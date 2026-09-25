@@ -1,3 +1,9 @@
+# Disclaimer
+> [!WARNING]
+> This project is fully written by AI using claude. It was written as a fun side project to try and replicate some of the features chatgpt's chatbot.
+
+
+
 # AiPet
 
 A floating desktop pet that shows what your coding-agent chats are doing. It works with Claude Code (the CLI, the
