@@ -1,0 +1,253 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="AiPet.SettingsWindow"
+        Title="AiPet · Settings" Width="800" Height="640" CanResize="False"
+        WindowDecorations="None" TransparencyLevelHint="Transparent" Background="Transparent" Topmost="True"
+        WindowStartupLocation="CenterScreen" FontFamily="{StaticResource UiFont}" FontSize="13">
+  <Window.Styles>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#9A9AA2"/>
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="Margin" Value="2,5,0,0"/>
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="2,14,0,6"/>
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="#8A8A92"/>
+      <Setter Property="LetterSpacing" Value="0.6"/>
+      <Setter Property="Margin" Value="2,18,0,8"/>
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Background" Value="#1A1A1D"/>
+      <Setter Property="BorderBrush" Value="#3A3A3F"/>
+    </Style>
+
+    <!-- sidebar -->
+    <Style Selector="Button.nav">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="12,9"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="Foreground" Value="#C4C4CA"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.nav:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1AFFFFFF"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+    </Style>
+    <Style Selector="Button.nav.selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#2CFFFFFF"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+    </Style>
+    <Style Selector="Button.nav Path">
+      <Setter Property="Stroke" Value="#B8B8C0"/>
+      <Setter Property="StrokeThickness" Value="1.6"/>
+      <Setter Property="StrokeLineCap" Value="Round"/>
+      <Setter Property="StrokeJoin" Value="Round"/>
+      <Setter Property="Width" Value="16"/>
+      <Setter Property="Height" Value="16"/>
+      <Setter Property="Stretch" Value="Uniform"/>
+    </Style>
+    <Style Selector="Button.nav.selected Path">
+      <Setter Property="Stroke" Value="{DynamicResource Accent}"/>
+    </Style>
+
+    <!-- grouped rows on a page -->
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="#1C1C1F"/>
+      <Setter Property="BorderBrush" Value="#2C2C31"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="16,12"/>
+    </Style>
+
+    <!-- avatar tiles -->
+    <Style Selector="Border.avatar">
+      <Setter Property="Width" Value="138"/>
+      <Setter Property="Margin" Value="0,0,12,12"/>
+      <Setter Property="Padding" Value="10,12,10,10"/>
+      <Setter Property="Background" Value="#1C1C1F"/>
+      <Setter Property="BorderBrush" Value="#2C2C31"/>
+      <Setter Property="BorderThickness" Value="1.5"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Border.avatar:pointerover">
+      <Setter Property="Background" Value="#242428"/>
+    </Style>
+    <Style Selector="Border.avatar.selected">
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      <Setter Property="Background" Value="#26262A"/>
+    </Style>
+
+    <Style Selector="ToggleSwitch">
+      <Setter Property="OnContent" Value=""/>
+      <Setter Property="OffContent" Value=""/>
+      <Setter Property="MinWidth" Value="0"/>
+    </Style>
+  </Window.Styles>
+
+  <Border Margin="14" CornerRadius="14" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource PanelEdge}" BorderThickness="1"
+          BoxShadow="0 6 24 0 #90000000" ClipToBounds="True">
+    <Grid ColumnDefinitions="196,*">
+
+      <!-- sidebar: drag it to move the window -->
+      <Border x:Name="Sidebar" Background="#18181B" Cursor="SizeAll">
+        <StackPanel Margin="12,16,12,14" Spacing="2">
+          <StackPanel Orientation="Horizontal" Spacing="9" Margin="10,0,0,18">
+            <Ellipse Width="9" Height="9" Fill="{DynamicResource Accent}" VerticalAlignment="Center"/>
+            <TextBlock Text="AiPet settings" FontSize="15" FontWeight="SemiBold"/>
+          </StackPanel>
+          <Button x:Name="NavGeneral" Classes="nav" Tag="general">
+            <StackPanel Orientation="Horizontal" Spacing="11">
+              <Path Data="M8,1.5 V3.2 M8,12.8 V14.5 M1.5,8 H3.2 M12.8,8 H14.5 M3.4,3.4 L4.6,4.6 M11.4,11.4 L12.6,12.6 M3.4,12.6 L4.6,11.4 M11.4,4.6 L12.6,3.4 M8,5.2 A2.8,2.8 0 1 1 7.99,5.2"/>
+              <TextBlock Text="General" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="NavAvatars" Classes="nav" Tag="avatars">
+            <StackPanel Orientation="Horizontal" Spacing="11">
+              <Path Data="M8,2.5 C4.9,2.5 3,4.8 3,7.8 C3,11.3 5.2,13.5 8,13.5 C10.8,13.5 13,11.3 13,7.8 C13,4.8 11.1,2.5 8,2.5 Z M6,7.2 V8.4 M10,7.2 V8.4"/>
+              <TextBlock Text="Avatars" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="NavJira" Classes="nav" Tag="jira">
+            <StackPanel Orientation="Horizontal" Spacing="11">
+              <Path Data="M8,1.8 L14.2,8 L8,14.2 L1.8,8 Z M8,5.4 L10.6,8 L8,10.6 L5.4,8 Z"/>
+              <TextBlock Text="Jira" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button x:Name="NavGitHub" Classes="nav" Tag="github">
+            <StackPanel Orientation="Horizontal" Spacing="11">
+              <Path Data="M4.5,2.5 A1.5,1.5 0 1 1 4.49,2.5 M4.5,5.5 V13.5 M11.5,10.5 A1.5,1.5 0 1 1 11.49,10.5 M11.5,10.5 V6.5 A2,2 0 0 0 9.5,4.5 H7 M8.5,3 L7,4.5 L8.5,6"/>
+              <TextBlock Text="GitHub" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Border>
+
+      <!-- page -->
+      <Grid Grid.Column="1" RowDefinitions="Auto,*">
+        <Grid x:Name="Header" ColumnDefinitions="*,Auto" Margin="28,18,14,0" Background="Transparent" Cursor="SizeAll">
+          <StackPanel>
+            <TextBlock x:Name="PageTitle" FontSize="19" FontWeight="SemiBold"/>
+            <TextBlock x:Name="PageHint" Classes="hint" FontSize="12.5" Margin="0,5,20,0"/>
+          </StackPanel>
+          <Button x:Name="CloseBtn" Grid.Column="1" Classes="tool" VerticalAlignment="Top" ToolTip.Tip="Close (Esc)">
+            <Path Stroke="#EDEDF0" StrokeThickness="1.6" StrokeLineCap="Round" Data="M0,0 L9,9 M9,0 L0,9" Width="9" Height="9"/>
+          </Button>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" Margin="0,8,0,0" HorizontalScrollBarVisibility="Disabled">
+          <Panel Margin="28,4,28,24">
+
+            <!-- General -->
+            <StackPanel x:Name="GeneralPage">
+              <TextBlock Classes="section" Text="THE PET"/>
+              <Border Classes="card"><StackPanel x:Name="ToggleRows" Spacing="2"/></Border>
+              <TextBlock Classes="section" Text="MORE"/>
+              <Border Classes="card">
+                <StackPanel Spacing="12">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="Position" FontWeight="SemiBold"/>
+                      <TextBlock Classes="hint" Text="Put the pet back in the bottom-right corner of the screen."/>
+                    </StackPanel>
+                    <Button x:Name="ResetPositionBtn" Grid.Column="1" Classes="pill" Content="Reset" Margin="0" VerticalAlignment="Center"/>
+                  </Grid>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="Data folder" FontWeight="SemiBold"/>
+                      <TextBlock x:Name="DataFolderText" Classes="hint"/>
+                    </StackPanel>
+                    <Button x:Name="OpenDataBtn" Grid.Column="1" Classes="pill" Content="Open" Margin="0" VerticalAlignment="Center"/>
+                  </Grid>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <!-- Avatars -->
+            <StackPanel x:Name="AvatarsPage" IsVisible="False">
+              <WrapPanel x:Name="AvatarGrid" Margin="0,10,0,0"/>
+              <Border Classes="card" Margin="0,8,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Your own avatars" FontWeight="SemiBold"/>
+                    <TextBlock Classes="hint" Text="Put an avatar .json file (a copy of a built-in one with your own colours and shape) in the avatars folder; it shows up here."/>
+                  </StackPanel>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Button x:Name="ReloadAvatarsBtn" Classes="pill" Content="Reload"/>
+                    <Button x:Name="OpenAvatarsBtn" Classes="pill" Content="Open folder" Margin="0"/>
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </StackPanel>
+
+            <!-- Jira -->
+            <StackPanel x:Name="JiraPage" IsVisible="False">
+              <CheckBox x:Name="EnabledBox" Content="Watch Jira for reviews assigned to me" Margin="0,8,0,0"/>
+              <Grid ColumnDefinitions="*,16,*">
+                <StackPanel>
+                  <TextBlock Classes="label" Text="Site"/>
+                  <TextBox x:Name="SiteBox"/>
+                  <TextBlock Classes="hint" Text="Your Jira Cloud address, e.g. your-company.atlassian.net"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2">
+                  <TextBlock Classes="label" Text="Email"/>
+                  <TextBox x:Name="EmailBox"/>
+                  <TextBlock Classes="hint" Text="The email you sign in to Atlassian with"/>
+                </StackPanel>
+              </Grid>
+              <TextBlock Classes="label" Text="API token"/>
+              <TextBox x:Name="TokenBox" PasswordChar="•"/>
+              <TextBlock x:Name="TokenHint" Classes="hint"/>
+              <TextBlock Classes="label" Text="Search (JQL)"/>
+              <TextBox x:Name="JqlBox" TextWrapping="Wrap" Height="64" AcceptsReturn="False"/>
+              <TextBlock Classes="hint" Text="Issues where you're the reviewer and the status is Review. Adjust the field or status names if yours differ."/>
+              <WrapPanel Margin="0,20,0,0">
+                <Button x:Name="JiraSaveBtn" Classes="pill primary" Content="Save"/>
+                <Button x:Name="TestBtn" Classes="pill" Content="Test search"/>
+                <Button x:Name="CreateTokenBtn" Classes="pill" Content="Create a token"/>
+                <Button x:Name="JiraForgetBtn" Classes="pill" Content="Remove saved token"/>
+              </WrapPanel>
+              <Border x:Name="JiraStatusBox" Margin="0,14,0,0" CornerRadius="8" Padding="10,8" Background="#1A1A1D" IsVisible="False">
+                <TextBlock x:Name="JiraStatusText" TextWrapping="Wrap"/>
+              </Border>
+            </StackPanel>
+
+            <!-- GitHub -->
+            <StackPanel x:Name="GitHubPage" IsVisible="False">
+              <CheckBox x:Name="GitHubBox" Content="Watch GitHub for pull requests waiting on my review" Margin="0,8,0,0"/>
+              <TextBlock Classes="label" Text="GitHub host"/>
+              <TextBox x:Name="GitHubHostBox"/>
+              <TextBlock Classes="hint" Text="github.com, or your GitHub Enterprise Server host"/>
+              <TextBlock Classes="label" Text="Access token"/>
+              <TextBox x:Name="GitHubTokenBox" PasswordChar="•"/>
+              <TextBlock x:Name="GitHubTokenHint" Classes="hint"/>
+              <TextBlock Classes="label" Text="Organisations"/>
+              <TextBox x:Name="GitHubOrgsBox"/>
+              <TextBlock Classes="hint" Text="Where to look for the pull request of a Jira task, comma-separated"/>
+              <WrapPanel Margin="0,20,0,0">
+                <Button x:Name="GitHubSaveBtn" Classes="pill primary" Content="Save"/>
+                <Button x:Name="GitHubTestBtn" Classes="pill" Content="Test connection"/>
+                <Button x:Name="CreateGitHubTokenBtn" Classes="pill" Content="Create a token"/>
+                <Button x:Name="GitHubForgetBtn" Classes="pill" Content="Remove saved token"/>
+              </WrapPanel>
+              <Border x:Name="GitHubStatusBox" Margin="0,14,0,0" CornerRadius="8" Padding="10,8" Background="#1A1A1D">
+                <TextBlock x:Name="GitHubStatus" TextWrapping="Wrap" Foreground="#9A9AA2"/>
+              </Border>
+            </StackPanel>
+
+          </Panel>
+        </ScrollViewer>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>

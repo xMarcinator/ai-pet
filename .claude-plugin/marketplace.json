@@ -1,0 +1,22 @@
+{
+  "name": "aipet",
+  "description": "AiPet: a desktop pet that shows what your Claude Code and Codex chats are doing.",
+  "owner": { "name": "xMarcinator", "url": "https://github.com/xMarcinator" },
+  "plugins": [
+    {
+      "name": "aipet",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/xMarcinator/ai-pet-plugin.git",
+        "path": "plugins/aipet",
+        "ref": "v0.2.0",
+        "sha": "0000000000000000000000000000000000000000"
+      },
+      "displayName": "AiPet",
+      "description": "Shows each Claude Code chat's status on the AiPet desktop pet.",
+      "homepage": "https://github.com/xMarcinator/ai-pet",
+      "license": "MIT",
+      "category": "productivity"
+    }
+  ]
+}

@@ -1,0 +1,229 @@
+{
+  "description": "Report each Claude Code chat's status to the AiPet desktop pet (observe only: the hook prints nothing and never answers Claude).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Elicitation": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "ElicitationResult": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
+            "shell": "bash",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

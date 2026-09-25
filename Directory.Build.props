@@ -1,0 +1,14 @@
+<Project>
+
+  <!-- Shared by every project. Release builds set the version from the tag: dotnet publish -p:Version=X.Y.Z -->
+  <PropertyGroup>
+    <Version>0.0.0-dev</Version>
+    <Authors>xMarcinator</Authors>
+    <Company>xMarcinator</Company>
+    <Product>AiPet</Product>
+    <Copyright>Copyright (c) 2026 xMarcinator</Copyright>
+    <!-- keep the version text as given (no "+<commit>" suffix) -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+</Project>

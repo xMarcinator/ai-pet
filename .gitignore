@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+artifacts/
+publish/
+Releases/
+*.user
+.vs/
+.idea/
+
+# The plugin's hook binaries (native/<rid>/): the release workflow adds them to the release commit in the plugin
+# repository. Only the launcher, native/aipet-hook.sh, is tracked here.
+plugins/aipet/native/*/
+
+# Old binaries and a source snapshot, kept locally only
+legacy/
+
+# Scratch and test output
+scratch/
+TestResults/
+*.log
+*.tmp
+.claude/settings.local.json

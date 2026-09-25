@@ -1,0 +1,11 @@
+{
+  "name": "aipet",
+  "displayName": "AiPet",
+  "version": "0.2.0",
+  "description": "Shows each Claude Code chat's status on the AiPet desktop pet. Needs the AiPet app running; does nothing otherwise.",
+  "author": { "name": "xMarcinator", "url": "https://github.com/xMarcinator" },
+  "homepage": "https://github.com/xMarcinator/ai-pet",
+  "repository": "https://github.com/xMarcinator/ai-pet",
+  "license": "MIT",
+  "keywords": ["desktop-pet", "status", "hooks"]
+}

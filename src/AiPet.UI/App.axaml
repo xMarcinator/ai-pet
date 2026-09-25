@@ -1,0 +1,140 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="AiPet.App"
+             RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <!-- Accent follows the current avatar (set from code); Fluent uses it for check marks and focus rings -->
+    <Color x:Key="SystemAccentColor">#E27A52</Color>
+    <SolidColorBrush x:Key="Accent" Color="#E27A52"/>
+    <SolidColorBrush x:Key="IconBrush" Color="#EDEDF0"/>
+    <SolidColorBrush x:Key="PanelBg" Color="#F5232326"/>
+    <SolidColorBrush x:Key="PanelEdge" Color="#3A3A3F"/>
+    <SolidColorBrush x:Key="Muted" Color="#9A9AA2"/>
+    <FontFamily x:Key="UiFont">Segoe UI Variable Text, Segoe UI, Ubuntu, Cantarell, Noto Sans, DejaVu Sans, sans-serif</FontFamily>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+
+    <Style Selector="Path.icon">
+      <Setter Property="Stroke" Value="{StaticResource IconBrush}"/>
+      <Setter Property="StrokeThickness" Value="1.7"/>
+      <Setter Property="StrokeLineCap" Value="Round"/>
+      <Setter Property="StrokeJoin" Value="Round"/>
+      <Setter Property="Width" Value="18"/>
+      <Setter Property="Height" Value="18"/>
+    </Style>
+
+    <!-- plain icon buttons (the settings window's close button): round hover highlight -->
+    <Style Selector="Button.tool">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="16"/>
+      <Setter Property="Width" Value="34"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="1,0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.tool:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#24FFFFFF"/>
+    </Style>
+    <Style Selector="Button.tool:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#38FFFFFF"/>
+    </Style>
+
+    <!-- round action buttons on a bubble -->
+    <Style Selector="Button.round">
+      <Setter Property="Background" Value="#3A3A3E"/>
+      <Setter Property="BorderBrush" Value="#18FFFFFF"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="16"/>
+      <Setter Property="Width" Value="32"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="4,0,0,0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.round:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#4A4A4F"/>
+    </Style>
+    <Style Selector="Button.round:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#58585E"/>
+    </Style>
+
+    <!-- small dismiss badge on a bubble's corner -->
+    <Style Selector="Button.close">
+      <Setter Property="Background" Value="#2E2E31"/>
+      <Setter Property="BorderBrush" Value="#66FFFFFF"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="11"/>
+      <Setter Property="Width" Value="22"/>
+      <Setter Property="Height" Value="22"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.close:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#4A4A4F"/>
+    </Style>
+
+    <!-- pill buttons in settings -->
+    <Style Selector="Button.pill">
+      <Setter Property="Background" Value="#3A3A3E"/>
+      <Setter Property="Foreground" Value="#EDEDF0"/>
+      <Setter Property="BorderBrush" Value="#18FFFFFF"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="16"/>
+      <Setter Property="Padding" Value="16,7"/>
+      <Setter Property="Margin" Value="0,0,8,0"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.pill:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#4A4A4F"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+    </Style>
+    <Style Selector="Button.pill.primary">
+      <Setter Property="Background" Value="{DynamicResource Accent}"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.pill.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Accent}"/>
+      <Setter Property="Opacity" Value="0.88"/>
+    </Style>
+
+    <!-- the pet's menus: dark rounded panels like the bubbles -->
+    <Style Selector="ContextMenu">
+      <Setter Property="Background" Value="{StaticResource PanelBg}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource PanelEdge}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="5"/>
+      <Setter Property="MinWidth" Value="230"/>
+      <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+    </Style>
+    <Style Selector="MenuItem">
+      <Setter Property="CornerRadius" Value="6"/>
+    </Style>
+    <Style Selector="MenuFlyoutPresenter">
+      <Setter Property="Background" Value="{StaticResource PanelBg}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource PanelEdge}"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="5"/>
+    </Style>
+    <Style Selector="Path.check">
+      <Setter Property="Data" Value="M1,5 L4.5,8.5 L11,1.5"/>
+      <Setter Property="Stroke" Value="{DynamicResource Accent}"/>
+      <Setter Property="StrokeThickness" Value="1.9"/>
+      <Setter Property="StrokeLineCap" Value="Round"/>
+      <Setter Property="StrokeJoin" Value="Round"/>
+      <Setter Property="Width" Value="12"/>
+      <Setter Property="Height" Value="10"/>
+    </Style>
+  </Application.Styles>
+</Application>

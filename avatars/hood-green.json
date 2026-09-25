@@ -1,0 +1,44 @@
+{
+  "name": "Hood (green)",
+  "shapes": [
+    [
+      13,
+      10.6,
+      7.2,
+      7.4
+    ],
+    [
+      13,
+      4.4,
+      3.2,
+      3.0
+    ],
+    [
+      13,
+      19.6,
+      10.2,
+      4.3
+    ]
+  ],
+  "shading": "rim",
+  "blush": false,
+  "faceTop": 8,
+  "faceBottom": 15,
+  "palette": {
+    "outline": "#030805",
+    "deep": "#061F0F",
+    "shade": "#0A3118",
+    "body": "#0F4422",
+    "hi": "#2FD36B",
+    "spec": "#A4FFC4",
+    "blush": "#0F4422",
+    "screen": "#020604",
+    "bezel": "#050D08",
+    "glint": "#050D08",
+    "eye": "#5CFF9C",
+    "eyeHi": "#E8FFF0",
+    "eyeLo": "#22C45E",
+    "glow": "#2BFF7A",
+    "accent": "#2FD36B"
+  }
+}

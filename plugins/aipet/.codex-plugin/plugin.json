@@ -1,0 +1,19 @@
+{
+  "name": "aipet",
+  "version": "0.2.0",
+  "description": "Shows each Codex chat's status on the AiPet desktop pet. Needs the AiPet app running; does nothing otherwise.",
+  "keywords": ["desktop-pet", "status", "hooks"],
+  "hooks": "./hooks/codex.json",
+  "interface": {
+    "displayName": "AiPet",
+    "shortDescription": "Show your Codex chats on the AiPet desktop pet",
+    "longDescription": "A floating pixel pet that mirrors your chats. The hook only observes: it prints nothing to Codex and does nothing while the pet is closed.",
+    "developerName": "xMarcinator",
+    "category": "Productivity",
+    "websiteURL": "https://github.com/xMarcinator/ai-pet",
+    "privacyPolicyURL": "https://github.com/xMarcinator/ai-pet#privacy",
+    "brandColor": "#E47E55",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png"
+  }
+}

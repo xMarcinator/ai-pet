@@ -1,0 +1,98 @@
+# CI: builds the solution on Windows and Linux, checks that the plugin's hook files register what the hook code
+# expects, and that the install and build scripts at least parse. Nothing is published here: see release.yml.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Build
+        run: dotnet build AiPet.slnx -c Release --nologo
+
+      # The PowerShell scripts can't be tried out here, but they must at least parse, in Windows PowerShell 5.1 too:
+      # that's what `irm ... | iex` usually runs in.
+      - name: Parse the PowerShell scripts (PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $failed = $false
+          $files = @('install.ps1', 'build.ps1') + @(Get-ChildItem -Path scripts -Filter *.ps1 -File | ForEach-Object { $_.FullName })
+          foreach ($file in $files) {
+            $tokens = $null; $problems = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$problems)
+            foreach ($p in $problems) { Write-Output "::error file=$file,line=$($p.Extent.StartLineNumber)::$($p.Message)"; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+          Write-Output "Parsed: $($files -join ', ')"
+      - name: Parse the PowerShell scripts (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $failed = $false
+          $files = @('install.ps1', 'build.ps1') + @(Get-ChildItem -Path scripts -Filter *.ps1 -File | ForEach-Object { $_.FullName })
+          foreach ($file in $files) {
+            $tokens = $null; $problems = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$problems)
+            foreach ($p in $problems) { Write-Output "::error file=$file,line=$($p.Extent.StartLineNumber)::$($p.Message)"; $failed = $true }
+          }
+          if ($failed) { exit 1 }
+          Write-Output "Parsed: $($files -join ', ')"
+
+  plugin:
+    name: Plugin files
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Manifests, hook files and marketplaces: valid JSON, the name aipet, one version, and exactly the events and
+      # handlers of ClaudeConfig.Events (Install.cs) and CodexConfig.Events (CodexConfig.cs).
+      # TODO: when aipet-hook can print its own plugin hook files (aipet-hook --print-plugin-hooks claude|codex),
+      # build the hook here and compare plugins/aipet/hooks/*.json with its output, so the plugin can't drift from
+      # the code (and drop the copies of the event tables in scripts/check-plugin.sh).
+      - name: Check the plugin and marketplace files
+        run: bash scripts/check-plugin.sh --marketplaces . plugins/aipet
+
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Parse
+        run: |
+          # POSIX sh: the one-liner (piped into sh, which is dash on Debian and Ubuntu), the package's installer and
+          # the plugin's launcher
+          for f in install.sh packaging/linux/install.sh plugins/aipet/native/aipet-hook.sh; do dash -n "$f"; done
+          for f in build.sh scripts/*.sh; do bash -n "$f"; done
+      - name: ShellCheck
+        run: shellcheck --severity=warning install.sh build.sh packaging/linux/install.sh plugins/aipet/native/aipet-hook.sh scripts/*.sh

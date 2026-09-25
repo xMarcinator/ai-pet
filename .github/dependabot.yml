@@ -1,0 +1,10 @@
+# The workflows pin their actions to commit SHAs; Dependabot proposes updates to them (and to the SHAs' comments).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

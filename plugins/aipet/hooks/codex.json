@@ -1,0 +1,122 @@
+{
+  "description": "Report each Codex chat's status to the AiPet desktop pet (observe only: the hook prints nothing).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
+            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
+            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
+            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
+            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
+            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
+            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
+            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
+            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
+            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

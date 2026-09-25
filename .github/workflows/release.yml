@@ -1,0 +1,429 @@
+# Release: builds AiPet for Windows and Linux, pushes the plugin with its hook binaries to the plugin repository,
+# publishes the GitHub release, and pins both marketplaces to the new plugin commit.
+#
+# Run it from the Actions tab (Release > Run workflow) on main, with the version to release, e.g. 0.2.0.
+#
+#   check    the version is new and well formed, and the plugin files are consistent
+#   win      AiPet.exe (self-contained) and aipet-hook.exe (NativeAOT): Velopack installer and update feed, portable zip
+#   linux    per platform, AiPet (self-contained) and aipet-hook (NativeAOT): AiPet-<version>-<rid>.tar.gz
+#   plugin   plugins/aipet plus the hook binaries: a commit tagged v<version> in the plugin repository
+#   publish  the GitHub release with every package and SHA256SUMS, then the marketplace pins on main
+#
+# Needs the secret PLUGIN_DEPLOY_KEY: the private half of a deploy key with write access to the plugin repository.
+# If a job fails after the plugin job, use "Re-run failed jobs": a version's plugin tag can be pushed only once.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, without the v (e.g. 0.2.0)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  # The repository the plugin's release commits go to (written only by this workflow), and the plugin's path in it.
+  # The marketplace files on main point at the same place.
+  PLUGIN_REPO: xMarcinator/ai-pet-plugin
+  PLUGIN_PATH: plugins/aipet
+  # Velopack's CLI; keep it in step with the Velopack package version the app references, if it references one.
+  VPK_VERSION: 1.2.158
+
+jobs:
+  check:
+    name: Check the version and the plugin
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the version
+        id: version
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Release from main (this run is on $GITHUB_REF)"; exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$VERSION' isn't a version like 0.2.0"; exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$VERSION" --silent 2>/dev/null; then
+            echo "::error::v$VERSION exists already in $GITHUB_REPOSITORY"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Check the plugin and marketplace files
+        run: bash scripts/check-plugin.sh --marketplaces . "$PLUGIN_PATH"
+      - name: Check the packaging files are there
+        run: |
+          missing=0
+          for f in assets/icon/aipet.ico packaging/linux/install.sh packaging/linux/aipet.desktop.in; do
+            if [ ! -f "$f" ]; then echo "::error::$f is missing"; missing=1; fi
+          done
+          if [ ! -d packaging/linux/icons/hicolor ]; then echo "::error::packaging/linux/icons/hicolor is missing"; missing=1; fi
+          exit "$missing"
+
+  win:
+    name: Windows (win-x64)
+    needs: check
+    runs-on: windows-2022
+    permissions:
+      contents: read   # also lets vpk read the previous release, for the delta package
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish the app (self-contained)
+        run: |
+          dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r win-x64 --self-contained -o out/app \
+            -p:Version="$VERSION" -p:DebugType=none --nologo
+      - name: Publish the hook (NativeAOT, no fallback)
+        run: |
+          # NativeAOT finds the MSVC linker through vswhere
+          export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"
+          dotnet publish src/AiPet.Hook/AiPet.Hook.csproj -c Release -r win-x64 -o out/hook \
+            -p:Version="$VERSION" -p:PublishAot=true -p:DebugType=none --nologo
+          # a managed (non-AOT) publish would leave aipet-hook.dll next to the exe
+          if [ ! -f out/hook/aipet-hook.exe ] || [ -f out/hook/aipet-hook.dll ]; then
+            echo "::error::The hook wasn't compiled natively"; ls -la out/hook; exit 1
+          fi
+      - name: Put the hook next to AiPet.exe
+        run: |
+          cp out/hook/aipet-hook.exe out/app/
+          # the native libraries' symbols (libSkiaSharp.pdb, libHarfBuzzSharp.pdb) alone are about 100 MiB
+          find out/app -name '*.pdb' -delete
+          for f in LICENSE THIRD-PARTY-NOTICES.md; do
+            if [ -f "$f" ]; then cp "$f" out/app/; fi
+          done
+      - name: Build the installer and update feed (Velopack)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOTNET_ROLL_FORWARD: Major   # vpk may target an older .NET than the one installed
+        run: |
+          dotnet tool install vpk --version "$VPK_VERSION" --tool-path out/tools
+          vpk=out/tools/vpk
+          mkdir -p out/velopack
+          # the latest release's full package, so vpk can make a delta from it (there is none before the first release)
+          "$vpk" download github --repoUrl "https://github.com/$GITHUB_REPOSITORY" --token "$GH_TOKEN" --outputDir out/velopack \
+            || echo "::notice::No earlier release to make a delta package from"
+          # packId AiPetApp, not AiPet: it's also the install folder (%LOCALAPPDATA%\AiPetApp), and %LOCALAPPDATA%\AiPet
+          # is the app's data folder
+          "$vpk" pack --packId AiPetApp --packVersion "$VERSION" --packDir out/app --mainExe AiPet.exe \
+            --packTitle AiPet --packAuthors xMarcinator --icon assets/icon/aipet.ico \
+            --channel win --shortcuts StartMenuRoot --noPortable --outputDir out/velopack
+          ls -la out/velopack
+      - name: Collect the Windows release files
+        run: |
+          shopt -s nullglob
+          mkdir -p dist
+          cd out/velopack
+          setups=(*-Setup.exe)
+          if [ ${#setups[@]} -ne 1 ]; then echo "::error::Expected one Setup.exe from vpk, found ${#setups[@]}"; exit 1; fi
+          cp "${setups[0]}" "../../dist/AiPet-Setup-$VERSION-win-x64.exe"
+          for f in "AiPetApp-$VERSION-full.nupkg" "AiPetApp-$VERSION-delta.nupkg"; do
+            if [ -f "$f" ]; then cp "$f" ../../dist/; fi
+          done
+          if [ ! -f "../../dist/AiPetApp-$VERSION-full.nupkg" ]; then echo "::error::vpk made no full package"; exit 1; fi
+          # The update feed of this release lists only this version's packages (earlier ones are in their own
+          # releases), as vpk upload github does. Fail rather than publish a feed that finds nothing.
+          jq --arg v "$VERSION" '.Assets |= map(select(.Version == $v))' releases.win.json > ../../dist/releases.win.json
+          if ! jq -e '(.Assets | length) >= 1' ../../dist/releases.win.json > /dev/null; then
+            echo "::error::releases.win.json lists no package of $VERSION"; cat releases.win.json; exit 1
+          fi
+          # (jq on Windows ends its lines with CRLF)
+          for f in $(jq -r '.Assets[].FileName' ../../dist/releases.win.json | tr -d '\r'); do
+            if [ ! -f "../../dist/$f" ]; then echo "::error::releases.win.json lists $f, which isn't in the release"; exit 1; fi
+          done
+          # the portable app: the same files as the installed one, at the zip's root
+          cd ../app
+          7z a -tzip -mx=9 "../../dist/AiPet-$VERSION-win-x64.zip" * > /dev/null
+          ls -la ../../dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-win-x64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hook-win-x64
+          path: out/hook/aipet-hook.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  linux:
+    name: Linux (${{ matrix.rid }})
+    needs: check
+    strategy:
+      matrix:
+        include:
+          # 22.04 for an older glibc, so the binaries run on more distributions
+          - { rid: linux-x64, os: ubuntu-22.04 }
+          - { rid: linux-arm64, os: ubuntu-22.04-arm }
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      RID: ${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Install what NativeAOT needs
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends clang zlib1g-dev
+      - name: Publish the app (self-contained)
+        run: |
+          dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r "$RID" --self-contained -o out/app \
+            -p:Version="$VERSION" -p:DebugType=none --nologo
+      - name: Publish the hook (NativeAOT, no fallback)
+        run: |
+          dotnet publish src/AiPet.Hook/AiPet.Hook.csproj -c Release -r "$RID" -o out/hook \
+            -p:Version="$VERSION" -p:PublishAot=true -p:StripSymbols=true -p:DebugType=none --nologo
+          if [ ! -f out/hook/aipet-hook ] || [ -f out/hook/aipet-hook.dll ]; then
+            echo "::error::The hook wasn't compiled natively"; ls -la out/hook; exit 1
+          fi
+          file out/hook/aipet-hook
+          ls -la out/hook
+      - name: Make the tarball
+        run: |
+          name="AiPet-$VERSION-$RID"
+          stage="out/stage/$name"
+          mkdir -p "$stage" dist
+          cp -R out/app "$stage/app"
+          cp out/hook/aipet-hook "$stage/app/aipet-hook"
+          find "$stage/app" \( -name '*.pdb' -o -name '*.dbg' \) -delete
+          chmod 755 "$stage/app/AiPet" "$stage/app/aipet-hook"
+          cp packaging/linux/install.sh packaging/linux/aipet.desktop.in "$stage/"
+          chmod 755 "$stage/install.sh"
+          mkdir -p "$stage/icons"
+          cp -R packaging/linux/icons/hicolor "$stage/icons/hicolor"
+          for f in LICENSE THIRD-PARTY-NOTICES.md; do
+            if [ -f "$f" ]; then cp "$f" "$stage/"; fi
+          done
+          tar -C out/stage --sort=name --owner=0 --group=0 --numeric-owner -czf "dist/$name.tar.gz" "$name"
+          ls -la dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-${{ matrix.rid }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hook-${{ matrix.rid }}
+          path: out/hook/aipet-hook
+          if-no-files-found: error
+          retention-days: 7
+
+  plugin:
+    name: Push the plugin
+    needs: [check, win, linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read   # this repository; the plugin repository is written with the deploy key
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+    outputs:
+      sha: ${{ steps.push.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.PLUGIN_REPO }}
+          ssh-key: ${{ secrets.PLUGIN_DEPLOY_KEY }}
+          path: plugin-repo
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: hook-*
+          path: hooks
+      - name: Check the tag is new
+        working-directory: plugin-repo
+        run: |
+          set +e
+          git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null
+          found=$?
+          set -e
+          if [ "$found" = 0 ]; then
+            echo "::error::v$VERSION exists already in $PLUGIN_REPO. To finish a release whose plugin job succeeded, use Re-run failed jobs."
+            exit 1
+          elif [ "$found" != 2 ]; then
+            echo "::error::Couldn't list the tags of $PLUGIN_REPO"; exit 1
+          fi
+      - name: Assemble the plugin
+        run: |
+          dest="plugin-repo/$PLUGIN_PATH"
+          rm -rf "$dest"
+          mkdir -p "$(dirname "$dest")"
+          cp -R "source/$PLUGIN_PATH" "$dest"
+          # only this release's binaries, with the mode git records for them
+          rm -rf "$dest"/native/*/
+          install -D -m 755 hooks/hook-win-x64/aipet-hook.exe "$dest/native/win-x64/aipet-hook.exe"
+          install -D -m 755 hooks/hook-linux-x64/aipet-hook "$dest/native/linux-x64/aipet-hook"
+          install -D -m 755 hooks/hook-linux-arm64/aipet-hook "$dest/native/linux-arm64/aipet-hook"
+          chmod 755 "$dest/native/aipet-hook.sh"
+          # Claude keeps users on a plugin's version and Codex refreshes its copy only when the version changes, so
+          # every release stamps its own
+          for f in "$dest/.claude-plugin/plugin.json" "$dest/.codex-plugin/plugin.json"; do
+            jq --arg v "$VERSION" '.version = $v' "$f" > "$f.tmp"
+            mv "$f.tmp" "$f"
+          done
+          if [ -f source/LICENSE ]; then cp source/LICENSE plugin-repo/LICENSE; fi
+          # Claude and Codex clone this repository with the user's git settings, and Git for Windows converts text to
+          # CRLF by default, which sh can't run. In the plugin folder too, since the agents check out only that folder.
+          for f in plugin-repo/.gitattributes "$dest/.gitattributes"; do
+            printf '%s\n' '# Check out every file exactly as committed, whatever core.autocrlf says: sh needs the launcher' \
+              '# with LF line endings, and the hook binaries must stay byte for byte.' '* -text' > "$f"
+          done
+          cat > plugin-repo/README.md <<'EOF'
+          # AiPet plugin: release builds
+
+          The release workflow of [xMarcinator/ai-pet](https://github.com/xMarcinator/ai-pet) writes this repository.
+          Each commit is one release of the AiPet plugin for Claude Code and Codex, tagged with its version, with the
+          hook binaries in `plugins/aipet/native/`. The marketplaces in ai-pet pin each release by tag and commit.
+
+          Don't change anything here by hand: change the plugin in ai-pet, and release it from there. To install AiPet
+          and the plugin, see the [ai-pet README](https://github.com/xMarcinator/ai-pet#readme).
+          EOF
+          bash source/scripts/check-plugin.sh --release "$dest"
+      - name: Commit, tag and push
+        id: push
+        working-directory: plugin-repo
+        run: |
+          tag="v$VERSION"
+          branch=$(git symbolic-ref --short HEAD)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "AiPet plugin $tag" \
+            -m "Built from $GITHUB_REPOSITORY@$GITHUB_SHA by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          git tag -a "$tag" -m "AiPet plugin $tag"
+          git push --atomic origin "HEAD:refs/heads/$branch" "refs/tags/$tag"
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Pushed $PLUGIN_REPO@$sha as $tag" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish the release
+    needs: [check, win, linux, plugin]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # the release, and the marketplace pins on main
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      PLUGIN_SHA: ${{ needs.plugin.outputs.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0   # the tags, to compare this release's Codex hooks with the previous release's
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Checksums
+        run: |
+          if [[ ! "$PLUGIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::The plugin job gave no commit sha"; exit 1; fi
+          (cd dist && sha256sum -- *) > SHA256SUMS
+          mv SHA256SUMS dist/
+          cat dist/SHA256SUMS
+      - name: Create the GitHub release
+        run: |
+          tag="v$VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::notice::Release $tag exists already (a re-run): replacing its files"
+            gh release upload "$tag" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            exit 0
+          fi
+          cat > notes.md <<'EOF'
+          ## Install
+
+          **Windows** (PowerShell):
+
+              irm https://raw.githubusercontent.com/xMarcinator/ai-pet/main/install.ps1 | iex
+
+          **Linux** (x64 or arm64):
+
+              curl -fsSL https://raw.githubusercontent.com/xMarcinator/ai-pet/main/install.sh | sh
+
+          Both check the download against `SHA256SUMS`, install the app (nothing starts at sign-in), and add the AiPet
+          plugin to Claude Code and Codex. Codex runs only hooks you trust: afterwards, run `codex`, open `/hooks` and
+          trust the aipet@aipet hooks, then restart the ChatGPT app if it's open.
+
+          Or download a package: `AiPet-Setup-@VERSION@-win-x64.exe` (installer), `AiPet-@VERSION@-win-x64.zip`
+          (portable), or `AiPet-@VERSION@-linux-<arch>.tar.gz` (extract it, then run `./install.sh`). The Windows files
+          aren't code-signed, so SmartScreen may warn about them.
+
+          This release's plugin: https://github.com/@PLUGIN_REPO@/tree/@PLUGIN_SHA@
+          EOF
+          sed -i -e "s/@VERSION@/$VERSION/g" -e "s|@PLUGIN_REPO@|$PLUGIN_REPO|g" -e "s/@PLUGIN_SHA@/$PLUGIN_SHA/g" notes.md
+          # Codex asks every user to trust the hooks again when their definitions change
+          previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$GITHUB_SHA" 2>/dev/null || true)
+          if [ -n "$previous" ] && ! git diff --quiet "$previous" "$GITHUB_SHA" -- "$PLUGIN_PATH/hooks/codex.json"; then
+            printf '\n> **Codex users:** this release changes the Codex hooks, so Codex asks you to trust them again (`codex`, then `/hooks`).\n' >> notes.md
+          fi
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "AiPet $VERSION" --notes-file notes.md --generate-notes "${prerelease[@]}"
+      - name: Pin the marketplaces to the plugin commit
+        run: |
+          tag="v$VERSION"
+          url="https://github.com/$PLUGIN_REPO.git"
+          files=(.claude-plugin/marketplace.json .agents/plugins/marketplace.json)
+          for f in "${files[@]}"; do
+            # only ref and sha change, in place, so the files keep their layout
+            if ! jq -e --arg url "$url" --arg path "$PLUGIN_PATH" '
+                (.plugins | length) == 1 and .plugins[0].name == "aipet" and .plugins[0].source.source == "git-subdir"
+                and .plugins[0].source.url == $url and ((.plugins[0].source.path | ltrimstr("./")) == $path)' "$f" > /dev/null; then
+              echo "::error::$f doesn't have the one git-subdir entry for aipet in $PLUGIN_REPO that this job pins: pin it by hand"; exit 1
+            fi
+            sed -i -E -e "s/(\"ref\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"/\1\"$tag\"/" \
+              -e "s/(\"sha\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"/\1\"$PLUGIN_SHA\"/" "$f"
+            if ! jq -e --arg ref "$tag" --arg sha "$PLUGIN_SHA" '.plugins[0].source.ref == $ref and .plugins[0].source.sha == $sha' "$f" > /dev/null; then
+              echo "::error::Couldn't pin $f"; exit 1
+            fi
+          done
+          if git diff --quiet -- "${files[@]}"; then echo "The marketplaces pin $tag already"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "${files[@]}"
+          git commit -q -m "Pin the aipet plugin to $tag" -m "$PLUGIN_REPO@$PLUGIN_SHA"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              echo "Pinned the marketplaces to $tag ($PLUGIN_REPO@$PLUGIN_SHA)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Push attempt $attempt failed; rebasing onto main"
+            git pull --rebase -q origin main
+          done
+          echo "::error::Couldn't push the marketplace pins to main"; exit 1

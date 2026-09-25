@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=AiPet
+GenericName=Desktop pet
+Comment=A desktop pet that shows what your Claude Code and Codex chats are doing
+Exec=@EXEC@
+Icon=aipet
+StartupWMClass=AiPet
+Terminal=false
+Categories=Utility;Development;
+Keywords=claude;codex;agent;pet;

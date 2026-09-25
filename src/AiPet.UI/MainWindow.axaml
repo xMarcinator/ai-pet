@@ -1,0 +1,51 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="AiPet.MainWindow"
+        Title="AiPet" Width="380" Height="600"
+        WindowDecorations="None" TransparencyLevelHint="Transparent" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" CanResize="False"
+        FontFamily="{StaticResource UiFont}">
+
+  <Grid x:Name="Root" Margin="12,8,12,8" RowDefinitions="*,124" Background="Transparent">
+
+    <!-- three bubble stacks, from the pet up: music, agent chats, reviews. The chats' and music's panels include
+         the gap above them while they hold bubbles (MainWindow.LayoutCards) -->
+    <StackPanel x:Name="Sections" Grid.Row="0" VerticalAlignment="Bottom" Margin="0,0,0,8">
+      <Border x:Name="ReviewsHeader" HorizontalAlignment="Center" Margin="0,0,0,8" IsVisible="False"
+              CornerRadius="10" Padding="10,3" Background="#E61C2B45" BorderBrush="#554C9AFF" BorderThickness="1">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Ellipse Width="6" Height="6" Fill="#4C9AFF" VerticalAlignment="Center"/>
+          <TextBlock x:Name="ReviewsHeaderText" Text="Reviews" FontSize="11" FontWeight="SemiBold"
+                     Foreground="#BFD6FF" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Border>
+      <Panel x:Name="Reviews" Height="0" ClipToBounds="False"/>
+      <Panel x:Name="Pills" Height="0" ClipToBounds="False"/>
+      <Panel x:Name="Music" Height="0" ClipToBounds="False"/>
+    </StackPanel>
+
+    <!-- the pet -->
+    <Panel Grid.Row="1" Width="140" Height="124" HorizontalAlignment="Center">
+      <Ellipse x:Name="Shadow" Width="76" Height="13" VerticalAlignment="Top" Margin="0,103,0,0" IsHitTestVisible="False" RenderTransformOrigin="50%,50%">
+        <Ellipse.Fill>
+          <RadialGradientBrush>
+            <GradientStop Color="#66000000" Offset="0"/>
+            <GradientStop Color="#33000000" Offset="0.55"/>
+            <GradientStop Color="#00000000" Offset="1"/>
+          </RadialGradientBrush>
+        </Ellipse.Fill>
+      </Ellipse>
+
+      <Panel x:Name="Sprite" Width="130" Height="120" VerticalAlignment="Top" RenderTransformOrigin="50%,91.7%" Cursor="Hand">
+        <Ellipse Width="86" Height="88" Margin="0,14,0,0" VerticalAlignment="Top" Fill="#01FFFFFF"/>
+        <Image x:Name="BodyImg" Stretch="Fill" RenderOptions.BitmapInterpolationMode="None"/>
+        <Image x:Name="GlowImg" Stretch="Fill" RenderOptions.BitmapInterpolationMode="None" IsHitTestVisible="False">
+          <Image.Effect>
+            <DropShadowDirectionEffect ShadowDepth="0" BlurRadius="10" Color="#7FEFFF" Opacity="0.9"/>
+          </Image.Effect>
+        </Image>
+        <Image x:Name="FxImg" Stretch="Fill" RenderOptions.BitmapInterpolationMode="None" IsHitTestVisible="False"/>
+      </Panel>
+    </Panel>
+  </Grid>
+</Window>

@@ -1,0 +1,18 @@
+{
+  "name": "aipet",
+  "interface": { "displayName": "AiPet" },
+  "plugins": [
+    {
+      "name": "aipet",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/xMarcinator/ai-pet-plugin.git",
+        "path": "plugins/aipet",
+        "ref": "v0.2.0",
+        "sha": "0000000000000000000000000000000000000000"
+      },
+      "policy": { "installation": "AVAILABLE" },
+      "category": "Productivity"
+    }
+  ]
+}

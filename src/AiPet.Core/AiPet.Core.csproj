@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Platform-neutral logic: paths, avatars, the pet's sprite and animation, chat/review state, Jira, GitHub. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AiPet</RootNamespace>
+  </PropertyGroup>
+
+</Project>

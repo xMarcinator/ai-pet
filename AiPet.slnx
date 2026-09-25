@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AiPet.Core/AiPet.Core.csproj" />
+    <Project Path="src/AiPet.UI/AiPet.UI.csproj" />
+    <Project Path="src/AiPet.Hook/AiPet.Hook.csproj" />
+  </Folder>
+</Solution>
