@@ -1,9 +1,3 @@
-# Disclaimer
-> [!WARNING]
-> This project is fully written by AI using claude. It was written as a fun side project to try and replicate some of the features chatgpt's chatbot.
-
-
-
 # AiPet
 
 A floating desktop pet that shows what your coding-agent chats are doing. It works with Claude Code (the CLI, the
@@ -18,6 +12,10 @@ thinks, types and searches while a chat works, waves when a chat needs you, and 
 
 AiPet runs on Windows 10/11 x64 and on Linux x64 or arm64 (X11, or XWayland under Wayland). macOS isn't supported
 yet.
+
+## Disclaimer
+> [!WARNING]
+> This project is fully written by AI using claude. It was written as a fun side project to try and replicate some of the features chatgpt's chatbot.
 
 ## Install
 
