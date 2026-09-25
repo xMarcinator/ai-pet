@@ -5,10 +5,12 @@ namespace AiPet;
 
 /// `aipet-hook --agent claude`: run by Claude Code (the desktop app, the CLI, IDE extensions) on each hook event.
 ///
-/// Claude starts the exe directly with its arguments and the event JSON on stdin. The hook only observes: it prints
+/// Registered directly (--install), Claude starts the exe itself with its arguments; the plugin runs it through bash,
+/// sh and its launcher (native/aipet-hook.sh). The event JSON comes on stdin. The hook only observes: it prints
 /// nothing (so Claude acts on nothing from it), and always exits 0. Most events run in the background and can finish
-/// out of order, so each is sent with when the hook started, which with no shell in between is when Claude started
-/// it, and the pet places it by that (AgentSessions).
+/// out of order, so each is sent with when the hook started, and the pet places it by that (AgentSessions). With no
+/// shell in between that is about when Claude started it; through the plugin it is a few ms later (maybe tens on Git
+/// Bash), by however long the shells took, so it doesn't order events Claude starts closer together than that.
 static class ClaudeHook
 {
     public static JsonObject Envelope(JsonObject payload)

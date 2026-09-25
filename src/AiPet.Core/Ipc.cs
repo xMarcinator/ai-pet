@@ -17,8 +17,10 @@ namespace AiPet;
 ///       -> {"ok":true,"outcome":"<state>|ignored|stale|removed"}
 ///   {"v":1,"type":"ping"} -> {"ok":true,"app":"AiPet","pid":..,"recent":["<hook-events.log line>", ..]}   (the doctor)
 /// at: when the hook started (its Main, before stdin was read), sent: when it sent the event (Unix seconds, ms
-/// precision). Claude starts the hook itself, so at is when Claude dispatched the event; Codex's shell starts it late
-/// (PowerShell on Windows, by 1-4 s), so for Codex the pet goes by the payload's own ids first (AgentSessions).
+/// precision). Claude starts a hook registered directly itself, so at is about when Claude dispatched the event; the
+/// plugin's goes through bash, sh and its launcher first (a few ms on Linux, maybe tens on Git Bash), so there at is
+/// that much later and doesn't order events dispatched closer together. Codex's shell starts it late (PowerShell on
+/// Windows, by 1-4 s), so for Codex the pet goes by the payload's own ids first (AgentSessions).
 /// Older hooks also sent "packaged" and "parent" (Codex), which the pet ignores, and some left out sent (lag=?).
 public static class Ipc
 {
@@ -27,9 +29,12 @@ public static class Ipc
     /// request is written without waiting).
     public const int MaxRequest = 4 << 20, TimeoutMs = 2000, BufferSize = 64 << 10;
     /// How long a hook waits at most for a free instance of a pipe that exists (all taken: a burst of events, or a pet
-    /// busy for a moment), and the budget of its whole run: Claude gives a hook 5 s, stdin (up to 3 s) and the reply
-    /// (TimeoutMs) included, so a hook that was slow to get its stdin waits for an instance that much less.
-    public const int ConnectMs = 2500, HookBudgetMs = 4500;
+    /// busy for a moment; on Linux, a pet that doesn't take connections), and the budget of its whole run from its Main.
+    /// Claude gives a hook 5 s: stdin (StdinMs) + an instance (what the budget has left once the reply's time is set
+    /// aside, so about 4500 - 2000 - 2000 = 500 ms at least) + the reply (TimeoutMs) = 4500 ms, which leaves 500 ms for
+    /// starting it (bash, sh and the launcher for the plugin, then the runtime). A hook that was slow to get its stdin
+    /// waits for an instance that much less; one that got none in time sends nothing.
+    public const int ConnectMs = 2500, HookBudgetMs = 4500, StdinMs = 2000;
     /// The longest string of an event the hook passes on (Write's tool_input holds the whole file, say).
     public const int MaxString = 256 << 10;
     /// How deep a request may nest: an event at the hook's own parse limit (64) is one level deeper in its envelope.
@@ -65,16 +70,34 @@ public static class Ipc
             OperatingSystem.IsWindows() ? PipeOptions.Asynchronous : PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         try
         {
-            try { c.Connect(0); }
-            // Windows: every instance is taken. The pipe exists, so wait for one; the kernel does the waiting.
-            // Connect(0) alone would take that for "not running"; on Linux a busy pet queues connects instead.
-            catch (TimeoutException) when (OperatingSystem.IsWindows() && PipeExists())
+            if (OperatingSystem.IsWindows())
             {
-                busy = true;
-                c.Connect(Math.Max(0, busyMs));
-                busy = false;
+                try { c.Connect(0); }
+                // every instance is taken. The pipe exists, so wait for one; the kernel does the waiting. Connect(0)
+                // alone would take that for "not running".
+                catch (TimeoutException) when (PipeExists())
+                {
+                    busy = true;
+                    c.Connect(Math.Max(0, busyMs));
+                    busy = false;
+                }
+                if (!OwnedByMe(c)) throw new UnauthorizedAccessException("the pipe isn't the pet's");
+                return c;
             }
-            if (OperatingSystem.IsWindows() && !OwnedByMe(c)) throw new UnauthorizedAccessException("the pipe isn't the pet's");
+            // Unix: a busy pet queues connects, but connect() has no time limit and blocks for as long as the queue is
+            // full (a suspended pet, say). So it runs on a thread of its own, left blocked when the wait is up: the
+            // hook's exit ends it, and c stays undisposed since that thread still uses it. At least 50 ms: a pet that
+            // takes connections does so at once, but the thread has to get to run first.
+            Exception failed = null;
+            var connect = new Thread(() => { try { c.Connect(0); } catch (Exception ex) { failed = ex; } }) { IsBackground = true };
+            connect.Start();
+            if (!connect.Join(Math.Max(50, busyMs)))
+            {
+                // the socket is there, so something listens on it (a pet that quit left one that refuses at once)
+                busy = File.Exists(Endpoint);
+                return null;
+            }
+            if (failed != null) throw failed;
             return c;
         }
         catch (Exception)
@@ -173,12 +196,15 @@ public static class Ipc
     }
 
     /// /run/user/<effective uid>, where logind puts the user's XDG_RUNTIME_DIR.
-    static string LoginRuntimeDir()
+    static string LoginRuntimeDir() => EffectiveUid() is { } uid ? "/run/user/" + uid : null;
+
+    /// The effective uid (Linux), without starting anything: the second of the Uid line's ids in /proc/self/status.
+    internal static string EffectiveUid()
     {
         try
         {
             foreach (var line in File.ReadLines("/proc/self/status"))
-                if (line.StartsWith("Uid:")) return "/run/user/" + line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries)[2];
+                if (line.StartsWith("Uid:")) return line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries)[2];
         }
         catch { }
         return null;

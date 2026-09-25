@@ -8,6 +8,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>aipet-hook</AssemblyName>
     <RootNamespace>AiPet</RootNamespace>
+    <AssemblyTitle>AiPet hook</AssemblyTitle>
+    <!-- in the exe's .res with its version resource, which names aipet-hook.exe (build/Win32Resources.targets) -->
+    <ApplicationIcon>..\..\assets\icon\aipet.ico</ApplicationIcon>
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <OptimizationPreference>Speed</OptimizationPreference>
@@ -19,5 +22,7 @@
     <Compile Include="..\AiPet.Core\Paths.cs" Link="Paths.cs" />
     <Compile Include="..\AiPet.Core\Ipc.cs" Link="Ipc.cs" />
   </ItemGroup>
+
+  <Import Project="..\..\build\Win32Resources.targets" />
 
 </Project>

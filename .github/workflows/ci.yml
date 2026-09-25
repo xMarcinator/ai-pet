@@ -1,5 +1,6 @@
-# CI: builds the solution on Windows and Linux, checks that the plugin's hook files register what the hook code
-# expects, and that the install and build scripts at least parse. Nothing is published here: see release.yml.
+# CI: builds the solution and runs its tests on Windows and Linux, checks that the plugin's hook files are what the
+# hook code makes of its event tables, and that the install and build scripts at least parse and stay executable.
+# Nothing is published here: see release.yml.
 name: CI
 
 on:
@@ -36,6 +37,17 @@ jobs:
           dotnet-version: 10.0.x
       - name: Build
         run: dotnet build AiPet.slnx -c Release --nologo
+      # The tests run the hook just built (dotnet aipet-hook.dll) against a HookServer on a temp pipe or socket, with
+      # temp data and temp folders, so nothing of the runner's user is touched. Windows is where the pet's cut-off of
+      # a silent client (CancelIoEx) is tried out.
+      - name: Test
+        run: dotnet test AiPet.slnx -c Release --nologo --no-build
+      # Manifests, hook files and marketplaces: valid JSON, the name aipet and one version, and the hook files exactly
+      # what the hook just built prints for them (aipet-hook --print-plugin-hooks), so the plugin can't drift from the
+      # code. On both OSes, since each builds its own hook; the release checks its Linux one again.
+      - name: Check the plugin and marketplace files
+        shell: bash
+        run: bash scripts/check-plugin.sh --marketplaces . plugins/aipet --hook dotnet src/AiPet.Hook/bin/Release/net10.0/aipet-hook.dll
 
       # The PowerShell scripts can't be tried out here, but they must at least parse, in Windows PowerShell 5.1 too:
       # that's what `irm ... | iex` usually runs in.
@@ -66,21 +78,6 @@ jobs:
           if ($failed) { exit 1 }
           Write-Output "Parsed: $($files -join ', ')"
 
-  plugin:
-    name: Plugin files
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # Manifests, hook files and marketplaces: valid JSON, the name aipet, one version, and exactly the events and
-      # handlers of ClaudeConfig.Events (Install.cs) and CodexConfig.Events (CodexConfig.cs).
-      # TODO: when aipet-hook can print its own plugin hook files (aipet-hook --print-plugin-hooks claude|codex),
-      # build the hook here and compare plugins/aipet/hooks/*.json with its output, so the plugin can't drift from
-      # the code (and drop the copies of the event tables in scripts/check-plugin.sh).
-      - name: Check the plugin and marketplace files
-        run: bash scripts/check-plugin.sh --marketplaces . plugins/aipet
-
   scripts:
     name: Shell scripts
     runs-on: ubuntu-22.04
@@ -96,3 +93,18 @@ jobs:
           for f in build.sh scripts/*.sh; do bash -n "$f"; done
       - name: ShellCheck
         run: shellcheck --severity=warning install.sh build.sh packaging/linux/install.sh plugins/aipet/native/aipet-hook.sh scripts/*.sh
+      - name: Executable bits
+        run: |
+          # The docs run these as ./build.sh and so on, so git must record them as executable (100755). A script added
+          # on Windows gets 100644 unless it's set with git update-index --chmod=+x. The plugin's launcher is run
+          # through sh, so it needn't be.
+          # --error-unmatch fails the step if one of them is gone, instead of no longer checking it.
+          listed=$(git ls-files -s --error-unmatch -- build.sh install.sh packaging/linux/install.sh 'scripts/*.sh')
+          bad=0
+          while read -r mode _ _ path; do
+            if [ "$mode" != 100755 ]; then
+              echo "::error file=$path::$path isn't executable in git (mode $mode): git update-index --chmod=+x $path"
+              bad=1
+            fi
+          done <<< "$listed"
+          exit "$bad"

@@ -25,15 +25,17 @@ sealed class WindowsPlatform : IPlatform
     /// The window FocusAgent brought forward; keys are only sent while that app is still in front.
     IntPtr focused;
 
-    public bool FocusAgent(string agent)
+    public bool FocusAgent(string agent, string link = null)
     {
         focused = IntPtr.Zero;
         var app = AgentApp(agent);
         var h = FindWindowOf(app.Exes);
         if (h == IntPtr.Zero)
         {
-            if (app.LaunchUrl != null) OpenUrl(app.LaunchUrl);
-            Log.Write(app.LaunchUrl != null ? $"no {agent} window found; opening {app.LaunchUrl}" : $"no {agent} window found");
+            // one URL only: the chat's link opens the app too (a ChatGPT window hidden in the tray isn't found)
+            var url = link ?? app.LaunchUrl;
+            if (url != null) OpenUrl(url);
+            Log.Write(url != null ? $"no {agent} window found; opening {(link != null ? "the chat's link" : url)}" : $"no {agent} window found");
             return false;
         }
         Bring(h);

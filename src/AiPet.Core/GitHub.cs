@@ -243,7 +243,8 @@ public sealed class GitHubWatcher
     /// POST a GraphQL query. Returns the response JSON, or null and a readable error.
     static async Task<(string Json, string Error)> GraphQLAsync(string hostName, string token, string query, JsonObject variables)
     {
-        var host = string.IsNullOrWhiteSpace(hostName) ? "github.com" : hostName.Trim().Replace("https://", "").TrimEnd('/');
+        // read as Jira reads its site (and Preset compares hosts): a typed http:// is dropped too, never kept in the name
+        var host = string.IsNullOrWhiteSpace(hostName) ? "github.com" : hostName.Trim().Replace("https://", "").Replace("http://", "").TrimEnd('/');
         var endpoint = host == "github.com" ? "https://api.github.com/graphql" : $"https://{host}/api/graphql";
         var body = new JsonObject { ["query"] = query };
         if (variables != null) body["variables"] = variables;

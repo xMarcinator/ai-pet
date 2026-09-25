@@ -5,7 +5,8 @@ namespace AiPet;
 
 /// Codex chats seen through Codex's own session files, for when its hooks don't report them: hooks that aren't
 /// trusted yet (Codex skips them silently), a desktop app that doesn't run them, or an interrupted turn (on
-/// Windows AiPet registers no Interrupt hook). The hook's live state wins whenever it's newer (see Board).
+/// Windows AiPet registers no Interrupt hook), or a turn that ends in an error (Codex runs no Stop hook then). Board
+/// orders the hook's live state against this by Codex's turn ids, else by time.
 ///
 /// Reads, never writes:
 ///   ~/.codex/session_index.jsonl        {id, thread_name, updated_at} per chat: its name, and which chats exist
@@ -25,6 +26,10 @@ public sealed class CodexWatcher
         public DateTime Mtime, LookAgain;  // LookAgain: when to look at the file of a chat idle for hours again
         public double Ts;
         public bool Skip;  // a sub-agent or one of Codex's own helper threads
+        /// The turn the latest task_started, task_complete or turn_aborted named (null when it named none), and
+        /// whether it has ended.
+        public string Turn;
+        public bool TurnEnded;
     }
 
     readonly Dictionary<string, Chat> threads = new();
@@ -101,6 +106,7 @@ public sealed class CodexWatcher
             {
                 Id = "codex:" + t.Id, Agent = "codex", Ts = t.Ts, Name = t.Name,
                 Eff = t.State, Detail = t.Detail, Prop = t.Prop, Cwd = t.Cwd ?? "", Where = t.Where, Source = "log",
+                Turn = t.Turn, TurnEnded = t.TurnEnded,
             });
         }
         snapshot = list;
@@ -234,11 +240,12 @@ public sealed class CodexWatcher
             double ts = r.TryGetProperty("timestamp", out var tse) && DateTimeOffset.TryParse(tse.GetString(), out var when)
                 ? when.ToUnixTimeMilliseconds() / 1000.0 : 0;
             void Set(string state, string detail, string prop = null) { t.State = state; t.Detail = detail; t.Prop = prop; if (ts > 0) t.Ts = ts; }
+            var turn = p.TryGetProperty("turn_id", out var tid) && tid.ValueKind == JsonValueKind.String ? tid.GetString() : null;
             switch (type.GetString())
             {
-                case "task_started": Set("thinking", "Thinking"); break;
-                case "task_complete": Set("done", "Done"); break;
-                case "turn_aborted": Set("idle", "Interrupted"); break;
+                case "task_started": Set("thinking", "Thinking"); (t.Turn, t.TurnEnded) = (turn, false); break;
+                case "task_complete": Set("done", "Done"); (t.Turn, t.TurnEnded) = (turn, true); break;
+                case "turn_aborted": Set("idle", "Interrupted"); (t.Turn, t.TurnEnded) = (turn, true); break;
                 case "item_completed" when t.State is "thinking" or "working":
                     // only finished items are saved, so this is what it just did, not what it's doing
                     var item = p.TryGetProperty("item", out var it) && it.TryGetProperty("type", out var itype) ? itype.GetString() : null;

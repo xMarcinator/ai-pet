@@ -3,6 +3,8 @@ bin/
 obj/
 artifacts/
 publish/
+# the release workflow's build folder (release.yml), when its steps are run locally
+out/
 Releases/
 *.user
 .vs/

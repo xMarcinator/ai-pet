@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The hook's and the pet's tests: event ordering, and the real aipet-hook against a real HookServer on a temp
+       endpoint. Nothing here touches the user's pet, config or data (see TestEnv). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AiPet.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- tests for one platform are skipped on the others by their [UnixFact]/[LinuxFact]/[WindowsFact] attributes,
+         which the platform analyzer doesn't know -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AiPet.Core\AiPet.Core.csproj" />
+    <!-- built first, but not referenced: it links Paths.cs and Ipc.cs from Core, so its types would clash. The tests
+         run it as the agents do, as a program (CopyHook). -->
+    <ProjectReference Include="..\..\src\AiPet.Hook\AiPet.Hook.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <!-- The hook's registration code, compiled in, so the tests can register with temp config folders (installing
+       from `dotnet aipet-hook.dll` is refused: it would register dotnet). Of the hook's linked files it needs only
+       Paths, which Core has. -->
+  <ItemGroup>
+    <Compile Include="..\..\src\AiPet.Hook\Install.cs" Link="Hook\Install.cs" />
+    <Compile Include="..\..\src\AiPet.Hook\CodexConfig.cs" Link="Hook\CodexConfig.cs" />
+  </ItemGroup>
+
+  <!-- The hook's dll and its runtime files go to hook/ in the output, for `dotnet hook/aipet-hook.dll`, whatever the
+       configuration. Not its apphost: freshly built .exe files upset antivirus on Windows. -->
+  <Target Name="CopyHook" AfterTargets="Build">
+    <MSBuild Projects="..\..\src\AiPet.Hook\AiPet.Hook.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="HookTarget" />
+    </MSBuild>
+    <PropertyGroup>
+      <HookDir>@(HookTarget->'%(RootDir)%(Directory)')</HookDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <HookFile Include="$(HookDir)aipet-hook.dll;$(HookDir)aipet-hook.runtimeconfig.json;$(HookDir)aipet-hook.deps.json" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HookFile)" DestinationFolder="$(OutDir)hook" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

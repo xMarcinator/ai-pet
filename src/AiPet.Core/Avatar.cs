@@ -74,7 +74,7 @@ public sealed class Avatar
                     try
                     {
                         var a = JsonSerializer.Deserialize<Avatar>(File.ReadAllText(f), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                        if (a?.Shapes is { Length: > 0 })
+                        if (a != null && Drawable(a))
                         {
                             a.Name ??= Path.GetFileNameWithoutExtension(f);
                             list.Add(a);
@@ -87,6 +87,13 @@ public sealed class Avatar
         foreach (var a in list) a.Resolve();
         return list;
     }
+
+    /// What the pet can draw without crashing: every shape a real ellipse (Pet.BuildBody reads all four numbers of
+    /// each) and the face rows on the grid (Pet.BuildFace loops over them). A hand-edited file easily misses a number.
+    static bool Drawable(Avatar a) =>
+        a.Shapes is { Length: > 0 } &&
+        a.Shapes.All(e => e is { Length: >= 4 } && e.Take(4).All(double.IsFinite) && e[2] > 0 && e[3] > 0) &&
+        a.FaceTop >= 0 && a.FaceTop <= a.FaceBottom && a.FaceBottom < Pet.GH;
 
     /// "#RRGGBB" or "#AARRGGBB" -> 0xAARRGGBB.
     public static bool TryParseColor(string hex, out uint argb)

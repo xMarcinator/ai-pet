@@ -13,7 +13,11 @@ sealed class MacPlatform : IPlatform
     public ISecretStore Secrets { get; } = new MemorySecrets();
     public IMediaPlayer Media => null;
 
-    public bool FocusAgent(string agent) => false;
+    public bool FocusAgent(string agent, string link = null)
+    {
+        if (link != null) OpenUrl(link);
+        return false;
+    }
     public Task<bool> SendEscape() => Task.FromResult(false);
     public void OpenUrl(string url) { try { Process.Start("open", url)?.Dispose(); } catch { } }
     public void OpenFolder(string path) => OpenUrl(path);

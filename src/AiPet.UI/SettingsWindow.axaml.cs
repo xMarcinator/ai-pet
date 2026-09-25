@@ -7,6 +7,8 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace AiPet;
@@ -22,6 +24,8 @@ sealed class SettingsHost
     public string DefaultEmail;
     public List<Switch> Switches = new();
     public Action ResetPosition;
+    /// Closes the pet, as Quit does but without installing an update itself ("Restart to update" has started that).
+    public Action Quit;
     public Func<Avatar> CurrentAvatar;
     public Action<Avatar> ApplyAvatar;
 }
@@ -39,7 +43,7 @@ public partial class SettingsWindow : Window
     {
         ["general"] = ("General", "How the pet behaves on your desktop."),
         ["avatars"] = ("Avatars", "Pick how the pet looks. Its colour also tints check marks and buttons."),
-        ["jira"] = ("Jira", "A bubble for every issue waiting on your review, and a wave when a new one arrives."),
+        ["jira"] = ("Jira", "A bubble for every issue your search finds, and a wave when a new one turns up."),
         ["github"] = ("GitHub", "Pull requests waiting on your review. A PR that mentions a Jira key (in its title, branch, description or commits) joins that Jira bubble, which then gets a button to open it."),
     };
 
@@ -116,6 +120,94 @@ public partial class SettingsWindow : Window
         ResetPositionBtn.Click += (_, _) => host.ResetPosition();
         DataFolderText.Text = Paths.DataDir;
         OpenDataBtn.Click += (_, _) => host.Platform.OpenFolder(Paths.DataDir);
+        ImportBtn.Click += async (_, _) => await ImportAsync();
+        BuildUpdates();
+    }
+
+    /// The version, and where its update stands (Updates): a check on demand, and "Restart to update" once one is in.
+    void BuildUpdates()
+    {
+        VersionText.Text = "AiPet " + Updates.Version;
+        UpdateBtn.Click += (_, _) =>
+        {
+            if (Updates.Status.Kind == UpdateStatus.Kinds.Ready) { if (Updates.Restart()) host.Quit(); }
+            else _ = Task.Run(Updates.CheckAsync);
+        };
+        void Changed() => Dispatcher.UIThread.Post(ShowUpdate);
+        Updates.Changed += Changed;
+        Closed += (_, _) => Updates.Changed -= Changed;
+        ShowUpdate();
+    }
+
+    void ShowUpdate()
+    {
+        var s = Updates.Status;
+        UpdateText.Text = s.Text;
+        UpdateText.Foreground = s.Kind switch { UpdateStatus.Kinds.Failed => Bad, UpdateStatus.Kinds.Ready => Ok, _ => Muted };
+        UpdateBtn.IsVisible = s.Kind != UpdateStatus.Kinds.Off;
+        UpdateBtn.IsEnabled = !s.Busy;
+        UpdateBtn.Content = s.Kind == UpdateStatus.Kinds.Ready ? "Restart to update" : "Check for updates";
+    }
+
+    /// "Import defaults…": a team's preset file sets the Jira and GitHub settings, saved as their pages' Save does.
+    /// Tokens and the email are never part of it (see Preset).
+    async Task ImportAsync()
+    {
+        if (!StorageProvider.CanOpen) { ShowImport("This desktop has no file picker to choose a preset with.", Bad); return; }
+        // the picker is the desktop's (a portal over D-Bus on Linux), and an error from it would take the pet down
+        IReadOnlyList<IStorageFile> files;
+        try
+        {
+            files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import defaults", AllowMultiple = false,
+                FileTypeFilter = new[] { new FilePickerFileType("AiPet preset") { Patterns = new[] { "*.json" } } },
+            });
+        }
+        catch (Exception ex) { ShowImport("Couldn't open a file picker: " + ex.Message, Bad); return; }
+        if (files == null || files.Count == 0) return;
+        Preset preset;
+        try
+        {
+            await using var stream = await files[0].OpenReadAsync();
+            using var reader = new StreamReader(stream);
+            preset = Preset.Parse(await reader.ReadToEndAsync());
+        }
+        catch (FormatException ex) { ShowImport("Nothing was imported. " + ex.Message, Bad); return; }
+        catch (Exception ex) { ShowImport("Couldn't read the file: " + ex.Message, Bad); return; }
+        if (!preset.HasJira && !preset.HasGitHub) { ShowImport("Nothing was imported: the file has no Jira or GitHub settings.", Muted); return; }
+        // A file someone shared must not send your saved token to a site of its choosing: when it points Jira or GitHub
+        // somewhere else, that token is removed before Save restarts the watcher, and you paste it again if it belongs there.
+        var moved = new List<string>();
+        try
+        {
+            if (preset.HasJira)
+            {
+                var jira = preset.ApplyTo(host.Jira.Config);
+                if (host.Jira.HasToken && preset.MovesJira(host.Jira.Config)) { host.Jira.ForgetToken(); moved.Add("Jira at " + jira.Site); }
+                host.Jira.Save(jira, null);
+                FillJira();
+            }
+            if (preset.HasGitHub)
+            {
+                var github = preset.ApplyTo(host.GitHub.Config);
+                if (host.GitHub.HasSavedToken && preset.MovesGitHub(host.GitHub.Config)) { host.GitHub.ForgetToken(); moved.Add("GitHub at " + github.Host); }
+                host.GitHub.Save(github);
+                FillGitHub();
+            }
+        }
+        catch (Exception ex) { ShowImport("Couldn't save the settings: " + ex.Message, Bad); return; }
+        if (moved.Count == 0) ShowImport($"Imported {preset.Describe()}. Your tokens and email stay as they were.", Ok);
+        else ShowImport($"Imported {preset.Describe()}. It points {string.Join(" and ", moved)}, so " +
+                        (moved.Count == 1 ? "the token you saved for the old address was removed: paste it" : "the tokens you saved for the old addresses were removed: paste them") +
+                        " again if you trust the new one. Your email stays as it was.", Muted);
+    }
+
+    void ShowImport(string text, IBrush color)
+    {
+        ImportStatus.Text = text;
+        ImportStatus.Foreground = color;
+        ImportStatus.IsVisible = true;
     }
 
     // ------------------------------------------------------------------ Avatars
@@ -132,7 +224,10 @@ public partial class SettingsWindow : Window
         var current = host.CurrentAvatar()?.Name;
         foreach (var a in Avatar.All())
         {
-            var (body, glow) = Render(a);
+            // a custom avatar the pet can't draw gets no tile, rather than taking Settings down
+            WriteableBitmap body, glow;
+            try { (body, glow) = Render(a); }
+            catch (Exception ex) { Log.Write($"avatar {a.Name}: can't draw it: {ex.Message}"); continue; }
             var glowImg = new Image
             {
                 Source = glow, Stretch = Stretch.Fill, IsHitTestVisible = false,
@@ -189,14 +284,8 @@ public partial class SettingsWindow : Window
     void LoadJira()
     {
         var jira = host.Jira;
-        var c = jira.Config;
-        EnabledBox.IsChecked = c.Enabled || !jira.HasToken;
-        SiteBox.Text = c.Site;
-        EmailBox.Text = string.IsNullOrEmpty(c.Email) ? host.DefaultEmail : c.Email;
-        JqlBox.Text = c.Jql;
+        FillJira();
         TokenBox.Text = "";
-        TokenHint.Text = jira.HasToken ? "A token is saved. Leave this empty to keep it." : "Create one at id.atlassian.com, then paste it here";
-        JiraForgetBtn.IsVisible = jira.HasToken;
         if (jira.LastError != null) ShowJira(jira.LastError, Bad);
 
         CreateTokenBtn.Click += (_, _) => host.Platform.OpenUrl("https://id.atlassian.com/manage-profile/security/api-tokens");
@@ -214,8 +303,21 @@ public partial class SettingsWindow : Window
             jira.ForgetToken();
             JiraForgetBtn.IsVisible = false;
             TokenHint.Text = "Create one at id.atlassian.com, then paste it here";
-            ShowJira("The saved token was removed. Jira reviews are off until you save a new one.", Muted);
+            ShowJira("The saved token was removed. Jira stays off until you save a new one.", Muted);
         };
+    }
+
+    /// The Jira page's fields from the saved settings (the token box is left alone).
+    void FillJira()
+    {
+        var jira = host.Jira;
+        var c = jira.Config;
+        EnabledBox.IsChecked = c.Enabled || !jira.HasToken;
+        SiteBox.Text = c.Site;
+        EmailBox.Text = string.IsNullOrEmpty(c.Email) ? host.DefaultEmail : c.Email;
+        JqlBox.Text = c.Jql;
+        TokenHint.Text = jira.HasToken ? "A token is saved. Leave this empty to keep it." : "Create one at id.atlassian.com, then paste it here";
+        JiraForgetBtn.IsVisible = jira.HasToken;
     }
 
     JiraWatcher.Settings JiraSettings() => new()
@@ -240,20 +342,16 @@ public partial class SettingsWindow : Window
         ShowJira("Searching…", Muted);
         var (issues, error) = await JiraWatcher.SearchAsync(JiraSettings(), token);
         if (error != null) ShowJira(error, Bad);
-        else if (issues.Count == 0) ShowJira("Connected. No issues are waiting on your review right now.", Ok);
-        else ShowJira($"Connected. {issues.Count} issue(s) waiting on your review, e.g. {issues[0].Key}: {issues[0].Summary}", Ok);
+        else if (issues.Count == 0) ShowJira("Connected. The search finds no issues right now.", Ok);
+        else ShowJira($"Connected. The search finds {issues.Count} issue(s), e.g. {issues[0].Key}: {issues[0].Summary}", Ok);
     }
 
     // ------------------------------------------------------------------ GitHub
     void LoadGitHub()
     {
         var github = host.GitHub;
-        var g = github.Config;
-        GitHubBox.IsChecked = g.Enabled;
-        GitHubHostBox.Text = g.Host;
-        GitHubOrgsBox.Text = string.Join(", ", g.Orgs);
+        FillGitHub();
         GitHubTokenBox.Text = "";
-        UpdateGitHubStatus();
 
         GitHubTokenBox.TextChanged += (_, _) => { if (!string.IsNullOrWhiteSpace(GitHubTokenBox.Text)) GitHubBox.IsChecked = true; };
         CreateGitHubTokenBtn.Click += (_, _) =>
@@ -287,6 +385,16 @@ public partial class SettingsWindow : Window
             github.ForgetToken();
             UpdateGitHubStatus("The saved token was removed. GitHub reviews are off until you save a new one.");
         };
+    }
+
+    /// The GitHub page's fields from the saved settings (the token box is left alone).
+    void FillGitHub()
+    {
+        var g = host.GitHub.Config;
+        GitHubBox.IsChecked = g.Enabled;
+        GitHubHostBox.Text = g.Host;
+        GitHubOrgsBox.Text = string.Join(", ", g.Orgs ?? Array.Empty<string>());
+        UpdateGitHubStatus();
     }
 
     void UpdateGitHubStatus(string message = null)

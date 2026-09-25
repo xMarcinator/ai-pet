@@ -8,6 +8,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>AiPet</AssemblyName>
     <RootNamespace>AiPet</RootNamespace>
+    <AssemblyTitle>AiPet</AssemblyTitle>
+    <!-- the exe's icon and manifest go into its .res (build/Win32Resources.targets); Avalonia makes the icon the
+         windows' icon too -->
+    <ApplicationIcon>..\..\assets\icon\aipet.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <!-- Win32 and X11 calls are guarded by OperatingSystem checks -->
@@ -18,10 +22,14 @@
     <PackageReference Include="Avalonia" Version="12.1.3" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
+    <!-- the installer and updates on Windows (Updates.cs); keep it in step with VPK_VERSION in release.yml -->
+    <PackageReference Include="Velopack" Version="1.2.158" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AiPet.Core\AiPet.Core.csproj" />
   </ItemGroup>
+
+  <Import Project="..\..\build\Win32Resources.targets" />
 
 </Project>

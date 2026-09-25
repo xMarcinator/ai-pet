@@ -8,7 +8,8 @@
 # the aipet plugin for Claude Code and for Codex, whichever of them is on PATH. Running it again updates everything.
 #
 # Settings (environment variables, e.g. curl ... | AIPET_VERSION=0.2.0 sh):
-#   AIPET_VERSION=0.2.0    install that release instead of the latest
+#   AIPET_VERSION=0.2.0    install that release of the app instead of the latest (the plugin still comes from the
+#                          latest release)
 #   AIPET_NO_PLUGINS=1     install only the app
 #   AIPET_NO_START=1       don't start the pet afterwards
 #   GITHUB_TOKEN=...       a token that can read the repositories, while they are private. Fetch the script with it too:
@@ -139,8 +140,9 @@ main() {
   tar -xzf "$tmp/$package" -C "$tmp"
   folder=$tmp/AiPet-$version-$rid
   [ -f "$folder/install.sh" ] || die "$package has no install.sh."
-  if [ "${AIPET_NO_START:-0}" = 1 ]; then sh "$folder/install.sh" --no-start < /dev/null
-  else sh "$folder/install.sh" < /dev/null
+  # without the token: the package's installer doesn't need it, and the pet it starts runs for days
+  if [ "${AIPET_NO_START:-0}" = 1 ]; then (unset GITHUB_TOKEN; sh "$folder/install.sh" --no-start < /dev/null)
+  else (unset GITHUB_TOKEN; sh "$folder/install.sh" < /dev/null)
   fi
   hook=${XDG_DATA_HOME:-$HOME/.local/share}/AiPet/app/aipet-hook
 
@@ -150,6 +152,12 @@ main() {
   if [ "${AIPET_NO_PLUGINS:-0}" != 1 ]; then
     if { command -v claude >/dev/null 2>&1 || command -v codex >/dev/null 2>&1; } && ! command -v git >/dev/null 2>&1; then
       warn "Claude Code and Codex fetch plugins with git, which isn't installed: install git, then run this again."
+    fi
+    # The marketplace on main pins the latest release's plugin, and no tag of this repository pins an older one (a
+    # release's tag is made before its plugin is pinned).
+    if [ -n "${AIPET_VERSION:-}" ] && { command -v claude >/dev/null 2>&1 || command -v codex >/dev/null 2>&1; }; then
+      warn "AIPET_VERSION pins only the app: the plugin for Claude Code and Codex (with its hook) comes from the latest release,"
+      warn "and AiPet $version may not understand a newer hook. To leave the plugins as they are, set AIPET_NO_PLUGINS=1."
     fi
 
     if command -v claude >/dev/null 2>&1; then

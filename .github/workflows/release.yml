@@ -3,13 +3,21 @@
 #
 # Run it from the Actions tab (Release > Run workflow) on main, with the version to release, e.g. 0.2.0.
 #
-#   check    the version is new and well formed, and the plugin files are consistent
+#   check    the version is new and well formed, the plugin files are consistent, the deploy key reads the plugin
+#            repository and it has a branch
 #   win      AiPet.exe (self-contained) and aipet-hook.exe (NativeAOT): Velopack installer and update feed, portable zip
-#   linux    per platform, AiPet (self-contained) and aipet-hook (NativeAOT): AiPet-<version>-<rid>.tar.gz
+#   linux    per platform, AiPet (self-contained) and aipet-hook (NativeAOT, for glibc 2.27 and newer):
+#            AiPet-<version>-<rid>.tar.gz
 #   plugin   plugins/aipet plus the hook binaries: a commit tagged v<version> in the plugin repository
 #   publish  the GitHub release with every package and SHA256SUMS, then the marketplace pins on main
 #
-# Needs the secret PLUGIN_DEPLOY_KEY: the private half of a deploy key with write access to the plugin repository.
+# A prerelease (a version like 0.3.0-rc.1) gets its plugin tag and a GitHub prerelease, but the marketplaces on main
+# stay on the latest stable release, which is what every user's Claude Code and Codex install. To try a prerelease's
+# plugin, point a local copy of the marketplace files at its tag and commit.
+#
+# Needs the plugin repository with a first commit on its default branch (create it with a README: actions/checkout
+# can't check out an empty repository, and each release replaces the README anyway), and the secret
+# PLUGIN_DEPLOY_KEY: the private half of a deploy key with write access to the plugin repository.
 # If a job fails after the plugin job, use "Re-run failed jobs": a version's plugin tag can be pushed only once.
 name: Release
 
@@ -34,7 +42,8 @@ env:
   # The marketplace files on main point at the same place.
   PLUGIN_REPO: xMarcinator/ai-pet-plugin
   PLUGIN_PATH: plugins/aipet
-  # Velopack's CLI; keep it in step with the Velopack package version the app references, if it references one.
+  # Velopack's CLI: keep it in step with the Velopack package the app references (src/AiPet.UI/AiPet.UI.csproj). vpk
+  # pack checks that the app calls VelopackApp.Build().Run() in Main, and warns when the versions differ.
   VPK_VERSION: 1.2.158
 
 jobs:
@@ -65,12 +74,43 @@ jobs:
             echo "::error::v$VERSION exists already in $GITHUB_REPOSITORY"; exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Check the plugin repository has a branch
+        env:
+          DEPLOY_KEY: ${{ secrets.PLUGIN_DEPLOY_KEY }}
+          # github.com's published host key (the ed25519 one), so ssh asks nothing and trusts nothing else
+          GITHUB_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+        run: |
+          # The plugin job checks it out with the deploy key after the builds (about 15 minutes), and actions/checkout
+          # can't check out a repository without commits. Read it with the same key now, so a missing branch or key
+          # fails at once, also while the repository is private.
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::error::The secret PLUGIN_DEPLOY_KEY isn't set: add a deploy key with write access to $PLUGIN_REPO, and its private half as that secret"
+            exit 1
+          fi
+          key="$RUNNER_TEMP/plugin-deploy-key"
+          hosts="$RUNNER_TEMP/plugin-known-hosts"
+          trap 'rm -f "$key"' EXIT
+          (umask 077 && printf '%s\n' "$DEPLOY_KEY" > "$key")
+          printf 'github.com %s\n' "$GITHUB_HOST_KEY" > "$hosts"
+          export GIT_SSH_COMMAND="ssh -i '$key' -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='$hosts'"
+          set +e
+          out=$(git ls-remote --exit-code --heads "git@github.com:$PLUGIN_REPO.git" 2>&1)
+          found=$?
+          set -e
+          if [ "$found" = 2 ]; then
+            echo "::error::$PLUGIN_REPO has no branch: give it a first commit on its default branch (e.g. create it with a README), then run this again"
+            exit 1
+          elif [ "$found" != 0 ]; then
+            echo "::error::Couldn't read $PLUGIN_REPO with PLUGIN_DEPLOY_KEY (is it that repository's deploy key?): $out"
+            exit 1
+          fi
       - name: Check the plugin and marketplace files
         run: bash scripts/check-plugin.sh --marketplaces . "$PLUGIN_PATH"
       - name: Check the packaging files are there
         run: |
           missing=0
-          for f in assets/icon/aipet.ico packaging/linux/install.sh packaging/linux/aipet.desktop.in; do
+          for f in assets/icon/aipet.ico packaging/linux/install.sh packaging/linux/aipet.desktop.in \
+                   packaging/linux/hyprland/aipet.lua packaging/linux/hyprland/aipet.conf; do
             if [ ! -f "$f" ]; then echo "::error::$f is missing"; missing=1; fi
           done
           if [ ! -d packaging/linux/icons/hicolor ]; then echo "::error::packaging/linux/icons/hicolor is missing"; missing=1; fi
@@ -108,6 +148,23 @@ jobs:
           if [ ! -f out/hook/aipet-hook.exe ] || [ -f out/hook/aipet-hook.dll ]; then
             echo "::error::The hook wasn't compiled natively"; ls -la out/hook; exit 1
           fi
+      - name: Check the exes' version resources
+        shell: pwsh
+        run: |
+          # AiPet.dll and aipet-hook.dll carry the icon and a version resource that names the exe
+          # (build/Win32Resources.targets); the SDK copies them into the apphost and NativeAOT into the native exe.
+          # Read them as Windows does: an exe that says it's a .dll, or has no version, upsets antivirus heuristics.
+          $bad = $false
+          foreach ($f in @('out/app/AiPet.exe', 'out/hook/aipet-hook.exe')) {
+            $v = (Get-Item -LiteralPath $f).VersionInfo
+            $name = Split-Path -Leaf $f
+            Write-Host "${name}: $($v.FileDescription), $($v.OriginalFilename), $($v.ProductVersion), $($v.FileVersion)"
+            if ($v.OriginalFilename -ne $name -or $v.InternalName -ne $name -or $v.ProductName -ne 'AiPet' -or $v.ProductVersion -ne $env:VERSION) {
+              Write-Host "::error::$f doesn't have its version resource (name $name, version $env:VERSION)"
+              $bad = $true
+            }
+          }
+          if ($bad) { exit 1 }
       - name: Put the hook next to AiPet.exe
         run: |
           cp out/hook/aipet-hook.exe out/app/
@@ -178,15 +235,26 @@ jobs:
     strategy:
       matrix:
         include:
-          # 22.04 for an older glibc, so the binaries run on more distributions
-          - { rid: linux-x64, os: ubuntu-22.04 }
-          - { rid: linux-arm64, os: ubuntu-22.04-arm }
-    runs-on: ${{ matrix.os }}
+          # Microsoft's cross-build images (x64 Azure Linux with clang and lld, and the target's Ubuntu 18.04 file
+          # system in /crossrootfs/<arch>), as its docs on NativeAOT in containers show. The hook links against that
+          # glibc (2.27), so it runs where .NET 10 does. Linked on a runner, it would need the runner's glibc (2.34+
+          # on 22.04), and older distributions' loaders would refuse it on every event.
+          # Pinned by digest, like the actions (docker ignores the tag then): Microsoft rebuilds these tags. To update,
+          # read the tag's new digest (docker buildx imagetools inspect <image>:<tag>) and watch the glibc step.
+          - { rid: linux-x64, arch: x64, image: "mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-amd64@sha256:f67558f7b8fcf1a875f62d682a05aa6b0ea2e61656258112566665fbc14ce13f" }
+          - { rid: linux-arm64, arch: arm64, image: "mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-arm64@sha256:712167cf0280effdccca936264ec0b3d8789cef04fde3c2fa6e911494673b427" }
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
     permissions:
       contents: read
+    defaults:
+      run:
+        shell: bash
     env:
       VERSION: ${{ needs.check.outputs.version }}
       RID: ${{ matrix.rid }}
+      # the oldest glibc the hook may need: the cross root file system's
+      GLIBC_FLOOR: "2.27"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -194,21 +262,41 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
-      - name: Install what NativeAOT needs
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends clang zlib1g-dev
       - name: Publish the app (self-contained)
         run: |
           dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r "$RID" --self-contained -o out/app \
             -p:Version="$VERSION" -p:DebugType=none --nologo
       - name: Publish the hook (NativeAOT, no fallback)
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
+          # linked against the image's root file system, not the container's own libraries
           dotnet publish src/AiPet.Hook/AiPet.Hook.csproj -c Release -r "$RID" -o out/hook \
-            -p:Version="$VERSION" -p:PublishAot=true -p:StripSymbols=true -p:DebugType=none --nologo
+            -p:Version="$VERSION" -p:PublishAot=true -p:StripSymbols=true -p:DebugType=none --nologo \
+            -p:SysRoot="/crossrootfs/$ARCH" -p:LinkerFlavor=lld
           if [ ! -f out/hook/aipet-hook ] || [ -f out/hook/aipet-hook.dll ]; then
             echo "::error::The hook wasn't compiled natively"; ls -la out/hook; exit 1
           fi
           file out/hook/aipet-hook
           ls -la out/hook
+      - name: Check the glibc the hook needs
+        run: |
+          # The loader refuses a binary that asks for a newer GLIBC_ symbol version than the system's glibc has, so
+          # the newest one it asks for is the oldest glibc it runs on.
+          hook=out/hook/aipet-hook
+          need=$(readelf -W -V "$hook" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)+' | sed 's/^GLIBC_//' | sort -uV || true)
+          if [ -z "$need" ]; then echo "::error::readelf found no GLIBC_ versions in $hook"; readelf -W -V "$hook"; exit 1; fi
+          echo "GLIBC_ versions the hook needs: $(echo $need)"
+          bad=0
+          for v in $need; do
+            if [ "$(printf '%s\n' "$GLIBC_FLOOR" "$v" | sort -V | tail -n 1)" != "$GLIBC_FLOOR" ]; then
+              echo "::error::The hook needs GLIBC_$v, newer than $GLIBC_FLOOR, for:"
+              readelf -W --dyn-syms "$hook" | grep -F "@GLIBC_$v " || true
+              bad=1
+            fi
+          done
+          if [ "$bad" = 1 ]; then exit 1; fi
+          echo "$RID hook: needs glibc $(echo "$need" | tail -n 1) (floor $GLIBC_FLOOR)" >> "$GITHUB_STEP_SUMMARY"
       - name: Make the tarball
         run: |
           name="AiPet-$VERSION-$RID"
@@ -222,6 +310,7 @@ jobs:
           chmod 755 "$stage/install.sh"
           mkdir -p "$stage/icons"
           cp -R packaging/linux/icons/hicolor "$stage/icons/hicolor"
+          cp -R packaging/linux/hyprland "$stage/hyprland"
           for f in LICENSE THIRD-PARTY-NOTICES.md; do
             if [ -f "$f" ]; then cp "$f" "$stage/"; fi
           done
@@ -312,7 +401,8 @@ jobs:
           Don't change anything here by hand: change the plugin in ai-pet, and release it from there. To install AiPet
           and the plugin, see the [ai-pet README](https://github.com/xMarcinator/ai-pet#readme).
           EOF
-          bash source/scripts/check-plugin.sh --release "$dest"
+          # this release's Linux hook (the copy just installed, so executable) must print the hook files released with it
+          bash source/scripts/check-plugin.sh --release "$dest" --hook "$dest/native/linux-x64/aipet-hook"
       - name: Commit, tag and push
         id: push
         working-directory: plugin-repo
@@ -356,7 +446,33 @@ jobs:
           (cd dist && sha256sum -- *) > SHA256SUMS
           mv SHA256SUMS dist/
           cat dist/SHA256SUMS
+      - name: Check whether this release is the latest
+        id: latest
+        run: |
+          # A prerelease, or a release older than the one main's marketplaces pin, leaves them (every user's plugin)
+          # and GitHub's latest release (the one-line installers' app) as they are.
+          note() { echo "::notice::$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; }
+          latest=true
+          if [[ "$VERSION" == *-* ]]; then
+            latest=false
+            note "$VERSION is a prerelease: the marketplaces on main and the latest release stay as they are"
+          fi
+          for f in .claude-plugin/marketplace.json .agents/plugins/marketplace.json; do
+            ref=$(jq -r '.plugins[0].source.ref // ""' "$f")
+            sha=$(jq -r '.plugins[0].source.sha // ""' "$f")
+            pinned=${ref#v}
+            pinned=${pinned%%-*}
+            # all zeros: the placeholder from before the first release
+            if [ "$latest" = false ] || [ -z "$pinned" ] || [[ "$sha" =~ ^0+$ ]]; then continue; fi
+            if [ "$pinned" != "$VERSION" ] && [ "$(printf '%s\n' "$pinned" "$VERSION" | sort -V | tail -n 1)" = "$pinned" ]; then
+              latest=false
+              note "$f pins $ref, newer than $VERSION: the marketplaces on main and the latest release stay as they are"
+            fi
+          done
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
       - name: Create the GitHub release
+        env:
+          LATEST: ${{ steps.latest.outputs.latest }}
         run: |
           tag="v$VERSION"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
@@ -386,16 +502,25 @@ jobs:
           This release's plugin: https://github.com/@PLUGIN_REPO@/tree/@PLUGIN_SHA@
           EOF
           sed -i -e "s/@VERSION@/$VERSION/g" -e "s|@PLUGIN_REPO@|$PLUGIN_REPO|g" -e "s/@PLUGIN_SHA@/$PLUGIN_SHA/g" notes.md
-          # Codex asks every user to trust the hooks again when their definitions change
-          previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$GITHUB_SHA" 2>/dev/null || true)
-          if [ -n "$previous" ] && ! git diff --quiet "$previous" "$GITHUB_SHA" -- "$PLUGIN_PATH/hooks/codex.json"; then
-            printf '\n> **Codex users:** this release changes the Codex hooks, so Codex asks you to trust them again (`codex`, then `/hooks`).\n' >> notes.md
+          # Codex asks every user to trust the hooks again when their definitions change. Users update from the latest
+          # stable release (prereleases don't move the marketplaces), not from a prerelease in between; a prerelease's
+          # testers may also come from the one before it.
+          previous=$(git tag --merged "$GITHUB_SHA" --list 'v[0-9]*' --sort=-v:refname | grep -v -e - | grep -vxF "$tag" | head -n 1 || true)
+          if [[ "$VERSION" == *-* ]]; then
+            previous="$previous $(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude "$tag" "$GITHUB_SHA" 2>/dev/null || true)"
           fi
+          for p in $previous; do
+            if ! git diff --quiet "$p" "$GITHUB_SHA" -- "$PLUGIN_PATH/hooks/codex.json"; then
+              printf '\n> **Codex users:** this release changes the Codex hooks, so Codex asks you to trust them again (`codex`, then `/hooks`).\n' >> notes.md
+              break
+            fi
+          done
           prerelease=()
           if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
           gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "AiPet $VERSION" --notes-file notes.md --generate-notes "${prerelease[@]}"
+            --title "AiPet $VERSION" --notes-file notes.md --generate-notes --latest="$LATEST" "${prerelease[@]}"
       - name: Pin the marketplaces to the plugin commit
+        if: steps.latest.outputs.latest == 'true'
         run: |
           tag="v$VERSION"
           url="https://github.com/$PLUGIN_REPO.git"

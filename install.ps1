@@ -8,14 +8,17 @@
 # whichever of them is on PATH. Running it again updates everything. Works in Windows PowerShell 5.1 and PowerShell 7.
 #
 # Settings are environment variables, since `irm | iex` can't pass parameters (e.g. $env:AIPET_VERSION = '0.2.0'):
-#   AIPET_VERSION     install that release instead of the latest
+#   AIPET_VERSION     install that release of the app instead of the latest (the plugin still comes from the latest
+#                     release, and the installed app still updates itself to the latest release a few minutes after
+#                     it starts, installing it when you quit)
 #   AIPET_NO_PLUGINS  1: install only the app
 #   AIPET_NO_START    1: don't start the pet afterwards
 #   GITHUB_TOKEN      a token that can read the repositories, while they are private. Fetch the script with it too:
 #     (iwr -UseBasicParsing -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } https://api.github.com/repos/xMarcinator/ai-pet/contents/install.ps1).Content | iex
 #
 # The Claude Code plugin runs its hook through Git Bash (Git for Windows). Where there's no Git Bash, the hook is
-# registered in ~/.claude/settings.json instead (aipet-hook --install claude), which needs no shell.
+# registered in ~/.claude/settings.json instead (aipet-hook --install claude), which needs no shell. Uninstalling AiPet
+# removes that registration too.
 # To build and install from a clone of the repository instead: scripts\install-from-source.ps1.
 #
 # Everything runs inside a script block, so nothing it sets stays behind in your PowerShell session.
@@ -78,6 +81,17 @@
         }
     }
 
+    # Starts a program without GITHUB_TOKEN: the pet (which the installer may start too) runs for days, and the
+    # browsers and apps it opens would get the token too. The session keeps its value.
+    function Start-WithoutToken([string]$FilePath, [string[]]$ArgumentList) {
+        [Environment]::SetEnvironmentVariable('GITHUB_TOKEN', $null, 'Process')
+        try {
+            if ($ArgumentList) { Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -PassThru } else { Start-Process -FilePath $FilePath -PassThru }
+        } finally {
+            [Environment]::SetEnvironmentVariable('GITHUB_TOKEN', $token, 'Process')
+        }
+    }
+
     # Git Bash, which the Claude Code plugin's hook runs through.
     function Find-GitBash {
         $candidates = @()
@@ -103,6 +117,9 @@
     $headers = @{ Accept = 'application/vnd.github+json' }
     if ($token) { $headers['Authorization'] = "Bearer $token" }
     $url = if ($env:AIPET_VERSION) { "$api/releases/tags/v$($env:AIPET_VERSION.TrimStart('v'))" } else { "$api/releases/latest" }
+    if ($env:AIPET_VERSION) {
+        Warn 'The installed app updates itself to the latest release a few minutes after it starts (and installs it when you quit).'
+    }
     try {
         $release = Invoke-RestMethod -Uri $url -Headers $headers -UseBasicParsing
     } catch {
@@ -143,7 +160,7 @@
 
         Step "Installing to $root"
         # -PassThru with WaitForExit, not -Wait: that would also wait for anything the installer leaves running
-        $p = Start-Process -FilePath $setup -ArgumentList @('--silent', '--log', ('"' + $log + '"')) -PassThru
+        $p = Start-WithoutToken $setup @('--silent', '--log', ('"' + $log + '"'))
         $null = $p.Handle   # keeps the process handle, so the exit code can still be read once it has exited
         $p.WaitForExit()
         if ($p.ExitCode -ne 0) { throw "The installer failed (exit code $($p.ExitCode)); its log is $log." }
@@ -154,6 +171,17 @@
     $hook = Join-Path $root 'current\aipet-hook.exe'
     if (-not (Test-Path -LiteralPath $appExe)) { throw "The installer finished, but $appExe isn't there (its log is $log)." }
 
+    # Older versions started themselves at sign-in (AiPet, and ClaudePet before it); now nothing does. A value that
+    # starts this install was added by hand, so it stays.
+    $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    foreach ($name in @('AiPet', 'ClaudePet')) {
+        $value = [string](Get-ItemProperty -LiteralPath $run -Name $name -ErrorAction SilentlyContinue).$name
+        if ($value -and $value.IndexOf($root, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            Step "Removing the sign-in entry of an older install ($name)"
+            Remove-ItemProperty -LiteralPath $run -Name $name -ErrorAction SilentlyContinue
+        }
+    }
+
     # ------------------------------------------------------------ the plugins
     $claudeDone = $false
     $claudeRegistered = $false
@@ -163,6 +191,12 @@
         $codex = Find-Exe 'codex'
         if (($claude -or $codex) -and -not (Find-Exe 'git')) {
             Warn 'Claude Code and Codex fetch plugins with git, which was not found: install Git for Windows, then run this again.'
+        }
+        # The marketplace on main pins the latest release's plugin, and no tag of this repository pins an older one (a
+        # release's tag is made before its plugin is pinned).
+        if ($env:AIPET_VERSION -and ($claude -or $codex)) {
+            Warn 'AIPET_VERSION pins only the app: the plugin for Claude Code and Codex (with its hook) comes from the latest release,'
+            Warn "and AiPet $version may not understand a newer hook. To leave the plugins as they are, set `$env:AIPET_NO_PLUGINS = '1'."
         }
 
         if ($claude) {
@@ -212,7 +246,7 @@
 
     if ($env:AIPET_NO_START -ne '1') {
         $stub = Join-Path $root 'AiPet.exe'   # starts current\AiPet.exe
-        Start-Process -FilePath $(if (Test-Path -LiteralPath $stub) { $stub } else { $appExe })
+        $null = Start-WithoutToken $(if (Test-Path -LiteralPath $stub) { $stub } else { $appExe })
     }
     $old = Join-Path $env:LOCALAPPDATA 'Programs\AiPet'
     if (Test-Path -LiteralPath (Join-Path $old 'AiPet.exe')) {
@@ -223,7 +257,11 @@
     Write-Host "AiPet $version is installed." -ForegroundColor Green -NoNewline
     Write-Host ' It shows your chats while it runs (Start menu: AiPet); nothing starts it at sign-in.'
     if ($claudeDone) { Write-Host 'Claude Code: new sessions pick up the plugin (in an open one, run /reload-plugins).' }
-    if ($claudeRegistered) { Write-Host 'Claude Code: new sessions pick up the hook. Install Git for Windows and run this again to switch to the plugin.' }
+    if ($claudeRegistered) {
+        Write-Host 'Claude Code: new sessions pick up the hook. Install Git for Windows and run this again to switch to the plugin.'
+        # the uninstaller runs aipet-hook --uninstall claude before it deletes the hook (the app's uninstall hook)
+        Write-Host 'Uninstalling AiPet (Settings > Apps) removes the hook from Claude Code too.'
+    }
     if ($codexDone) {
         Write-Host 'One step left for Codex:' -ForegroundColor Yellow -NoNewline
         Write-Host ' Codex runs only hooks you trust. Run codex, open /hooks and trust the aipet@aipet hooks'

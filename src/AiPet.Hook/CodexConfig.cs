@@ -36,6 +36,11 @@ static class CodexConfig
                   ("PostToolUse", true, 30), ("Stop", true, 30), ("PreCompact", true, 30), ("PostCompact", true, 30),
                   ("SubagentStart", true, 30), ("SubagentStop", true, 30), ("Interrupt", false, 3), ("SessionEnd", false, 3) };
 
+    /// The events of the aipet plugin (plugins/aipet/hooks/codex.json): a plugin can't pick them per OS, so it has
+    /// the Windows set everywhere. Frozen with the plugin's hook definitions.
+    public static readonly string[] PluginEvents =
+        { "SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "Stop", "PreCompact", "PostCompact", "SubagentStart", "SubagentStop" };
+
     public static string Snake(string ev) => Regex.Replace(ev, "(?<=[a-z])([A-Z])", "_$1").ToLowerInvariant();
 
     /// AiPet's hooks: the command runs aipet-hook, or AIPET-~1.EXE (older installs shortened the file name too).
@@ -81,6 +86,18 @@ static class CodexConfig
     // ------------------------------------------------------------------ install / uninstall
     public static int Install(string exe)
     {
+        // the pet gets every event either way, so this isn't a failure: installers run --install without checking
+        if (Plugin() is { } plugin)
+        {
+            // hooks registered here earlier would report every event a second time: the plugin replaces them
+            bool removed = EditToml(ConfigToml, null, removeTrustFor: new[] { HooksJson });
+            removed |= EditHooksJson(null);
+            Console.WriteLine(removed
+                ? $"The {plugin} plugin is enabled in {ConfigToml} and reports every event, so the AiPet hooks registered earlier were removed (the plugin replaces them)."
+                : $"The {plugin} plugin is enabled in {ConfigToml} and already reports every event, so no hooks were registered (they would report each one twice).");
+            Console.WriteLine($"To use hooks in Codex's config instead, remove the plugin (codex plugin remove {plugin}) and install again.");
+            return 0;
+        }
         var command = BuildCommand(exe);
         bool useJson = ChooseHooksJson();
         var target = useJson ? HooksJson : ConfigToml;
@@ -136,6 +153,31 @@ static class CodexConfig
         }
         catch { }
         return false;
+    }
+
+    /// The AiPet plugin whose hooks Codex runs (its id, e.g. aipet@aipet), or null. Codex runs them while config.toml
+    /// has a [plugins."<id>"] entry that isn't `enabled = false` and the plugin is in its cache
+    /// (plugins/cache/<marketplace>/<plugin>/<version>/); `codex plugin remove` takes both away.
+    public static string Plugin()
+    {
+        var found = new Dictionary<string, bool>();  // id -> disabled
+        foreach (var s in ParseToml(Read(ConfigToml)))
+        {
+            if (s.IsArray || (s.Header != null && s.Table == null)) continue;
+            var table = s.Table ?? Array.Empty<string>();
+            if (table is ["plugins", var name]) found.TryAdd(name, false);
+            foreach (var (key, value, _) in s.Values)
+                switch (table.Concat(key).ToArray())
+                {
+                    case ["plugins", var id, "enabled"]: found[id] = value == "false"; break;
+                    case ["plugins", var id]: found[id] = Regex.IsMatch(value, @"^\{.*\benabled\s*=\s*false\b"); break;  // an inline table
+                    case ["plugins", var id, ..]: found.TryAdd(id, false); break;
+                }
+        }
+        return found.Where(p => !p.Value && p.Key.Split('@') is ["aipet", var market]
+                                && Directory.Exists(Path.Combine(Paths.CodexHome, "plugins", "cache", market, "aipet"))
+                                && Directory.EnumerateDirectories(Path.Combine(Paths.CodexHome, "plugins", "cache", market, "aipet")).Any())
+                    .Select(p => p.Key).FirstOrDefault();
     }
 
     static string Read(string path) { try { return File.ReadAllText(path); } catch { return ""; } }
@@ -469,9 +511,7 @@ static class CodexConfig
             Directory.CreateDirectory(Path.GetDirectoryName(real)!);
             if (File.Exists(path)) Backup(path);
             if (File.Exists(real) && File.GetLastWriteTimeUtc(real) != stamp && attempt < 3) continue;  // Codex wrote it meanwhile
-            var tmp = real + ".aipet-tmp";
-            File.WriteAllText(tmp, result, new UTF8Encoding(false));
-            File.Move(tmp, real, overwrite: true);
+            AiPet.Install.Save(real, result);
             return true;
         }
     }
@@ -588,9 +628,13 @@ static class CodexConfig
         foreach (var h in JsonPositions(hooks)) yield return (h.Event, h.Group, h.Index, CommandOf(h.Node));
     }
 
-    static JsonObject JsonHandler((string Event, bool Async, int Timeout) e, string command)
+    /// A handler in a hooks file. Only the plugin's has commandWindows (PluginHooks), which Codex runs instead of
+    /// command on Windows: a user's hooks.json is written for the OS it's on.
+    internal static JsonObject JsonHandler((string Event, bool Async, int Timeout) e, string command, string commandWindows = null)
     {
-        var h = new JsonObject { ["type"] = "command", ["command"] = command, ["timeout"] = e.Timeout };
+        var h = new JsonObject { ["type"] = "command", ["command"] = command };
+        if (commandWindows != null) h["commandWindows"] = commandWindows;
+        h["timeout"] = e.Timeout;
         if (e.Async) h["async"] = true;
         return h;
     }
@@ -668,7 +712,7 @@ static class CodexConfig
         if (before.EndsWith(LF)) after += nl;
         if (JsonNode.DeepEquals(JsonNode.Parse(string.IsNullOrWhiteSpace(before) ? "{}" : before), JsonNode.Parse(after))) return false;
         if (File.Exists(path)) Backup(path);
-        File.WriteAllText(real, after, new UTF8Encoding(false));
+        AiPet.Install.Save(real, after);
         return true;
     }
 }

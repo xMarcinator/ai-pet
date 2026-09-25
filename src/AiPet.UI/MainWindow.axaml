@@ -15,7 +15,7 @@
               CornerRadius="10" Padding="10,3" Background="#E61C2B45" BorderBrush="#554C9AFF" BorderThickness="1">
         <StackPanel Orientation="Horizontal" Spacing="6">
           <Ellipse Width="6" Height="6" Fill="#4C9AFF" VerticalAlignment="Center"/>
-          <TextBlock x:Name="ReviewsHeaderText" Text="Reviews" FontSize="11" FontWeight="SemiBold"
+          <TextBlock x:Name="ReviewsHeaderText" Text="Jira and GitHub" FontSize="11" FontWeight="SemiBold"
                      Foreground="#BFD6FF" VerticalAlignment="Center"/>
         </StackPanel>
       </Border>

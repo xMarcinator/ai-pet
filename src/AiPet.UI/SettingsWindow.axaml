@@ -169,7 +169,25 @@
                     </StackPanel>
                     <Button x:Name="OpenDataBtn" Grid.Column="1" Classes="pill" Content="Open" Margin="0" VerticalAlignment="Center"/>
                   </Grid>
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="Team defaults" FontWeight="SemiBold"/>
+                      <TextBlock Classes="hint" Text="Set up Jira and GitHub from a preset file your team shares. A preset holds no tokens and no email; you add your own."/>
+                      <TextBlock x:Name="ImportStatus" Classes="hint" IsVisible="False"/>
+                    </StackPanel>
+                    <Button x:Name="ImportBtn" Grid.Column="1" Classes="pill" Content="Import defaults…" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                  </Grid>
                 </StackPanel>
+              </Border>
+              <TextBlock Classes="section" Text="ABOUT"/>
+              <Border Classes="card">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="VersionText" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="UpdateText" Classes="hint"/>
+                  </StackPanel>
+                  <Button x:Name="UpdateBtn" Grid.Column="1" Classes="pill" Content="Check for updates" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                </Grid>
               </Border>
             </StackPanel>
 
@@ -192,7 +210,7 @@
 
             <!-- Jira -->
             <StackPanel x:Name="JiraPage" IsVisible="False">
-              <CheckBox x:Name="EnabledBox" Content="Watch Jira for reviews assigned to me" Margin="0,8,0,0"/>
+              <CheckBox x:Name="EnabledBox" Content="Watch Jira for the issues my search finds" Margin="0,8,0,0"/>
               <Grid ColumnDefinitions="*,16,*">
                 <StackPanel>
                   <TextBlock Classes="label" Text="Site"/>
@@ -210,7 +228,7 @@
               <TextBlock x:Name="TokenHint" Classes="hint"/>
               <TextBlock Classes="label" Text="Search (JQL)"/>
               <TextBox x:Name="JqlBox" TextWrapping="Wrap" Height="64" AcceptsReturn="False"/>
-              <TextBlock Classes="hint" Text="Issues where you're the reviewer and the status is Review. Adjust the field or status names if yours differ."/>
+              <TextBlock Classes="hint" Text="The default finds your own open issues (assigned to you and not done); empty the field to go back to it. For reviews, use something like Reviewer = currentUser() AND status = Review. Field and status names differ between sites."/>
               <WrapPanel Margin="0,20,0,0">
                 <Button x:Name="JiraSaveBtn" Classes="pill primary" Content="Save"/>
                 <Button x:Name="TestBtn" Classes="pill" Content="Test search"/>

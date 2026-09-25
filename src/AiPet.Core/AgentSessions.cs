@@ -8,8 +8,9 @@ namespace AiPet;
 
 /// The agent chats as their hooks report them, kept by the running pet alone: every hook run forwards its event
 /// (see Ipc, HookServer) and Apply places it. Events run in the background and can finish out of order, so each is
-/// placed by when the agent started it: Claude's by `at` (see Stale), Codex's by its own turn and tool ids first
-/// (CodexStale). A chat's ts only moves when what it shows changes.
+/// placed by when the agent started it: Claude's by `at` (see Stale) and a call's PreToolUse and PermissionRequest
+/// by each other (ClaudeStale), Codex's by its own turn and tool ids first (CodexStale). A chat's ts only moves when
+/// what it shows changes.
 /// Thread-safe: HookServer applies events from its handler threads and Board takes a Snapshot on the UI thread.
 /// Files (chat titles, Codex transcripts) are read on the caller's thread before the lock is taken.
 public sealed class AgentSessions
@@ -28,6 +29,13 @@ public sealed class AgentSessions
         /// Codex: how far each of the chat's threads has come, by thread (see CodexStale). Only Apply uses it, under
         /// the lock; a Snapshot's copies share it.
         internal Dictionary<string, Turns> Threads;
+        /// Codex: the chat's own current turn and whether its end is in, copied out of Threads for Board, which orders
+        /// the hook's report against CodexWatcher's by turn.
+        public string Turn;
+        public bool TurnEnded;
+        /// Claude: its latest PreToolUses and PermissionRequests, to pair a call's two (see ClaudePair). Like Threads,
+        /// only Apply uses it and a Snapshot's copies share it.
+        internal List<(int What, bool Request, double At, bool Paired)> Asks;
         public Entry Clone() => (Entry)MemberwiseClone();
     }
 
@@ -115,9 +123,11 @@ public sealed class AgentSessions
         if (!ClaudeEvents.Contains(ev)) return "ignored";
 
         // an event Claude started before the last one recorded arrived late: it's out of date
-        if (chats.TryGetValue(key, out var old) && Stale(old, ev, at, now)) return "stale";
+        if (chats.TryGetValue(key, out var old) && ClaudeStale(old, p, ev, at, now)) return "stale";
         var (s, isNew) = Open(key);
-        Stamp(s, ev, at);
+        // a new chat (or one taken up again after it ended) starts pairing calls from this event
+        if (isNew) ClaudePair(s, p, ev, at);
+        Stamp(s, ev, at, now);
         var before = (s.State, s.Detail);
         s.Agent = "claude";
         if (Str("cwd") is { Length: > 0 } cwd) s.Cwd = cwd;
@@ -287,12 +297,16 @@ public sealed class AgentSessions
         if (ev == "SessionEnd") return End(key, ev, at, now);
         if (!CodexEvents.Contains(ev)) return "ignored";
 
-        // an event from before what the chat already has arrived late: it's out of date
-        if (chats.TryGetValue(key, out var old) && CodexStale(old, p, ev, at, now)) return "stale";
+        // an event from before what the chat already has arrived late: it's out of date. A turn's prompt that came
+        // after the turn's other events (late) still names the chat, but changes nothing else.
+        bool late = false;
+        if (chats.TryGetValue(key, out var old) && CodexStale(old, p, ev, at, now, out late) && !late) return "stale";
         var (s, isNew) = Open(key);
         // a new chat (or one taken up again after it ended) starts from this event's turn
-        if (isNew) CodexOrder(s, p, ev);
-        Stamp(s, ev, at);
+        if (isNew) CodexOrder(s, p, ev, at, now, out _);
+        var chat = s.Threads?.GetValueOrDefault("");
+        (s.Turn, s.TurnEnded) = (chat?.Current, chat?.Ended == true);
+        if (!late) Stamp(s, ev, at, now);
         var before = (s.State, s.Detail);
         s.Agent = "codex";
         if (Str("cwd") is { Length: > 0 } cwd) s.Cwd = cwd.StartsWith(@"\\?\", StringComparison.Ordinal) ? cwd[4..] : cwd;
@@ -324,6 +338,7 @@ public sealed class AgentSessions
                     var prompt = Short((Str("prompt") ?? "").Split('\n')[0], 38);
                     if (prompt.Length > 0 && !prompt.StartsWith('/')) s.Title = prompt;
                 }
+                if (late) return "stale";
                 Set("thinking", helper ? "Delegating to a helper" : "Thinking");
                 break;
             case "PreToolUse":
@@ -342,11 +357,15 @@ public sealed class AgentSessions
             case "Interrupt":
                 Set("idle", "Interrupted");
                 break;
-            // compaction happens inside a turn, so the turn's Stop still follows
+            // an automatic compaction happens inside a turn, whose Stop still follows; /compact is a turn of its own
+            // with no Stop, so its PostCompact ends it (see CodexOrder)
             case "PreCompact":
                 Set("thinking", "Compacting the conversation");
                 break;
             case "PostCompact":
+                if (ManualCompact(p)) Set("done", "Compacted");
+                else Set("thinking", "Thinking");
+                break;
             case "SubagentStop":
                 Set("thinking", "Thinking");
                 break;
@@ -466,8 +485,10 @@ public sealed class AgentSessions
     }
 
     // ------------------------------------------------------------------ ordering events
-    /// How far into a turn an event comes, to order events whose hooks started in the same millisecond (a PreToolUse
-    /// and its PermissionRequest can).
+    /// How far into a turn an event comes, to order events whose hooks started in the same millisecond. Only a
+    /// rough guide: a plugin install starts Claude's hooks through bash, sh and a wrapper, a few ms late at random
+    /// (tens on Git Bash), so the pair it matters most for, a call's PreToolUse and PermissionRequest, is paired by
+    /// ClaudePair instead. A wider tie would make a quick next PreToolUse stale after a PostToolUse.
     static int Rank(string ev) => ev switch
     {
         "SessionStart" => 0,
@@ -488,11 +509,54 @@ public sealed class AgentSessions
         return at < last - 0.0005 || (at <= last + 0.0005 && Rank(ev) < s.DispatchedRank);
     }
 
-    /// Record the event as the chat's latest, for Stale.
-    static void Stamp(Entry s, string ev, double at)
+    /// Record the event as the chat's latest, for Stale. One taken although it started before the latest (a
+    /// PermissionRequest paired with its PreToolUse, or one in the same tick) comes after it: the latest stays, so
+    /// what started between the two is still stale. Not when the clock was set back since the latest.
+    static void Stamp(Entry s, string ev, double at, double now)
     {
+        if (at < s.Dispatched && s.Dispatched <= now + 5)
+        {
+            s.DispatchedRank = Math.Max(s.DispatchedRank, Rank(ev));
+            return;
+        }
         s.Dispatched = at;
         s.DispatchedRank = Rank(ev);
+    }
+
+    /// Claude's order: by `at` (Stale), except for a call's PreToolUse and PermissionRequest (ClaudePair).
+    static bool ClaudeStale(Entry s, JsonObject p, string ev, double at, double now) =>
+        (s.Ended == null ? ClaudePair(s, p, ev, at) : null) ?? Stale(s, ev, at, now);
+
+    /// How far apart the hooks of one Claude call's PreToolUse and PermissionRequest can start, in seconds.
+    const double PairWindow = 1;
+
+    /// Claude dispatches a call's PreToolUse and then its PermissionRequest a few ms apart at most, and their hooks
+    /// start a few ms late at random (see Rank), so `at` can put them either way round. PermissionRequest has no
+    /// tool_use_id, so the two are paired by tool and command (CallKey), the closest within PairWindow:
+    ///  - a PreToolUse whose PermissionRequest is in already is stale (true);
+    ///  - a PermissionRequest is taken (false) when its own PreToolUse is the chat's latest event: nothing else is newer.
+    /// Anything else goes by `at` (null). Each half pairs once, so the same command run again soon after isn't taken
+    /// for the earlier call. Recorded even when its time then finds it stale, like CodexOrder.
+    static bool? ClaudePair(Entry s, JsonObject p, string ev, double at)
+    {
+        bool request = ev == "PermissionRequest";
+        if (!request && ev != "PreToolUse") return null;
+        int what = CallKey(p);
+        var asks = s.Asks ??= new();
+        int i = -1;
+        for (int j = 0; j < asks.Count; j++)
+            if (asks[j].What == what && asks[j].Request != request && !asks[j].Paired && Math.Abs(asks[j].At - at) <= PairWindow
+                && (i < 0 || Math.Abs(asks[j].At - at) < Math.Abs(asks[i].At - at))) i = j;
+        if (i < 0)
+        {
+            asks.Add((what, request, at, false));
+            if (asks.Count > 16) asks.RemoveAt(0);
+            return null;
+        }
+        var other = asks[i];
+        asks[i] = other with { Paired = true };
+        if (!request) return true;
+        return other.At == s.Dispatched && s.DispatchedRank == Rank("PreToolUse") ? false : null;
     }
 
     /// Codex's order. On Windows Codex runs each hook through PowerShell, which starts it 1-4 s late at random, so
@@ -501,45 +565,80 @@ public sealed class AgentSessions
     /// thread that reports under its session.
     ///  1. An event of a turn before its thread's current one is stale. Turn ids are UUIDv7s, which begin with the
     ///     turn's start time, so they sort even when all of a turn's events come late (ids of another shape only tell
-    ///     a turn seen before from a new one).
-    ///  2. Nothing of a turn is taken after its end (Stop; SubagentStop for a sub-agent; Interrupt). Once the chat's
-    ///     own turn has ended, its other threads' events are stale too, until its next turn.
+    ///     a turn seen before from a new one; so does a v7 id while the current one's time is well past now, after
+    ///     the clock was set back). A turn's UserPromptSubmit is its first event, so once another event of the turn
+    ///     is in it came late: it only names the chat.
+    ///  2. Nothing of a turn is taken after its end (Stop; SubagentStop for a sub-agent; Interrupt; the PostCompact
+    ///     of a /compact, which is a turn of its own with no Stop). Once the chat's own turn has ended, its other
+    ///     threads' events are stale too, until its next turn.
     ///  3. Within a turn, a PreToolUse whose call has come further already (its PermissionRequest or PostToolUse is
-    ///     in) is stale. Calls are told apart by tool_use_id; PermissionRequest has none, so it goes with the latest
-    ///     call of the same tool and command still at its PreToolUse.
+    ///     in) is stale. Calls are told apart by tool_use_id. PermissionRequest has none, so it goes with the latest
+    ///     call of the same tool and command that is still at its PreToolUse and started within HookSpread of it:
+    ///     an identical call after the one that asked can only start once the ask is answered. It may still be for
+    ///     a rerun whose PreToolUse hasn't come (Codex reruns a command that failed in the sandbox, with approval, a
+    ///     second or two later), so it also waits for one on its own, until HookSpread has passed or its call's
+    ///     PostToolUse is in. A PermissionRequest whose call's PreToolUse is the chat's latest event is taken
+    ///     whatever its time. Left wrong: the same command run again within HookSpread of an approved request, and
+    ///     before that call's PostToolUse (none on Windows), shows the chat asking until its next event.
     ///  4. The chat's own turn starting or ending is taken whatever its time: it comes after everything else of the
     ///     chat.
     ///  5. Anything else (SessionStart, which has no turn; one tool call against another; a sub-agent against the
-    ///     chat; compaction) goes by `at` and Rank as for Claude (Stale).
+    ///     chat; an automatic compaction) goes by `at` and Rank as for Claude (Stale).
     /// Wrong when another tool's Stop hook makes Codex go on, or a sub-agent works on past its chat's turn: until the
     /// next turn the chat shows done.
-    static bool CodexStale(Entry s, JsonObject p, string ev, double at, double now) =>
-        (s.Ended == null ? CodexOrder(s, p, ev) : null) ?? Stale(s, ev, at, now);
-
-    /// What Codex's ids say of an event (rules 1-4 above): stale (true), taken (false), or nothing (null). What it
-    /// tells of its thread is recorded even when its time then finds it stale: it holds either way.
-    static bool? CodexOrder(Entry s, JsonObject p, string ev)
+    static bool CodexStale(Entry s, JsonObject p, string ev, double at, double now, out bool late)
     {
+        late = false;
+        return (s.Ended == null ? CodexOrder(s, p, ev, at, now, out late) : null) ?? Stale(s, ev, at, now);
+    }
+
+    /// What Codex's ids say of an event (rules 1-4 above): stale (true), taken (false), or nothing (null). Late: a
+    /// UserPromptSubmit after its turn's other events (stale, but its prompt still names the chat). What it tells
+    /// of its thread is recorded even when its time then finds it stale: it holds either way.
+    static bool? CodexOrder(Entry s, JsonObject p, string ev, double at, double now, out bool late)
+    {
+        late = false;
         var turn = StrOf(p, "turn_id");
         if (string.IsNullOrEmpty(turn)) return null;
         s.Threads ??= new();
         var thread = ThreadOf(p);
         bool own = thread.Length == 0;
         if (!own && s.Threads.TryGetValue("", out var chat) && chat.Ended) return true;
-        if (!s.Threads.TryGetValue(thread, out var t)) s.Threads[thread] = t = new Turns { Current = turn };
-        bool newTurn = false;
+        // a thread's first turn is a new one too
+        bool newTurn = !s.Threads.TryGetValue(thread, out var t);
+        if (newTurn) s.Threads[thread] = t = new Turns { Current = turn };
         if (turn != t.Current)
         {
-            if (t.Before(turn)) return true;
+            if (t.Before(turn, now)) return true;
             t.Next(turn);
             newTurn = true;
         }
+        // its turn's prompt, after another event of the turn (even its end)
+        else if (t.Seen && ev == "UserPromptSubmit")
+        {
+            late = true;
+            return true;
+        }
         else if (t.Ended) return true;
-        bool end = ev is "Stop" or "SubagentStop" or "Interrupt";
-        if (end) t.Ended = true;
-        else if (t.Call(ev, p)) return true;
-        return own && (newTurn || end) ? false : null;
+        t.Seen = true;
+        if (ev is "Stop" or "SubagentStop" or "Interrupt" || own && ManualCompact(p))
+        {
+            t.Ended = true;
+            if (!own) return null;
+        }
+        else
+        {
+            var call = t.Call(ev, p, at, s.Dispatched);
+            if (call == true || !own || !newTurn) return call;
+        }
+        // rule 4: the chat's own turn starting or ending is its latest event whatever its time (Stamp keeps a later one)
+        s.Dispatched = at;
+        return false;
     }
+
+    /// A PostCompact of /compact, not of an automatic compaction in the middle of a turn.
+    static bool ManualCompact(JsonObject p) =>
+        StrOf(p, "hook_event_name") == "PostCompact" && StrOf(p, "trigger") == "manual" && ThreadOf(p).Length == 0;
 
     /// Which of a chat's threads an event is from: "" for the chat itself, "agent:<id>" for a sub-agent, and
     /// "transcript:<path>" for any other thread reporting under the chat's session (Codex names the chat's own
@@ -552,21 +651,27 @@ public sealed class AgentSessions
             ? "" : "transcript:" + transcript;
     }
 
+    /// How far apart, in seconds, the hooks of a Codex call's PreToolUse and PermissionRequest can start: PowerShell
+    /// starts each 1-4 s late.
+    const double HookSpread = 5;
+
     /// Codex: one thread of a chat, as far as its events have come (see CodexStale).
     internal sealed class Turns
     {
         public string Current;
         /// The current turn's end is in.
         public bool Ended;
+        /// An event of the current turn is in.
+        public bool Seen;
         /// The turns before, for ids that don't sort (the latest few).
         readonly List<string> past = new();
         /// The current turn's tool calls: tool_use_id (null for a PermissionRequest whose PreToolUse hasn't come), a
-        /// hash of what it runs, and how far it has come: 1 PreToolUse, 2 PermissionRequest, 3 PostToolUse.
-        readonly List<(string Id, int What, int Step)> calls = new();
+        /// hash of what it runs, how far it has come (1 PreToolUse, 2 PermissionRequest, 3 PostToolUse), and when its
+        /// PreToolUse's hook started (else its first event's).
+        readonly List<(string Id, int What, int Step, double At)> calls = new();
 
         /// Whether a turn other than the current one came before it.
-        public bool Before(string turn) =>
-            IsV7(turn) && IsV7(Current) ? string.Compare(turn, Current, StringComparison.OrdinalIgnoreCase) < 0 : past.Contains(turn);
+        public bool Before(string turn, double now) => past.Contains(turn) || V7Before(turn, Current, now);
 
         /// A later turn starts.
         public void Next(string turn)
@@ -575,44 +680,73 @@ public sealed class AgentSessions
             if (past.Count > 16) past.RemoveAt(0);
             Current = turn;
             Ended = false;
+            Seen = false;
             calls.Clear();
         }
 
-        /// Records a tool event of the current turn. True for a PreToolUse whose call has come further already.
-        public bool Call(string ev, JsonObject p)
+        /// Records a tool event of the current turn (rule 3): true for a PreToolUse whose call has come further
+        /// already, false for a PermissionRequest whose call's PreToolUse is the chat's latest event, else null.
+        public bool? Call(string ev, JsonObject p, double at, double latest)
         {
             int step = ev switch { "PreToolUse" => 1, "PermissionRequest" => 2, "PostToolUse" => 3, _ => 0 };
-            if (step == 0) return false;
+            if (step == 0) return null;
             var id = StrOf(p, "tool_use_id") is { Length: > 0 } x ? x : null;
             int what = CallKey(p);
-            // the call by its id; else a PermissionRequest takes the latest one still at its PreToolUse, and a
-            // PreToolUse or PostToolUse the PermissionRequest that came before it
+            void Add(string callId, int callStep)
+            {
+                calls.Add((callId, what, callStep, at));
+                if (calls.Count > 64) calls.RemoveAt(0);
+            }
+            // the call by its id; else one of the same tool and command within HookSpread: a PermissionRequest takes
+            // the latest still at its PreToolUse, a PreToolUse or PostToolUse the closest PermissionRequest waiting
+            // for its PreToolUse
             int i = id != null ? calls.FindLastIndex(c => c.Id == id) : -1;
-            if (i < 0) i = step == 2 ? calls.FindLastIndex(c => c.What == what && c.Step == 1)
-                                     : calls.FindLastIndex(c => c.What == what && c.Id == null);
+            bool byId = i >= 0;
+            if (!byId)
+                for (int j = 0; j < calls.Count; j++)
+                {
+                    var c = calls[j];
+                    if (c.What != what || Math.Abs(c.At - at) > HookSpread) continue;
+                    if (step == 2 ? c.Step == 1 && (i < 0 || c.At >= calls[i].At)
+                                  : c.Id == null && (i < 0 || Math.Abs(c.At - at) < Math.Abs(calls[i].At - at))) i = j;
+                }
             if (i < 0)
             {
-                calls.Add((id, what, step));
-                if (calls.Count > 64) calls.RemoveAt(0);
-                return false;
+                Add(id, step);
+                return null;
             }
             var call = calls[i];
-            calls[i] = (call.Id ?? id, call.What, Math.Max(call.Step, step));
-            return step == 1 && call.Step > 1;
+            calls[i] = (call.Id ?? id, call.What, Math.Max(call.Step, step), step == 1 ? at : call.At);
+            if (step == 1) return call.Step > 1 ? true : null;
+            if (step == 3)
+            {
+                // the call that asked is done: no rerun waits on its request
+                if (byId && call.Step == 2) calls.RemoveAll(c => c.Id == null && c.What == what && c.Step == 2);
+                return null;
+            }
+            // it may be for a rerun whose PreToolUse is still to come: that one then comes late, like its own
+            if (!byId) Add(null, 2);
+            return call.Step == 1 && call.At == latest ? false : null;
         }
     }
 
     /// What a tool call runs, as a hash (a command can be 256 Ki characters): its tool and command (PermissionRequest
-    /// adds a description to a shell command's input), or else its whole input.
+    /// adds a description to a shell command's input) or file, or else its whole input.
     static int CallKey(JsonObject p)
     {
         var input = p["tool_input"];
-        var what = input is JsonObject o && o["command"] is JsonValue v && v.TryGetValue(out string command) ? command : input?.ToJsonString();
+        var what = input is JsonObject o && (o["command"] ?? o["file_path"] ?? o["notebook_path"]) is JsonValue v && v.TryGetValue(out string command)
+            ? command : input?.ToJsonString();
         return HashCode.Combine(StrOf(p, "tool_name"), what);
     }
 
     /// A UUIDv7 (xxxxxxxx-xxxx-7xxx-...), whose text sorts by when it was made.
     static bool IsV7(string id) => id is { Length: 36 } && id[14] == '7' && Guid.TryParseExact(id, "D", out _);
+
+    /// Whether UUIDv7 a was made before b. Not when b's time is well past now: the clock was set back since, and ids
+    /// made after that sort before it.
+    internal static bool V7Before(string a, string b, double now) =>
+        IsV7(a) && IsV7(b) && Convert.ToInt64(b[..8] + b[9..13], 16) / 1000.0 <= now + 5 && string.Compare(a, b, StringComparison.OrdinalIgnoreCase) < 0;
 
     // ------------------------------------------------------------------ describing tool calls
     static string BaseName(string path)

@@ -13,9 +13,9 @@ public interface IPlatform
     IMediaPlayer Media { get; }
 
     /// Bring the agent's desktop app to the front ("claude", "codex"). False unless it's now really in front.
-    /// It never runs the agent's CLI; when the app isn't open, at most its URL is opened (claude:// on Windows),
-    /// and this still returns false.
-    bool FocusAgent(string agent);
+    /// It never runs the agent's CLI; when no window of the app is found, at most a URL is opened (the chat's link
+    /// when given, else the app's own, claude:// on Windows), and this still returns false.
+    bool FocusAgent(string agent, string link = null);
 
     /// Press Escape in the app FocusAgent brought forward (stops the running turn). Returns false, without
     /// pressing anything, if that app is no longer in front.
@@ -24,6 +24,11 @@ public interface IPlatform
     void OpenUrl(string url);
     void OpenFolder(string path);
 
+    /// Keep the pet's window only as big as what it shows (see MainWindow.FitWindow), where the input region can't be
+    /// relied on to let the mouse through the rest.
+    bool FitsPetWindow => false;
+    /// Moves and resizes the pet window in one go (physical pixels), for FitWindow.
+    void MoveResize(IntPtr handle, int x, int y, int width, int height) { }
     /// Called once the pet window exists: hide from Alt+Tab, etc.
     void SetupPetWindow(IntPtr handle);
     /// Re-assert always-on-top (some window managers drop it).

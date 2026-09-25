@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -58,10 +59,12 @@ static class Doctor
                 if (value is JsonArray groups)
                     foreach (var h in groups.OfType<JsonObject>().SelectMany(g => (g["hooks"] as JsonArray)?.OfType<JsonObject>() ?? Enumerable.Empty<JsonObject>()))
                         if (ClaudeConfig.IsOurs(h)) ours.Add((ev, h));
-        // the AiPet plugin brings its own hooks (plugins/claude-code/hooks/hooks.json), so settings.json needs none
-        bool plugin = root["enabledPlugins"] is JsonObject plugins && plugins.Any(p => p.Key.StartsWith("aipet@") && True(p.Value));
+        // the AiPet plugin brings its own hooks (plugins/aipet/hooks/hooks.json), so settings.json needs none
+        bool plugin = ClaudeConfig.Plugin(root) != null, runs = ClaudeConfig.PluginRuns();
         string exe = null;
-        if (ours.Count == 0 && plugin) Ok("hooks come from the AiPet plugin (enabledPlugins), not from settings.json");
+        if (ours.Count == 0 && plugin && runs) Ok("hooks come from the AiPet plugin (enabledPlugins), not from settings.json");
+        else if (ours.Count == 0 && plugin)
+        { Fail("the AiPet plugin's hooks need Git Bash, which wasn't found: install Git for Windows, or run aipet-hook --install claude"); return; }
         else if (ours.Count == 0) { Fail("AiPet's hooks aren't registered: run aipet-hook --install claude"); return; }
         else
         {
@@ -71,7 +74,8 @@ static class Doctor
             exe = (string)ours[0].Hook["command"];
             if (!File.Exists(exe)) Fail($"the registered hook doesn't exist: {exe}");
             else Ok("hook: " + exe);
-            if (plugin) Warn("the AiPet plugin is also enabled, so every event is reported twice");
+            if (plugin && runs) Warn("the AiPet plugin is also enabled, so every event is reported twice");
+            else if (plugin) Warn("the AiPet plugin is also enabled, but its hooks need Git Bash, which wasn't found: once Git for Windows is installed, run aipet-hook --uninstall claude");
         }
 
         Section("Policies set by your organisation");
@@ -135,7 +139,7 @@ static class Doctor
             // fall back to what the files say (trust can only be read from Codex itself)
             Warn("couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown");
             var files = CodexConfig.AllHandlers();
-            var mineInFiles = files.Where(h => h.Command.Contains("aipet-hook", StringComparison.OrdinalIgnoreCase)).ToList();
+            var mineInFiles = files.Where(h => CodexConfig.IsOurs(h.Command)).ToList();
             foreach (var h in files)
             {
                 bool mine = mineInFiles.Contains(h);
@@ -143,15 +147,22 @@ static class Doctor
                 if (mine) Ok(line); else Info(line);
                 foreach (var problem in Lint(h.Command)) (mine ? (Action<string>)Fail : Warn)($"   {problem}");
             }
-            if (mineInFiles.Count == 0) Fail("AiPet's hooks aren't registered: run aipet-hook --install codex");
-            else if (CodexConfig.Events.Any(e => !mineInFiles.Any(m => m.Event == e.Event)))
+            // the plugin's hooks are in its own folder, not in these files
+            var plugin = CodexConfig.Plugin();
+            if (plugin != null) Ok($"the {plugin} plugin is enabled, so the hooks come from it");
+            if (mineInFiles.Count == 0 && plugin == null) Fail(NotRegistered);
+            else if (mineInFiles.Count > 0 && plugin != null) Warn(Twice(plugin));
+            else if (plugin == null && CodexConfig.Events.Any(e => !mineInFiles.Any(m => m.Event == e.Event)))
                 Warn("AiPet isn't registered for every event (run aipet-hook --install codex)");
             bool up = CheckAiPet();
             if (mineInFiles.Count > 0) ProbeCodex(mineInFiles[0].Command, up);
+            else if (plugin != null) NoProbe("without hooks/list it isn't known which command and folder Codex runs the plugin's hook with");
             RecentEvents("codex");
             return;
         }
-        var ours = listed.Where(h => ((string)h["command"] ?? "").Contains("aipet-hook", StringComparison.OrdinalIgnoreCase)).ToList();
+        var ours = listed.Where(h => CodexConfig.IsOurs((string)h["command"])).ToList();
+        var fromPlugin = ours.Where(FromPlugin).ToList();
+        var direct = ours.Except(fromPlugin).ToList();
         foreach (var h in listed)
         {
             var cmd = (string)h["command"] ?? "(" + (string)h["handlerType"] + ")";
@@ -164,38 +175,88 @@ static class Doctor
             else Info(line);
             foreach (var problem in Lint(cmd)) (mine ? (Action<string>)Fail : Warn)($"   {problem}");
         }
-        var missing = CodexConfig.Events.Select(e => e.Event).Where(e => !ours.Any(o => string.Equals((string)o["eventName"], char.ToLowerInvariant(e[0]) + e[1..], StringComparison.Ordinal))).ToList();
-        if (ours.Count == 0) { Fail("AiPet's hooks aren't registered: run aipet-hook --install codex"); return; }
-        if (missing.Count > 0) Warn("AiPet isn't registered for: " + string.Join(", ", missing) + " (run aipet-hook --install codex)");
+        // hooks/list names events in camelCase ("preToolUse")
+        List<string> Missing(IEnumerable<string> events, List<JsonObject> hooks) => events.Where(e => !hooks.Any(o =>
+            string.Equals((string)o["eventName"], char.ToLowerInvariant(e[0]) + e[1..], StringComparison.Ordinal))).ToList();
+        if (ours.Count == 0) { Fail(NotRegistered); return; }
+        string root = null, skip = null;  // the plugin's folder, where its command finds the hook; why it can't be run
+        if (fromPlugin.Count > 0)
+        {
+            var plugin = (string)fromPlugin[0]["pluginId"] ?? "aipet";
+            var missing = Missing(CodexConfig.PluginEvents, fromPlugin);
+            if (missing.Count > 0) Warn($"the {plugin} plugin isn't registered for: {string.Join(", ", missing)} (update it: codex plugin marketplace upgrade aipet, then codex plugin add aipet@aipet)");
+            else Ok($"hooks come from the {plugin} plugin, for all {CodexConfig.PluginEvents.Length} of its events");
+            // sourcePath is <root>/hooks/codex.json
+            if ((string)fromPlugin[0]["sourcePath"] is { Length: > 0 } source) root = Path.GetDirectoryName(Path.GetDirectoryName(source));
+            else skip = "Codex didn't say where the plugin is, and its command needs that ($PLUGIN_ROOT)";
+            // its launcher quietly does nothing when there's no hook for this system
+            if (root != null && PluginHook(root) is { } bin && !File.Exists(bin))
+            {
+                Fail($"the plugin has no hook for this system ({bin}), so its hooks do nothing");
+                skip = "the plugin has no hook for this system";
+            }
+            if (direct.Count > 0) Warn(Twice(plugin));
+        }
+        else
+        {
+            var missing = Missing(CodexConfig.Events.Select(e => e.Event), direct);
+            if (missing.Count > 0) Warn("AiPet isn't registered for: " + string.Join(", ", missing) + " (run aipet-hook --install codex)");
+        }
 
         bool running = CheckAiPet();
-        ProbeCodex((string)ours[0]["command"], running);
+        if (direct.Count > 0) ProbeCodex((string)direct[0]["command"], running);
+        else if (skip != null) NoProbe(skip);
+        else ProbeCodex((string)fromPlugin[0]["command"], running, new Dictionary<string, string> { ["PLUGIN_ROOT"] = root });
         RecentEvents("codex");
     }
 
-    /// With --probe, AiPet's registered command run through the shell Codex uses.
-    static void ProbeCodex(string command, bool running)
+    const string NotRegistered = "AiPet's hooks aren't registered: add the aipet plugin (codex plugin marketplace add xMarcinator/ai-pet, "
+                               + "then codex plugin add aipet@aipet), or run aipet-hook --install codex";
+
+    static string Twice(string plugin) =>
+        $"the {plugin} plugin is also enabled, so every event is reported twice: run aipet-hook --uninstall codex (the plugin replaces those hooks)";
+
+    static void NoProbe(string why)
+    {
+        Section("Running AiPet's hook the way Codex does");
+        Info("skipped: " + why);
+    }
+
+    /// A listed hook of the AiPet plugin rather than one in the user's config.toml or hooks.json.
+    static bool FromPlugin(JsonObject h) => (string)h["source"] == "plugin" || ((string)h["pluginId"])?.StartsWith("aipet@") == true
+                                            || ((string)h["command"])?.Contains("PLUGIN_ROOT") == true;
+
+    /// The hook binary the plugin's launcher runs on this system (see plugins/aipet/native/aipet-hook.sh), or null
+    /// where it runs none.
+    static string PluginHook(string root) =>
+        OperatingSystem.IsWindows() ? Path.Combine(root, "native", "win-x64", "aipet-hook.exe")
+        : OperatingSystem.IsLinux() ? Path.Combine(root, "native", RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "linux-arm64" : "linux-x64", "aipet-hook")
+        : null;
+
+    /// With --probe, AiPet's registered command run through the shell Codex uses. env: what Codex sets for it too
+    /// (a plugin's hook gets PLUGIN_ROOT).
+    static void ProbeCodex(string command, bool running, Dictionary<string, string> env = null)
     {
         Section("Running AiPet's hook the way Codex does");
         if (!probe) Info("skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)");
         else if (OperatingSystem.IsWindows())
         {
             var shell = FindOnPath(new[] { "pwsh.exe" }) ?? Existing(@"C:\Program Files\PowerShell\7\pwsh.exe") ?? "powershell.exe";
-            Probe(shell, new[] { "-NoProfile", "-Command", command }, null, 30, running);
+            Probe(shell, new[] { "-NoProfile", "-Command", command }, null, 30, running, env: env);
             // "& '...'" is how the installer writes a path it can't write plainly: PowerShell only, by design. cmd.exe is
             // only Codex's rare fallback, so a failure there is a warning, not a problem
             if (command.TrimStart().StartsWith('&')) Info("not through the cmd.exe fallback: the command uses PowerShell's & '...' form, which cmd.exe can't run");
             else
             {
                 Info("and through the cmd.exe fallback:");
-                Probe(System.Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe", null, $"/C \"{command}\"", 30, running, onlyWarn: true);
+                Probe(System.Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe", null, $"/C \"{command}\"", 30, running, onlyWarn: true, env: env);
             }
         }
         else
         {
-            Probe("/bin/sh", new[] { "-c", command }, null, 30, running);
+            Probe("/bin/sh", new[] { "-c", command }, null, 30, running, env: env);
             if (System.Environment.GetEnvironmentVariable("SHELL") is { Length: > 0 } sh && sh != "/bin/sh")
-                Probe(sh, new[] { "-lc", command }, null, 30, running);
+                Probe(sh, new[] { "-lc", command }, null, 30, running, env: env);
         }
     }
 
@@ -280,14 +341,15 @@ static class Doctor
     /// exits 0 well within the agent's time limit, and that the running pet got the event (the pet lists ignored events
     /// too). With the pet closed the hook must just return (within quickMs, when given). onlyWarn: a failure is a
     /// warning (a rare fallback).
-    static void Probe(string file, string[] args, string rawArgs, int timeoutSec, bool running, bool onlyWarn = false, int quickMs = 0)
+    static void Probe(string file, string[] args, string rawArgs, int timeoutSec, bool running, bool onlyWarn = false, int quickMs = 0,
+                      Dictionary<string, string> env = null)
     {
         var bad = onlyWarn ? (Action<string>)Warn : Fail;
         // unique in its first 13 characters, which is what the pet lists
         var id = "doctor" + Guid.NewGuid().ToString("N")[..7] + "-aipet";
         var payload = new JsonObject { ["hook_event_name"] = "AipetDoctor", ["session_id"] = id, ["cwd"] = System.Environment.CurrentDirectory }.ToJsonString();
         var sw = Stopwatch.StartNew();
-        var (code, stdout, stderr) = Capture(file, args, timeoutSec, payload, rawArgs);
+        var (code, stdout, stderr) = Capture(file, args, timeoutSec, payload, rawArgs, env);
         var ms = sw.ElapsedMilliseconds;
         var shown = rawArgs ?? string.Join(" ", args ?? Array.Empty<string>());
         var name = Path.GetFileName(file);
@@ -356,7 +418,8 @@ static class Doctor
         (pong?[Ipc.Recent] as JsonArray)?.Select(n => n is JsonValue v && v.TryGetValue(out string s) ? s : null).Where(s => s != null)
         ?? Enumerable.Empty<string>();
 
-    static (int Code, string Out, string Err) Capture(string file, string[] args, int timeoutSec, string stdin = null, string rawArgs = null)
+    static (int Code, string Out, string Err) Capture(string file, string[] args, int timeoutSec, string stdin = null, string rawArgs = null,
+                                                      Dictionary<string, string> env = null)
     {
         try
         {
@@ -367,6 +430,7 @@ static class Doctor
             };
             if (rawArgs != null) psi.Arguments = rawArgs;
             else foreach (var a in args ?? Array.Empty<string>()) psi.ArgumentList.Add(a);
+            if (env != null) foreach (var (name, value) in env) psi.Environment[name] = value;
             using var p = Process.Start(psi);
             var o = p.StandardOutput.ReadToEndAsync();
             var e = p.StandardError.ReadToEndAsync();

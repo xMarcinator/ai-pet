@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
@@ -72,6 +73,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        full = new Size(Width, Height);
         if (Environment.GetEnvironmentVariable("AIPET_OPAQUE") == "1")
         {
             // debugging aid for displays without transparent windows (e.g. WSLg): draw on a solid background
@@ -96,9 +98,12 @@ public partial class MainWindow : Window
         Opened += (_, _) =>
         {
             PlaceWindow();
+            placed = true;
             if (TryGetPlatformHandle()?.Handle is IntPtr h) platform.SetupPetWindow(h);
             UpdateInputRegion(force: true);
         };
+        // a fitted window's content moved in it: its shape follows once the layout is done
+        Resized += (_, _) => Dispatcher.UIThread.Post(() => UpdateInputRegion(force: true), DispatcherPriority.Render);
 
         // pet: drag, boop, hover
         Sprite.PointerPressed += Sprite_Pressed;
@@ -170,13 +175,27 @@ public partial class MainWindow : Window
     void ResetPosition()
     {
         var wa = WorkArea;
-        Position = new PixelPoint(wa.Right - (int)(Width * Scale) - 24, wa.Bottom - (int)(Height * Scale));
+        var whole = new PixelPoint(wa.Right - FullPixels.Width - 24, wa.Bottom - FullPixels.Height);
+        Position = whole + FittedOffset();
         SaveConfig();
     }
 
+    /// The whole window's size in pixels.
+    PixelSize FullPixels => new((int)Math.Round(full.Width * Scale), (int)Math.Round(full.Height * Scale));
+
+    /// How far the corner of a window fitted to this size (pixels) is inward of where the whole window's would be:
+    /// fitted, it keeps the pet's bottom-centre where the whole window has it (see FitWindow). Every move goes by this
+    /// one integer formula, so no rounding pixel ever moves the pet.
+    PixelPoint OffsetFor(int width, int height) => new((FullPixels.Width - width) / 2, FullPixels.Height - height);
+
+    /// The same for the window as it is now; zero while it has its full size.
+    PixelPoint FittedOffset() => OffsetFor((int)Math.Round(ClientSize.Width * Scale), (int)Math.Round(ClientSize.Height * Scale));
+
     void SaveConfig()
     {
-        cfg.Left = Position.X; cfg.Top = Position.Y; cfg.WindowHeight = Height; cfg.Toolbar = null;
+        // saved as the whole window, so the next start places it the same way whatever size it has now
+        var whole = Position - FittedOffset();
+        cfg.Left = whole.X; cfg.Top = whole.Y; cfg.WindowHeight = full.Height; cfg.Toolbar = null;
         cfg.Pills = pillsVisible; cfg.OnTop = Topmost;
         try { File.WriteAllText(Paths.Config, JsonSerializer.Serialize(cfg)); } catch { }
     }
@@ -205,7 +224,24 @@ public partial class MainWindow : Window
 
     ContextMenu BuildMenu()
     {
-        var menu = new ContextMenu();
+        // Above the pet, where the window has room for it: on X11 menus are drawn inside their window (see Program), so
+        // the window's edge cuts off what reaches past it. No submenu for the same reason (it would open sideways, out
+        // of the window): the avatars are in Settings.
+        var menu = new ContextMenu { PlacementTarget = Sprite, Placement = PlacementMode.Top };
+        // a window fitted to less (or about to be: a change on its way) has no room for it yet: it grows first, then
+        // FitWindow opens the menu
+        menu.Opening += (_, e) =>
+        {
+            if (!platform.FitsPetWindow) return;
+            var (roomW, roomH) = Room();
+            bool small = ClientSize.Width < roomW - 1 || ClientSize.Height < roomH - 1;
+            bool shrinking = requestedAt >= 0 && (requested.Width < roomW * Scale - 1 || requested.Height < roomH * Scale - 1);
+            if (!small && !shrinking) return;
+            e.Cancel = true;
+            menuWanted = true;
+        };
+        // where the window takes the mouse (and, for compositors that honour it, what it shows) includes the menu
+        menu.Opened += (_, _) => Dispatcher.UIThread.Post(() => UpdateInputRegion(), DispatcherPriority.Background);
         MenuItem Toggle(string text, Func<bool> get, Action<bool> set)
         {
             var mi = new MenuItem { Header = text };
@@ -219,31 +255,16 @@ public partial class MainWindow : Window
         menu.Items.Add(Toggle("Show chats", () => pillsVisible, v => { pillsVisible = v; Refresh(); }));
         menu.Items.Add(Toggle("Always on top", () => Topmost, v => Topmost = v));
 
-        var avatarMenu = new MenuItem { Header = "Avatar" };
-        void FillAvatars()
-        {
-            avatarMenu.Items.Clear();
-            foreach (var a in Avatar.All())
-            {
-                var mi = new MenuItem { Header = a.Name, Icon = a.Name == pet.Avatar?.Name ? Check() : null };
-                mi.Click += (_, _) => { ApplyAvatar(a); SaveConfig(); };
-                avatarMenu.Items.Add(mi);
-            }
-            avatarMenu.Items.Add(new Separator());
-            var folder = new MenuItem { Header = "Open custom avatars folder" };
-            folder.Click += (_, _) => { Directory.CreateDirectory(Avatar.CustomDir); platform.OpenFolder(Avatar.CustomDir); };
-            avatarMenu.Items.Add(folder);
-        }
-        FillAvatars();
-        menu.Opening += (_, _) => FillAvatars();  // picks up new custom avatar files
-        menu.Items.Add(avatarMenu);
+        var avatarsItem = new MenuItem { Header = "Avatars…" };
+        avatarsItem.Click += (_, _) => OpenSettings("avatars");
+        menu.Items.Add(avatarsItem);
 
         var settingsItem = new MenuItem { Header = "Settings…" };
         settingsItem.Click += (_, _) => OpenSettings();
         menu.Items.Add(settingsItem);
         menu.Items.Add(new Separator());
         var quit = new MenuItem { Header = "Quit" };
-        quit.Click += (_, _) => Close();
+        quit.Click += (_, _) => { Updates.InstallOnQuit(); Close(); };
         menu.Items.Add(quit);
         return menu;
     }
@@ -258,6 +279,7 @@ public partial class MainWindow : Window
         {
             Platform = platform, Jira = jira, GitHub = github, DefaultEmail = "",
             ResetPosition = ResetPosition,
+            Quit = Close,
             CurrentAvatar = () => pet.Avatar,
             ApplyAvatar = a => { ApplyAvatar(a); SaveConfig(); },
             Switches =
@@ -352,9 +374,12 @@ public partial class MainWindow : Window
         c.Stop = Round("Stop", new Rectangle { Width = 10, Height = 10, RadiusX = 2, RadiusY = 2, Fill = (IBrush)Application.Current.Resources["IconBrush"] });
         c.Stop.Click += (_, _) =>
         {
-            // Escape stops whichever chat the app has open, so it's only pressed when that must be this one
+            // Escape stops whichever chat the app has open, so it's only pressed when that must be this one. Otherwise
+            // the app just comes forward, on the chat itself when it has a link, for you to stop it there.
             var s = board.Find(c.Id);
-            if (s != null && platform.FocusAgent(s.Agent) && OnlyDesktopChat(s)) _ = platform.SendEscape();
+            if (s == null) return;
+            if (!OnlyDesktopChat(s)) OpenItem(s.Id);
+            else if (platform.FocusAgent(s.Agent, s.Link)) _ = platform.SendEscape();
         };
         c.Actions = new StackPanel
         {
@@ -397,8 +422,13 @@ public partial class MainWindow : Window
         {
             if (e.InitialPressMouseButton != MouseButton.Left) return;
             if ((e.Source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) != null) return;
-            // a collapsed stack spreads out on the first click; after that a click opens the item
-            if (!expanded[c.Section] && board.Cards.Count(x => x.Section == c.Section) > 1) { expanded[c.Section] = true; LayoutCards(); }
+            // a collapsed stack spreads out on the first click; after that a click opens the item. Only one stack is
+            // spread out at a time: two are taller than the row above the pet (see LayoutCards).
+            if (!expanded[c.Section] && board.Cards.Count(x => x.Section == c.Section) > 1)
+            {
+                foreach (var sec in expanded.Keys.ToList()) expanded[sec] = sec == c.Section;
+                LayoutCards();
+            }
             else OpenItem(c.Id);
         };
         return c;
@@ -443,7 +473,8 @@ public partial class MainWindow : Window
         bool interactive = c.Hover && (expanded[c.Section] || IsFront(c)) && !c.Removing;
         c.Actions.IsVisible = interactive;
         c.Close.IsVisible = interactive;
-        c.Stop.IsVisible = c.Kind == "chat" && c.State is "working" or "thinking" && c.Where != "terminal";
+        // the pet can only stop a chat through its agent's desktop app, so terminal, VS Code, SDK and exec chats get none
+        c.Stop.IsVisible = c.Kind == "chat" && c.State is ("working" or "thinking") && c.Where == "desktop";
         if (c.Stop.IsVisible && board.Find(c.Id) is { } s)
             ToolTip.SetTip(c.Stop, OnlyDesktopChat(s) ? "Stop" : $"Open {Board.AgentLabel(s.Agent)} to stop it");
         c.Open.IsVisible = c.TicketUrl != null;
@@ -533,6 +564,11 @@ public partial class MainWindow : Window
     }
 
     /// Each section's panel, and the gap (DIPs) above it while it holds bubbles, so an empty stack takes no room.
+    /// The stacks share the 452 DIPs above the pet (the window's 600, less Root's margins, the pet's row and Sections'
+    /// margin). A bottom-aligned StackPanel taller than that spills down behind the pet, so only one stack is spread
+    /// out at a time. The tallest case, with Board.MaxCards' 4 chats, 4 reviews and music: one of them spread out
+    /// (4 reviews 224, or 4 chats 14 + 224), the other collapsed (68, or 14 + 68), music 64 and the reviews header
+    /// about 31: 401 DIPs. Raise a cap or add a stack and this needs checking again.
     (string Section, Panel Panel, double Gap)[] Stacks => new[] { ("reviews", Reviews, 0.0), ("chats", Pills, 14.0), ("music", Music, 14.0) };
 
     void LayoutCards()
@@ -554,9 +590,10 @@ public partial class MainWindow : Window
             int n = active.Count;
             panelTarget[panel] = n == 0 ? 0 : gap + (open ? 50 + (n - 1) * 58 : 50 + 9 * (Math.Min(n, 3) - 1));
         }
-        int reviews = board.Cards.Count(x => x.Kind is "jira" or "github") + board.Extra["reviews"];
+        // Jira's search may find your own issues rather than reviews, so the count doesn't call them reviews
+        int waiting = board.Cards.Count(x => x.Kind is "jira" or "github") + board.Extra["reviews"];
         ReviewsHeader.IsVisible = pillsVisible && cardViews.Values.Any(c => !c.Removing && c.Section == "reviews");
-        ReviewsHeaderText.Text = reviews == 0 ? "Reviews" : reviews == 1 ? "1 review waiting" : $"{reviews} reviews waiting";
+        ReviewsHeaderText.Text = waiting == 0 ? "Jira and GitHub" : $"{waiting} waiting on you";
     }
 
     readonly Dictionary<Panel, double> panelTarget = new();
@@ -566,7 +603,8 @@ public partial class MainWindow : Window
     {
         if (!e.GetCurrentPoint(Sprite).Properties.IsLeftButtonPressed) return;
         dragStartScreen = lastScreen = this.PointToScreen(e.GetPosition(this));
-        dragStartPos = Position;
+        // where the whole window is, which a fitted window changing size (a change already on its way) doesn't move
+        dragStartPos = Position - FittedOffset();
         dragging = true; moved = false;
         e.Pointer.Capture(Sprite);
         e.Handled = true;
@@ -581,7 +619,7 @@ public partial class MainWindow : Window
         int dx = cur.X - dragStartScreen.X, dy = cur.Y - dragStartScreen.Y;
         if (!moved && Math.Abs(dx) + Math.Abs(dy) > 4) moved = true;
         if (!moved) return;
-        Position = new PixelPoint(dragStartPos.X + dx, dragStartPos.Y + dy);
+        Position = new PixelPoint(dragStartPos.X + dx, dragStartPos.Y + dy) + FittedOffset();
         int ddx = cur.X - lastScreen.X;
         if (Math.Abs(ddx) >= 2) { input.Facing = ddx > 0 ? 1 : -1; input.LastMove = Now; }
         else if (Math.Abs(cur.Y - lastScreen.Y) > 2) input.LastMove = Now;
@@ -645,9 +683,80 @@ public partial class MainWindow : Window
         foreach (var (panel, target) in panelTarget)
             panel.Height += (target - panel.Height) * k;
 
-        if (t - lastRegionAt > 0.1) UpdateInputRegion();
+        FitWindow();
+        // not while the window is changing size: the layout isn't the new one yet (Resized updates it once it is)
+        if (t - lastRegionAt > 0.1 && requestedAt < 0) UpdateInputRegion();
         RequestAnimationFrame(OnFrame);
     }
+
+    // ------------------------------------------------------------------ fitting the window (Linux)
+    /// The window's size as the XAML gives it: room for every stack, the menu, and the pet.
+    Size full;
+    bool placed, menuWanted;
+    double shrinkingSince = -1, requestedAt = -1;
+    PixelSize requested;
+
+    /// Keeps the window only as big as what it shows, where the platform asks for it (IPlatform.FitsPetWindow): a
+    /// compositor that ignores the input region (see UpdateInputRegion) would otherwise let no click through anywhere
+    /// in it. The pet's bottom-centre stays put, so the layout (bubbles stacked above the pet at the bottom) needs no
+    /// change. It grows at once, for what is about to show, and shrinks once the stacks have settled.
+    void FitWindow()
+    {
+        if (!platform.FitsPetWindow || !placed || dragging || TryGetPlatformHandle()?.Handle is not IntPtr handle) return;
+        var (w, h) = FittedSize();
+        int wantW = (int)Math.Ceiling(w * Scale), wantH = (int)Math.Ceiling(h * Scale);
+        int curW = (int)Math.Round(ClientSize.Width * Scale), curH = (int)Math.Round(ClientSize.Height * Scale);
+        // a change still on its way: its size and position aren't in yet (given up on after a moment)
+        if (requestedAt >= 0 && Now - requestedAt < 0.5 && (Math.Abs(curW - requested.Width) > 1 || Math.Abs(curH - requested.Height) > 1)) return;
+        requestedAt = -1;
+        if (menuWanted && Math.Abs(curW - wantW) <= 1 && Math.Abs(curH - wantH) <= 1)
+        {
+            menuWanted = false;
+            Root.ContextMenu?.Open(Root);
+            return;
+        }
+        int newW = Math.Max(wantW, curW), newH = Math.Max(wantH, curH);
+        if (wantW < curW - 1 || wantH < curH - 1)
+        {
+            // smaller only once nothing is still moving in the stacks, and then for a moment
+            bool settled = panelTarget.All(p => Math.Abs(p.Key.Height - p.Value) < 0.5) && !cardViews.Values.Any(c => c.Removing);
+            if (!settled) shrinkingSince = -1;
+            else if (shrinkingSince < 0) shrinkingSince = Now;
+            else if (Now - shrinkingSince > 0.4) { newW = wantW; newH = wantH; shrinkingSince = -1; }
+        }
+        else shrinkingSince = -1;
+        if (Math.Abs(newW - curW) <= 1 && Math.Abs(newH - curH) <= 1) return;
+        // the whole window takes the mouse until the input region for the new layout is in (see Resized): the old one
+        // would leave the pet's new place out meanwhile
+        platform.SetInputRegion(handle, new[] { (0, 0, Math.Max(curW, newW), Math.Max(curH, newH)) });
+        lastRegion = null;
+        requested = new PixelSize(newW, newH);
+        requestedAt = Now;
+        var corner = Position - OffsetFor(curW, curH) + OffsetFor(newW, newH);
+        platform.MoveResize(handle, corner.X, corner.Y, newW, newH);
+    }
+
+    /// The size (DIPs) what's shown needs: the widest bubble with its close button and shadow, the stacks as tall as
+    /// they are or are growing to, the reviews header and the pet's row, or everything while the menu is open or
+    /// about to be. Never more than the screen's work area, which a window manager may hold a window to: a size it
+    /// never grants would be asked for again and again, and the menu would wait for it.
+    (double W, double H) FittedSize()
+    {
+        var (maxW, maxH) = Room();
+        if (menuWanted || Root.ContextMenu?.IsOpen == true) return (maxW, maxH);
+        double wide = 140;  // the pet's panel
+        foreach (var c in cardViews.Values) wide = Math.Max(wide, c.Body.Bounds.Width + 2 * 20);
+        if (ReviewsHeader.IsVisible) wide = Math.Max(wide, ReviewsHeader.Bounds.Width);
+        double stacks = 0;
+        foreach (var (_, panel, _) in Stacks) stacks += Math.Max(panel.Height, panelTarget.GetValueOrDefault(panel));
+        if (ReviewsHeader.IsVisible) stacks += ReviewsHeader.Bounds.Height + ReviewsHeader.Margin.Bottom;
+        // Root's margins and the pet's row; above it the stacks with the gap under them, or room for the pet to hop
+        double h = Root.Margin.Top + (stacks > 0 ? stacks + Sections.Margin.Bottom : 20) + 124 + Root.Margin.Bottom;
+        return (Math.Min(maxW, wide + Root.Margin.Left + Root.Margin.Right), Math.Min(maxH, h));
+    }
+
+    /// The whole window's size (DIPs), held to the screen's work area.
+    (double W, double H) Room() => (Math.Min(full.Width, WorkArea.Width / Scale), Math.Min(full.Height, WorkArea.Height / Scale));
 
     static void Blit(WriteableBitmap bmp, uint[] px, Image img)
     {
@@ -684,6 +793,11 @@ public partial class MainWindow : Window
         if (ReviewsHeader.IsVisible) Add(ReviewsHeader, 4);
         foreach (var c in cardViews.Values)
             if (c.Root.Opacity > 0.05) { Add(c.Body, 16); if (c.Close.IsVisible) Add(c.Close, 2); }
+        // the menu and tooltips, when they're drawn in the window (overlay popups, on X11: see Program). The layer is
+        // found from a control inside it; from the window itself it isn't.
+        if (OverlayLayer.GetOverlayLayer(Root) is { } overlay)
+            foreach (var popup in overlay.Children) Add(popup, 2);
+        if (Root.ContextMenu is { IsOpen: true } menu) Add(menu, 2);
         var key = string.Join(";", rects);
         if (!force && key == lastRegion) return;
         lastRegion = key;

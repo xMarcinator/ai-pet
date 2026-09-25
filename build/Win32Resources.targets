@@ -1,0 +1,171 @@
+<Project>
+
+  <!-- The Windows resources of an exe (AiPet.exe, aipet-hook.exe): its icon, its manifest, and a version resource
+       that names the .exe. The compiler takes either one .res file or the icon and manifest as options, and in that
+       case writes a version resource of its own, which names the .dll (InternalName, OriginalFilename): antivirus
+       heuristics dislike an .exe that says it's a .dll. So this target makes the .res itself, on every OS and without
+       rc.exe, from ApplicationIcon, ApplicationManifest (or the compiler's default manifest) and the assembly's
+       version properties, and gives the compiler only that. Windows then copies the dll's resources into the exe:
+       the SDK into the apphost (AiPet.exe), NativeAOT into the native exe (aipet-hook.exe).
+       A project imports this and sets ApplicationIcon and AssemblyTitle (the FileDescription). -->
+
+  <UsingTask TaskName="AiPetWin32Resource" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Code Type="Class" Language="cs"><![CDATA[
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using Microsoft.Build.Framework;
+using Microsoft.Build.Utilities;
+
+/// Writes a .res file (the format rc.exe writes): RT_ICON and RT_GROUP_ICON from the .ico, RT_VERSION, RT_MANIFEST.
+public class AiPetWin32Resource : Task
+{
+    [Required] public string ResFile { get; set; }
+    [Required] public string Icon { get; set; }
+    [Required] public string Manifest { get; set; }
+    [Required] public string FileName { get; set; }
+    [Required] public string Description { get; set; }
+    public string Product { get; set; }
+    public string Company { get; set; }
+    public string Copyright { get; set; }
+    [Required] public string FileVersion { get; set; }
+    [Required] public string ProductVersion { get; set; }
+
+    const int RT_ICON = 3, RT_GROUP_ICON = 14, RT_VERSION = 16, RT_MANIFEST = 24;
+    // the icon group's id is the one csc gives an ApplicationIcon
+    const int IconGroup = 32512;
+
+    public override bool Execute()
+    {
+        var res = new MemoryStream();
+        Entry(res, 0, 0, new byte[0]);  // a .res file starts with an empty entry
+
+        // each image of the .ico is an RT_ICON; the group lists them as the .ico's directory does, by id
+        var ico = File.ReadAllBytes(Icon);
+        if (ico.Length < 6 || BitConverter.ToUInt16(ico, 2) != 1)
+        {
+            Log.LogError($"{Icon} isn't an .ico file");
+            return false;
+        }
+        int count = BitConverter.ToUInt16(ico, 4);
+        var group = new MemoryStream();
+        var g = new BinaryWriter(group);
+        g.Write((ushort)0); g.Write((ushort)1); g.Write((ushort)count);
+        for (int i = 0; i < count; i++)
+        {
+            int e = 6 + 16 * i;
+            int size = BitConverter.ToInt32(ico, e + 8), offset = BitConverter.ToInt32(ico, e + 12);
+            var image = new byte[size];
+            Array.Copy(ico, offset, image, 0, size);
+            Entry(res, RT_ICON, i + 1, image);
+            g.Write(ico, e, 12);  // width, height, colours, reserved, planes, bits per pixel, size
+            g.Write((ushort)(i + 1));
+        }
+        Entry(res, RT_GROUP_ICON, IconGroup, group.ToArray());
+        Entry(res, RT_VERSION, 1, Version());
+        Entry(res, RT_MANIFEST, 1, File.ReadAllBytes(Manifest));
+
+        // unchanged content keeps the file's time, so the compiler isn't run again for nothing
+        var bytes = res.ToArray();
+        if (File.Exists(ResFile) && File.ReadAllBytes(ResFile).SequenceEqual(bytes)) return true;
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(ResFile)));
+        File.WriteAllBytes(ResFile, bytes);
+        return !Log.HasLoggedErrors;
+    }
+
+    /// One entry: its header (numeric type and name, language neutral, as csc writes its own) and its data.
+    static void Entry(Stream s, int type, int name, byte[] data)
+    {
+        var w = new BinaryWriter(s);
+        w.Write(data.Length);
+        w.Write(32);  // the header's size
+        w.Write((ushort)0xFFFF); w.Write((ushort)type);
+        w.Write((ushort)0xFFFF); w.Write((ushort)name);
+        w.Write(0);  // data version
+        w.Write((ushort)(type == RT_ICON ? 0x1010 : 0x1030));  // memory flags, as rc.exe sets them
+        w.Write((ushort)0);  // language: neutral
+        w.Write(0); w.Write(0);  // version, characteristics
+        w.Write(data);
+        while (s.Length % 4 != 0) s.WriteByte(0);
+    }
+
+    /// VS_VERSIONINFO: the numeric versions, and the strings Explorer and antivirus read.
+    byte[] Version()
+    {
+        var v = FileVersion.Split('.').Select(p => ushort.TryParse(p, out var n) ? n : (ushort)0).Concat(new ushort[4]).Take(4).ToArray();
+        uint ms = (uint)(v[0] << 16 | v[1]), ls = (uint)(v[2] << 16 | v[3]);
+        var fixedInfo = new MemoryStream();
+        var f = new BinaryWriter(fixedInfo);
+        foreach (var x in new uint[] { 0xFEEF04BD, 0x00010000, ms, ls, ms, ls, 0x3F, 0, 0x4 /* VOS__WINDOWS32 */, 0x1 /* VFT_APP */, 0, 0, 0 })
+            f.Write(x);
+
+        var strings = new List<byte[]>();
+        foreach (var (key, value) in new[]
+        {
+            ("CompanyName", Company), ("FileDescription", Description), ("FileVersion", FileVersion), ("InternalName", FileName),
+            ("LegalCopyright", Copyright), ("OriginalFilename", FileName), ("ProductName", Product), ("ProductVersion", ProductVersion),
+        })
+            if (!string.IsNullOrEmpty(value)) strings.Add(Node(key, Encoding.Unicode.GetBytes(value + "\0"), true));
+        // language neutral, Unicode: the table csc writes
+        var table = Node("000004b0", null, true, strings.ToArray());
+        var translation = Node("Translation", new byte[] { 0x00, 0x00, 0xB0, 0x04 }, false);
+        return Node("VS_VERSION_INFO", fixedInfo.ToArray(), false, Node("StringFileInfo", null, true, table), Node("VarFileInfo", null, true, translation));
+    }
+
+    /// A version info block: length, value length (in characters for text), type, key, value, children, each
+    /// aligned to 4 bytes.
+    static byte[] Node(string key, byte[] value, bool text, params byte[][] children)
+    {
+        var s = new MemoryStream();
+        var w = new BinaryWriter(s);
+        w.Write((ushort)0);
+        w.Write((ushort)(value == null ? 0 : text ? value.Length / 2 : value.Length));
+        w.Write((ushort)(text ? 1 : 0));
+        w.Write(Encoding.Unicode.GetBytes(key + "\0"));
+        if (value != null)
+        {
+            while (s.Length % 4 != 0) s.WriteByte(0);
+            w.Write(value);
+        }
+        foreach (var c in children)
+        {
+            while (s.Length % 4 != 0) s.WriteByte(0);
+            w.Write(c);
+        }
+        var bytes = s.ToArray();
+        BitConverter.GetBytes((ushort)bytes.Length).CopyTo(bytes, 0);
+        return bytes;
+    }
+}
+]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- After the SDK has worked out the versions and the manifest, and before the compiler runs. The compiler gets
+       the .res alone: ApplicationIcon and the manifest are in it. (Avalonia has read ApplicationIcon already, for the
+       windows' icon.) -->
+  <Target Name="AiPetWin32Resource" BeforeTargets="CoreCompile" DependsOnTargets="GetAssemblyVersion;SetWin32ManifestProperties"
+          Condition="'$(ApplicationIcon)' != ''">
+    <PropertyGroup>
+      <_AiPetRes>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', '$(AssemblyName).res'))</_AiPetRes>
+      <_AiPetManifest>$(MSBuildThisFileDirectory)default.win32manifest</_AiPetManifest>
+      <_AiPetManifest Condition="'$(Win32Manifest)' != ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(Win32Manifest)'))</_AiPetManifest>
+    </PropertyGroup>
+    <AiPetWin32Resource ResFile="$(_AiPetRes)" Icon="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(ApplicationIcon)'))"
+                        Manifest="$(_AiPetManifest)" FileName="$(AssemblyName).exe" Description="$(AssemblyTitle)"
+                        Product="$(Product)" Company="$(Company)" Copyright="$(Copyright)"
+                        FileVersion="$(FileVersion)" ProductVersion="$(InformationalVersion)" />
+    <PropertyGroup>
+      <Win32Resource>$(_AiPetRes)</Win32Resource>
+      <ApplicationIcon />
+      <Win32Manifest />
+    </PropertyGroup>
+    <ItemGroup>
+      <FileWrites Include="$(_AiPetRes)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

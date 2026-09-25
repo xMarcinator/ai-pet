@@ -10,6 +10,10 @@ public sealed class Session
     public string Link;
     /// Who reported a chat: "hook", or "log" (Codex's session files, via CodexWatcher).
     public string Source;
+    /// Codex: the chat's turn the report is of (its own thread's; null when it names none), and whether that turn
+    /// has ended, so Board can order the hook's report against the log's by turn.
+    public string Turn;
+    public bool TurnEnded;
     public double Ts;
     public string Section => Board.SectionOf(Kind);
     public Session Clone() => (Session)MemberwiseClone();
@@ -116,7 +120,7 @@ public sealed class Board
             list.Add((new Session
             {
                 Id = v.Id, Ts = v.Ts, Detail = v.Detail ?? "", Prop = v.Prop, Cwd = cwd, Agent = agent,
-                Where = v.Where, Eff = v.State ?? "idle", Source = "hook",
+                Where = v.Where, Eff = v.State ?? "idle", Source = "hook", Turn = v.Turn, TurnEnded = v.TurnEnded,
                 Link = LinkFor(agent, v.Where, sid, v.HostId),
                 Name = rank == 2 ? v.ChatTitle : rank == 1 ? v.Title
                     : (Path.GetFileName(cwd.TrimEnd('/', '\\')) is { Length: > 0 } f ? f : AgentLabel(agent)),
@@ -129,13 +133,16 @@ public sealed class Board
     public void Refresh(AgentSessions hooks, JiraWatcher jira, GitHubWatcher github, IMediaPlayer media, bool musicOn, CodexWatcher codex = null)
     {
         var recorded = Recorded(hooks);
+        double now = Unix;
 
-        // one bubble per chat: the newest report wins (a hook's on a tie), keeping the best name any source has
+        // one bubble per chat: the newest report wins, by Codex's turns (ByTurn), else by time (a hook's on a tie),
+        // keeping the winner's own time and the best name any source has
         var merged = new Dictionary<string, (Session S, int NameRank)>();
         void Offer(Session s, int rank)
         {
             if (!merged.TryGetValue(s.Id, out var cur)) { merged[s.Id] = (s, rank); return; }
-            var (win, lose) = s.Ts > cur.S.Ts || (s.Ts == cur.S.Ts && s.Source == "hook" && cur.S.Source != "hook") ? (s, cur.S) : (cur.S, s);
+            bool newer = ByTurn(s, cur.S, now) ?? (s.Ts > cur.S.Ts || (s.Ts == cur.S.Ts && s.Source == "hook" && cur.S.Source != "hook"));
+            var (win, lose) = newer ? (s, cur.S) : (cur.S, s);
             win.Where ??= lose.Where;
             win.Link ??= lose.Link ?? LinkFor(win.Agent, win.Where, win.Id[(win.Id.IndexOf(':') + 1)..], null);
             if (string.IsNullOrEmpty(win.Cwd)) win.Cwd = lose.Cwd;
@@ -154,7 +161,6 @@ public sealed class Board
             Offer(copy, titled ? 2 : 0);
         }
 
-        double now = Unix;
         var sessions = merged.Values.Select(m => { m.S.Eff = Effective(m.S.Eff, m.S.Ts, now); return m.S; }).ToList();
 
         // reviews: Jira issues get their PR; PRs that match a Jira review are merged into it
@@ -167,7 +173,8 @@ public sealed class Board
                 Id = "jira:" + i.Key, Kind = "jira", Agent = "jira", Eff = "review", Ts = i.Updated,
                 Url = i.Url, TicketUrl = i.Url, PrUrl = pr,
                 Name = $"{i.Key} · {i.Summary}",
-                Detail = $"Review requested · {i.Status}" + (pr != null ? " · PR " + PrLabel(pr) : ""),
+                // what the issue is at, whatever the search (the default finds your own open issues, not reviews)
+                Detail = string.Join(" · ", new[] { i.Status, pr != null ? "PR " + PrLabel(pr) : null }.Where(x => !string.IsNullOrEmpty(x))),
             });
         }
         foreach (var pr in github.ReviewRequests)
@@ -197,24 +204,32 @@ public sealed class Board
         if (github.Config.Enabled && github.LastError != null)
             sessions.Add(new Session { Id = "gh:_error", Kind = "github-error", Agent = "github", Eff = "error", Ts = now, Name = "GitHub reviews", Detail = github.LastError + ". Click to fix" });
         if (jira.Config.Enabled && jira.LastError != null)
-            sessions.Add(new Session { Id = "jira:_error", Kind = "jira-error", Agent = "jira", Eff = "error", Ts = now, Name = "Jira reviews", Detail = jira.LastError + ". Click to fix" });
+            sessions.Add(new Session { Id = "jira:_error", Kind = "jira-error", Agent = "jira", Eff = "error", Ts = now, Name = "Jira", Detail = jira.LastError + ". Click to fix" });
 
         sessions = sessions.OrderByDescending(s => Priority.GetValueOrDefault(s.Eff, 1)).ThenByDescending(s => s.Ts).ToList();
         All = sessions;
 
         // a dismissed bubble comes back when it does something new: a chat's state or detail changes, or a report comes
-        // in well after it (the hook and Codex's log often report the same event a moment apart)
+        // in well after it (the hook and Codex's log often report the same event a moment apart). An error bubble is
+        // made anew on every refresh, so only another error brings it back.
         foreach (var (id, d) in Dismissed.ToList())
-            if (sessions.FirstOrDefault(s => s.Id == id) is not { } s0 || s0.Ts > d.Ts + 2
-                || s0.Kind == "chat" && (s0.Eff != d.Eff || s0.Detail != d.Detail)) Dismissed.Remove(id);
+            if (sessions.FirstOrDefault(s => s.Id == id) is not { } s0
+                || (s0.Kind is "jira-error" or "github-error" ? s0.Detail != d.Detail
+                    : s0.Ts > d.Ts + 2 || s0.Kind == "chat" && (s0.Eff != d.Eff || s0.Detail != d.Detail))) Dismissed.Remove(id);
 
         var live = sessions.Where(s => s.Eff != "idle" && !Dismissed.ContainsKey(s.Id)).ToList();
         var cards = new List<Session>();
         foreach (var (sec, max) in MaxCards)
         {
+            // a watcher's error always shows, first (it's the only sign its reviews are out of date): the cap only
+            // leaves out reviews, and only they count as more
             var inSection = live.Where(x => x.Section == sec).ToList();
-            cards.AddRange(inSection.Take(max));
-            Extra[sec] = Math.Max(0, inSection.Count - max);
+            var errors = inSection.Where(x => x.Kind is "jira-error" or "github-error").ToList();
+            var rest = inSection.Except(errors).ToList();
+            int room = Math.Max(0, max - errors.Count);
+            cards.AddRange(errors);
+            cards.AddRange(rest.Take(room));
+            Extra[sec] = Math.Max(0, rest.Count - room);
         }
         Cards = cards;
 
@@ -225,6 +240,24 @@ public sealed class Board
         if (st == "idle" && now - latest > 300) st = "sleep";
         State = st;
         Prop = primary?.Prop;
+    }
+
+    /// Codex: whether report a of a chat is newer than b by the chat's turn ids, when one is the hook's and the other
+    /// the log's; null when the ids can't tell (then time decides). Their times don't compare: the hook's is when its
+    /// hook started (on Windows 1-4 s late, through PowerShell), the log's when Codex wrote the line. So an
+    /// interrupt or an error, which only the log reports, would lose to a hook event Codex sent just before it.
+    ///   - The log's end of a turn beats the hook's news of that turn (unless the hook has its end too) or of an
+    ///     older one.
+    ///   - The hook's news of a later turn beats the log.
+    /// Turns order as in AgentSessions: UUIDv7s by their time, ids of another shape only equal or not.
+    static bool? ByTurn(Session a, Session b, double now)
+    {
+        if (a.Source == b.Source || a.Turn == null || b.Turn == null) return null;
+        var (hook, log) = a.Source == "hook" ? (a, b) : (b, a);
+        bool? hookNewer = hook.Turn == log.Turn ? (log.TurnEnded && !hook.TurnEnded ? false : null)
+            : AgentSessions.V7Before(log.Turn, hook.Turn, now) ? true
+            : AgentSessions.V7Before(hook.Turn, log.Turn, now) && log.TurnEnded ? false : null;
+        return hookNewer == null ? null : hookNewer == (a == hook);
     }
 
     public Session Find(string id) => All.FirstOrDefault(s => s.Id == id);
