@@ -9,8 +9,8 @@
         "source": "git-subdir",
         "url": "https://github.com/xMarcinator/ai-pet-plugin.git",
         "path": "plugins/aipet",
-        "ref": "v0.2.0",
-        "sha": "0000000000000000000000000000000000000000"
+        "ref": "v0.1.0",
+        "sha": "2bc4c9659e31e3a2e66d155ac055b95bc6358948"
       },
       "displayName": "AiPet",
       "description": "Shows each Claude Code chat's status on the AiPet desktop pet.",
