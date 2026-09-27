@@ -1,0 +1,12 @@
+[package]
+name = "aipet-ui"
+description = "The pet's front end shared by the Wayland and desktop shells: sprite, bubbles, menu, Settings, and the geometry that drives both the view and the input region."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+aipet-sprite = { path = "../aipet-sprite" }
+iced.workspace = true

@@ -1,0 +1,40 @@
+[package]
+name = "aipet-desktop"
+description = "The pet in an ordinary transparent window (iced on winit): X11, XWayland, Windows and macOS."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+aipet-ui = { path = "../aipet-ui" }
+iced.workspace = true
+
+# The native calls behind the pet window (src/native). Each is the version winit 0.30 already builds, with features
+# it already enables, so they add nothing to compile.
+[target.'cfg(target_os = "linux")'.dependencies]
+# a pure-Rust connection of our own to the X server winit uses
+x11rb = { version = "0.13", features = ["shape"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5.2"
+objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSGeometry", "NSThread"] }
+objc2-app-kit = { version = "0.2.2", features = [
+    "NSApplication",
+    "NSEvent",
+    "NSGraphics",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSScreen",
+    "NSView",
+    "NSWindow",
+] }

@@ -1,0 +1,37 @@
+# The Rust front end spike (iced 0.14): the pet's sprite and animation, then the windows.
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+# the research prototypes in notes/ are built on their own (see SPIKE.md)
+exclude = ["notes"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+# the toolchain the spike is built with; the resolver picks dependency versions that support it
+rust-version = "1.89"
+publish = false
+
+[workspace.dependencies]
+serde = "1"
+# float_roundtrip: parse numbers exactly (correctly rounded), as System.Text.Json does; raw_value: avatar files read
+# their numbers from the raw text, where System.Text.Json and serde_json disagree (-0 as an int, 1e400 as a double)
+serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
+# The front end. wgpu only: tiny-skia cannot draw a transparent window. iced always builds its winit shell, and
+# winit needs a backend on Linux, hence x11 and wayland. tokio is the executor (and gives time::every).
+iced = { version = "0.14.0", default-features = false, features = [
+    "wgpu",
+    "crisp",
+    "web-colors",
+    "x11",
+    "wayland",
+    "tokio",
+    "image-without-codecs",
+    "canvas",
+    "advanced",
+] }
+# Layer-shell surfaces on Wayland. No default features: they add a colour-scheme probe that blocks startup for up
+# to 200 ms.
+iced_exwlshell = { version = "0.20.1", default-features = false, features = ["macros"] }
+wayland-client = "0.31.15"

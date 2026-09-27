@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Writes the golden frames for the Rust port of the pet (rust/crates/aipet-sprite/tests/golden.rs) with the real
+       AiPet.Core; Program.cs says how to run it. Not part of AiPet.slnx, and it doesn't change Core. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AiPet.Golden</RootNamespace>
+    <AssemblyName>aipet-golden</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/AiPet.Core/AiPet.Core.csproj" />
+  </ItemGroup>
+
+</Project>
