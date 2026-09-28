@@ -1,0 +1,22 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.243096Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.13",
+    "fn-1-migrate-aipet-from-net-to-rust.16",
+    "fn-1-migrate-aipet-from-net-to-rust.17",
+    "fn-1-migrate-aipet-from-net-to-rust.18",
+    "fn-1-migrate-aipet-from-net-to-rust.19",
+    "fn-1-migrate-aipet-from-net-to-rust.20",
+    "fn-1-migrate-aipet-from-net-to-rust.21"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.22",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.22.md",
+  "status": "todo",
+  "title": "Linux hands-on parity pass and the Hyprland layer rules",
+  "updated_at": "2026-09-28T18:25:53.166783Z"
+}

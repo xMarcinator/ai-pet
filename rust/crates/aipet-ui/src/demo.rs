@@ -6,15 +6,6 @@ use crate::cards::{Bubble, Section};
 /// The script's length; it starts over after that.
 pub const PERIOD: f64 = 40.0;
 
-/// What the pet shows at a moment of the script.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Scene {
-    /// The pet's mood (a `PetInput::state`).
-    pub mood: &'static str,
-    /// The bubbles, in stack order (the first of a section is at the front).
-    pub bubbles: Vec<Bubble>,
-}
-
 /// One bubble in one state for a while.
 struct Step {
     from: f64,
@@ -67,46 +58,62 @@ const SCRIPT: &[Step] = &[
     },
 ];
 
-/// Which pass through the script `t` (seconds since the start) is in.
-pub fn cycle(t: f64) -> u64 {
-    (t / PERIOD).floor().max(0.0) as u64
-}
-
-/// The scene at `t` seconds since the start.
-pub fn scene(t: f64) -> Scene {
+/// The scene at `t` seconds since the start: sets `bubbles` to its bubbles, in stack order (the first of a section
+/// is at the front), and gives the pet's mood (a `PetInput::state`).
+pub fn scene(t: f64, bubbles: &mut Vec<Bubble>) -> &'static str {
     let at = t.rem_euclid(PERIOD);
-    let bubbles: Vec<Bubble> = SCRIPT
-        .iter()
-        .filter(|s| (s.from..s.until).contains(&at))
-        .map(|s| Bubble {
-            id: s.id,
-            section: s.section,
-            state: s.state,
-            title: s.title.to_owned(),
-            detail: s.detail.to_owned(),
-            app_colour: s.app,
-        })
-        .collect();
+    bubbles.clear();
+    bubbles.extend(
+        SCRIPT
+            .iter()
+            .filter(|s| (s.from..s.until).contains(&at))
+            .map(|s| Bubble {
+                id: s.id,
+                section: s.section,
+                state: s.state,
+                title: s.title.into(),
+                detail: s.detail.into(),
+                app_colour: s.app,
+            }),
+    );
     // the loudest chat sets the mood; with nothing going on the pet naps, until the script starts over
     let chats = |state: &str| bubbles.iter().any(|b| b.section == Section::Chats && b.state == state);
-    let mood = ["attention", "working", "thinking", "done"]
+    ["attention", "working", "thinking", "done"]
         .into_iter()
         .find(|&m| chats(m))
-        .unwrap_or(if (2.0..36.0).contains(&at) { "idle" } else { "sleep" });
-    Scene { mood, bubbles }
+        .unwrap_or(if (2.0..36.0).contains(&at) { "idle" } else { "sleep" })
+}
+
+/// Whether a review turns up after `from` and by `to` (seconds since the start), which the C#'s watchers report as
+/// NewReviews.
+pub fn review_arrived(from: f64, to: f64) -> bool {
+    SCRIPT.iter().filter(|s| s.section == Section::Reviews).any(|s| {
+        let next = s.from + (((from - s.from) / PERIOD).floor() + 1.0) * PERIOD;
+        next <= to
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn bubbles(t: f64) -> Vec<Bubble> {
+        let mut bubbles = Vec::new();
+        scene(t, &mut bubbles);
+        bubbles
+    }
+
+    fn mood(t: f64) -> &'static str {
+        scene(t, &mut Vec::new())
+    }
+
     fn ids(t: f64) -> Vec<&'static str> {
-        scene(t).bubbles.iter().map(|b| b.id).collect()
+        bubbles(t).iter().map(|b| b.id).collect()
     }
 
     #[test]
     fn the_script_walks_claude_through_its_states() {
-        let claude = |t: f64| scene(t).bubbles.into_iter().find(|b| b.id == "claude").map(|b| b.state);
+        let claude = |t: f64| bubbles(t).into_iter().find(|b| b.id == "claude").map(|b| b.state);
         assert_eq!(claude(1.0), None);
         assert_eq!(claude(3.0), Some("thinking"));
         assert_eq!(claude(10.0), Some("working"));
@@ -117,15 +124,15 @@ mod tests {
 
     #[test]
     fn the_mood_follows_the_loudest_chat() {
-        assert_eq!(scene(0.5).mood, "sleep");
-        assert_eq!(scene(3.0).mood, "thinking");
-        assert_eq!(scene(12.0).mood, "working");
-        assert_eq!(scene(17.0).mood, "attention");
+        assert_eq!(mood(0.5), "sleep");
+        assert_eq!(mood(3.0), "thinking");
+        assert_eq!(mood(12.0), "working");
+        assert_eq!(mood(17.0), "attention");
         // Claude is done but Codex still works
-        assert_eq!(scene(23.0).mood, "working");
-        assert_eq!(scene(26.0).mood, "done");
-        assert_eq!(scene(35.0).mood, "idle");
-        assert_eq!(scene(38.0).mood, "sleep");
+        assert_eq!(mood(23.0), "working");
+        assert_eq!(mood(26.0), "done");
+        assert_eq!(mood(35.0), "idle");
+        assert_eq!(mood(38.0), "sleep");
     }
 
     #[test]
@@ -133,9 +140,22 @@ mod tests {
         assert_eq!(ids(14.0), vec!["claude", "codex", "jira"]);
         assert_eq!(ids(30.0), vec!["claude", "jira"]);
         assert!(ids(38.0).is_empty());
-        assert_eq!(scene(14.0 + 3.0 * PERIOD), scene(14.0));
-        assert_eq!((cycle(39.9), cycle(40.0), cycle(85.0)), (0, 1, 2));
-        let jira = scene(14.0).bubbles.into_iter().find(|b| b.id == "jira").unwrap();
+        assert_eq!(bubbles(14.0 + 3.0 * PERIOD), bubbles(14.0));
+        let jira = bubbles(14.0).into_iter().find(|b| b.id == "jira").unwrap();
         assert_eq!((jira.section, jira.app_colour), (Section::Reviews, None));
+        // the buffer is refilled, not added to
+        let mut reused = bubbles(14.0);
+        scene(30.0, &mut reused);
+        assert_eq!(reused, bubbles(30.0));
+    }
+
+    #[test]
+    fn the_review_arrives_at_13_s_in_every_pass() {
+        assert!(review_arrived(12.99, 13.0));
+        assert!(!review_arrived(13.0, 13.02), "only once");
+        assert!(!review_arrived(0.0, 12.9));
+        assert!(review_arrived(PERIOD + 12.9, PERIOD + 13.1));
+        assert!(review_arrived(30.0, PERIOD + 20.0), "across the loop");
+        assert!(!review_arrived(0.0, 0.0));
     }
 }

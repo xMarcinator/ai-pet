@@ -15,7 +15,7 @@ use objc2_app_kit::{
 };
 use objc2_foundation::MainThreadMarker;
 
-use super::{NativeError, PxRect};
+use super::{NativeError, Pointer, PxRect};
 
 /// winit's AppKit handle: the window's content NSView.
 pub type Handle = NonNull<c_void>;
@@ -115,12 +115,22 @@ fn update(w: &NSWindow) {
     }
 }
 
-pub fn pointer(_scale: f32) -> Result<Point, NativeError> {
+pub fn pointer(_scale: f32) -> Result<Pointer, NativeError> {
     let mtm = main_thread()?;
     // AppKit's desktop is in points (winit's logical px already), from the bottom left of the primary screen, which
     // is the first one; winit's positions are from its top left
     // SAFETY: plain getters, on the main thread
-    let (p, primary) = unsafe { (NSEvent::mouseLocation(), NSScreen::screens(mtm).firstObject()) };
+    let (p, primary, buttons) = unsafe {
+        (
+            NSEvent::mouseLocation(),
+            NSScreen::screens(mtm).firstObject(),
+            NSEvent::pressedMouseButtons(),
+        )
+    };
     let primary = primary.ok_or_else(|| NativeError::Os("AppKit lists no screen".into()))?;
-    Ok(Point::new(p.x as f32, (primary.frame().size.height - p.y) as f32))
+    Ok(Pointer {
+        at: Point::new(p.x as f32, (primary.frame().size.height - p.y) as f32),
+        // bit 0: the left button
+        left_held: buttons & 1 != 0,
+    })
 }

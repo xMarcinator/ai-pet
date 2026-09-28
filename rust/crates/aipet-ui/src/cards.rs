@@ -1,6 +1,8 @@
 //! The bubbles ("cards") above the pet: which are shown, how they stack, and how they come and go. A port of
 //! MainWindow's SyncCards, LayoutCards and the card part of OnFrame.
 
+use std::borrow::Cow;
+
 use iced::Point;
 
 use crate::geometry::{CARD_H, CENTER_X, CardFrame, HEADER_GAP, STACKS_BOTTOM};
@@ -35,8 +37,8 @@ pub struct Bubble {
     pub section: Section,
     /// The chat's state, for the dot's colour and the style: thinking, working, attention, done, idle, review…
     pub state: &'static str,
-    pub title: String,
-    pub detail: String,
+    pub title: Cow<'static, str>,
+    pub detail: Cow<'static, str>,
     /// The border colour of the app the chat runs in.
     pub app_colour: Option<u32>,
 }
@@ -66,8 +68,9 @@ pub struct Card {
     pub title: String,
     pub detail: String,
     pub width: f32,
-    /// The text it was fitted from, to fit again only when it changes.
-    source: (String, String),
+    /// What its text was fitted from (the title, the detail and how many thinking dots), to fit again only when that
+    /// changes.
+    source: (String, String, usize),
     pub born_at: f64,
     /// How far it rises above its stack's bottom (negative: up), its scale and its opacity, now and the target.
     pub y: f32,
@@ -83,6 +86,11 @@ pub struct Card {
 }
 
 impl Card {
+    /// Whether it is drawn at all (not once it has faded out).
+    pub fn drawn(&self) -> bool {
+        self.o >= 0.004
+    }
+
     /// Whether the dot pulses: something is going on.
     pub fn pulsing(&self) -> bool {
         matches!(self.state, "working" | "attention" | "thinking" | "music")
@@ -93,6 +101,8 @@ impl Card {
 #[derive(Default)]
 pub struct Stacks {
     cards: Vec<Card>,
+    /// The cards' indices in drawing order, back to front.
+    order: Vec<usize>,
     expanded: [bool; 2],
     /// Each stack's height (with its gap), easing towards its target.
     height: [f32; 2],
@@ -122,12 +132,9 @@ impl Stacks {
             if let Some(i) = self.cards.iter().position(|c| c.id == bubble.id && c.removing) {
                 self.cards.remove(i);
             }
-            let detail = match bubble.state {
-                "thinking" => {
-                    let dots = 1 + (t * 2.5) as usize % 3;
-                    format!("{}{}", bubble.detail.trim_end_matches(['.', '…']), ".".repeat(dots))
-                }
-                _ => bubble.detail.clone(),
+            let dots = match bubble.state {
+                "thinking" => 1 + (t * 2.5) as usize % 3,
+                _ => 0,
             };
             let card = match self.cards.iter_mut().find(|c| c.id == bubble.id) {
                 Some(card) => card,
@@ -140,7 +147,7 @@ impl Stacks {
                         title: String::new(),
                         detail: String::new(),
                         width: 0.0,
-                        source: (String::new(), String::new()),
+                        source: (String::new(), String::new(), 0),
                         born_at: t,
                         y: 14.0,
                         s: 1.0,
@@ -156,9 +163,13 @@ impl Stacks {
             };
             card.state = bubble.state;
             card.app_colour = bubble.app_colour;
-            if card.source.0 != bubble.title || card.source.1 != detail {
+            if card.source.0 != bubble.title || card.source.1 != bubble.detail || card.source.2 != dots {
+                let detail = match dots {
+                    0 => bubble.detail.to_string(),
+                    n => format!("{}{}", bubble.detail.trim_end_matches(['.', '…']), ".".repeat(n)),
+                };
                 let fitted = fit(&bubble.title, &detail);
-                card.source = (bubble.title.clone(), detail);
+                card.source = (bubble.title.to_string(), bubble.detail.to_string(), dots);
                 (card.title, card.detail, card.width) = (fitted.title, fitted.detail, fitted.width);
             }
         }
@@ -171,14 +182,16 @@ impl Stacks {
         let order = |id: &str| show.iter().position(|b| b.id == id).unwrap_or(usize::MAX);
         for section in Section::ALL {
             let open = self.expanded[section.index()];
-            let mut active: Vec<&mut Card> = self
-                .cards
-                .iter_mut()
-                .filter(|c| !c.removing && c.section == section)
-                .collect();
-            active.sort_by_key(|c| order(c.id));
-            let n = active.len();
-            for (i, card) in active.into_iter().enumerate() {
+            let active = |c: &Card| !c.removing && c.section == section;
+            let n = self.cards.iter().filter(|c| active(c)).count();
+            for k in 0..self.cards.len() {
+                if !active(&self.cards[k]) {
+                    continue;
+                }
+                // its place in the stack, from the front: how many of the stack's bubbles come before it in `show`
+                let at = order(self.cards[k].id);
+                let i = self.cards.iter().filter(|c| active(c) && order(c.id) < at).count();
+                let card = &mut self.cards[k];
                 let f = i as f32;
                 card.target = if open {
                     (-f * SPREAD, 1.0, 1.0)
@@ -194,6 +207,15 @@ impl Stacks {
                 _ => section.gap() + CARD_H + PEEK * (n.min(3) - 1) as f32,
             };
         }
+        self.restack();
+    }
+
+    /// Sorts `order` into drawing order again: by depth, and in the cards' order at the same depth.
+    fn restack(&mut self) {
+        let cards = &self.cards;
+        self.order.clear();
+        self.order.extend(0..cards.len());
+        self.order.sort_by_key(|&i| cards[i].z);
     }
 
     /// Spreads out a folded stack of more than one bubble, and folds the others: two spread stacks are taller than
@@ -222,10 +244,24 @@ impl Stacks {
             card.s += (card.target.1 - card.s) * k;
             card.o += (card.target.2 - card.o) * fade;
         }
+        let before = self.cards.len();
         self.cards.retain(|c| !(c.removing && t - c.removed_at > LEAVE));
+        if self.cards.len() != before {
+            self.restack();
+        }
         for (height, target) in self.height.iter_mut().zip(self.target) {
             *height += (target - *height) * k;
         }
+    }
+
+    /// Whether a bubble or a stack is still visibly on its way: more than half a px from where it is going, or 1 %
+    /// of its opacity.
+    pub fn easing(&self) -> bool {
+        const PX: f32 = 0.5;
+        let card = |c: &Card| {
+            (c.target.0 - c.y).abs() > PX || (c.target.1 - c.s).abs() * c.width > PX || (c.target.2 - c.o).abs() > 0.01
+        };
+        self.cards.iter().any(card) || self.height.iter().zip(self.target).any(|(h, t)| (t - h).abs() > PX)
     }
 
     /// The bottom edge of a stack: the chats sit on the stacks' bottom, the reviews on top of the chats.
@@ -247,24 +283,16 @@ impl Stacks {
     }
 
     /// Every bubble with where it is drawn, back to front.
-    pub fn frames(&self) -> Vec<(&Card, CardFrame)> {
-        let mut frames: Vec<(&Card, CardFrame)> = self
-            .cards
-            .iter()
-            .map(|c| {
-                let bottom_center = Point::new(CENTER_X, self.bottom(c.section) + c.y);
-                (
-                    c,
-                    CardFrame {
-                        bottom_center,
-                        width: c.width,
-                        scale: c.s,
-                    },
-                )
-            })
-            .collect();
-        frames.sort_by_key(|(c, _)| c.z);
-        frames
+    pub fn frames(&self) -> impl DoubleEndedIterator<Item = (&Card, CardFrame)> {
+        self.order.iter().map(|&i| {
+            let c = &self.cards[i];
+            let frame = CardFrame {
+                bottom_center: Point::new(CENTER_X, self.bottom(c.section) + c.y),
+                width: c.width,
+                scale: c.s,
+            };
+            (c, frame)
+        })
     }
 }
 
@@ -277,8 +305,8 @@ mod tests {
             id,
             section,
             state,
-            title: id.to_owned(),
-            detail: "Doing things…".to_owned(),
+            title: id.into(),
+            detail: "Doing things…".into(),
             app_colour: None,
         }
     }
@@ -311,7 +339,8 @@ mod tests {
         stacks.sync(&show, t, false, fit);
         let a = card(&stacks, "a").unwrap();
         assert_eq!((a.y, a.o), (14.0, 0.0));
-        let (_, frame) = stacks.frames()[0];
+        assert!(stacks.easing());
+        let (_, frame) = stacks.frames().next().unwrap();
         assert_eq!(frame.bottom_center, Point::new(190.0, 474.0));
         run(&mut stacks, &mut t, 1.0);
         let a = card(&stacks, "a").unwrap();
@@ -320,8 +349,10 @@ mod tests {
             (stacks.height[0] - 64.0).abs() < 0.1,
             "the stack is its gap and one bubble high"
         );
+        assert!(!stacks.easing(), "it has arrived");
 
         stacks.sync(&[], t, false, fit);
+        assert!(stacks.easing());
         run(&mut stacks, &mut t, 0.1);
         let a = card(&stacks, "a").unwrap();
         assert!(a.removing && a.y > 1.0 && a.o < 0.5, "{a:?}");
@@ -344,10 +375,7 @@ mod tests {
         assert!(card(&stacks, "a").unwrap().content && !b.content);
         assert!((stacks.height[0] - (14.0 + 50.0 + 9.0)).abs() < 0.1);
         // the front bubble is drawn last
-        assert_eq!(
-            stacks.frames().iter().map(|(c, _)| c.id).collect::<Vec<_>>(),
-            ["b", "a"]
-        );
+        assert_eq!(stacks.frames().map(|(c, _)| c.id).collect::<Vec<_>>(), ["b", "a"]);
 
         assert!(stacks.expand(Section::Chats, &show));
         run(&mut stacks, &mut t, 2.0);
@@ -384,8 +412,7 @@ mod tests {
         ];
         stacks.sync(&show, t, false, fit);
         run(&mut stacks, &mut t, 2.0);
-        let frames = stacks.frames();
-        let r = frames.iter().find(|(c, _)| c.id == "r").unwrap().1;
+        let r = stacks.frames().find(|(c, _)| c.id == "r").unwrap().1;
         assert!((r.bottom_center.y - (460.0 - 64.0)).abs() < 0.1, "{r:?}");
         assert!((stacks.header_bottom() - (460.0 - 64.0 - 50.0 - 8.0)).abs() < 0.1);
         assert!(stacks.has_reviews());

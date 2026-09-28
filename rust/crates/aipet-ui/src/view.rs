@@ -1,14 +1,15 @@
 //! The pet's surface: every layer pinned where [`crate::geometry`] puts it, bottom to top: the reviews header, the
 //! bubbles (back to front), the ground shadow, the sprite's body, the glow's halo, the glow and effects, and the
-//! menu when it is drawn inline.
+//! menu when it is drawn inline, which hides everything under it from the pointer.
 
 use iced::widget::image::{FilterMethod, Handle};
-use iced::widget::{Space, button, canvas, container, image, mouse_area, pin, row, stack, text};
+use iced::widget::{Space, button, canvas, container, image, mouse_area, opaque, pin, row, stack, text};
 use iced::{Border, Color, ContentFit, Element, Length, Point, Rectangle, Shadow, Vector, mouse};
 
 use crate::cards::Card;
 use crate::geometry::{
-    CARD_H, CARD_RADIUS, CLOSE_SIZE, CardFrame, HALO_PAD, HEADER_H, HEADER_RADIUS, INLINE_MENU, SPRITE,
+    BODY, CARD_GLOW_BLUR, CARD_H, CARD_RADIUS, CARD_SHADOW_BLUR, CARD_SHADOW_Y, CLOSE_SIZE, CardFrame, HALO, HEADER_H,
+    HEADER_RADIUS, INLINE_MENU,
 };
 use crate::style::{self, AMBER, Glyph, Icon, argb};
 use crate::{Message, PetUi};
@@ -28,7 +29,7 @@ impl PetUi {
     /// ([`Message::PointerMoved`], [`Message::PointerLeft`]) itself.
     pub fn pet_view(&self) -> Element<'_, Message> {
         let mut layers: Vec<Element<'_, Message>> = Vec::new();
-        if let (Some((label, _)), Some(r)) = (&self.header, self.header_rect()) {
+        if let (Some((_, label, _)), Some(r)) = (&self.header, self.header_rect()) {
             layers.push(pin(header(label, r)).position(r.position()).into());
         }
         for (card, frame) in self.stacks.frames() {
@@ -45,13 +46,8 @@ impl PetUi {
             .position(shadow.position())
             .into(),
         );
-        let body = self.motion.rect_to_surface(Rectangle::new(Point::ORIGIN, SPRITE));
-        let halo = self.motion.rect_to_surface(Rectangle {
-            x: -HALO_PAD,
-            y: -HALO_PAD,
-            width: SPRITE.width + 2.0 * HALO_PAD,
-            height: SPRITE.height + 2.0 * HALO_PAD,
-        });
+        let body = self.motion.rect_to_surface(BODY);
+        let halo = self.motion.rect_to_surface(HALO);
         layers.push(pixels(&self.sprite.body_image, body, FilterMethod::Nearest));
         layers.push(pixels(&self.sprite.halo_image, halo, FilterMethod::Linear));
         layers.push(pixels(&self.sprite.top_image, body, FilterMethod::Nearest));
@@ -64,7 +60,9 @@ impl PetUi {
         );
 
         if self.inline_menu {
-            layers.push(pin(self.menu_view()).position(INLINE_MENU.position()).into());
+            // opaque: a press on its padding or separator stays in the menu, and the bubbles under it don't see
+            // the pointer
+            layers.push(pin(opaque(self.menu_view())).position(INLINE_MENU.position()).into());
         }
         mouse_area(stack(layers).width(Length::Fill).height(Length::Fill))
             .on_move(Message::PointerMoved)
@@ -72,14 +70,40 @@ impl PetUi {
             .into()
     }
 
+    /// A bubble's shadow at scale `s`, faded with it: a soft drop shadow (0 4 18 #61000000), or for one that needs
+    /// you an amber glow, breathing.
+    pub(crate) fn card_shadow(&self, card: &Card, s: f32) -> Shadow {
+        let shadow = if card.state == "attention" {
+            let alpha = (0x40 as f32 + 0x90 as f32 * (0.5 + 0.5 * (self.t * 3.5).sin() as f32)) / 255.0;
+            Shadow {
+                color: Color {
+                    a: alpha,
+                    ..argb(AMBER)
+                },
+                offset: Vector::ZERO,
+                blur_radius: CARD_GLOW_BLUR * s,
+            }
+        } else {
+            Shadow {
+                color: argb(0x61000000),
+                offset: Vector::new(0.0, CARD_SHADOW_Y * s),
+                blur_radius: CARD_SHADOW_BLUR * s,
+            }
+        };
+        Shadow {
+            color: shadow.color.scale_alpha(card.o),
+            ..shadow
+        }
+    }
+
     /// One bubble's layers: its body, then (while its text shows) the pulsing dot and the text, then the dismiss
-    /// button while it is hovered. Everything fades with the bubble and scales with it.
+    /// button while it is hovered. Everything fades with the bubble and scales with it. Only a bubble whose text
+    /// shows takes the pointer: the ones folded behind the front one don't, as in the C#.
     fn card<'a>(&'a self, card: &'a Card, frame: CardFrame, layers: &mut Vec<Element<'a, Message>>) {
-        let o = card.o;
-        if o < 0.004 {
+        if !card.drawn() {
             return;
         }
-        let s = frame.scale;
+        let (o, s) = (card.o, frame.scale);
         let highlight = card.state == "attention";
         // StyleBody: the app's colour, or amber for one that needs you, or a faint edge
         let (edge, edge_width) = match (card.app_colour, highlight) {
@@ -88,28 +112,7 @@ impl PetUi {
             (None, false) => (argb(0x26FFFFFF), 1.0),
         };
         let background = argb(if highlight { 0xF72E291E } else { 0xF5252528 });
-        // a bubble that needs you glows amber, breathing; the others cast a soft shadow (0 4 18 #61000000)
-        let shadow = if highlight {
-            let alpha = (0x40 as f32 + 0x90 as f32 * (0.5 + 0.5 * (self.t * 3.5).sin() as f32)) / 255.0;
-            Shadow {
-                color: Color {
-                    a: alpha,
-                    ..argb(AMBER)
-                },
-                offset: Vector::ZERO,
-                blur_radius: 16.0 * s,
-            }
-        } else {
-            Shadow {
-                color: argb(0x61000000),
-                offset: Vector::new(0.0, 4.0 * s),
-                blur_radius: 14.0 * s,
-            }
-        };
-        let shadow = Shadow {
-            color: shadow.color.scale_alpha(o),
-            ..shadow
-        };
+        let shadow = self.card_shadow(card, s);
         let body = frame.body();
         let plate = container(Space::new().width(body.width).height(body.height)).style(move |_| container::Style {
             background: Some(background.scale_alpha(o).into()),
@@ -122,13 +125,15 @@ impl PetUi {
             text_color: None,
             snap: true,
         });
-        layers.push(
-            pin(mouse_area(plate)
+        let plate: Element<'a, Message> = if card.content {
+            mouse_area(plate)
                 .on_press(Message::CardPressed(card.id))
-                .interaction(mouse::Interaction::Pointer))
-            .position(body.position())
-            .into(),
-        );
+                .interaction(mouse::Interaction::Pointer)
+                .into()
+        } else {
+            plate.into()
+        };
+        layers.push(pin(plate).position(body.position()).into());
 
         if card.content {
             let colour = argb(style::status_colour(card.state));

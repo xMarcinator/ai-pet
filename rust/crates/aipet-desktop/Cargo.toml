@@ -13,7 +13,8 @@ iced.workspace = true
 
 # The native calls behind the pet window (src/native). Each is the version winit 0.30 already builds, with features
 # it already enables, so they add nothing to compile.
-[target.'cfg(target_os = "linux")'.dependencies]
+# where winit has its X11 backend: Linux and the BSDs
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies]
 # a pure-Rust connection of our own to the X server winit uses
 x11rb = { version = "0.13", features = ["shape"] }
 
@@ -21,6 +22,7 @@ x11rb = { version = "0.13", features = ["shape"] }
 windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }

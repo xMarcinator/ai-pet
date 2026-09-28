@@ -1,19 +1,20 @@
 //! Windows: WindowsPlatform's calls. A window region clips hit-testing and drawing alike, so the region is the
-//! padded `drawn` one; winit draws an undecorated window's client area over the whole window, so the region's
-//! window-relative pixels are the client area's.
+//! `drawn` one (the pet's shadows and glow take clicks too); winit draws an undecorated window's client area over the
+//! whole window, so the region's window-relative pixels are the client area's.
 
 use iced::Point;
 use iced::window::raw_window_handle::RawWindowHandle;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::{CombineRgn, CreateRectRgn, DeleteObject, RGN_OR, SetWindowRgn};
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GWL_EXSTYLE, GetCursorPos, GetWindowLongW, HWND_TOPMOST, STYLESTRUCT, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_NOZORDER, SetWindowLongW, SetWindowPos, WM_NCDESTROY, WM_STYLECHANGING, WS_EX_APPWINDOW,
-    WS_EX_TOOLWINDOW,
+    GWL_EXSTYLE, GetCursorPos, GetSystemMetrics, GetWindowLongW, HWND_TOPMOST, SM_SWAPBUTTON, STYLESTRUCT,
+    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowLongW, SetWindowPos, WM_NCDESTROY,
+    WM_STYLECHANGING, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
 };
 
-use super::{NativeError, PxRect};
+use super::{NativeError, Pointer, PxRect};
 
 pub type Handle = HWND;
 
@@ -108,12 +109,26 @@ pub fn keep_on_top(hwnd: HWND) -> Result<(), NativeError> {
     Ok(())
 }
 
-pub fn pointer(scale: f32) -> Result<Point, NativeError> {
+pub fn pointer(scale: f32) -> Result<Pointer, NativeError> {
     let mut p = POINT { x: 0, y: 0 };
     // SAFETY: plain user32 call writing to a local
     if unsafe { GetCursorPos(&mut p) } == 0 {
         return Err(NativeError::Os("GetCursorPos failed".into()));
     }
-    // physical pixels: winit makes the process per-monitor DPI aware
-    Ok(Point::new(p.x as f32 / scale, p.y as f32 / scale))
+    // GetAsyncKeyState reads the physical buttons (its top bit: held now), and winit's left is the primary one: the
+    // right when they are swapped
+    // SAFETY: plain user32 calls
+    let left_held = unsafe {
+        let left = if GetSystemMetrics(SM_SWAPBUTTON) != 0 {
+            VK_RBUTTON
+        } else {
+            VK_LBUTTON
+        };
+        GetAsyncKeyState(i32::from(left)) < 0
+    };
+    Ok(Pointer {
+        // physical pixels: winit makes the process per-monitor DPI aware
+        at: Point::new(p.x as f32 / scale, p.y as f32 / scale),
+        left_held,
+    })
 }

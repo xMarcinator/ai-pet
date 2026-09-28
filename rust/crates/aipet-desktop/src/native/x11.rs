@@ -12,13 +12,13 @@ use x11rb::cookie::VoidCookie;
 use x11rb::errors::ConnectionError;
 use x11rb::protocol::shape::{self, ConnectionExt as _, SK, SO};
 use x11rb::protocol::xproto::{
-    Atom, AtomEnum, ClientMessageEvent, ClipOrdering, ConnectionExt as _, EventMask, MapState, PropMode, Rectangle,
-    Window,
+    Atom, AtomEnum, ClientMessageEvent, ClipOrdering, ConnectionExt as _, EventMask, KeyButMask, MapState, PropMode,
+    Rectangle, Window,
 };
 use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 
-use super::{NativeError, PxRect};
+use super::{NativeError, Pointer, PxRect};
 
 /// The X window id.
 pub type Handle = Window;
@@ -187,9 +187,13 @@ pub fn keep_on_top(win: Window) -> Result<(), NativeError> {
     x.conn.flush().map_err(os)
 }
 
-pub fn pointer(scale: f32) -> Result<Point, NativeError> {
+pub fn pointer(scale: f32) -> Result<Pointer, NativeError> {
     let x = x()?;
     let p = x.conn.query_pointer(x.root).map_err(os)?.reply().map_err(os)?;
-    // the root window's coordinates are the screen's physical pixels
-    Ok(Point::new(f32::from(p.root_x) / scale, f32::from(p.root_y) / scale))
+    Ok(Pointer {
+        // the root window's coordinates are the screen's physical pixels
+        at: Point::new(f32::from(p.root_x) / scale, f32::from(p.root_y) / scale),
+        // button 1 after the server's button mapping, which is winit's left
+        left_held: p.mask.contains(KeyButMask::BUTTON1),
+    })
 }

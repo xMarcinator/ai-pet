@@ -1,0 +1,17 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.243062Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.11",
+    "fn-1-migrate-aipet-from-net-to-rust.19"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.20",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.20.md",
+  "status": "todo",
+  "title": "Settings: Jira and GitHub pages",
+  "updated_at": "2026-09-28T18:25:28.322669Z"
+}

@@ -1,5 +1,6 @@
-//! Dragging the pet: a state machine fed with the pet surface's pointer, frame and size events, which says how to
-//! move the surface and what the pet should hear. It knows nothing of Wayland, so the tests replay event sequences.
+//! Dragging the pet: a state machine fed with the pet surface's pointer, frame and size events (and when the changes
+//! it asked for were made), which says how to move the surface and what the pet should hear. It knows nothing of
+//! Wayland, so the tests replay event sequences.
 //!
 //! At home the surface is [`SURFACE`]-sized and anchored to its output's bottom-right corner, placed by its right
 //! and bottom margins. It may hang over the output's edges, as long as the sprite stays on it. A left press on the
@@ -13,22 +14,14 @@
 
 use std::time::{Duration, Instant};
 
-use aipet_ui::{Message as Pet, SURFACE};
-use iced::{Point, Rectangle, Size, Vector};
+use aipet_ui::{Message as Pet, SPRITE, SURFACE};
+use iced::{Point, Size, Vector};
 
-/// The sprite's box on the pet's surface, where aipet-ui draws it: 130 × 120, centred, at the top of the 124 px pet
-/// row 8 px above the bottom (aipet-ui doesn't export its layout).
-pub const SPRITE: Rectangle = Rectangle {
-    x: SURFACE.width / 2.0 - 65.0,
-    y: SURFACE.height - 8.0 - 124.0,
-    width: 130.0,
-    height: 120.0,
-};
 /// How far (|dx| + |dy|, px) the pointer gets from the press before it is a drag, as in the C#'s Sprite_Moved
 /// (aipet-ui tells a poke from a drag by the same rule).
 const THRESHOLD: f32 = 4.0;
-/// Frames drawn after a move was sent that prove the compositor took it: each frame is drawn after the compositor
-/// answered the one before, so by the second it had read the move.
+/// Frames drawn after a move was made (committed) that prove the compositor took it: each frame is drawn after the
+/// compositor answered the one before, so by the second it had read the move.
 const CONFIRM: u8 = 2;
 /// How long a step waits for the compositor to resize the surface before the drag gives up on it.
 const PATIENCE: Duration = Duration::from_secs(1);
@@ -37,8 +30,8 @@ const PATIENCE: Duration = Duration::from_secs(1);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Strategy {
     /// Moves the surface by its margins. A pointer position is relative to the surface, and nothing says when the
-    /// compositor has moved it, so one move is in flight at a time: from the moment it is sent the pointer is
-    /// ignored, until [`CONFIRM`] frames drawn after it came round, and the next move goes from there. The pet
+    /// compositor has moved it, so one move is in flight at a time: from the moment it is asked for the pointer is
+    /// ignored, until [`CONFIRM`] frames drawn after it was made came round, and the next move goes from there. The pet
     /// follows at most every other frame and never drifts. Hyprland's animation makes it glide behind the pointer.
     Margin,
     /// Grows the surface over the whole output for the drag, so pointer positions are the output's and the pet is
@@ -90,6 +83,9 @@ pub enum Input {
     Redraw(Instant),
     /// The compositor gave the surface this size.
     Resized(Size),
+    /// The changes of the last step that asked for it ([`Step::confirm`]) have been made: sent, and the surface
+    /// committed.
+    Committed,
 }
 
 /// What to do about an input: the surface's changes, in order, and news for the pet (a drag starting, moving by
@@ -97,25 +93,28 @@ pub enum Input {
 #[derive(Debug, Default)]
 pub struct Step {
     pub actions: Vec<Action>,
+    /// The drag waits to hear when these changes have been made: hand it [`Input::Committed`] then (a change is made
+    /// some time after it is asked for, and frames drawn before that prove nothing).
+    pub confirm: bool,
     pub pet: Option<Pet>,
 }
 
-/// A change sent at some time, and how many frames drawn after it have come round.
+/// A change asked for: when it was made, once it is, and how many frames drawn after that have come round.
 #[derive(Clone, Copy, Debug)]
 struct Sent {
-    at: Instant,
+    at: Option<Instant>,
     frames: u8,
 }
 
 impl Sent {
-    fn new(at: Instant) -> Sent {
-        Sent { at, frames: 0 }
+    fn asked() -> Sent {
+        Sent { at: None, frames: 0 }
     }
 
-    /// Counts a frame drawn at `drawn` (one drawn before the change, reported late, doesn't count); true once the
-    /// compositor has surely taken the change.
+    /// Counts a frame drawn at `drawn` (one drawn before the change was made, reported late, doesn't count); true
+    /// once the compositor has surely taken the change.
     fn landed(&mut self, drawn: Instant) -> bool {
-        if drawn > self.at {
+        if self.at.is_some_and(|at| drawn > at) {
             self.frames += 1;
         }
         self.frames >= CONFIRM
@@ -246,9 +245,22 @@ impl Drag {
         vec![move_to(home, self.output)]
     }
 
-    /// The surface was made anew, at home: whatever drag was on is over.
-    pub fn reset(&mut self) {
+    /// The surface's top-left on its output, and the output's size, when that is known and no drag is on.
+    pub fn placed(&self) -> Option<(Point, Output)> {
+        let output = self.output.filter(|_| !self.active())?;
+        Some((origin(self.home, output), output))
+    }
+
+    /// The surface is gone, or made anew at home: whatever drag was on is over. A pet still held is let go, with
+    /// [`Pet::DragCancelled`] to hear.
+    pub fn reset(&mut self) -> Option<Pet> {
+        let held = match self.phase {
+            Phase::Idle | Phase::Returning { .. } | Phase::Settling { .. } => false,
+            Phase::Growing { released, .. } | Phase::Shifting { released, .. } => !released,
+            Phase::Pressed { .. } | Phase::Margins { .. } | Phase::Overlay { .. } => true,
+        };
         self.phase = Phase::Idle;
+        held.then_some(Pet::DragCancelled)
     }
 
     /// Takes in what happened at `now`.
@@ -277,7 +289,7 @@ impl Drag {
                         since: now,
                     }
                 } else {
-                    self.follow(grab, self.home, p, now, &mut step)
+                    self.follow(grab, self.home, p, &mut step)
                 }
             }
             (Phase::Pressed { .. }, Input::Release) => {
@@ -292,7 +304,7 @@ impl Drag {
                     moving: None,
                 },
                 Input::Motion(p),
-            ) => self.follow(grab, start, p, now, &mut step),
+            ) => self.follow(grab, start, p, &mut step),
             (
                 Phase::Margins {
                     grab,
@@ -362,7 +374,7 @@ impl Drag {
                     ..
                 },
                 Input::Resized(size),
-            ) if size != SURFACE => {
+            ) if !is_size(size, SURFACE) => {
                 if released {
                     // the corner never moved: straight back home
                     step.actions = vec![Action::Home];
@@ -391,7 +403,8 @@ impl Drag {
             (Phase::Shifting { since, sent: None, .. }, Input::Redraw(drawn)) if drawn > since => {
                 // the first frame with the pet drawn for the output's corner is out: the corner follows it
                 step.actions = vec![Action::Margins(0, 0, 0, 0)];
-                self.phase_with_sent(Sent::new(now))
+                step.confirm = true;
+                self.phase_with_sent(Sent::asked())
             }
             (
                 Phase::Shifting {
@@ -465,7 +478,7 @@ impl Drag {
                 step.pet = Some(Pet::DragEnded);
                 self.phase_released()
             }
-            (Phase::Settling { sent: None, .. }, Input::Resized(size)) if size == SURFACE => Phase::Idle,
+            (Phase::Settling { sent: None, .. }, Input::Resized(size)) if is_size(size, SURFACE) => Phase::Idle,
             (Phase::Settling { since, .. }, Input::Redraw(drawn)) if drawn - since > PATIENCE => Phase::Idle,
             (
                 Phase::Settling {
@@ -483,6 +496,18 @@ impl Drag {
                     }
                 }
             }
+            (mut phase, Input::Committed) => {
+                if let Phase::Margins {
+                    moving: Some((_, sent)),
+                    ..
+                }
+                | Phase::Shifting { sent: Some(sent), .. }
+                | Phase::Settling { sent: Some(sent), .. } = &mut phase
+                {
+                    sent.at.get_or_insert(now);
+                }
+                phase
+            }
             (phase, _) => phase,
         };
         step
@@ -490,7 +515,7 @@ impl Drag {
 
     /// The margin strategy on a pointer move to `p` with no move in flight: tells the pet how far the pointer is
     /// from the press, and sends the surface where it keeps the pointer on the grab (as far as the output allows).
-    fn follow(&mut self, grab: Point, start: Home, p: Point, now: Instant, step: &mut Step) -> Phase {
+    fn follow(&mut self, grab: Point, start: Home, p: Point, step: &mut Step) -> Phase {
         let d = p - grab;
         let moved = Vector::new(
             (start.right - self.home.right) as f32,
@@ -506,7 +531,8 @@ impl Drag {
         );
         let moving = (target != self.home).then(|| {
             step.actions.push(move_to(target, self.output));
-            (target, Sent::new(now))
+            step.confirm = true;
+            (target, Sent::asked())
         });
         Phase::Margins { grab, start, moving }
     }
@@ -573,6 +599,12 @@ impl Drag {
             phase => phase,
         }
     }
+}
+
+/// Whether the compositor gave the surface `size`. At a fractional scale iced reports the size in whole physical px,
+/// back in logical px (at 4/3, ceil(380 × 4/3) / (4/3) is 380.25), so it may be off by less than a px.
+fn is_size(got: Size, size: Size) -> bool {
+    (got.width - size.width).abs() < 1.0 && (got.height - size.height).abs() < 1.0
 }
 
 /// The surface's top-left on the output at `home`.
@@ -687,7 +719,9 @@ mod tests {
         let step = d.handle(Input::Motion(GRAB + Vector::new(10.0, -20.0)), t1);
         assert_eq!(moved(&step), Vector::new(10.0, -20.0));
         assert_eq!(step.actions, vec![Action::Margins(580, 410, 20, 1130)]);
-        // while it is in flight the pointer is ignored, and a frame drawn before it was sent doesn't count
+        assert!(step.confirm);
+        d.handle(Input::Committed, t1);
+        // while it is in flight the pointer is ignored, and a frame drawn before it was made doesn't count
         assert!(d.handle(Input::Motion(GRAB + Vector::new(3.0, 0.0)), t1).pet.is_none());
         d.handle(Input::Redraw(t1 - Duration::from_millis(1)), t1);
         d.handle(Input::Redraw(t1 + FRAME), t1 + FRAME);
@@ -706,6 +740,7 @@ mod tests {
         let t2 = t1 + 3 * FRAME;
         assert!(matches!(d.handle(Input::Release, t2).pet, Some(Pet::DragEnded)));
         assert_eq!(d.home, Home { right: 407, bottom: 20 });
+        d.handle(Input::Committed, t2);
         assert!(d.handle(Input::Press(GRAB), t2).pet.is_none());
         d.handle(Input::Redraw(t2 + FRAME), t2 + FRAME);
         d.handle(Input::Redraw(t2 + 2 * FRAME), t2 + 2 * FRAME);
@@ -713,7 +748,7 @@ mod tests {
     }
 
     /// A compositor that takes each margin change as late as the proof allows: just before the second frame drawn
-    /// after it. Pointer positions it reports are relative to where it has the surface.
+    /// after it was made. Pointer positions it reports are relative to where it has the surface.
     #[test]
     fn a_margin_drag_never_drifts_even_when_the_compositor_is_late() {
         let mut d = drag(Strategy::Margin);
@@ -737,7 +772,8 @@ mod tests {
             if let Some(&action) = step.actions.first() {
                 assert!(pending.is_none(), "one move in flight at a time");
                 pending = Some((placed(action), 0));
-                // a frame drawn just before the move went out comes round after it
+                d.handle(Input::Committed, now);
+                // a frame drawn just before the move was made comes round after it
                 d.handle(Input::Redraw(now - Duration::from_millis(1)), now);
             }
             if i % 2 == 1 {
@@ -773,6 +809,7 @@ mod tests {
         let to = placed(step.actions[0]);
         assert_eq!(to.x + SPRITE.x + SPRITE.width, OUTPUT.0 as f32);
         assert_eq!(to.y + SPRITE.y + SPRITE.height, OUTPUT.1 as f32);
+        d.handle(Input::Committed, t);
         d.handle(Input::Redraw(t + FRAME), t + FRAME);
         d.handle(Input::Redraw(t + 2 * FRAME), t + 2 * FRAME);
         // and past the top-left corner: the sprite's top-left stops at the output's
@@ -780,6 +817,7 @@ mod tests {
         let to = placed(step.actions[0]);
         assert_eq!((to.x + SPRITE.x, to.y + SPRITE.y), (0.0, 0.0));
         // pushing on at the edge asks nothing more
+        d.handle(Input::Committed, t + 2 * FRAME);
         d.handle(Input::Redraw(t + 3 * FRAME), t + 3 * FRAME);
         d.handle(Input::Redraw(t + 4 * FRAME), t + 4 * FRAME);
         let step = d.handle(Input::Motion(GRAB + Vector::new(-50.0, 0.0)), t + 4 * FRAME);
@@ -834,6 +872,8 @@ mod tests {
         assert!(d.handle(Input::Redraw(t1 - FRAME), t1).actions.is_empty());
         let step = d.handle(Input::Redraw(t1 + FRAME), t1 + FRAME);
         assert_eq!(step.actions, vec![Action::Margins(0, 0, 0, 0)]);
+        assert!(step.confirm);
+        d.handle(Input::Committed, t1 + FRAME);
         // positions are ambiguous until the shift lands
         assert!(d.handle(Input::Motion(Point::new(5.0, 5.0)), t1 + FRAME).pet.is_none());
         d.handle(Input::Redraw(t1 + 2 * FRAME), t1 + 2 * FRAME);
@@ -890,6 +930,7 @@ mod tests {
             d.handle(Input::Redraw(t + FRAME), t + FRAME).actions,
             vec![Action::Margins(0, 0, 0, 0)]
         );
+        d.handle(Input::Committed, t + FRAME);
         d.handle(Input::Redraw(t + 2 * FRAME), t + 2 * FRAME);
         d.handle(Input::Redraw(t + 3 * FRAME), t + 3 * FRAME);
         // the pet never followed: it goes home where it started
@@ -908,6 +949,82 @@ mod tests {
         assert_eq!(step.actions, vec![Action::Home]);
         assert!(matches!(step.pet, Some(Pet::DragEnded)));
         assert!(!d.active());
+    }
+
+    #[test]
+    fn a_margin_move_counts_only_frames_drawn_after_it_was_made() {
+        let mut d = drag(Strategy::Margin);
+        let t = Instant::now();
+        d.handle(Input::Press(GRAB), t);
+        let step = d.handle(Input::Motion(GRAB + Vector::new(10.0, 0.0)), t);
+        assert!(step.confirm && step.actions.len() == 1);
+        // the move is still on its way to the compositor: frames drawn meanwhile prove nothing
+        d.handle(Input::Redraw(t + FRAME), t + FRAME);
+        d.handle(Input::Redraw(t + 2 * FRAME), t + 2 * FRAME);
+        assert!(d.handle(Input::Motion(GRAB), t + 2 * FRAME).pet.is_none());
+        let made = t + 2 * FRAME + Duration::from_millis(1);
+        d.handle(Input::Committed, made);
+        d.handle(Input::Redraw(t + 3 * FRAME), t + 3 * FRAME);
+        assert!(d.handle(Input::Motion(GRAB), t + 3 * FRAME).pet.is_none());
+        d.handle(Input::Redraw(t + 4 * FRAME), t + 4 * FRAME);
+        assert_eq!(d.home, Home { right: 410, bottom: 0 });
+        assert_eq!(
+            moved(&d.handle(Input::Motion(GRAB), t + 4 * FRAME)),
+            Vector::new(10.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn a_drag_lost_with_the_surface_lets_a_held_pet_go() {
+        let mut d = drag(Strategy::Margin);
+        let t = Instant::now();
+        assert!(d.reset().is_none());
+        d.handle(Input::Press(GRAB), t);
+        assert!(matches!(d.reset(), Some(Pet::DragCancelled)));
+        assert!(!d.active() && d.reset().is_none());
+        // an overlay drag that was already released has told the pet so
+        let mut d = drag(Strategy::Overlay);
+        d.handle(Input::Press(GRAB), t);
+        d.handle(Input::Motion(GRAB + Vector::new(30.0, 0.0)), t);
+        assert!(matches!(d.reset(), Some(Pet::DragCancelled)));
+        d.handle(Input::Press(GRAB), t);
+        d.handle(Input::Motion(GRAB + Vector::new(30.0, 0.0)), t);
+        d.handle(Input::Release, t);
+        assert!(d.active() && d.reset().is_none());
+    }
+
+    #[test]
+    fn an_overlay_drag_at_a_fractional_scale_knows_the_home_size() {
+        let mut d = drag(Strategy::Overlay);
+        let t = Instant::now();
+        d.handle(Input::Press(GRAB), t);
+        d.handle(Input::Motion(GRAB + Vector::new(0.0, 6.0)), t);
+        // at 4/3 the home size comes back as 380.25 × 600: not grown yet
+        let home = Size::new(380.25, 600.0);
+        d.handle(Input::Resized(home), t);
+        assert_eq!(d.describe(), "growing over the output");
+        d.handle(Input::Release, t + FRAME);
+        assert_eq!(
+            d.handle(Input::Resized(Size::new(1920.0, 1200.0)), t + 2 * FRAME)
+                .actions,
+            vec![Action::Home]
+        );
+        // back home: the next press counts at once
+        d.handle(Input::Resized(home), t + 3 * FRAME);
+        assert!(!d.active());
+        assert!(matches!(
+            d.handle(Input::Press(GRAB), t + 3 * FRAME).pet,
+            Some(Pet::DragStarted)
+        ));
+    }
+
+    #[test]
+    fn a_drag_places_the_surface_only_at_rest_on_a_known_output() {
+        assert!(Drag::new(Strategy::Margin, HOME).placed().is_none());
+        let mut d = drag(Strategy::Margin);
+        assert_eq!(d.placed(), Some((Point::new(1120.0, 600.0), OUTPUT)));
+        d.handle(Input::Press(GRAB), Instant::now());
+        assert!(d.placed().is_none());
     }
 
     #[test]

@@ -1,18 +1,24 @@
 //! The pet in an ordinary transparent, always-on-top window (iced on winit), for everywhere the Wayland shell can't
 //! run: X11 and XWayland, Windows, macOS.
 //!
-//! On Linux it runs through X11. In a Wayland session the caller removes `WAYLAND_DISPLAY` before any thread starts,
-//! so that winit takes XWayland: winit's own Wayland windows can neither place themselves nor stay on top.
+//! On Linux and the BSDs it runs through X11, so the caller empties `WAYLAND_DISPLAY` and removes `WAYLAND_SOCKET`
+//! before any thread starts. winit then takes X11 even in a Wayland session (its own Wayland windows can neither
+//! place themselves nor stay on top), and libwayland can't connect at all. Without `WAYLAND_DISPLAY` it would try
+//! `wayland-0`, and if that connects (GNOME's socket), wgpu's EGL renders for Wayland and panics on the X11 window.
 
 mod native;
 mod shell;
 
 /// Runs the pet until it quits.
 pub fn run() -> Result<(), String> {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
     {
-        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
-            return Err("the desktop shell runs through X11: remove WAYLAND_DISPLAY from its environment".to_owned());
+        let x11_only = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| v.is_empty())
+            && std::env::var_os("WAYLAND_SOCKET").is_none();
+        if !x11_only {
+            return Err(
+                "the desktop shell runs through X11: it needs an empty WAYLAND_DISPLAY, and no WAYLAND_SOCKET".into(),
+            );
         }
         native::connect_x11().map_err(|e| e.to_string())?;
     }

@@ -3,10 +3,14 @@
 //!
 //! The pet's surface is [`SURFACE`] (380 × 600), anchored to its output's bottom-right corner on the Top layer
 //! (Bottom when it isn't to stay on top), never taking the keyboard. At rest its input region is exactly
-//! [`PetUi::hit_rects`], so everything but the pet and its bubbles clicks through. A left drag on the sprite moves
-//! it, one of two ways (`AIPET_DRAG`, see [`crate::drag`]); a right press on the sprite opens the menu above it, in a popup
-//! the compositor dismisses on a click elsewhere, or drawn in the pet's surface where no popup opens; Settings opens
-//! in a window of its own, one at a time (`AIPET_OPEN_SETTINGS=1` opens it at start).
+//! [`PetUi::hit_rects`] (brought up to date at most every 100 ms, as in the C#), so everything but the pet and its
+//! bubbles clicks through. A left drag on the sprite moves it, one of two ways (`AIPET_DRAG`, see [`crate::drag`]);
+//! a right press on the sprite opens the menu above it, in a popup the compositor dismisses on a click elsewhere, or
+//! drawn in the pet's surface when a popup doesn't appear in time; a press on the pet closes either, and does nothing
+//! else. Settings opens in a window of its own, one at a time (`AIPET_OPEN_SETTINGS=1` opens it at start).
+//!
+//! The pet moves on every [`PetUi::frame_interval`] (30 or 60 times a second), and only its surface is drawn for
+//! that: its own frames and the pointer's news draw nothing, so it doesn't draw at the display's rate.
 //!
 //! The runtime knows a surface by its id only once it exists, and an action for an id that never appears waits
 //! forever: windows are closed only once they have appeared, and a popup or Settings that doesn't appear in time is
@@ -16,9 +20,9 @@
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
-use aipet_ui::{Effect, MENU, PetUi, Rect, SURFACE};
+use aipet_ui::{Effect, INLINE_MENU, MENU, PetUi, Rect, SPRITE, SURFACE};
 use iced::widget::{Space, container, pin};
-use iced::{Color, Element, Event, Point, Subscription, Task, Theme, event, mouse, theme, time, window};
+use iced::{Color, Element, Event, Point, Rectangle, Subscription, Task, Theme, event, mouse, theme, time, window};
 use iced_exwlshell::actions::{ActionCallback, IcedNewPopupSettings, IcedXdgWindowSettings};
 use iced_exwlshell::redraw::Scope;
 use iced_exwlshell::reexport::{
@@ -30,7 +34,7 @@ use iced_exwlshell::shell::{ShellEvent, ShellReceiver};
 use iced_exwlshell::to_layer_message;
 use wayland_client::Connection;
 
-use crate::drag::{Action, Drag, Home, Input, SPRITE, Strategy};
+use crate::drag::{Action, Drag, Home, Input, Strategy};
 
 /// The layer-shell namespace: compositor rules can match it (and it is not the real pet's).
 const NAMESPACE: &str = "aipet-spike";
@@ -42,17 +46,26 @@ const SETTINGS_SIZE: (u32, u32) = (560, 640);
 /// surface when it opens at start, and waits for the renderer).
 const POPUP_PATIENCE: Duration = Duration::from_millis(500);
 const WINDOW_PATIENCE: Duration = Duration::from_secs(3);
+/// How long the menu drawn in the pet's surface stays open with the pointer off the surface: the surface hears no
+/// click elsewhere, so this is how it closes when you go on with something else.
+const INLINE_MENU_PATIENCE: Duration = Duration::from_secs(1);
 /// How often, while the pet has no surface, a new one is tried.
 const RETRY: Duration = Duration::from_secs(1);
+/// The input region changes at most this often (MainWindow.OnFrame's 0.1 s): the hit rects follow the sprite's
+/// breathing and bobbing, and each change is a commit of its own.
+const REGION_EVERY: Duration = Duration::from_millis(100);
 
 #[to_layer_message(multi)]
 #[derive(Debug, Clone)]
 enum Message {
     Ui(aipet_ui::Message),
-    /// The pet's surface drew a frame: time to move everything on.
+    /// Time to move everything on, and draw the pet ([`PetUi::frame_interval`]).
     Frame(Instant),
-    /// A pointer, frame or size event on the pet's surface, and whether a widget took it.
+    /// A pointer, frame, size or close event on the pet's surface, and whether a widget took it.
     Pet(Event, event::Status),
+    /// The drag's last changes to the pet's surface have been made: this comes after them in one task, and the
+    /// runtime makes (and commits) each change as it comes.
+    Committed,
     /// Surfaces made and closed, outputs, and which output the pet is on.
     Shell(Box<ShellEvent>),
     /// The pet has no surface: time to try making one.
@@ -64,7 +77,7 @@ enum Message {
 enum Surface {
     Opening,
     Live,
-    /// Closed (its output went away): made again once an output is there.
+    /// Closed (its output went away, or the compositor had no output for it): made again once an output is there.
     Gone,
 }
 
@@ -89,8 +102,25 @@ impl Window {
 #[derive(Clone, Copy, Debug)]
 enum Menu {
     Popup(Window),
-    /// Drawn in the pet's surface.
-    Inline,
+    /// Drawn in the pet's surface; `away`: since when the pointer has been off the surface.
+    Inline {
+        away: Option<Instant>,
+    },
+}
+
+/// The input region the surface has: when it was sent, and whether the menu drawn in the surface was open then.
+struct Region {
+    rects: Vec<Rect>,
+    at: Instant,
+    menu: bool,
+}
+
+impl Region {
+    /// Whether a new region may go out at `now`, with the menu drawn in the surface open or not: after
+    /// [`REGION_EVERY`], or at once when the menu opened or closed (it takes clicks from the moment it shows).
+    fn stale(&self, now: Instant, menu: bool) -> bool {
+        self.menu != menu || now.saturating_duration_since(self.at) >= REGION_EVERY
+    }
 }
 
 struct Shell {
@@ -99,15 +129,13 @@ struct Shell {
     surface: Surface,
     drag: Drag,
     /// The input region the surface has, to send a new one only when it differs.
-    region: Option<Vec<Rect>>,
+    region: Option<Region>,
     shell: ShellReceiver,
     /// The outputs connected, by registry name.
     outputs: BTreeSet<u32>,
     /// The output the pet's surface is on.
     output: Option<u32>,
     menu: Option<Menu>,
-    /// No popup appeared last time: the menu is drawn in the pet's surface from now on.
-    inline_menu: bool,
     settings: Option<Window>,
     /// AIPET_DEBUG=1: log what happens to the surfaces, the pointer's presses and the drags to stderr, stamped with
     /// the time since this start.
@@ -136,12 +164,7 @@ pub fn run(connection: Connection) -> Result<(), String> {
         text_color: theme.palette().text,
     })
     .subscription(Shell::subscription)
-    // the pet's frames and pointer redraw only the pet; what the views send may change any of them
-    .redraw_scope(move |message: &Message| match message {
-        Message::Frame(_) | Message::Pet(..) => Scope::Window(pet),
-        Message::Shell(_) | Message::Retry => Scope::None,
-        _ => Scope::All,
-    })
+    .redraw_scope(move |message: &Message| redraw_scope(pet, message))
     .settings(Settings {
         layer_settings: LayerShellSettings {
             // no surface of its own at start (the pet's is made in boot, with a known id), and the daemon doesn't
@@ -172,7 +195,6 @@ impl Shell {
             outputs: BTreeSet::new(),
             output: None,
             menu: None,
-            inline_menu: false,
             settings: None,
             debug,
         };
@@ -192,10 +214,14 @@ impl Shell {
 
     fn subscription(&self) -> Subscription<Message> {
         let mut subscriptions = vec![
-            frames_of(self.pet),
-            pet_events(self.pet, self.drag.active()),
+            // two intervals only, so the timer is made anew only when the pet calms down or livens up
+            time::every(self.ui.frame_interval()).map(Message::Frame),
+            pet_events(self.pet),
             self.shell.listen().map(|e| Message::Shell(Box::new(e))),
         ];
+        if self.drag.active() {
+            subscriptions.push(drag_events(self.pet));
+        }
         if self.surface == Surface::Gone {
             subscriptions.push(time::every(RETRY).map(|_| Message::Retry));
         }
@@ -207,7 +233,9 @@ impl Shell {
             Message::Frame(now) => {
                 self.ui.tick(now);
                 self.expire(now);
-                self.sync_region()
+                // `now` is when the tick was due, and a tick can come late: the region's wait is counted from when
+                // it really went out
+                self.sync_region(Instant::now())
             }
             Message::Ui(message) => {
                 // choosing an item closes the menu
@@ -216,9 +244,10 @@ impl Shell {
                     _ => Task::none(),
                 };
                 let effect = self.ui.update(message).map_or_else(Task::none, |e| self.apply(e));
-                Task::batch([close, effect, self.sync_region()])
+                Task::batch([close, effect, self.sync_region(Instant::now())])
             }
             Message::Pet(event, status) => self.pet_event(event, status),
+            Message::Committed => self.drag_input(Input::Committed),
             Message::Shell(event) => self.shell_event(*event),
             Message::Retry if self.surface == Surface::Gone && !self.outputs.is_empty() => self.open_pet(),
             // the layer-shell actions the macro adds are taken by the runtime and never get here
@@ -249,7 +278,7 @@ impl Shell {
     fn open_pet(&mut self) -> Task<Message> {
         self.surface = Surface::Opening;
         self.region = None;
-        self.drag.reset();
+        self.end_drag();
         let margin = self.drag.margins();
         self.log(|| format!("opening the pet's surface, margins {margin:?}"));
         Task::done(Message::NewLayerShell {
@@ -270,8 +299,8 @@ impl Shell {
         })
     }
 
-    /// Events on the pet's surface: presses on the sprite drag it or open the menu, and the drag hears the pointer,
-    /// the frames and the sizes.
+    /// Events on the pet's surface: presses on the sprite drag it or open the menu, the drag hears the pointer,
+    /// the frames and the sizes, and the surface may close.
     fn pet_event(&mut self, event: Event, status: event::Status) -> Task<Message> {
         match event {
             Event::Mouse(mouse::Event::CursorEntered) => self.log(|| "pointer entered the pet's surface".to_owned()),
@@ -281,20 +310,22 @@ impl Shell {
                 let at = self.ui.pointer();
                 let on_sprite = at.is_some_and(|p| self.ui.sprite_hit(p));
                 self.log(|| format!("{button:?} press at {at:?}: {}", press_target(on_sprite, status)));
+                // a press anywhere on the pet but on the menu drawn in it closes the menu, and does nothing else, as a
+                // click outside a menu does (on the sprite too: no poke, drag or new menu). A popup's grab lets its
+                // own client's surfaces hear presses, so this closes the popup as well
+                let on_menu =
+                    matches!(self.menu, Some(Menu::Inline { .. })) && at.is_some_and(|p| INLINE_MENU.contains(p));
+                let closing = self.menu.is_some() && !on_menu;
+                let close = if closing { self.close_menu() } else { Task::none() };
                 if status == event::Status::Captured {
-                    return Task::none();
+                    return Task::batch([close, self.sync_region(Instant::now())]);
                 }
-                // a press anywhere on the pet closes the menu drawn in it (a right press on the sprite, too)
-                let inline = matches!(self.menu, Some(Menu::Inline));
-                if inline {
-                    self.menu = None;
-                    self.ui.set_inline_menu(false);
-                }
-                return match (button, at) {
-                    (mouse::Button::Left, Some(at)) if on_sprite => self.drag_input(Input::Press(at)),
-                    (mouse::Button::Right, _) if on_sprite && !inline => self.open_menu(),
-                    _ => self.sync_region(),
+                let then = match (button, at) {
+                    (mouse::Button::Left, Some(at)) if on_sprite && !closing => self.drag_input(Input::Press(at)),
+                    (mouse::Button::Right, _) if on_sprite && !closing => self.open_menu(),
+                    _ => self.sync_region(Instant::now()),
                 };
+                return Task::batch([close, then]);
             }
             Event::Mouse(mouse::Event::CursorMoved { position }) => return self.drag_input(Input::Motion(position)),
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => return self.drag_input(Input::Release),
@@ -305,6 +336,9 @@ impl Shell {
                 self.region = None;
                 return self.drag_input(Input::Resized(size));
             }
+            // also heard when the compositor closes the surface before it ever appeared, which the shell's news
+            // never tells
+            Event::Window(window::Event::Closed) => self.closed(self.pet),
             _ => {}
         }
         Task::none()
@@ -321,11 +355,23 @@ impl Shell {
             // the drag's news never asks anything of the shell
             self.ui.update(message);
         }
-        Task::batch([self.change_surface(step.actions), self.sync_region()])
+        Task::batch([
+            self.change_surface(step.actions, step.confirm),
+            self.sync_region(Instant::now()),
+        ])
     }
 
-    /// The drag's changes to the pet's surface, in order.
-    fn change_surface(&self, actions: Vec<Action>) -> Task<Message> {
+    /// Ends whatever drag was on: the pet, if still held, is let go.
+    fn end_drag(&mut self) {
+        if let Some(message) = self.drag.reset() {
+            self.log(|| "drag lost with the surface".to_owned());
+            self.ui.update(message);
+        }
+    }
+
+    /// The drag's changes to the pet's surface, in order, and then, if it wants to hear (`confirm`), that they have
+    /// been made.
+    fn change_surface(&self, actions: Vec<Action>, confirm: bool) -> Task<Message> {
         if self.surface != Surface::Live {
             return Task::none();
         }
@@ -333,7 +379,7 @@ impl Shell {
             self.log(|| format!("surface: {actions:?}"));
         }
         let id = self.pet;
-        actions.into_iter().fold(Task::none(), |task, action| {
+        let changes = actions.into_iter().fold(Task::none(), |task, action| {
             task.chain(Task::done(match action {
                 Action::Margins(top, right, bottom, left) => Message::MarginChange {
                     id,
@@ -350,7 +396,12 @@ impl Shell {
                     size: LayerSize::px(w, h),
                 },
             }))
-        })
+        });
+        if confirm {
+            changes.chain(Task::done(Message::Committed))
+        } else {
+            changes
+        }
     }
 
     /// Does what the pet's UI asks of the shell.
@@ -370,29 +421,25 @@ impl Shell {
     /// Opens the menu above the sprite: a popup, which the compositor places (below the sprite where there is no
     /// room above) and dismisses on a click elsewhere, opened on the press so its grab has the press to go by.
     fn open_menu(&mut self) -> Task<Message> {
+        // one menu at a time, and none while the surface is being moved
         if self.menu.is_some() || self.drag.active() {
-            // a popup open: the press outside it dismisses it (the compositor's grab)
             return Task::none();
-        }
-        if self.inline_menu {
-            self.menu = Some(Menu::Inline);
-            self.ui.set_inline_menu(true);
-            self.log(|| "menu drawn in the pet's surface".to_owned());
-            return self.sync_region();
         }
         let id = window::Id::unique();
         self.menu = Some(Menu::Popup(Window::asked(id, Instant::now() + POPUP_PATIENCE)));
         self.log(|| format!("menu popup {id:?} asked for"));
-        // anchored to the middle of the sprite's top edge, growing up from it, centred. Flipped at the output's
-        // edges but never slid: Hyprland 0.56 slides a layer surface's popup by the wrong amount while the surface
-        // is still being animated (seen right after it maps), and flips alone land where asked
-        let top = (SURFACE.width as i32 / 2, SPRITE.y as i32);
+        // flipped below the sprite at the top of the output, but never slid along it: Hyprland 0.56 slides a layer
+        // surface's popup by the wrong amount while the surface is still being animated (seen right after it maps),
+        // and flips alone land where asked. So the anchor is moved sideways here instead (a flip on x does nothing
+        // for a centred menu)
+        let anchor = menu_anchor(self.drag.placed());
         let size = PixelSize::px(MENU.width as u32, MENU.height as u32);
+        let anchor_size = PixelSize::px(anchor.width as u32, anchor.height as u32);
         Task::done(Message::NewPopUp {
-            settings: IcedNewPopupSettings::new(self.pet, size, top, PixelSize::px(1, 1))
+            settings: IcedNewPopupSettings::new(self.pet, size, (anchor.x as i32, anchor.y as i32), anchor_size)
                 .anchor(PopupAnchor::Top)
                 .gravity(PopupGravity::Top)
-                .constraint_adjustment(PopupConstraintAdjustment::FlipX | PopupConstraintAdjustment::FlipY),
+                .constraint_adjustment(PopupConstraintAdjustment::FlipY),
             id,
         })
     }
@@ -402,7 +449,7 @@ impl Shell {
     fn close_menu(&mut self) -> Task<Message> {
         match self.menu.take() {
             Some(Menu::Popup(w)) if w.live => window::close(w.id),
-            Some(Menu::Inline) => {
+            Some(Menu::Inline { .. }) => {
                 self.ui.set_inline_menu(false);
                 Task::none()
             }
@@ -432,16 +479,26 @@ impl Shell {
     }
 
     /// Gives up on a popup or Settings that hasn't appeared by now. A menu popup that didn't is drawn in the pet's
-    /// surface instead, from now on.
+    /// surface instead, this time (the next menu tries a popup again). The menu drawn there closes once the pointer
+    /// has been off the surface for [`INLINE_MENU_PATIENCE`].
     fn expire(&mut self, now: Instant) {
-        if let Some(Menu::Popup(w)) = self.menu
-            && !w.live
-            && now > w.deadline
-        {
-            self.log(|| "no popup appeared: the menu is drawn in the pet's surface".to_owned());
-            self.inline_menu = true;
-            self.menu = Some(Menu::Inline);
-            self.ui.set_inline_menu(true);
+        match self.menu {
+            Some(Menu::Popup(w)) if !w.live && now > w.deadline => {
+                self.log(|| "no popup appeared: the menu is drawn in the pet's surface".to_owned());
+                self.menu = Some(Menu::Inline { away: None });
+                self.ui.set_inline_menu(true);
+            }
+            Some(Menu::Inline { away }) => {
+                let away = self.ui.pointer().is_none().then(|| away.unwrap_or(now));
+                if away.is_some_and(|since| now.saturating_duration_since(since) > INLINE_MENU_PATIENCE) {
+                    self.log(|| "the pointer went away: the menu drawn in the pet's surface closes".to_owned());
+                    self.menu = None;
+                    self.ui.set_inline_menu(false);
+                } else {
+                    self.menu = Some(Menu::Inline { away });
+                }
+            }
+            _ => {}
         }
         if self.settings.is_some_and(|w| !w.live && now > w.deadline) {
             self.log(|| "Settings didn't appear: given up on".to_owned());
@@ -479,7 +536,7 @@ impl Shell {
     /// The drag keeps the pet on its output's size.
     fn set_output(&mut self, size: Option<(i32, i32)>) -> Task<Message> {
         let actions = self.drag.set_output(size);
-        self.change_surface(actions)
+        self.change_surface(actions, false)
     }
 
     /// A surface appeared. One this shell has given up on is closed.
@@ -505,16 +562,24 @@ impl Shell {
     }
 
     /// A surface closed: the compositor dismissed the menu, the user closed Settings, or the pet's output went
-    /// away (its surface is made again, on the output the compositor picks, by the retry timer).
+    /// away or never was (its surface is made again, on the output the compositor picks, by the retry timer).
     fn closed(&mut self, id: window::Id) {
         if id == self.pet {
+            // heard twice when it had appeared: in the shell's news and in its own events
+            if self.surface == Surface::Gone {
+                return;
+            }
             self.log(|| "the pet's surface closed".to_owned());
             self.surface = Surface::Gone;
             self.output = None;
-            self.drag.reset();
-            // its popup went with it
-            if matches!(self.menu, Some(Menu::Popup(_))) {
-                self.menu = None;
+            self.end_drag();
+            // the pointer is off the pet now: the widget that would say so went with the surface
+            if self.ui.pointer().is_some() {
+                self.ui.update(aipet_ui::Message::PointerLeft);
+            }
+            // its popup went with it, and the menu drawn in it goes
+            if let Some(Menu::Inline { .. }) = self.menu.take() {
+                self.ui.set_inline_menu(false);
             }
         } else if matches!(self.menu, Some(Menu::Popup(w)) if w.id == id) {
             self.log(|| "menu closed".to_owned());
@@ -525,18 +590,27 @@ impl Shell {
         }
     }
 
-    /// Sends the pet's hit rectangles as the surface's input region, when they changed. Only at rest: during a drag
-    /// the pointer is the surface's until the release anyway, and the pet's box may be elsewhere on it.
-    fn sync_region(&mut self) -> Task<Message> {
+    /// Sends the pet's hit rectangles as the surface's input region, when they changed and the region is
+    /// [`Region::stale`] (a new surface or size has none). Only at rest: during a drag the pointer is the surface's
+    /// until the release anyway, and the pet's box may be elsewhere on it.
+    fn sync_region(&mut self, now: Instant) -> Task<Message> {
         if self.surface != Surface::Live || self.drag.active() {
             return Task::none();
         }
+        let menu = matches!(self.menu, Some(Menu::Inline { .. }));
+        if self.region.as_ref().is_some_and(|r| !r.stale(now, menu)) {
+            return Task::none();
+        }
         let rects = self.ui.hit_rects();
-        if self.region.as_ref() == Some(&rects) {
+        if self.region.as_ref().is_some_and(|r| r.rects == rects) {
             return Task::none();
         }
         self.log(|| format!("input region: {} rects, {}", rects.len(), describe(&rects)));
-        self.region = Some(rects.clone());
+        self.region = Some(Region {
+            rects: rects.clone(),
+            at: now,
+            menu,
+        });
         Task::done(Message::SetInputRegion {
             id: self.pet,
             callback: ActionCallback::new(move |region| {
@@ -554,35 +628,66 @@ impl Shell {
     }
 }
 
-/// The pet surface's frames: each `RedrawRequested` of that surface, as the time it was drawn (other surfaces'
-/// frames don't count, or Settings would speed the pet up).
-fn frames_of(pet: window::Id) -> Subscription<Message> {
-    event::listen_raw(|event, _status, id| match event {
-        Event::Window(window::Event::RedrawRequested(at)) => Some((id, at)),
+/// What a message draws anew. The pet's ticks draw its surface, and so do its bubbles' clicks and its surface's own
+/// events (during a drag the pet may be drawn elsewhere on it). Its frames draw nothing, or each would draw the next,
+/// and neither does the pointer's news: the next tick shows it, a [`aipet_ui::SMOOTH_FRAME`] later while the pointer
+/// is on the pet. What the menu and Settings send may change any window.
+fn redraw_scope(pet: window::Id, message: &Message) -> Scope {
+    use aipet_ui::Message as Ui;
+    match message {
+        Message::Pet(Event::Window(window::Event::RedrawRequested(_)), _)
+        | Message::Ui(Ui::PointerMoved(_) | Ui::PointerLeft)
+        | Message::Committed
+        | Message::Shell(_)
+        | Message::Retry => Scope::None,
+        Message::Frame(_) | Message::Pet(..) | Message::Ui(Ui::CardPressed(_) | Ui::Dismiss(_)) => Scope::Window(pet),
+        _ => Scope::All,
+    }
+}
+
+/// The pet surface's presses, releases, sizes and close, in one stream that stays for the shell's life: a stream
+/// that is replaced drops what it hasn't delivered yet, and a lost release would leave a drag on.
+fn pet_events(pet: window::Id) -> Subscription<Message> {
+    event::listen_raw(|event, status, id| match event {
+        Event::Mouse(mouse::Event::CursorMoved { .. } | mouse::Event::WheelScrolled { .. }) => None,
+        Event::Mouse(_) | Event::Window(window::Event::Resized(_) | window::Event::Closed) => Some((id, event, status)),
         _ => None,
     })
     .with(pet)
-    .filter_map(|(pet, (id, at))| (id == pet).then_some(Message::Frame(at)))
+    .filter_map(|(pet, (id, event, status))| (id == pet).then_some(Message::Pet(event, status)))
 }
 
-/// The pet surface's pointer and size events; with `every` (during a drag) also each pointer move and frame, all
-/// in one stream so the drag sees them in the order they happened.
-fn pet_events(pet: window::Id, every: bool) -> Subscription<Message> {
+/// During a drag, also each pointer move and frame of the pet's surface, in one stream so the drag sees them in the
+/// order they happened. Presses and releases come in [`pet_events`], so a move may arrive after a release it came
+/// before: the drag is over by then and ignores it, and ends at most that move short.
+fn drag_events(pet: window::Id) -> Subscription<Message> {
     event::listen_raw(|event, status, id| match event {
-        Event::Mouse(_) | Event::Window(window::Event::Resized(_) | window::Event::RedrawRequested(_)) => {
+        Event::Mouse(mouse::Event::CursorMoved { .. }) | Event::Window(window::Event::RedrawRequested(_)) => {
             Some((id, event, status))
         }
         _ => None,
     })
-    .with((pet, every))
-    .filter_map(|((pet, every), (id, event, status))| {
-        let wanted = match event {
-            Event::Mouse(mouse::Event::CursorMoved { .. }) | Event::Window(window::Event::RedrawRequested(_)) => every,
-            Event::Mouse(mouse::Event::WheelScrolled { .. }) => false,
-            _ => true,
-        };
-        (id == pet && wanted).then_some(Message::Pet(event, status))
-    })
+    .with(pet)
+    .filter_map(|(pet, (id, event, status))| (id == pet).then_some(Message::Pet(event, status)))
+}
+
+/// Where the menu's popup is anchored on the pet's surface: the sprite's box at rest, the middle of whose top edge
+/// the menu grows up from, centred, or whose bottom edge it hangs from when there is no room above. The box is moved
+/// sideways, within the surface, as far as keeps the menu on the output, when `placed` (the surface's top-left on
+/// its output, and the output's size) is known.
+fn menu_anchor(placed: Option<(Point, (i32, i32))>) -> Rectangle {
+    let dx = placed.map_or(0.0, |(origin, (width, _))| {
+        let middle = origin.x + SPRITE.center_x();
+        let half = MENU.width / 2.0;
+        // its right edge on the output, then its left one (on an output narrower than the menu, the left wins)
+        0f32.min(width as f32 - half - middle).max(half - middle)
+    });
+    // the protocol wants the anchor inside the surface
+    let dx = dx.clamp(-SPRITE.x, SURFACE.width - SPRITE.x - SPRITE.width);
+    Rectangle {
+        x: SPRITE.x + dx,
+        ..SPRITE
+    }
 }
 
 fn press_target(on_sprite: bool, status: event::Status) -> &'static str {
@@ -608,29 +713,170 @@ fn describe(rects: &[Rect]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use aipet_ui::{MenuItem, SMOOTH_FRAME};
+    use iced_exwlshell::shell::{ShellInfo, ShellType};
+
     use super::*;
 
-    #[test]
-    fn the_menu_popup_goes_where_the_pet_draws_its_inline_menu() {
-        let mut ui = PetUi::new();
+    const SPRITE_MIDDLE: Point = Point::new(SPRITE.x + SPRITE.width / 2.0, SPRITE.y + SPRITE.height / 2.0);
+
+    /// A shell whose pet's surface is up, a second into the demo, with the pointer on the sprite; and that second.
+    fn live_shell() -> (Shell, Instant) {
+        let (_, receiver) = iced_exwlshell::shell::channel();
+        let (mut shell, _) = Shell::boot(window::Id::unique(), Strategy::Margin, receiver, false);
+        let _ = shell.shell_event(ShellEvent::NewShell(ShellInfo {
+            window: shell.pet,
+            shell: ShellType::LayerShell,
+        }));
         let start = Instant::now();
         for i in 0..60 {
-            ui.tick(start + Duration::from_millis(16 * i));
+            let _ = shell.update(Message::Frame(start + SMOOTH_FRAME * i));
         }
-        assert!(ui.sprite_hit(Point::new(SPRITE.center_x(), SPRITE.center_y())));
-        let bare = ui.hit_rects();
-        ui.set_inline_menu(true);
-        let menu: Vec<Rect> = ui.hit_rects().into_iter().filter(|r| !bare.contains(r)).collect();
-        let x0 = menu.iter().map(|r| r.x).min().unwrap();
-        let y0 = menu.iter().map(|r| r.y).min().unwrap();
-        let x1 = menu.iter().map(|r| r.x + r.width).max().unwrap();
-        let y1 = menu.iter().map(|r| r.y + r.height).max().unwrap();
-        // the popup is centred on its anchor, the middle of the sprite's top edge, right above it
-        let (ax, ay) = (SURFACE.width / 2.0, SPRITE.y);
+        let _ = shell.update(Message::Ui(aipet_ui::Message::PointerMoved(SPRITE_MIDDLE)));
+        assert!(shell.ui.sprite_hit(SPRITE_MIDDLE));
+        (shell, start + SMOOTH_FRAME * 60)
+    }
+
+    fn pet(event: Event) -> Message {
+        Message::Pet(event, event::Status::Ignored)
+    }
+
+    fn press(button: mouse::Button) -> Message {
+        pet(Event::Mouse(mouse::Event::ButtonPressed(button)))
+    }
+
+    fn appear(shell: &mut Shell, window: window::Id) {
+        let _ = shell.shell_event(ShellEvent::NewShell(ShellInfo {
+            window,
+            shell: ShellType::PopUp,
+        }));
+    }
+
+    #[test]
+    fn the_menu_popup_opens_where_the_inline_menu_is_drawn_and_stays_on_the_output() {
+        // the popup for an anchor: centred on the middle of its top edge, growing up
+        let popup = |a: Rectangle| Rectangle::new(Point::new(a.center_x() - MENU.width / 2.0, a.y - MENU.height), MENU);
+        let output = (1920, 1200);
+        let home = Point::new((1920 - 380 - 420) as f32, 600.0);
+        for placed in [None, Some((home, output))] {
+            assert_eq!(popup(menu_anchor(placed)), INLINE_MENU);
+        }
+        // the sprite at the output's left edge, then at its right edge: the menu stops at the edge
+        let left = Point::new(-SPRITE.x, 600.0);
+        let right = Point::new(1920.0 - SPRITE.x - SPRITE.width, 600.0);
+        let (at_left, at_right) = (menu_anchor(Some((left, output))), menu_anchor(Some((right, output))));
+        assert_eq!(left.x + popup(at_left).x, 0.0);
+        assert_eq!(right.x + popup(at_right).x + MENU.width, 1920.0);
+        // the anchor stays on the surface, and a flip hangs the menu from the sprite's bottom edge
+        for a in [at_left, at_right] {
+            assert!(a.x >= 0.0 && a.x + a.width <= SURFACE.width);
+            assert_eq!((a.y, a.size()), (SPRITE.y, SPRITE.size()));
+        }
+    }
+
+    #[test]
+    fn the_pets_ticks_draw_only_the_pet_and_its_frames_and_pointer_nothing() {
+        use aipet_ui::Message as Ui;
+        let id = window::Id::unique();
+        let at = Instant::now();
+        let scope = |message: Message| redraw_scope(id, &message);
+        assert_eq!(scope(Message::Frame(at)), Scope::Window(id));
         assert_eq!(
-            (x0, x1),
-            ((ax - MENU.width / 2.0) as i32, (ax + MENU.width / 2.0) as i32)
+            scope(pet(Event::Window(window::Event::RedrawRequested(at)))),
+            Scope::None
         );
-        assert_eq!((y0, y1), ((ay - MENU.height) as i32, ay as i32));
+        assert_eq!(scope(Message::Ui(Ui::PointerMoved(SPRITE_MIDDLE))), Scope::None);
+        assert_eq!(scope(Message::Ui(Ui::PointerLeft)), Scope::None);
+        assert_eq!(scope(Message::Committed), Scope::None);
+        let moved = mouse::Event::CursorMoved {
+            position: SPRITE_MIDDLE,
+        };
+        assert_eq!(scope(pet(Event::Mouse(moved))), Scope::Window(id));
+        assert_eq!(scope(Message::Ui(Ui::Dismiss("claude"))), Scope::Window(id));
+        assert_eq!(scope(Message::Ui(Ui::Menu(MenuItem::Bubbles))), Scope::All);
+        assert_eq!(scope(Message::Ui(Ui::SetMusic(true))), Scope::All);
+    }
+
+    #[test]
+    fn the_input_region_changes_at_most_every_100_ms_but_at_once_for_the_menu() {
+        let t = Instant::now();
+        let region = Region {
+            rects: Vec::new(),
+            at: t,
+            menu: false,
+        };
+        assert!(!region.stale(t + Duration::from_millis(50), false));
+        assert!(region.stale(t + REGION_EVERY, false));
+        assert!(region.stale(t + Duration::from_millis(10), true));
+    }
+
+    #[test]
+    fn a_pet_surface_closed_before_it_appeared_is_made_again() {
+        let (_, receiver) = iced_exwlshell::shell::channel();
+        let (mut shell, _) = Shell::boot(window::Id::unique(), Strategy::Margin, receiver, false);
+        assert_eq!(shell.surface, Surface::Opening);
+        let _ = shell.update(pet(Event::Window(window::Event::Closed)));
+        assert_eq!(shell.surface, Surface::Gone);
+        // the shell's news of the same close changes nothing
+        let _ = shell.shell_event(ShellEvent::Closed(shell.pet));
+        assert_eq!(shell.surface, Surface::Gone);
+    }
+
+    #[test]
+    fn losing_the_surface_mid_drag_lets_the_pet_go() {
+        let (mut shell, _) = live_shell();
+        let _ = shell.update(press(mouse::Button::Left));
+        let far = mouse::Event::CursorMoved {
+            position: SPRITE_MIDDLE + iced::Vector::new(30.0, 0.0),
+        };
+        let _ = shell.update(pet(Event::Mouse(far)));
+        assert!(shell.ui.drag_moved());
+        let _ = shell.update(pet(Event::Window(window::Event::Closed)));
+        assert_eq!(shell.surface, Surface::Gone);
+        assert!(!shell.drag.active() && !shell.ui.drag_moved());
+        assert_eq!(shell.ui.pointer(), None);
+    }
+
+    #[test]
+    fn losing_the_surface_under_the_pointer_takes_the_pointer_off_the_pet() {
+        let (mut shell, _) = live_shell();
+        let _ = shell.update(pet(Event::Window(window::Event::Closed)));
+        // no hover, and no smooth frames, for a point on a surface that is gone
+        assert_eq!(shell.ui.pointer(), None);
+    }
+
+    #[test]
+    fn a_late_popup_falls_back_to_the_inline_menu_once_which_closes_when_the_pointer_goes() {
+        let (mut shell, t) = live_shell();
+        let _ = shell.update(press(mouse::Button::Right));
+        assert!(matches!(shell.menu, Some(Menu::Popup(Window { live: false, .. }))));
+        let t = t.max(Instant::now()) + POPUP_PATIENCE * 2;
+        let _ = shell.update(Message::Frame(t));
+        assert!(matches!(shell.menu, Some(Menu::Inline { away: None })));
+        let _ = shell.update(Message::Ui(aipet_ui::Message::PointerLeft));
+        let _ = shell.update(Message::Frame(t + SMOOTH_FRAME));
+        let _ = shell.update(Message::Frame(t + INLINE_MENU_PATIENCE));
+        assert!(matches!(shell.menu, Some(Menu::Inline { away: Some(_) })));
+        let _ = shell.update(Message::Frame(t + INLINE_MENU_PATIENCE + SMOOTH_FRAME * 2));
+        assert!(shell.menu.is_none());
+        // the next menu tries a popup again
+        let _ = shell.update(Message::Ui(aipet_ui::Message::PointerMoved(SPRITE_MIDDLE)));
+        let _ = shell.update(press(mouse::Button::Right));
+        assert!(matches!(shell.menu, Some(Menu::Popup(_))));
+    }
+
+    #[test]
+    fn a_press_on_the_pet_closes_its_popup_and_does_nothing_else() {
+        let (mut shell, _) = live_shell();
+        for button in [mouse::Button::Right, mouse::Button::Left] {
+            let _ = shell.update(press(mouse::Button::Right));
+            let Some(Menu::Popup(w)) = shell.menu else {
+                panic!("no popup asked for")
+            };
+            appear(&mut shell, w.id);
+            // on the sprite: no new menu, no poke and no drag
+            let _ = shell.update(press(button));
+            assert!(shell.menu.is_none() && !shell.drag.active());
+        }
     }
 }

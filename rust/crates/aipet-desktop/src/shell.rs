@@ -2,16 +2,21 @@
 //!
 //! The window is [`SURFACE`] (380 × 600). It opens hidden, so the native setup (utility window, keep above, out of
 //! the taskbar) is in place before the window manager sees it, and shows near the primary monitor's bottom-right
-//! corner. Its input region is [`PetUi::hit_rects`] in physical pixels, set at most every 100 ms when it changed
-//! (as MainWindow.OnFrame does), so everything else clicks through. A left press on the sprite drags the window after
-//! the pointer, read from the desktop every frame; a press that doesn't move pokes the pet. A right press on the
-//! sprite opens the menu above it, inside the window and its input region. Settings is an ordinary window.
+//! corner. Its input region is [`PetUi::hit_rects`] in physical pixels, so everything else clicks through; where the
+//! platform also clips drawing to a region, that one is [`PetUi::drawn_rects`]. What is drawn is sent as soon as it
+//! changes, and the input region with it; a change to the input region alone waits 100 ms since the last (as
+//! MainWindow.OnFrame does). A left press on the sprite drags the window after the pointer, read from the desktop
+//! every frame; a press that doesn't move pokes the pet. A right press on the sprite opens the menu above it, inside
+//! the window and its input region. Settings is an ordinary window.
+//!
+//! The pet moves on every [`PetUi::frame_interval`] (60 or 30 times a second). iced's winit shell redraws every open
+//! window after each message, so an open Settings window is drawn at that rate too.
 
 use std::time::{Duration, Instant};
 
-use aipet_ui::{Effect, PetUi, SURFACE};
+use aipet_ui::{Effect, INLINE_MENU, PetUi, SURFACE};
 use iced::widget::Space;
-use iced::{Color, Element, Event, Point, Size, Subscription, Task, Theme, event, mouse, theme, window};
+use iced::{Color, Element, Event, Point, Size, Subscription, Task, Theme, event, mouse, theme, time, window};
 
 use crate::native::{self, NativeError, PxRect};
 
@@ -24,12 +29,11 @@ const APP_ID: &str = "aipet-spike";
 const START_RIGHT: f32 = 420.0;
 /// Settings' size (SettingsWindow.axaml).
 const SETTINGS: Size = Size::new(800.0, 640.0);
-/// The input region changes at most this often (MainWindow.OnFrame's 0.1 s).
+/// How long a change to the input region alone waits since the last update (MainWindow.OnFrame's 0.1 s).
 const REGION_EVERY: Duration = Duration::from_millis(100);
-/// How far past what takes the mouse the pet draws: the bubbles' shadows (a 14 px blur, 4 px down) and the sprite's
-/// glow halo (10 px). A region that clips drawing too (X11's bounding shape, a Windows window region) is grown by
-/// this much.
-const DRAWN_PAD: f32 = 18.0;
+/// How long a drag waits for its release once the desktop says the button is up: the release event can come a
+/// frame later. After that the release went elsewhere (a pointer grab, a lost capture) and the drag is let go.
+const RELEASE_GRACE: Duration = Duration::from_millis(100);
 /// "Always on top" is said again this often while it is on (MainWindow's KeepOnTop timer).
 const KEEP_ON_TOP_EVERY: Duration = Duration::from_secs(2);
 /// macOS: the pointer is tested against the input region this often.
@@ -39,7 +43,7 @@ const HIT_TEST_EVERY: Duration = Duration::from_millis(33);
 #[derive(Debug, Clone)]
 enum Message {
     Ui(aipet_ui::Message),
-    /// The pet window drew a frame: time to move everything on.
+    /// Time to move everything on (every [`PetUi::frame_interval`]).
     Frame(Instant),
     /// A mouse or window event on one of the windows, and whether a widget took it.
     Input(window::Id, Event, event::Status),
@@ -58,8 +62,8 @@ struct Shell {
     pet: window::Id,
     /// The pet window's scale factor (physical px per logical px), once it is shown.
     scale: Option<f32>,
-    /// The input region the window has, and when it was set.
-    region: Option<Vec<PxRect>>,
+    /// The regions the window has, and when they were set.
+    region: Option<Region>,
     region_at: Instant,
     /// When "always on top" was last said again.
     top_at: Instant,
@@ -85,6 +89,30 @@ struct Drag {
     window: Option<Point>,
     /// The pointer when last read, to skip frames it didn't move in.
     last: Option<Point>,
+    /// Since when the desktop has said the button is up, while its release hasn't come.
+    up_since: Option<Instant>,
+}
+
+impl Drag {
+    /// Takes whether the desktop has the button held at `now`, and says whether its release is lost: the button has
+    /// been up for [`RELEASE_GRACE`] and no release came.
+    fn release_lost(&mut self, held: bool, now: Instant) -> bool {
+        if held {
+            self.up_since = None;
+            return false;
+        }
+        let up_since = *self.up_since.get_or_insert(now);
+        now.saturating_duration_since(up_since) >= RELEASE_GRACE
+    }
+}
+
+/// What the pet window was last told, in physical px.
+#[derive(PartialEq)]
+struct Region {
+    /// Where it takes the mouse.
+    input: Vec<PxRect>,
+    /// Where it is drawn on at all.
+    drawn: Vec<PxRect>,
 }
 
 /// Runs the pet until it quits.
@@ -154,7 +182,9 @@ impl Shell {
             ) => Some(Message::Input(id, event, status)),
             _ => None,
         });
-        Subscription::batch([frames_of(self.pet), input])
+        // read after every update: the pointer and a drag change it at once
+        let frames = time::every(self.ui.frame_interval()).map(Message::Frame);
+        Subscription::batch([frames, input])
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -231,7 +261,9 @@ impl Shell {
         let Some(scale) = self.scale else {
             return Task::none();
         };
-        let mut tasks = vec![self.follow_pointer(scale), self.sync_region(now, false)];
+        // `now` is when the tick was due, and a tick can come late: the region's wait is counted from when it really
+        // went out
+        let mut tasks = vec![self.follow_pointer(now, scale), self.sync_region(Instant::now(), false)];
         if self.ui.on_top() && now.saturating_duration_since(self.top_at) >= KEEP_ON_TOP_EVERY {
             self.top_at = now;
             tasks.push(native_call(self.pet, "keeping the pet on top", native::keep_on_top));
@@ -274,29 +306,33 @@ impl Shell {
         Task::none()
     }
 
-    /// A press on the pet window that no widget took: closes the menu if it shows; otherwise a left press on the
-    /// sprite starts a drag and a right one opens the menu.
+    /// A press on the pet window. Anywhere but on the menu it closes the menu, if that shows, and does nothing else
+    /// (a bubble it lands on takes it all the same). Otherwise, unless a widget took it, a left press on the sprite
+    /// starts a drag and a right one opens the menu.
     fn press(&mut self, button: mouse::Button, status: event::Status) -> Task<Message> {
         let at = self.ui.pointer();
         let on_sprite = at.is_some_and(|p| self.ui.sprite_hit(p));
         self.log(|| format!("{button:?} press at {at:?}: {}", press_target(on_sprite, status)));
+        // a press on the menu is its own: an item is chosen on the release, so the menu stays till then
+        if self.menu && !at.is_some_and(|p| INLINE_MENU.contains(p)) {
+            return self.set_menu(false);
+        }
         // a bubble, its dismiss button or a menu item took it
         if status == event::Status::Captured {
             return Task::none();
-        }
-        if self.menu {
-            return self.set_menu(false);
         }
         match button {
             mouse::Button::Left if on_sprite => {
                 let scale = self.scale.unwrap_or(1.0);
                 let pressed = native::pointer(scale)
                     .map_err(|e| self.report("reading the pointer", &e))
-                    .ok();
+                    .ok()
+                    .map(|p| p.at);
                 self.drag = Some(Drag {
                     pressed,
                     window: None,
                     last: None,
+                    up_since: None,
                 });
                 self.ui.update(aipet_ui::Message::DragStarted);
                 window::position(self.pet).map(Message::DragOrigin)
@@ -308,19 +344,27 @@ impl Shell {
 
     /// While the sprite is held: tells the pet how far the pointer is from the press and, once that is a drag, puts
     /// the window where the pointer took it. The pointer comes from the desktop, not from the window's events (whose
-    /// positions move with the window), so the pet stays under it without lagging or overshooting.
-    fn follow_pointer(&mut self, scale: f32) -> Task<Message> {
+    /// positions move with the window), so the pet stays under it without lagging or overshooting. If the desktop
+    /// says the button is up and no release comes within [`RELEASE_GRACE`], the drag is cancelled.
+    fn follow_pointer(&mut self, now: Instant, scale: f32) -> Task<Message> {
         let Some(drag) = &mut self.drag else {
             return Task::none();
         };
-        let (Some(pressed), Ok(now)) = (drag.pressed, native::pointer(scale)) else {
+        let (Some(pressed), Ok(pointer)) = (drag.pressed, native::pointer(scale)) else {
             return Task::none();
         };
-        if drag.last == Some(now) {
+        if drag.release_lost(pointer.left_held, now) {
+            self.drag = None;
+            self.ui.update(aipet_ui::Message::DragCancelled);
+            self.log(|| "the button is up and no release came: drag cancelled".to_owned());
             return Task::none();
         }
-        drag.last = Some(now);
-        let from_press = now - pressed;
+        // up, with its release on the way, or moved nowhere
+        if !pointer.left_held || drag.last == Some(pointer.at) {
+            return Task::none();
+        }
+        drag.last = Some(pointer.at);
+        let from_press = pointer.at - pressed;
         self.ui.update(aipet_ui::Message::DragMoved(from_press));
         match drag.window {
             Some(window) if self.ui.drag_moved() => window::move_to(self.pet, window + from_press),
@@ -328,24 +372,36 @@ impl Shell {
         }
     }
 
-    /// Hands the pet's hit rectangles to the window as its input region, when they changed and at most every
-    /// [`REGION_EVERY`], or at once if `force`.
+    /// Hands the window the pet's hit rectangles as its input region, and what it draws on as the region drawn at
+    /// all. A change to what is drawn goes at once, or a region that clips drawing would cut off what moved out of
+    /// it; a change to the input region alone waits for [`REGION_EVERY`] since the last, unless `force`.
     fn sync_region(&mut self, now: Instant, force: bool) -> Task<Message> {
         let Some(scale) = self.scale else {
             return Task::none();
         };
-        let due = self.region.is_none() || now.saturating_duration_since(self.region_at) >= REGION_EVERY;
-        if !force && !due {
+        let drawn = native::to_physical(&self.ui.drawn_rects(), scale, 0.0);
+        let due = force || now.saturating_duration_since(self.region_at) >= REGION_EVERY;
+        if !due && self.region.as_ref().is_some_and(|r| r.drawn == drawn) {
             return Task::none();
         }
-        let rects = self.ui.hit_rects();
-        let input = native::to_physical(&rects, scale, 0.0);
-        if self.region.as_ref() == Some(&input) {
+        let region = Region {
+            input: native::to_physical(&self.ui.hit_rects(), scale, 0.0),
+            drawn,
+        };
+        if self.region.as_ref() == Some(&region) {
             return Task::none();
         }
-        let drawn = native::to_physical(&rects, scale, DRAWN_PAD);
-        self.log(|| format!("input region: {} rects, {}", input.len(), describe(&input)));
-        self.region = Some(input.clone());
+        if self.region.as_ref().is_none_or(|r| r.input != region.input) {
+            self.log(|| {
+                format!(
+                    "input region: {} rects, {}",
+                    region.input.len(),
+                    describe(&region.input)
+                )
+            });
+        }
+        let (input, drawn) = (region.input.clone(), region.drawn.clone());
+        self.region = Some(region);
         self.region_at = now;
         native_call(self.pet, "setting the input region", move |w| {
             native::set_region(w, &input, &drawn)
@@ -468,17 +524,6 @@ fn native_call(
     })
 }
 
-/// The pet window's frames: each of its `RedrawRequested`, as the time it was drawn (Settings' frames don't count,
-/// or it would speed the pet up).
-fn frames_of(pet: window::Id) -> Subscription<Message> {
-    event::listen_raw(|event, _status, id| match event {
-        Event::Window(window::Event::RedrawRequested(at)) => Some((id, at)),
-        _ => None,
-    })
-    .with(pet)
-    .filter_map(|(pet, (id, at))| (id == pet).then_some(Message::Frame(at)))
-}
-
 fn env_is_1(name: &str) -> bool {
     std::env::var_os(name).is_some_and(|v| v == "1")
 }
@@ -512,5 +557,87 @@ mod tests {
     fn the_window_starts_at_the_bottom_left_of_the_monitors_corner() {
         let at = start_position(SURFACE, Size::new(1920.0, 1080.0));
         assert_eq!(at, Point::new(1920.0 - 380.0 - 420.0, 1080.0 - 600.0));
+    }
+
+    /// A shell whose pet window is shown at scale 1.
+    fn shown() -> Shell {
+        let (mut shell, _) = Shell::boot();
+        shell.scale = Some(1.0);
+        shell
+    }
+
+    #[test]
+    fn what_is_drawn_is_never_cut_off_and_the_input_region_is_at_most_100_ms_old() {
+        let mut shell = shown();
+        let start = Instant::now();
+        let (mut updates, mut drawn_only) = (0, 0);
+        // the demo's 40 s, at 60 fps
+        for i in 0..2400 {
+            let now = start + Duration::from_secs_f64(f64::from(i) / 60.0);
+            shell.ui.tick(now);
+            let before = shell.region_at;
+            let _ = shell.sync_region(now, false);
+            let region = shell.region.as_ref().unwrap();
+            assert_eq!(region.drawn, native::to_physical(&shell.ui.drawn_rects(), 1.0, 0.0));
+            if region.input != native::to_physical(&shell.ui.hit_rects(), 1.0, 0.0) {
+                assert!(now - shell.region_at < REGION_EVERY, "at frame {i}");
+            }
+            if shell.region_at != before {
+                updates += 1;
+                if now - before < REGION_EVERY {
+                    drawn_only += 1;
+                }
+            }
+        }
+        // the sprite bobs, hops and waves, and the bubbles come and go: it changes often, but not every frame
+        assert!(updates > 100 && updates < 2400, "{updates} updates");
+        assert!(drawn_only > 0, "no update came sooner than {REGION_EVERY:?}");
+    }
+
+    #[test]
+    fn a_drag_whose_release_never_comes_is_let_go() {
+        let t = Instant::now();
+        let ms = |n| t + Duration::from_millis(n);
+        let mut drag = Drag {
+            pressed: None,
+            window: None,
+            last: None,
+            up_since: None,
+        };
+        assert!(!drag.release_lost(true, t));
+        // up, but its release may be a frame behind
+        assert!(!drag.release_lost(false, ms(16)));
+        assert!(!drag.release_lost(false, ms(99)));
+        // held again: it starts over
+        assert!(!drag.release_lost(true, ms(110)));
+        assert!(!drag.release_lost(false, ms(130)));
+        assert!(!drag.release_lost(false, ms(200)));
+        assert!(drag.release_lost(false, ms(230)));
+    }
+
+    #[test]
+    fn a_press_beside_the_open_menu_closes_it_even_when_a_bubble_takes_it() {
+        let mut shell = shown();
+        let _ = shell.set_menu(true);
+        // a bubble above the menu took it
+        let _ = shell
+            .ui
+            .update(aipet_ui::Message::PointerMoved(Point::new(190.0, 200.0)));
+        let _ = shell.press(mouse::Button::Left, event::Status::Captured);
+        assert!(!shell.menu);
+        // nothing took it
+        let _ = shell.set_menu(true);
+        let _ = shell.press(mouse::Button::Left, event::Status::Ignored);
+        assert!(!shell.menu);
+    }
+
+    #[test]
+    fn a_press_on_the_menu_leaves_it_open_for_the_item_to_be_chosen() {
+        let mut shell = shown();
+        let _ = shell.set_menu(true);
+        let _ = shell.ui.update(aipet_ui::Message::PointerMoved(INLINE_MENU.center()));
+        // an item (or the menu's padding) takes the press, and the item is chosen on the release
+        let _ = shell.press(mouse::Button::Left, event::Status::Captured);
+        assert!(shell.menu);
     }
 }

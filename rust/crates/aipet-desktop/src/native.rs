@@ -18,7 +18,8 @@
 //! `set_cursor_hittest`): on X11 they overwrite the input shape, and once it has been turned on winit sets a
 //! full-window one again on every resize.
 
-#[cfg(target_os = "linux")]
+// where winit has its X11 backend: Linux and the BSDs
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
 #[path = "native/x11.rs"]
 mod sys;
 
@@ -99,7 +100,7 @@ fn handle(w: &dyn Window) -> Result<sys::Handle, NativeError> {
 
 /// X11: opens the connection the other calls use, so a missing or unreachable display is found before iced (whose
 /// event loop would panic) tries it.
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
 pub fn connect_x11() -> Result<(), NativeError> {
     sys::connect()
 }
@@ -129,9 +130,18 @@ pub fn update_hit_test(w: &dyn Window) -> Result<(), NativeError> {
     sys::update_hit_test(handle(w)?)
 }
 
-/// Where the pointer is on the desktop, in the logical px `window::move_to` takes for a window at `scale`. It is
-/// the same wherever the window is, unlike the pointer positions the window's own events carry.
-pub fn pointer(scale: f32) -> Result<Point, NativeError> {
+/// The pointer, as the desktop has it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pointer {
+    /// Where it is, in the logical px `window::move_to` takes for a window at the scale asked for. It is the same
+    /// wherever the window is, unlike the pointer positions the window's own events carry.
+    pub at: Point,
+    /// Whether the left (primary) button is held, now: its release may still be on its way to the window.
+    pub left_held: bool,
+}
+
+/// Where the pointer is on the desktop, for a window at `scale`, and whether its left button is held.
+pub fn pointer(scale: f32) -> Result<Pointer, NativeError> {
     sys::pointer(scale)
 }
 
