@@ -105,9 +105,9 @@ fn session_id() -> Option<u32> {
 }
 
 /// .NET's `Environment.UserName` on Windows: `GetUserNameExW(NameSamCompatible)` without its `DOMAIN\`. Empty when
-/// it can't be read, as for .NET.
+/// it can't be read, as for .NET. The hook's trace log names the user with it too.
 #[cfg(windows)]
-fn user_name() -> OsString {
+pub fn user_name() -> OsString {
     use std::os::windows::ffi::OsStringExt;
     use windows_sys::Win32::Foundation::{ERROR_MORE_DATA, GetLastError};
     use windows_sys::Win32::Security::Authentication::Identity::{GetUserNameExW, NameSamCompatible};

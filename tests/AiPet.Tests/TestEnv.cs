@@ -59,6 +59,25 @@ static class TestEnv
     /// hook/aipet-hook.dll in the output (the csproj copies it there), run with `dotnet` as the antivirus rule asks.
     public static readonly string HookDll = Path.Combine(AppContext.BaseDirectory, "hook", "aipet-hook.dll");
 
+    /// AIPET_TEST_HOOK=<path>: the event-path tests (StartHook, HookRun) run that binary itself instead, the Rust hook
+    /// in cross-runtime.yml. The other modes (--install, --doctor, --print-plugin-hooks) still run HookDll.
+    public static readonly string TestHook =
+        Environment.GetEnvironmentVariable("AIPET_TEST_HOOK") is { Length: > 0 } hook ? Path.GetFullPath(hook) : null;
+
+    /// How to start the hook on its event path with `args`: `dotnet hook/aipet-hook.dll`, or TestHook directly.
+    public static ProcessStartInfo HookStartInfo(params string[] args)
+    {
+        var hook = TestHook ?? HookDll;
+        Assert.True(File.Exists(hook), "the hook isn't built at " + hook);
+        var psi = new ProcessStartInfo(TestHook ?? Dotnet)
+        {
+            UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+        };
+        if (TestHook == null) psi.ArgumentList.Add(HookDll);
+        foreach (var arg in args) psi.ArgumentList.Add(arg);
+        return psi;
+    }
+
     /// The dotnet that runs these tests: <root>/shared/Microsoft.NETCore.App/<version>/ is its runtime folder.
     public static readonly string Dotnet = FindDotnet();
 
@@ -73,20 +92,13 @@ static class TestEnv
 
     public sealed record HookResult(int Exit, string Stdout, string Stderr, double Started, double Ended);
 
-    /// Starts `dotnet aipet-hook.dll --agent <agent>` with the event on stdin, already closed. Only synchronous I/O,
-    /// so a starved thread pool in this process can't hold it up.
+    /// Starts `dotnet aipet-hook.dll --agent <agent>` (or TestHook) with the event on stdin, already closed. Only
+    /// synchronous I/O, so a starved thread pool in this process can't hold it up.
     public static (Process Process, double Started) StartHook(string agent, string stdin, string pipe = null, string dataDir = null,
                                                              string tempDir = null, IDictionary<string, string> env = null)
     {
-        Assert.True(File.Exists(HookDll), "the hook isn't built at " + HookDll);
-        var psi = new ProcessStartInfo(Dotnet)
-        {
-            UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
-            StandardInputEncoding = new UTF8Encoding(false),
-        };
-        psi.ArgumentList.Add(HookDll);
-        psi.ArgumentList.Add("--agent");
-        psi.ArgumentList.Add(agent);
+        var psi = HookStartInfo("--agent", agent);
+        psi.StandardInputEncoding = new UTF8Encoding(false);
         foreach (var name in AgentEnv) psi.Environment.Remove(name);
         foreach (var (name, value) in Vars(pipe ?? Pipe, dataDir ?? DataDir, tempDir ?? TempDir)) psi.Environment[name] = value;
         if (env != null) foreach (var (name, value) in env) psi.Environment[name] = value;
