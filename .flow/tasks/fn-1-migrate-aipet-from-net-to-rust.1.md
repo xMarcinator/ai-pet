@@ -73,6 +73,7 @@ Tests: constants are read from Ipc.cs's source; endpoint and paths are compared 
 Follow-ups noted: ureq also carries platform-verifier and win-system-proxy so task 11 can match HttpClient's OS trust store and proxy without touching Cargo.lock; paths::home()/local_app_data() are public because the hook's registration and doctor read the same .NET special folders.
 
 stage: impl-review - ran [2026-09-28..2026-09-28] codex SHIP on first pass
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits: 03b1404d0af2c262c39f6d65afb117c416b3b990
 - Tests: baseline: green (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check; dotnet test AiPet.slnx: 234 passed, 1 skipped), cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check, dotnet test AiPet.slnx, AIPET_GOLDEN=rust/golden/bin/Release/net10.0/aipet-golden.dll cargo test --workspace --locked (C# cross-check of endpoint and paths), unshare -r env AIPET_GOLDEN=... <aipet-ipc test binary> (endpoint rules without /run/user/<uid>), cargo clippy --workspace --all-targets --locked -- -D warnings, cargo clippy -p aipet-ipc -p aipet-hook -p aipet-sprite -p aipet-ui -p aipet-desktop -p aipet-spike -p aipet-wayland --all-targets --target x86_64-pc-windows-msvc -- -D warnings, cargo check -p aipet-ipc -p aipet-hook --all-targets --target aarch64-apple-darwin, dotnet run --project rust/golden -c Release (sprite: frames.json sha256 d2eed203... unchanged, git diff empty)
