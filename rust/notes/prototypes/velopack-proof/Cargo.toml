@@ -1,0 +1,21 @@
+# The Velopack proof's stand-in for the Rust pet: packed as AiPet.exe with packId AiPetApp, it is the update an
+# installed .NET release applies (.github/workflows/velopack-proof.yml; the results are in rust/proofs/velopack.md).
+# Built on its own, like the other prototypes: `cargo build --release` here.
+[package]
+name = "velopack-proof"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+
+# the pet's exe name, which is Velopack's main exe (--mainExe AiPet.exe)
+[[bin]]
+name = "AiPet"
+path = "src/main.rs"
+
+[dependencies]
+# Velopack's Rust SDK at the version of the pinned vpk (release.yml's VPK_VERSION) and of the .NET app's Velopack
+# package; the workflow fails when they differ
+velopack = "=1.2.158"
+# the data folder as the pet finds it (Paths.cs, ported)
+aipet-ipc = { path = "../../../crates/aipet-ipc" }
