@@ -1,0 +1,29 @@
+[package]
+name = "aipet-hook"
+description = "The hook Claude Code and Codex run on every event: it hands the event to the running pet and never disturbs the agent. Also --install/--uninstall, --doctor and --print-plugin-hooks. A port of src/AiPet.Hook."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "aipet-hook"
+path = "src/main.rs"
+
+[dependencies]
+aipet-ipc = { path = "../aipet-ipc" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+# the trace log's O_NOFOLLOW open and fstat checks, and the modes registration keeps
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+# Codex's 8.3 short paths (GetShortPathNameW)
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+# the Windows exe's icon and version resource
+[build-dependencies]
+winresource.workspace = true

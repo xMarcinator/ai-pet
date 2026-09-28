@@ -1,4 +1,5 @@
-# The Rust front end spike (iced 0.14): the pet's sprite and animation, then the windows.
+# AiPet in Rust: the hook, the core, the pet's sprite and its windows. The migration from .NET is planned in
+# .flow/specs/fn-1-migrate-aipet-from-net-to-rust.md; the front end started as the iced spike (SPIKE.md).
 [workspace]
 resolver = "3"
 members = ["crates/*"]
@@ -9,15 +10,29 @@ exclude = ["notes"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-# the toolchain the spike is built with; the resolver picks dependency versions that support it
+# the toolchain the workspace is built with (CI pins it); the resolver picks dependency versions that support it
 rust-version = "1.89"
 publish = false
 
+# Every dependency the product crates are planned to need is declared here and in their manifests from the start, so
+# the tasks that fill the crates in don't each change the manifests and Cargo.lock.
 [workspace.dependencies]
 serde = "1"
 # float_roundtrip: parse numbers exactly (correctly rounded), as System.Text.Json does; raw_value: avatar files read
 # their numbers from the raw text, where System.Text.Json and serde_json disagree (-0 as an int, 1e400 as a double)
 serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
+# Unix system calls: peer credentials, O_NOFOLLOW opens, fstat, flock, access
+libc = "0.2"
+# the hook server's Unix socket, bound and chmodded before it listens (std's UnixListener::bind also listens)
+socket2 = "0.6"
+# Win32 calls, each crate with the features it uses. 0.52 is the version winit already builds.
+windows-sys = "0.52"
+# Jira and GitHub. No default features: gzip would add an Accept-Encoding the C#'s HttpClient doesn't send. rustls
+# (with ring) for TLS; platform-verifier and win-system-proxy trust the OS's certificates and honour its proxy
+# settings, as .NET's HttpClient does, so a Jira or GitHub server behind a company CA or proxy keeps working.
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier", "win-system-proxy"] }
+# the Windows hook's icon and version resource (aipet-hook's build script)
+winresource = "0.1"
 # The front end. wgpu only: tiny-skia cannot draw a transparent window. iced always builds its winit shell, and
 # winit needs a backend on Linux, hence x11 and wayland. tokio is the executor (and gives time::every).
 iced = { version = "0.14.0", default-features = false, features = [

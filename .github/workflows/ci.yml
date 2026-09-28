@@ -1,5 +1,6 @@
 # CI: builds the solution and runs its tests on Windows and Linux, checks that the plugin's hook files are what the
-# hook code makes of its event tables, and that the install and build scripts at least parse and stay executable.
+# hook code makes of its event tables, and that the install and build scripts at least parse and stay executable. The
+# Rust workspace (rust/) gets its format, lints and tests on Windows and Linux, and a compile check on macOS.
 # Nothing is published here: see release.yml.
 name: CI
 
@@ -77,6 +78,76 @@ jobs:
           }
           if ($failed) { exit 1 }
           Write-Output "Parsed: $($files -join ', ')"
+
+  rust:
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # aipet-wayland links libxkbcommon
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev
+      # the workspace's rust-version, so a new stable's lints can't break the build
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.89.0
+          components: clippy, rustfmt
+      # the cargo registry and rust/target, keyed by the toolchain installed above
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      # aipet-ipc's tests hold the endpoint and data paths against the C#'s in the same environments: the golden
+      # generator's ipc mode (rust/crates/aipet-ipc/src/csharp.rs)
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Build the golden generator
+        run: dotnet build golden -c Release --nologo
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --workspace --locked
+        env:
+          AIPET_GOLDEN: ${{ github.workspace }}/rust/golden/bin/Release/net10.0/aipet-golden.dll
+      # As uid 0 in a user namespace there is no /run/user/<uid>, so the socket's path comes from XDG_RUNTIME_DIR or
+      # the data folder: the rules the runner's own uid never gets to.
+      - name: Test the endpoint without a /run/user folder
+        if: runner.os == 'Linux'
+        run: unshare -r cargo test -p aipet-ipc --locked csharp
+        env:
+          AIPET_GOLDEN: ${{ github.workspace }}/rust/golden/bin/Release/net10.0/aipet-golden.dll
+
+  # macOS isn't a release target, but its code keeps compiling
+  rust-macos:
+    name: Rust (macos-14, check)
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.89.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      - name: Check
+        run: cargo check --workspace --all-targets --locked
 
   scripts:
     name: Shell scripts

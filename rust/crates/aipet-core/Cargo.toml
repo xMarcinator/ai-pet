@@ -1,0 +1,33 @@
+[package]
+name = "aipet-core"
+description = "The pet's core: the hook server, the chats' state (AgentSessions), the Codex log watcher, Jira and GitHub, the Board that merges them into bubbles, and the data, secrets and logs. A port of src/AiPet.Core, on plain threads."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+aipet-ipc = { path = "../aipet-ipc" }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+# Jira and GitHub
+ureq.workspace = true
+
+# the hook server's socket (bound, chmodded, then listening; the peer's uid), and the secrets file's mode
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+socket2.workspace = true
+
+# the hook server's pipe (its owner and ACL, first instance, cancelling a silent client) and Credential Manager
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Credentials",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
