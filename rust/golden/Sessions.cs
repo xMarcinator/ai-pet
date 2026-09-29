@@ -8,15 +8,16 @@ using System.Text.Json.Nodes;
 namespace AiPet.Golden;
 
 /// Mode sessions: golden data for the Rust AgentSessions (rust/crates/aipet-core/src/sessions). Envelope sequences go
-/// through the real AgentSessions.Apply, and what it gives goes to
-/// rust/crates/aipet-core/tests/golden/sessions/claude.json, which tests/sessions.rs replays.
+/// through the real AgentSessions.Apply, and what it gives goes to rust/crates/aipet-core/tests/golden/sessions/:
+/// claude.json for Claude's events, codex.json for Codex's, which tests/sessions.rs replays.
 ///
 ///   dotnet run --project rust/golden -c Release -- sessions
 ///
 /// A case is a store of its own and a list of steps. A step is an envelope, as the hook writes it and HookServer parses
 /// it, with the clock (`now`) it was applied at, and what Apply gave: the outcome, the hook-events.log line and, at
-/// chosen steps, Snapshot(). Or it writes or deletes a transcript in the case's folder, which a transcript_path names
-/// as "{files}". The cases:
+/// chosen steps, Snapshot(). An exception is given as HookServer reports it (outcome "error:<type>"). Or a step writes
+/// or deletes a file in the case's folder: a transcript, which a transcript_path names as "{files}", or Codex's
+/// session_index.jsonl, since the folder is the case's CODEX_HOME. The Claude cases:
 ///  - each Claude case of tests/AiPet.Tests/OrderingTests.cs;
 ///  - the event and tool tables, where and host ids, titles from transcripts (missing, oversized, odd encodings and
 ///    lines), when titles are read, pruning, pairing and ordering edges (tool inputs whose keys come in another order,
@@ -24,6 +25,16 @@ namespace AiPet.Golden;
 ///  - seeded random chats: late hooks, a PermissionRequest either side of its PreToolUse, duplicates, SessionEnd and
 ///    resumes, a clock set back, renamed transcripts. Chance is only in how the inputs were made: they're all written
 ///    out.
+/// The Codex cases:
+///  - each case of CodexOrderingTests (a theory's each inline data);
+///  - the event and tool tables (apply_patch's files), where from the transcript's originator (the first line, the
+///    first 4 MB, the regex over the raw text), names from session_index.jsonl (lines of every shape, when they're read,
+///    the last 256 KB), cwd and threads, the log's lag, malformed envelopes, turn ids (v7 or not, case, the last 16,
+///    the forms the Guid parser takes, which can throw), tool calls (the last 64, 5 s spread, reruns' requests), a
+///    clock set back, SessionEnd and pruning;
+///  - seeded random chats on Windows (hooks 1-4 s late, no PostToolUse) and elsewhere: sub-agents, other threads,
+///    reruns after a sandbox denial, late prompts, /compact, a clock set back with its turn ids, duplicates, SessionEnd
+///    and resumes, names and originators coming late.
 ///
 /// AgentSessions reads the real clock (Board.Unix). Each envelope is applied at the start of a fresh millisecond, and
 /// `now` is that millisecond, which an envelope without a usable `at` gets. Apply reads the clock again later, but the
@@ -63,10 +74,17 @@ static class SessionsMode
 
         var root = Path.Combine(data, "sessions");
         var cases = new List<Replay>();
+        var codex = new List<Replay>();
         Replay Case(string name, int every = 1, bool osSpecific = false)
         {
             var r = new Replay(root, name, every, osSpecific);
             cases.Add(r);
+            return r;
+        }
+        Replay CodexCase(string name, int every = 1)
+        {
+            var r = new Replay(root, name, every, false);
+            codex.Add(r);
             return r;
         }
 
@@ -86,7 +104,29 @@ static class SessionsMode
         Malformed(Case("claude/malformed", every: int.MaxValue));
         for (int seed = 1; seed <= 32; seed++) RandomChats(Case($"random/{seed}", every: 10), seed);
 
-        var output = Path.Combine(repo, "rust", "crates", "aipet-core", "tests", "golden", "sessions", "claude.json");
+        CodexOrdering(CodexCase);
+        CodexEvents(CodexCase("codex/events"));
+        CodexDescribe(CodexCase("codex/describe"));
+        CodexWhere(CodexCase("codex/where", every: int.MaxValue), CodexCase("codex/where-reads"));
+        CodexNames(CodexCase("codex/names", every: int.MaxValue), CodexCase("codex/name-reads"), CodexCase("codex/name-window"));
+        CodexCwdAndThreads(CodexCase("codex/cwd-and-threads"));
+        CodexLag(CodexCase("codex/lag", every: int.MaxValue));
+        CodexMalformed(CodexCase("codex/malformed", every: int.MaxValue));
+        CodexTurnIds(CodexCase("codex/turn-ids"));
+        CodexCalls(CodexCase("codex/calls"));
+        CodexClock(CodexCase("codex/clock"));
+        CodexEnd(CodexCase("codex/end-and-prune"));
+        for (int seed = 1; seed <= 32; seed++) RandomCodexChats(CodexCase($"random-codex/{seed}", every: 10), seed);
+
+        Write(repo, "claude.json", cases, "random/");
+        Write(repo, "codex.json", codex, "random-codex/", "error:FormatException");
+    }
+
+    /// Writes one file of cases, and checks that it holds every kind of outcome (and `more`), and a stale event among
+    /// its `random` cases.
+    static void Write(string repo, string file, List<Replay> cases, string random, params string[] more)
+    {
+        var output = Path.Combine(repo, "rust", "crates", "aipet-core", "tests", "golden", "sessions", file);
         var sb = new StringBuilder();
         sb.Append("{\n");
         sb.Append("  \"about\": ").Append(J("Written by rust/golden (dotnet run --project rust/golden -c Release -- sessions) "
@@ -97,15 +137,14 @@ static class SessionsMode
         Directory.CreateDirectory(Path.GetDirectoryName(output));
         File.WriteAllText(output, sb.ToString(), new UTF8Encoding(false));
 
-        // what the corpus holds, and a check that it holds every kind of outcome
         var outcomes = cases.SelectMany(c => c.Outcomes).GroupBy(o => o).OrderBy(g => g.Key, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Count());
-        Console.WriteLine($"{cases.Count} cases, {outcomes.Values.Sum()} envelopes; outcomes: "
+        Console.WriteLine($"{file}: {cases.Count} cases, {outcomes.Values.Sum()} envelopes; outcomes: "
             + string.Join(" ", outcomes.Select(o => $"{o.Key} {o.Value}")));
-        foreach (var o in new[] { "idle", "thinking", "working", "attention", "done", "removed", "ignored", "stale" })
-            if (!outcomes.ContainsKey(o)) throw new InvalidOperationException($"no case gives the outcome {o}");
-        var random = cases.Where(c => c.Name.StartsWith("random/", StringComparison.Ordinal)).SelectMany(c => c.Outcomes).ToList();
-        if (random.Count(o => o == "stale") == 0) throw new InvalidOperationException("no random case has a stale event: pick other seeds");
+        foreach (var o in new[] { "idle", "thinking", "working", "attention", "done", "removed", "ignored", "stale" }.Concat(more))
+            if (!outcomes.ContainsKey(o)) throw new InvalidOperationException($"{file}: no case gives the outcome {o}");
+        var randoms = cases.Where(c => c.Name.StartsWith(random, StringComparison.Ordinal)).SelectMany(c => c.Outcomes).ToList();
+        if (randoms.Count(o => o == "stale") == 0) throw new InvalidOperationException($"{file}: no random case has a stale event: pick other seeds");
         Console.WriteLine($"wrote {output} ({new FileInfo(output).Length / 1024} KB)");
     }
 
@@ -170,6 +209,10 @@ static class SessionsMode
         public string Claude(string sid, string ev, double at, JsonObject extra = null, JsonObject env = null, bool? snapshot = null) =>
             Apply(Envelope(at, Payload(sid, ev, extra), env), snapshot);
 
+        /// A Codex event, as the Codex hook sends it (no env), with its turn_id when given.
+        public string Codex(string sid, string ev, string turn, double at, JsonObject extra = null, bool? snapshot = null) =>
+            Apply(CodexEnvelope(at, CodexPayload(sid, ev, turn, extra)), snapshot);
+
         public string Apply(JsonObject envelope, bool? snapshot = null) => Apply(envelope.ToJsonString(Json), snapshot);
 
         /// A request line as it's written, which may space and escape its JSON as the hook wouldn't.
@@ -180,8 +223,17 @@ static class SessionsMode
             if (req[Ipc.Payload] is JsonObject p && p["transcript_path"] is JsonValue v && v.TryGetValue(out string path)
                 && path.StartsWith(Files, StringComparison.Ordinal))
                 p["transcript_path"] = dir + path[Files.Length..];
+            // Codex's chat names come from $CODEX_HOME/session_index.jsonl: the case's own folder
+            Environment.SetEnvironmentVariable("CODEX_HOME", dir);
             double now = FreshMillisecond();
-            var (outcome, log) = sessions.Apply(req);
+            string outcome, log;
+            try { (outcome, log) = sessions.Apply(req); }
+            catch (Exception ex)
+            {
+                // as HookServer.Answer reports it
+                outcome = "error:" + ex.GetType().Name;
+                log = "event -> " + outcome;
+            }
             if (Board.Unix - now > 60) throw new InvalidOperationException($"{Name}: an Apply took over a minute");
             outcomes.Add(outcome);
             bool snap = snapshot ?? outcomes.Count % every == 0;
@@ -1106,6 +1158,1125 @@ static class SessionsMode
             }
         }
     }
+
+    // ------------------------------------------------------------------ Codex envelopes
+    /// A Codex envelope as the hook writes it: no env, and `sent` 10 ms after `at`.
+    static JsonObject CodexEnvelope(double at, JsonObject payload, long pid = 4242) => new()
+    {
+        [Ipc.V] = Ipc.Version, [Ipc.Kind] = "event", [Ipc.Agent] = "codex", [Ipc.At] = at, [Ipc.Pid] = pid,
+        [Ipc.Payload] = payload, [Ipc.Sent] = at + 0.01,
+    };
+
+    /// A payload as the tests' Events.Payload makes it: hook_event_name and session_id, a turn_id when given, and extra.
+    static JsonObject CodexPayload(string sid, string ev, string turn = null, JsonObject extra = null)
+    {
+        var p = new JsonObject { ["hook_event_name"] = ev, ["session_id"] = sid };
+        if (turn != null) p["turn_id"] = turn;
+        if (extra != null)
+            foreach (var (k, v) in extra) p[k] = v?.DeepClone();
+        return p;
+    }
+
+    /// A Codex session id, with letters in it (ThreadOf finds it in a path ignoring case).
+    static string CodexSid(int n) => $"0199c0de-{n / 10000 % 10000:D4}-7abc-8def-{n:D12}";
+
+    /// A turn id as Codex makes them: a UUIDv7 made at `unix` (ms precision), its other bits from n.
+    static string V7(double unix, int n = 0)
+    {
+        long ms = (long)Math.Floor(unix * 1000);
+        var id = $"{ms >> 16:x8}-{ms & 0xFFFF:x4}-7{n & 0xFFF:x3}-{0x8000 | ((n >> 12) & 0x3FFF):x4}-{(uint)n * 2654435761L & 0xFFFFFFFFFFFFL:x12}";
+        if (id.Length != 36 || id[14] != '7' || !Guid.TryParseExact(id, "D", out _))
+            throw new InvalidOperationException("not a UUIDv7: " + id);
+        return id;
+    }
+
+    /// A sub-agent's event: its agent_id, on top of `extra`.
+    static JsonObject SubAgent(string agentId, JsonObject extra = null)
+    {
+        var o = extra ?? new JsonObject();
+        o["agent_id"] = agentId;
+        return o;
+    }
+
+    /// The first line of a Codex transcript.
+    static string MetaLine(string originator) =>
+        "{\"timestamp\":\"2026-09-29T10:00:00.000Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"x\",\"originator\":" + J(originator)
+        + ",\"cli_version\":\"0.40.0\",\"instructions\":\"be helpful\"}}\n";
+
+    /// A line of Codex's session index.
+    static string IndexLine(string sid, string name) =>
+        "{\"id\":" + J(sid) + ",\"thread_name\":" + J(name) + ",\"updated_at\":\"2026-09-29T10:00:00Z\"}\n";
+
+    // ------------------------------------------------------------------ tests/AiPet.Tests/OrderingTests.cs (Codex)
+    /// CodexOrderingTests, a case each (a theory's each inline data too): the same envelopes at the same times, with
+    /// turn ids made as the tests make them (v7, a second apart, a minute before the case began).
+    static void CodexOrdering(Func<string, int, Replay> newCase)
+    {
+        string sid = CodexSid(1);
+        const string agent = "019a0000-0000-7000-8000-00000000a1a1";
+        (Replay, double, string, string, string) Case(string name)
+        {
+            var r = newCase("ordering/codex/" + name, 1);
+            return (r, r.T0, V7(r.T0 - 60, 1), V7(r.T0 - 59, 2), V7(r.T0 - 58, 3));
+        }
+        JsonObject Prompt(string text) => Obj(("prompt", text));
+        JsonObject Manual() => Obj(("trigger", "manual"));
+        {
+            var (r, t0, turn1, turn2, _) = Case("EarlierTurn_AfterTheNextTurnStarted_IsStale_EvenWithALaterAt");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "UserPromptSubmit", turn2, t0 + 1, Prompt("second"));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 5, Bash("ls", "call_1"));
+            r.Codex(sid, "Stop", turn1, t0 + 6);
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("NothingOfATurn_IsTakenAfterItsStop");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "Stop", turn1, t0 + 1);
+            r.Codex(sid, "PreToolUse", turn1, t0 + 2, Bash("ls", "call_1"));
+            r.Codex(sid, "PermissionRequest", turn1, t0 + 3, Bash("ls"));
+            r.Codex(sid, "PostToolUse", turn1, t0 + 4, Bash("ls", "call_1"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("NothingOfATurn_IsTakenAfterItsInterrupt");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "Interrupt", turn1, t0 + 1);
+            r.Codex(sid, "PreToolUse", turn1, t0 + 2, Bash("ls", "call_1"));
+            r.Codex(sid, "Stop", turn1, t0 + 3);
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("PreToolUse_AfterItsOwnPostToolUse_IsStale");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "PostToolUse", turn1, t0 + 2, Bash("ls", "call_1"));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 3, Bash("ls", "call_1"));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 4, Bash("ls", "call_2"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("PreToolUse_AfterItsPermissionRequest_IsStale");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "PermissionRequest", turn1, t0 + 2, Bash("rm -rf build", description: "clean"));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 3, Bash("rm -rf build", "call_1"));
+            r.Codex(sid, "PostToolUse", turn1, t0 + 4, Bash("rm -rf build", "call_1"));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 5, Bash("rm -rf build", "call_1"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("PreToolUse_OfAnotherCommand_AfterAPermissionRequest_IsTaken");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "PermissionRequest", turn1, t0 + 2, Bash("rm -rf build"));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 3, Bash("ls", "call_2"));
+        }
+        {
+            var (r, t0, turn1, turn2, _) = Case("OwnNewTurn_IsTaken_EvenWhenItsAtIsBeforeThePreviousStop");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "Stop", turn1, t0 + 5);
+            r.Codex(sid, "UserPromptSubmit", turn2, t0 + 1, Prompt("go on"));
+            r.Codex(sid, "PreToolUse", turn2, t0 + 2, Bash("make", "call_9"));
+            r.Codex(sid, "Stop", turn2, t0 + 1.5);
+        }
+        {
+            var (r, t0, turn1, turn2, _) = Case("SubAgent_AfterTheChatsStop_IsStale_UntilTheNextTurn");
+            string sub1 = V7(r.T0 - 30, 11), sub2 = V7(r.T0 - 10, 12);
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "PreToolUse", sub1, t0 + 1, SubAgent(agent, Bash("ls", "sub_1")));
+            r.Codex(sid, "Stop", turn1, t0 + 2);
+            r.Codex(sid, "PostToolUse", sub1, t0 + 3, SubAgent(agent, Bash("ls", "sub_1")));
+            r.Codex(sid, "PreToolUse", sub2, t0 + 4, SubAgent(agent, Bash("pwd", "sub_2")));
+            r.Codex(sid, "UserPromptSubmit", turn2, t0 + 5);
+            r.Codex(sid, "PreToolUse", sub2, t0 + 6, SubAgent(agent, Bash("pwd", "sub_3")));
+        }
+        {
+            var (r, t0, _, _, _) = Case("NonV7TurnIds_OnlyTellASeenTurnFromANewOne");
+            string a = "3f2504e0-4f89-41d3-9a0c-0305e82c3301", b = "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                c = "a8098c1a-f86e-41d4-a716-446655440000";
+            r.Codex(sid, "UserPromptSubmit", a, t0);
+            r.Codex(sid, "UserPromptSubmit", b, t0 + 1);
+            r.Codex(sid, "PreToolUse", a, t0 + 2, Bash("ls", "call_1"));
+            r.Codex(sid, "Stop", b, t0 + 3);
+            r.Codex(sid, "PreToolUse", b, t0 + 4, Bash("ls", "call_2"));
+            r.Codex(sid, "UserPromptSubmit", c, t0 + 5);
+            r.Codex(sid, "Stop", b, t0 + 6);
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("EventsWithoutATurn_GoByAt");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0 + 1);
+            r.Codex(sid, "SessionStart", null, t0);
+            r.Codex(sid, "SessionStart", null, t0 + 2);
+        }
+        {
+            var (r, t0, turn1, turn2, _) = Case("LateUserPromptSubmit_OfASeenTurn_KeepsTheState_ButNamesTheChat");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0, Prompt("first"));
+            r.Codex(sid, "Stop", turn1, t0 + 1);
+            r.Codex(sid, "PreToolUse", turn2, t0 + 2, Bash("cargo test", "call_a"));
+            r.Codex(sid, "PermissionRequest", turn2, t0 + 2.5, Bash("cargo test"));
+            r.Codex(sid, "UserPromptSubmit", turn2, t0 + 3.5, Prompt("run the tests"));
+            r.Codex(sid, "PreToolUse", turn2, t0 + 3, Bash("ls", "call_b"));
+        }
+        {
+            var (r, t0, turn1, turn2, _) = Case("UserPromptSubmit_ThenItsTurnsEvents_AreTaken");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0, Prompt("first"));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 1, Bash("ls", "call_1"));
+            r.Codex(sid, "Stop", turn1, t0 + 2);
+            r.Codex(sid, "UserPromptSubmit", turn2, t0 + 3, Prompt("second"));
+            r.Codex(sid, "PreToolUse", turn2, t0 + 4, Bash("ls", "call_2"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("NewChat_FirstEventIsItsPrompt_IsTaken");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0, Prompt("hello"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("PermissionRequest_OfARerun_GoesToTheRerun_NotTheEarlierCallOfTheSameCommand");
+            double b = t0 - 100;
+            r.Codex(sid, "UserPromptSubmit", turn1, b);
+            r.Codex(sid, "PreToolUse", turn1, b + 1, Bash("npm test", "call_1"));
+            r.Codex(sid, "PermissionRequest", turn1, b + 21, Bash("npm test", description: "rerun"));
+            r.Codex(sid, "PreToolUse", turn1, b + 22.5, Bash("npm test", "call_2"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("PermissionRequest_OfARerun_ArrivingAfterItsPreToolUse_StartedBeforeIt_IsTaken");
+            double b = t0 - 100;
+            r.Codex(sid, "UserPromptSubmit", turn1, b);
+            r.Codex(sid, "PreToolUse", turn1, b + 1, Bash("npm test", "call_1"));
+            r.Codex(sid, "PreToolUse", turn1, b + 22.5, Bash("npm test", "call_2"));
+            r.Codex(sid, "PermissionRequest", turn1, b + 21, Bash("npm test"));
+            r.Codex(sid, "PreToolUse", turn1, b + 22.6, Bash("npm test", "call_2"));
+        }
+        foreach (var (request, rerun) in new[] { (3.5, 4.0), (2.2, 3.9), (4.8, 3.1) })
+        {
+            var (r, t0, turn1, _, _) = Case(FormattableString.Invariant(
+                $"PermissionRequest_OfAFastRerun_ArrivingBeforeItsPreToolUse_KeepsTheChatAsking({request:0.0}, {rerun:0.0})"));
+            double b = t0 - 100;
+            r.Codex(sid, "UserPromptSubmit", turn1, b);
+            r.Codex(sid, "PreToolUse", turn1, b + 1, Bash("npm test", "call_1"));
+            r.Codex(sid, "PermissionRequest", turn1, b + request, Bash("npm test", description: "rerun"));
+            r.Codex(sid, "PreToolUse", turn1, b + rerun, Bash("npm test", "call_2"));
+            r.Codex(sid, "PreToolUse", turn1, b + rerun + 0.1, Bash("npm test", "call_2"));
+        }
+        foreach (var (request, rerun) in new[] { (3.5, 4.0), (2.2, 3.9), (4.8, 3.1) })
+        {
+            var (r, t0, turn1, _, _) = Case(FormattableString.Invariant(
+                $"PermissionRequest_OfAFastRerun_ArrivingAfterItsPreToolUse_IsTaken({request:0.0}, {rerun:0.0})"));
+            double b = t0 - 100;
+            r.Codex(sid, "UserPromptSubmit", turn1, b);
+            r.Codex(sid, "PreToolUse", turn1, b + 1, Bash("npm test", "call_1"));
+            r.Codex(sid, "PreToolUse", turn1, b + rerun, Bash("npm test", "call_2"));
+            r.Codex(sid, "PermissionRequest", turn1, b + request, Bash("npm test", description: "rerun"));
+            r.Codex(sid, "PreToolUse", turn1, b + rerun + 0.1, Bash("npm test", "call_2"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("SameCommandAgain_AfterTheAskingCallsPostToolUse_IsTaken");
+            double b = t0 - 100;
+            r.Codex(sid, "UserPromptSubmit", turn1, b);
+            r.Codex(sid, "PreToolUse", turn1, b + 1, Bash("npm test", "call_1"));
+            r.Codex(sid, "PermissionRequest", turn1, b + 1.2, Bash("npm test"));
+            r.Codex(sid, "PostToolUse", turn1, b + 2, Bash("npm test", "call_1"));
+            r.Codex(sid, "PreToolUse", turn1, b + 3, Bash("npm test", "call_2"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("PairedRequest_DoesNotMoveTheLatestBack");
+            double b = t0 - 100;
+            r.Codex(sid, "UserPromptSubmit", turn1, b);
+            r.Codex(sid, "PreToolUse", turn1, b + 1, Bash("ls", "call_a"));
+            r.Codex(sid, "PreToolUse", turn1, b + 3, Bash("rm -rf build", "call_b"));
+            r.Codex(sid, "PermissionRequest", turn1, b + 2, Bash("rm -rf build"));
+            r.Codex(sid, "PostToolUse", turn1, b + 2.5, Bash("ls", "call_a"));
+        }
+        {
+            var (r, t0, turn1, turn2, _) = Case("LateUserPromptSubmit_AfterItsTurnsStop_StillNamesTheChat");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0, Prompt("first"));
+            r.Codex(sid, "Stop", turn1, t0 + 1);
+            r.Codex(sid, "PreToolUse", turn2, t0 + 2, Bash("ls", "call_1"));
+            r.Codex(sid, "Stop", turn2, t0 + 3);
+            r.Codex(sid, "UserPromptSubmit", turn2, t0 + 4, Prompt("second"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("PermissionRequest_BehindAnotherCall_GoesByAt");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "PreToolUse", turn1, t0 + 2, Bash("rm -rf build", "call_1"));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 3, Bash("ls", "call_2"));
+            r.Codex(sid, "PermissionRequest", turn1, t0 + 1.5, Bash("rm -rf build"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("TwoIdenticalCalls_FarApart_TheSecondsRequestGoesWithTheSecond");
+            double b = t0 - 100;
+            r.Codex(sid, "UserPromptSubmit", turn1, b);
+            r.Codex(sid, "PreToolUse", turn1, b + 1, Bash("npm test", "call_1"));
+            r.Codex(sid, "PreToolUse", turn1, b + 60, Bash("npm test", "call_2"));
+            r.Codex(sid, "PermissionRequest", turn1, b + 60.5, Bash("npm test"));
+            r.Codex(sid, "PostToolUse", turn1, b + 70, Bash("npm test", "call_2"));
+            r.Codex(sid, "PreToolUse", turn1, b + 71, Bash("npm test", "call_2"));
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("PendingRequest_IsNotTakenByTheSameCommandLongAfter");
+            double b = t0 - 100;
+            r.Codex(sid, "UserPromptSubmit", turn1, b);
+            r.Codex(sid, "PermissionRequest", turn1, b + 1, Bash("npm test"));
+            r.Codex(sid, "PreToolUse", turn1, b + 30, Bash("npm test", "call_3"));
+        }
+        {
+            var (r, t0, turn1, turn2, turn3) = Case("ManualCompact_EndsItsTurn");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "Stop", turn1, t0 + 1);
+            r.Codex(sid, "PreCompact", turn2, t0 + 2, Manual());
+            r.Codex(sid, "PostCompact", turn2, t0 + 3, Manual());
+            r.Codex(sid, "UserPromptSubmit", turn3, t0 + 4);
+        }
+        {
+            var (r, t0, turn1, turn2, _) = Case("ManualCompact_PreCompactArrivingLast_IsStale");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "Stop", turn1, t0 + 1);
+            r.Codex(sid, "PostCompact", turn2, t0 + 3, Manual());
+            r.Codex(sid, "PreCompact", turn2, t0 + 4, Manual());
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("AutoCompact_StaysInItsTurn");
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "PreCompact", turn1, t0 + 1, Obj(("trigger", "auto")));
+            r.Codex(sid, "PostCompact", turn1, t0 + 2, Obj(("trigger", "auto")));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 3, Bash("ls", "call_1"));
+            r.Codex(sid, "Stop", turn1, t0 + 4);
+        }
+        {
+            var (r, t0, turn1, _, _) = Case("SubAgentsCompact_DoesNotEndTheChatsTurn");
+            string sub = V7(r.T0 - 30, 11);
+            r.Codex(sid, "UserPromptSubmit", turn1, t0);
+            r.Codex(sid, "PostCompact", sub, t0 + 1, SubAgent(agent, Manual()));
+            r.Codex(sid, "PreToolUse", sub, t0 + 2, SubAgent(agent, Bash("ls", "sub_1")));
+            r.Codex(sid, "PreToolUse", turn1, t0 + 3, Bash("ls", "call_1"));
+        }
+        {
+            var (r, t0, _, _, _) = Case("ClockSetBack_NewTurnsAreTaken_AndTheOldTurnStaysStale");
+            // turn 1 began while the clock was an hour ahead, so its id sorts after every turn made once it was set right
+            string ahead = V7(r.T0 + 3600, 21), after = V7(r.T0, 22);
+            r.Codex(sid, "UserPromptSubmit", ahead, t0 + 3600);
+            r.Codex(sid, "Stop", ahead, t0 + 3601);
+            r.Codex(sid, "UserPromptSubmit", after, t0, Prompt("after"));
+            r.Codex(sid, "PreToolUse", after, t0 + 1, Bash("ls", "call_1"));
+            r.Codex(sid, "Stop", after, t0 + 2);
+            r.Codex(sid, "PreToolUse", ahead, t0 + 3602, Bash("ls", "call_0"));
+        }
+        {
+            var (r, t0, turn1, turn2, turn3) = Case("NewChat_StartsFromItsFirstEventsTurn");
+            r.Codex(sid, "PreToolUse", turn2, t0 + 2, Bash("ls", "call_1"));
+            r.Codex(sid, "UserPromptSubmit", turn1, t0 + 3);
+            r.Codex(sid, "Stop", turn2, t0 + 4);
+            r.Codex(sid, "UserPromptSubmit", turn3, t0 + 5);
+        }
+    }
+
+    // ------------------------------------------------------------------ Codex: the event → state table
+    /// One chat through every Codex event (and others it doesn't take), prompts of every shape, a helper's prompt, and
+    /// each compaction. No turn ids: each goes by `at`.
+    static void CodexEvents(Replay r)
+    {
+        string sid = CodexSid(2);
+        double t = r.T0 - 100;
+        string Ev(string ev, JsonObject extra = null) => r.Codex(sid, ev, null, t += 0.01, extra);
+
+        Ev("SessionStart", Obj(("source", "startup")));
+        Ev("UserPromptSubmit", Obj(("prompt", "  fix   the\tbuild  \r\nand more")));
+        Ev("UserPromptSubmit", Obj(("prompt", "/review")));
+        Ev("UserPromptSubmit", Obj(("prompt", "")));
+        Ev("UserPromptSubmit");
+        Ev("UserPromptSubmit", Obj(("prompt", 42)));
+        Ev("UserPromptSubmit", SubAgent("019a0000-0000-7000-8000-00000000a1a1", Obj(("prompt", "a helper's prompt"))));
+        Ev("UserPromptSubmit", Obj(("prompt", "an empty agent id"), ("agent_id", "")));
+        Ev("UserPromptSubmit", Obj(("prompt", "a numeric agent id"), ("agent_id", 7)));
+        Ev("PreToolUse", Bash("make"));
+        Ev("PermissionRequest", Bash("make", description: "build it"));
+        Ev("PostToolUse", Bash("make"));
+        Ev("PreCompact", Obj(("trigger", "auto")));
+        Ev("PostCompact", Obj(("trigger", "auto")));
+        Ev("PostCompact", Obj(("trigger", "manual")));
+        Ev("PreCompact", Obj(("trigger", "manual")));
+        Ev("PostCompact");
+        Ev("PostCompact", SubAgent("019a0000-0000-7000-8000-00000000a1a1", Obj(("trigger", "manual"))));
+        Ev("PostCompact", Obj(("trigger", "manual"), ("transcript_path", Files + "/rollout-another-thread.jsonl")));
+        Ev("PostCompact", Obj(("trigger", "manual"), ("transcript_path", Files + "/rollout-" + sid.ToUpperInvariant() + ".jsonl")));
+        Ev("PostCompact", Obj(("trigger", "MANUAL")));
+        foreach (var kind in new JsonNode[] { null, "general-purpose", "default", "explorer", "  ", 5, "" })
+            Ev("SubagentStart", kind == null ? null : Obj(("agent_type", kind)));
+        Ev("SubagentStop");
+        Ev("Stop");
+        Ev("SessionStart", Obj(("source", "resume")));
+        Ev("UserPromptSubmit", Obj(("prompt", "go on")));
+        Ev("SessionStart", Obj(("source", "compact")));
+        Ev("Interrupt");
+        Ev("Interrupt");
+        // not Codex's
+        foreach (var ev in new[] { "PostToolUseFailure", "Notification", "PermissionDenied", "Elicitation", "StopFailure", "SomethingNew", "stop", "Stop " })
+            Ev(ev);
+        Ev("Stop");
+        Ev("SessionEnd", Obj(("reason", "exit")));
+        Ev("SessionEnd");
+        Ev("Stop");
+        Ev("SessionStart");
+    }
+
+    // ------------------------------------------------------------------ Codex: describing tool calls
+    static readonly (string Tool, string Input)[] CodexTools =
+    {
+        ("apply_patch", J(new { command = "*** Begin Patch\n*** Update File: src/main.rs\n@@\n-a\n+b\n*** End Patch" })),
+        ("apply_patch", J(new { command = "*** Begin Patch\n*** Add File: docs/new.md\n+x\n*** Delete File: old.txt\n*** End Patch" })),
+        ("apply_patch", J(new { command = "*** Update File: a.rs\n*** Update File: a.rs\n" })),
+        ("apply_patch", J(new { command = "*** Update File: a.rs \r\n*** Update File: a.rs\r\n*** Update File:  a.rs" })),
+        ("apply_patch", J(new { command = "*** Update File: a.rs\n*** Update File: b.rs\n*** Add File: c.rs\n*** Delete File: a.rs" })),
+        ("apply_patch", J(new { command = "*** Update File: \n*** Update File:  \t\n" })),
+        ("apply_patch", J(new { command = "*** Update File: \n*** Update File: " })),
+        ("apply_patch", J(new { command = "***Update File: a.rs\n *** Update File: b.rs\n*** update File: c.rs\n*** Move File: d.rs\n*** Update File:e.rs\n*** Update file: f.rs" })),
+        ("apply_patch", J(new { command = "*** Update File: dir/sub/\n" })),
+        ("apply_patch", J(new { command = "*** Update File: /\n" })),
+        ("apply_patch", J(new { command = "\u3000*** Update File: x\n*** Delete File: \u3000spaced name.txt\u3000\u00a0\u2028\n" })),
+        ("apply_patch", J(new { command = "*** Update File: é/ü😀.rs" })),
+        ("apply_patch", J(new { command = "prefix\n*** Update File: a.rs\n*** Update File: A.rs\n" })),
+        ("apply_patch", J(new { command = "*** Update File: a.rs\r*** Update File: b.rs" })),
+        ("apply_patch", J(new { command = "*** Update File: *** Update File: x.rs\n" })),
+        ("apply_patch", J(new { command = "" })), ("apply_patch", "{}"), ("apply_patch", J(new { command = 7 })), ("apply_patch", "null"),
+        ("apply_patch", "\"*** Update File: a.rs\""), ("apply_patch", "[\"*** Update File: a.rs\"]"),
+        ("apply_patch", J(new { input = "*** Update File: a.rs", file_path = "/x/b.rs" })),
+        ("apply_patch", J(new { command = "*** Update File: a.rs", file_path = "/x/b.rs" })),
+        ("spawn_agent", null), ("spawn_agent", "{\"prompt\":\"go\"}"), ("view_image", "{\"path\":\"/tmp/a.png\"}"), ("view_image", null),
+        ("shell", "{\"command\":[\"ls\"]}"), ("exec_command", "{\"cmd\":\"make\"}"), ("local_shell", null), ("web_search", null),
+        ("update_plan", null), ("mcp__atlassian__search", null), ("mcp__Claude_Browser__x", null), ("write_stdin", null),
+        ("Bash", null), ("", null), ("Spawn_agent", null), ("APPLY_PATCH", J(new { command = "*** Update File: a.rs" })),
+    };
+
+    /// A PreToolUse for each tool, on one chat; then one without a tool_name and one with a number for it.
+    static void CodexDescribe(Replay r)
+    {
+        string sid = CodexSid(3);
+        double t = r.T0 - 100;
+        foreach (var (tool, input) in CodexTools) r.Codex(sid, "PreToolUse", null, t += 0.01, Tool(tool, input));
+        r.Codex(sid, "PreToolUse", null, t += 0.01, Obj(("tool_input", Parse("{\"command\":\"*** Update File: a.rs\"}"))));
+        r.Codex(sid, "PreToolUse", null, t += 0.01, Obj(("tool_name", 12)));
+    }
+
+    // ------------------------------------------------------------------ Codex: where, from the transcript
+    /// The originator of transcripts of every shape, each read by the SessionStart of a chat of its own; then when the
+    /// transcript is read.
+    static void CodexWhere(Replay r, Replay reads)
+    {
+        const int Head = 4 * 1024 * 1024;
+        double t = r.T0 - 100;
+        int n = 0;
+        void Chat(params Part[] transcript)
+        {
+            string sid = CodexSid(100 + n++), file = "rollout-" + sid + ".jsonl";
+            r.Write(file, transcript);
+            r.Codex(sid, "SessionStart", null, t += 0.01, Obj(("transcript_path", Files + "/" + file)));
+        }
+        foreach (var o in new[] { "Codex Desktop", "codex_work_desktop", "codex-tui", "codex_cli_rs", "codex_exec", "codex_vscode",
+                                  "CODEX-TUI", "Codex_Web App", "İSTANBUL ΣΑΣ", "ẞig Ωhm Kelvin Å 𐐀 Ა", "", " ", "tab\there", "a\u0001b",
+                                  new string('o', 80) })
+            Chat(Part.T(MetaLine(o) + "{\"type\":\"response_item\"}\n"));
+        // the regex over the first line's raw text
+        foreach (var line in new[]
+        {
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\" : \"spaced\"}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\"\t:\u3000\"unicode spaces\"}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\"\u0085:\u00a0\"nel and nbsp\"}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\"\r:\"carriage return\"}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\"\u200b:\"zero width\",\"x\":{\"originator\":\"after zero width\"}}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\":\"a\\\"b\"}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\":\"\\u0041pp\"}}",
+            "{\"x\":\"originator\",\"type\":\"session_meta\",\"payload\":{\"originator\":\"second try\"}}",
+            "\"originator\"originator\":\"overlapping\" \"session_meta\"",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\":\"no closing quote}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\":null}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\":42,\"o\":{\"originator\":\"nested later\"}}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"x\"}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"Originator\":\"case\"}}",
+            "{\"type\":\"session-meta\",\"payload\":{\"originator\":\"not the meta\"}}",
+            "{\"type\":\"SESSION_META\",\"payload\":{\"originator\":\"upper meta\"}}",
+            "session_meta \"session_meta\" \"originator\":\"not json at all\"",
+            "{\"payload\":{\"originator\":\"meta after\"},\"type\":\"session_meta\"}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\":\"\"}}",
+            // raw (a JSON writer escapes what's past U+FFFF): lower-cased a character, a surrogate pair too, at a time
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\":\"\U00010400\U00010401 Ω K Å İ ΣΣ ẞ ǅ\"}}",
+            "{\"type\":\"session_meta\",\"payload\":{\"originator\":\"" + new string('o', 59) + "\U00010400 cut by the log\"}}",
+        })
+            Chat(Part.T(line + "\n{\"type\":\"session_meta\",\"payload\":{\"originator\":\"second line\"}}\n"));
+        // the first line only, within the first 4 MB
+        Chat(Part.T("{\"type\":\"response_item\"}\n" + MetaLine("codex-tui")));
+        Chat(Part.T(MetaLine("no newline").TrimEnd('\n')));
+        Chat(Part.T(MetaLine("codex-tui").Replace("\n", "\r\n")));
+        Chat(Part.T("{\"type\":\"session_meta\",\"payload\":{\"originator\":\"early\",\"instructions\":\""), Part.T("x", Head), Part.T("\"}}\n"));
+        Chat(Part.T("{\"type\":\"session_meta\",\"payload\":{\"instructions\":\""), Part.T("x", Head), Part.T("\",\"originator\":\"late\"}}\n"));
+        Chat(Part.T("{\"payload\":{\"originator\":\"meta too late\",\"instructions\":\""), Part.T("x", Head), Part.T("\"},\"type\":\"session_meta\"}\n"));
+        // its closing quote the 4 MB's last byte, and one past it
+        string head = "{\"type\":\"session_meta\",\"payload\":{\"instructions\":\"", tail = "\",\"originator\":\"edge\"";
+        int fill = Head - Encoding.UTF8.GetByteCount(head) - Encoding.UTF8.GetByteCount(tail);
+        Chat(Part.T(head), Part.T("x", fill), Part.T(tail + "}}\n"));
+        Chat(Part.T(head), Part.T("x", fill + 1), Part.T(tail + "}}\n"));
+        // a character cut at 4 MB
+        Chat(Part.T("{\"type\":\"session_meta\",\"payload\":{\"originator\":\"cut char\",\"instructions\":\""), Part.T("x", Head - 80), Part.T("é", 100));
+        Chat(Part.H(new byte[] { 0xEF, 0xBB, 0xBF }), Part.T(MetaLine("after a bom")));
+        Chat(Part.T("{\"type\":\"session_meta\",\"payload\":{\"originator\":\"bad "), Part.H(new byte[] { 0xFF, 0xC3, 0x28, 0xED, 0xA0, 0x80 }), Part.T(" bytes\"}}\n"));
+        Chat(Part.H(new byte[] { 0xFF, 0xFE }.Concat(Encoding.Unicode.GetBytes(MetaLine("utf-16"))).ToArray()));
+        Chat();
+        // no file to read
+        var paths = new JsonNode[] { "", Files + "/missing.jsonl", Files, Files + "/a\u0000b.jsonl", 5 };
+        for (int i = 0; i < paths.Length; i++)
+            r.Codex(CodexSid(190 + i), "SessionStart", null, t += 0.01, Obj(("transcript_path", paths[i]?.DeepClone())));
+        r.Codex(CodexSid(199), "SessionStart", null, t += 0.01);
+
+        // read while the chat has no where, whatever the event, stale ones too; not once it has one; again after its end
+        string sid = CodexSid(200), file = "rollout-" + sid + ".jsonl", path = Files + "/" + file;
+        double b = reads.T0 - 100;
+        string Ev(string ev, JsonObject extra = null, string turn = null) =>
+            reads.Codex(sid, ev, turn, b += 0.01, (extra ?? new JsonObject()).Also(o => o["transcript_path"] = path));
+        Ev("SessionStart");
+        reads.Write(file, Part.T(MetaLine("")));
+        Ev("UserPromptSubmit", Obj(("prompt", "hi")));
+        reads.Write(file, Part.T(MetaLine("codex_exec")));
+        reads.Codex(sid, "Stop", null, b - 5, Obj(("transcript_path", path)));
+        reads.Write(file, Part.T(MetaLine("codex-tui")));
+        Ev("SomethingNew");
+        Ev("PreToolUse", Bash("ls"));
+        reads.Write(file, Part.T(MetaLine("Codex Desktop")));
+        Ev("Stop");
+        Ev("SessionEnd");
+        Ev("SessionStart");
+        // another transcript names nothing new once the chat has its where
+        reads.Codex(sid, "Stop", null, b += 0.01, Obj(("transcript_path", Files + "/missing.jsonl")));
+        // a sub-agent's event reads the transcript it names
+        string helper = CodexSid(201), helperFile = "rollout-" + helper + ".jsonl";
+        reads.Write(helperFile, Part.T(MetaLine("codex_vscode")));
+        reads.Codex(helper, "PreToolUse", V7(b - 50, 1), b += 0.01,
+            SubAgent("019a0000-0000-7000-8000-00000000a1a1", Bash("ls", "c1")).Also(o => o["transcript_path"] = Files + "/" + helperFile));
+    }
+
+    // ------------------------------------------------------------------ Codex: names from the session index
+    /// Codex's names from session_index.jsonl in CODEX_HOME (the case's folder): lines of every shape, each for a chat of
+    /// its own that its SessionStart reads; when names are read; and the last 256 KB.
+    static void CodexNames(Replay r, Replay reads, Replay window)
+    {
+        const string Index = "session_index.jsonl";
+        const int Tail = 256 * 1024;
+        var lines = new StringBuilder();
+        var chats = new List<string>();
+        void Chat(params Func<string, string>[] forChat)
+        {
+            string sid = CodexSid(300 + chats.Count);
+            chats.Add(sid);
+            foreach (var line in forChat) lines.Append(line(sid)).Append('\n');
+        }
+        string Named(string sid, string name) => IndexLine(sid, name).TrimEnd('\n');
+        string Earlier(string sid) => Named(sid, "earlier");
+        // arrays that nest the line to `depth` in all, with its object
+        string Deep(int depth) => new string('[', depth - 1) + new string(']', depth - 1);
+        // the id with its fifth character (a letter) escaped, so the raw line hasn't the id
+        string Escaped(string sid) => sid[..4] + "\\u00" + ((int)sid[4]).ToString("x2") + sid[5..];
+
+        Chat(s => Named(s, "plain name"));
+        Chat(s => Named(s, "first"), s => Named(s, "second wins"));
+        Chat(Earlier, s => Named(s, ""));
+        Chat(Earlier, s => Named(s, " \t "));
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":42}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":null}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":[\"x\"]}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)}}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"cut");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"dup\",\"thread_name\":\"dup two\"}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"dup id\",\"i\\u0064\":{J(s)}}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"nested dup\",\"o\":{{\"a\":1,\"a\":2}}}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"deep 64\",\"x\":{Deep(64)}}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"deep 65\",\"x\":{Deep(65)}}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"lone \\ud800 surrogate\"}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"fine\",\"other\":\"\\udc00\"}}");
+        Chat(Earlier, s => $"[{J(s)},{{\"thread_name\":\"in an array\"}}]");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"garbage\"}} x");
+        Chat(Earlier, s => $"{{\"id\":{J(s)},\"thread_name\":\"comma\",}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s.ToUpperInvariant())},\"thread_name\":\"upper id\",\"x\":{J(s)}}}");
+        Chat(Earlier, s => $"{{\"id\":42,\"thread_name\":\"number id\",\"x\":{J(s)}}}");
+        Chat(Earlier, s => $"{{\"id\":null,\"thread_name\":\"null id\",\"x\":{J(s)}}}");
+        Chat(Earlier, s => $"{{\"id\":\"{Escaped(s)}\",\"thread_name\":\"escaped id of {s}\"}}");
+        Chat(Earlier, s => $"{{\"id\":\"{Escaped(s)}\",\"thread_name\":\"escaped id only\"}}");
+        Chat(Earlier, s => $"{{\"id\":{J(s + " ")},\"thread_name\":\"a longer id\"}}");
+        Chat(s => $"{{\"thread_name\":\"keys the other way round\",\"id\":{J(s)}}}");
+        Chat(s => Named(s, "a rather long name for a chat that goes on and on and on"));
+        Chat(s => Named(s, "two\nlines\tand  spaces"));
+        Chat(s => $"{{\"id\":{J(s)},\"thread_name\":\"big number\",\"n\":1e400,\"m\":-0,\"k\":1.50}}");
+        Chat(Earlier, s => "\ufeff" + Named(s, "inner bom"));
+        Chat(s => Named(s, "crlf") + "\r");
+        Chat(s => "  \t" + Named(s, "indented"));
+        Chat(s => Named(s, new string('a', 42) + "😀 and more"));
+        Chat(s => Named(CodexSid(999), "someone else's"));
+        Chat();
+        // the whole index, after a byte order mark (StreamReader drops it)
+        r.Write(Index, Part.H(new byte[] { 0xEF, 0xBB, 0xBF }), Part.T(lines.ToString()));
+        double t = r.T0 - 100;
+        foreach (var sid in chats) r.Codex(sid, "SessionStart", null, t += 0.01);
+
+        // read on SessionStart, UserPromptSubmit and Stop, and whenever the chat has none; never for an ignored event
+        {
+            string sid = CodexSid(400);
+            double b = reads.T0 - 100;
+            void Names(params string[] names) => reads.Write(Index, Part.T(string.Concat(names.Select(n => IndexLine(sid, n)))));
+            string Ev(string ev, JsonObject extra = null) => reads.Codex(sid, ev, null, b += 0.01, extra);
+            Ev("SessionStart");
+            Names("first");
+            Ev("PreToolUse", Bash("ls"));
+            Names("first", "second");
+            Ev("PostToolUse", Bash("ls"));
+            Ev("PermissionRequest", Bash("make"));
+            Ev("Stop");
+            Names("first", "second", "third");
+            Ev("UserPromptSubmit", Obj(("prompt", "go")));
+            Names("fourth");
+            Ev("SessionStart");
+            Names("fifth");
+            Ev("SomethingNew");
+            Ev("Interrupt");
+            reads.Delete(Index);
+            Ev("Stop");
+            Names("sixth");
+            reads.Codex(sid, "Stop", null, b - 5);
+            Ev("SessionEnd");
+            Ev("PreCompact", Obj(("trigger", "auto")));
+            // a helper's events are the chat's too
+            Names("seventh");
+            Ev("UserPromptSubmit", SubAgent("019a0000-0000-7000-8000-00000000a1a1", Obj(("prompt", "look"))));
+        }
+
+        // the last 256 KB
+        {
+            string early = CodexSid(500), late = CodexSid(501), edge = CodexSid(502), past = CodexSid(503), wide = CodexSid(504);
+            double b = window.T0 - 100;
+            string filler = IndexLine(CodexSid(599), new string('x', 1000));
+            window.Write(Index, Part.T(IndexLine(early, "too early")), Part.T(filler, Tail / filler.Length + 2), Part.T(IndexLine(late, "late enough")));
+            window.Codex(early, "SessionStart", null, b += 0.01);
+            window.Codex(late, "SessionStart", null, b += 0.01);
+            // a line whose last part begins the window exactly: that part is a line of its own there; a byte on, not
+            string part = $"{{\"id\":{J(edge)},\"thread_name\":\"from the window's edge\"}}\n";
+            int pad = Tail - Encoding.UTF8.GetByteCount(part) - 1;
+            window.Write(Index, Part.T("{\"garbage\":\"xx "), Part.T(part), Part.T("y", pad), Part.T("\n"));
+            window.Codex(edge, "SessionStart", null, b += 0.01);
+            string pastPart = $"{{\"id\":{J(past)},\"thread_name\":\"a byte past the edge\"}}\n";
+            window.Write(Index, Part.T("{\"garbage\":\"xx "), Part.T(pastPart), Part.T("y", Tail - Encoding.UTF8.GetByteCount(pastPart)), Part.T("\n"));
+            window.Codex(past, "SessionStart", null, b += 0.01);
+            // UTF-16, by its byte order mark
+            window.Write(Index, Part.H(new byte[] { 0xFF, 0xFE }.Concat(Encoding.Unicode.GetBytes(IndexLine(wide, "utf-16 name"))).ToArray()));
+            window.Codex(wide, "SessionStart", null, b += 0.01);
+            window.Write(Index, Part.H(new byte[] { 0xFE, 0xFF }.Concat(Encoding.BigEndianUnicode.GetBytes(IndexLine(wide, "utf-16 be name"))).ToArray()));
+            window.Codex(wide, "Stop", null, b += 0.01);
+        }
+    }
+
+    // ------------------------------------------------------------------ Codex: cwd and threads
+    /// cwd (the \\?\ prefix dropped) and has_transcript; the chat's own thread, another thread reporting under its
+    /// session (another transcript), and sub-agents.
+    static void CodexCwdAndThreads(Replay r)
+    {
+        string sid = CodexSid(800), own = Files + "/rollout-2026-09-29T10-00-00-" + sid.ToUpperInvariant() + ".jsonl";
+        string other = Files + "/rollout-2026-09-29T10-00-01-helper.jsonl";
+        double t = r.T0 - 100;
+        string turn1 = V7(t - 50, 1), turn2 = V7(t - 40, 2), other1 = V7(t - 90, 3), other2 = V7(t - 30, 4), other3 = V7(t - 20, 5);
+        string Ev(string ev, string turn, JsonObject extra = null) => r.Codex(sid, ev, turn, t += 0.01, extra);
+        JsonObject Other(JsonObject extra = null) => (extra ?? new JsonObject()).Also(o => o["transcript_path"] = other);
+
+        Ev("SessionStart", null, Obj(("cwd", @"\\?\C:\src\app"), ("transcript_path", own)));
+        Ev("UserPromptSubmit", turn1, Obj(("cwd", ""), ("prompt", "go")));
+        Ev("UserPromptSubmit", other1, Other(Obj(("prompt", "name the chat"))));
+        Ev("PreToolUse", turn1, Bash("ls", "call_1").Also(o => o["cwd"] = 42));
+        Ev("Stop", other1, Other());
+        Ev("PostToolUse", turn1, Bash("ls", "call_1").Also(o => o["cwd"] = @"\\?\"));
+        Ev("PreToolUse", other1, Other(Bash("pwd", "call_2")));
+        Ev("Stop", turn1, Obj(("cwd", "/home/u/x"), ("transcript_path", "")));
+        Ev("UserPromptSubmit", other2, Other(Obj(("prompt", "again"))));
+        Ev("PreToolUse", turn1, Bash("ls", "call_3").Also(o => o["agent_id"] = ""));
+        Ev("UserPromptSubmit", turn2, Obj(("cwd", @"\\?\UNC\server\share\p"), ("prompt", "next")));
+        Ev("UserPromptSubmit", other2, Other(Obj(("prompt", "again"))));
+        Ev("PreToolUse", other3, Other(Bash("date", "call_4")));
+        Ev("PreToolUse", turn2, Bash("ls", "call_5").Also(o => { o["cwd"] = @"\\.\C:\x"; o["agent_id"] = 7; }));
+        Ev("PreToolUse", turn2, Bash("ls", "call_6").Also(o => { o["cwd"] = @"\\?\\\?\x"; o["transcript_path"] = own.ToLowerInvariant(); }));
+        // a sub-agent names its own thread, whatever transcript it reports
+        Ev("PreToolUse", other1, SubAgent("019a0000-0000-7000-8000-00000000b2b2", Other(Bash("ls", "sub_1"))));
+        Ev("SubagentStop", other1, SubAgent("019a0000-0000-7000-8000-00000000b2b2", Other()));
+        Ev("PreToolUse", other1, SubAgent("019a0000-0000-7000-8000-00000000b2b2", Other(Bash("ls", "sub_2"))));
+        Ev("Stop", turn2);
+        // the chat's own transcript is one whose path has its id, ignoring case as .NET's ordinal casing does (simple
+        // upper-case mappings, surrogate pairs too, but ı and ſ kept); else it's another thread's, stale while the
+        // chat's turn has ended
+        foreach (var (id, path) in new[]
+        {
+            ("chat-é-ω-𐐨-ǆ-a", "rollout-CHAT-É-Ω-𐐀-ǅ-A.jsonl"), ("chat-i-s", "rollout-CHAT-ı-ſ.jsonl"),
+            ("chat-k-ß", "rollout-CHAT-K-ẞ.jsonl"),
+        })
+        {
+            string turn = V7(t - 10, 20), next = V7(t - 5, 21);
+            r.Codex(id, "UserPromptSubmit", turn, t += 0.01, Obj(("prompt", "go")));
+            r.Codex(id, "Stop", turn, t += 0.01);
+            r.Codex(id, "UserPromptSubmit", next, t += 0.01, Obj(("transcript_path", Files + "/" + path)));
+        }
+        // a chat without a transcript
+        r.Codex(CodexSid(801), "SessionStart", null, t += 0.01, Obj(("transcript_path", ""), ("cwd", "\\\\?\\")));
+        r.Codex(CodexSid(801), "UserPromptSubmit", null, t += 0.01, Obj(("transcript_path", 5)));
+        r.Codex(CodexSid(801), "Stop", null, t += 0.01, Obj(("transcript_path", Files + "/x.jsonl")));
+    }
+
+    // ------------------------------------------------------------------ Codex: the log line's lag
+    /// `lag=`: sent less at, in ms, as .NET's "0" format writes it (15 digits, then half away from zero; a negative
+    /// zero keeps its sign), or "?" without a positive sent. Each a chat of its own.
+    static void CodexLag(Replay r)
+    {
+        double b = r.T0 - 100;
+        int n = 0;
+        string B(double d) => J(d);
+        var pairs = new (string At, string Sent)[]
+        {
+            (B(b), B(b + 0.01)), (B(b), null), (B(b), "0"), (B(b), "-5"), (B(b), "\"soon\""), (B(b), "true"), (B(b), "null"),
+            (B(b), B(b - 0.0004)), (B(b), B(b - 0.0006)), (B(b), B(b + 2.5)), (B(b), B(b + 0.0005)), (B(b), B(b - 10)),
+            ("0", "0.0125"), ("0", "0.0005"), ("0", "0.0015"), ("0", "0.0025"), ("0", "0.0004"), ("1", "1.0125"), ("1", "1e300"),
+            ("0", "0.9995"), ("0", "9.9995"), ("-1.5", "2.5"), (B(b), "9007199254740993"), (B(b), "1e-300"), ("0", "123456789012.3456"),
+            (null, B(b)), ("\"x\"", B(b)), ("null", B(b)),
+        };
+        foreach (var (at, sent) in pairs)
+        {
+            var line = new StringBuilder("{\"v\":1,\"type\":\"event\",\"agent\":\"codex\"");
+            if (at != null) line.Append(",\"at\":").Append(at);
+            line.Append(",\"pid\":4242,\"payload\":").Append(CodexPayload(CodexSid(900 + n++), "SessionStart").ToJsonString(Json));
+            if (sent != null) line.Append(",\"sent\":").Append(sent);
+            r.Apply(line.Append('}').ToString());
+        }
+    }
+
+    // ------------------------------------------------------------------ Codex: malformed envelopes
+    /// Envelopes and payloads of the wrong shape, each on a chat of its own where it makes one.
+    static void CodexMalformed(Replay r)
+    {
+        double t = r.T0 - 100;
+        int n = 0;
+        JsonObject Env(string ev = "SessionStart") => CodexEnvelope(t += 0.01, CodexPayload(CodexSid(1000 + n++), ev));
+        void Take(JsonObject envelope) => r.Apply(envelope);
+
+        Take(Env().Also(o => o.Remove(Ipc.Payload)));
+        Take(Env().Also(o => o[Ipc.Payload] = new JsonArray(1, 2)));
+        Take(Env().Also(o => o[Ipc.Payload] = "SessionStart"));
+        Take(Env().Also(o => ((JsonObject)o[Ipc.Payload]).Remove("session_id")));
+        Take(Env().Also(o => o[Ipc.Payload]["session_id"] = ""));
+        Take(Env("Stop").Also(o => o[Ipc.Payload]["session_id"] = 99));
+        Take(Env().Also(o => o[Ipc.Payload]["session_id"] = null));
+        Take(Env().Also(o => o[Ipc.Payload]["hook_event_name"] = 12));
+        Take(Env().Also(o => ((JsonObject)o[Ipc.Payload]).Remove("hook_event_name")));
+        foreach (var turn in new JsonNode[] { "", 42, null, true })
+            Take(Env("UserPromptSubmit").Also(o => o[Ipc.Payload]["turn_id"] = turn?.DeepClone()));
+        Take(Env("PreToolUse").Also(o =>
+        {
+            var p = o[Ipc.Payload];
+            p["turn_id"] = V7(t - 60, 1);
+            p["tool_name"] = "shell";
+            p["tool_input"] = "ls";
+            p["tool_use_id"] = 5;
+        }));
+        Take(Env("PreToolUse").Also(o =>
+        {
+            var p = o[Ipc.Payload];
+            p["turn_id"] = V7(t - 60, 1);
+            p["tool_name"] = "shell";
+            p["tool_input"] = new JsonArray("ls");
+            p["tool_use_id"] = "";
+        }));
+        Take(Env("PreToolUse").Also(o => o[Ipc.Payload]["tool_name"] = 3));
+        Take(Env().Also(o => o.Remove(Ipc.At)));
+        Take(Env().Also(o => o[Ipc.At] = "soon"));
+        Take(Env().Also(o => o[Ipc.At] = null));
+        Take(Env().Also(o => o[Ipc.At] = -1.5));
+        foreach (var pid in new JsonNode[] { null, "4242", 42.9, -42.9, 1e20 })
+            Take(Env().Also(o => { if (pid == null) o.Remove(Ipc.Pid); else o[Ipc.Pid] = pid.DeepClone(); }));
+        Take(Env().Also(o => o[Ipc.V] = 2));
+        Take(Env().Also(o => o[Ipc.Kind] = "ping"));
+        Take(Env().Also(o => o[Ipc.Env] = Obj(("CLAUDE_CODE_ENTRYPOINT", "cli"))));
+        Take(Env("Stop\n"));
+        Take(Env("Stop "));
+        Take(Env("stop"));
+        Take(Env(new string('E', 59) + "😀x"));
+        Take(Env(new string('E', 100)));
+        Take(Env("SessionEnd"));
+        foreach (var sid in new[] { "abcdefghijk😀tail", "abcdefghijkl😀tail", "tab\there\u0007bell", "é", new string('s', 13), new string('s', 14) })
+            Take(Env().Also(o => o[Ipc.Payload]["session_id"] = sid));
+        Take(Env().Also(o => o[Ipc.Payload]["transcript_path"] = 5));
+        Take(Env().Also(o => o[Ipc.Payload]["agent_id"] = 7));
+    }
+
+    // ------------------------------------------------------------------ Codex: turn ids
+    /// Which turn came first: v7 ids by their text, ignoring case, until the current one's time is well past now; other
+    /// ids only by the last 16 seen, as written; the forms .NET's Guid parser takes, which Convert can then refuse.
+    static void CodexTurnIds(Replay r)
+    {
+        double b = r.T0 - 100;
+        string sid = null;
+        string Ev(string ev, string turn, double at, JsonObject extra = null) => r.Codex(sid, ev, turn, at, extra);
+
+        sid = CodexSid(1100);
+        string t1 = V7(b - 60, 0xabc), t2 = V7(b - 50, 0xabd), t3 = V7(b - 40, 0xabe);
+        Ev("UserPromptSubmit", t2, b);
+        Ev("PreToolUse", t1.ToUpperInvariant(), b + 1, Bash("ls", "c1"));
+        Ev("UserPromptSubmit", t3.ToUpperInvariant(), b + 2);
+        Ev("PreToolUse", t2, b + 3, Bash("ls", "c2"));
+        Ev("PreToolUse", t2.ToUpperInvariant(), b + 4, Bash("ls", "c3"));
+        Ev("Stop", t3, b + 5);
+        Ev("PreToolUse", t3.ToUpperInvariant(), b + 6, Bash("ls", "c4"));
+
+        sid = CodexSid(1101);
+        var ids = Enumerable.Range(0, 18).Select(i => $"turn-{i:D2}").ToArray();
+        for (int i = 0; i < ids.Length; i++) Ev("UserPromptSubmit", ids[i], b + 10 + i);
+        Ev("PreToolUse", ids[1], b + 30, Bash("ls", "c5"));
+        Ev("PreToolUse", ids[0], b + 31, Bash("ls", "c6"));
+        Ev("PreToolUse", ids[17], b + 32, Bash("ls", "c7"));
+        Ev("PreToolUse", "TURN-02", b + 33, Bash("ls", "c8"));
+        Ev("PreToolUse", "TURN-02", b + 34, Bash("ls", "c8"));
+
+        sid = CodexSid(1102);
+        Ev("UserPromptSubmit", V7(b - 30, 5), b + 40);
+        Ev("UserPromptSubmit", "3f2504e0-4f89-41d3-9a0c-0305e82c3301", b + 41);
+        Ev("UserPromptSubmit", V7(b - 60, 6), b + 42);
+        Ev("UserPromptSubmit", V7(b - 61, 7), b + 43);
+        Ev("UserPromptSubmit", "{" + V7(b - 20, 8) + "}", b + 44);
+        Ev("UserPromptSubmit", V7(b - 70, 9), b + 45);
+        Ev("UserPromptSubmit", V7(b - 19, 10)[..35] + "g", b + 46);
+        Ev("UserPromptSubmit", V7(b - 90, 11), b + 47);
+        Ev("UserPromptSubmit", V7(b - 18, 12)[..35] + "é", b + 48);
+        Ev("UserPromptSubmit", V7(b - 95, 13), b + 49);
+        Ev("UserPromptSubmit", V7(b - 17, 14).Replace('-', '_'), b + 50);
+
+        // two of the same millisecond: their other bits decide
+        sid = CodexSid(1103);
+        Ev("UserPromptSubmit", V7(b - 10, 0x300), b + 60);
+        Ev("UserPromptSubmit", V7(b - 10, 0x200), b + 61);
+        Ev("UserPromptSubmit", V7(b - 10, 0x400), b + 62);
+
+        // .NET's Guid parser takes a + and a 0x at a group's start: Convert reads the first group so, and throws on
+        // the second
+        sid = CodexSid(1104);
+        Ev("UserPromptSubmit", "+0x19a2b-3c4d-7e6f-8000-000000000001", b + 70);
+        Ev("UserPromptSubmit", V7(b - 10, 1), b + 71);
+        Ev("UserPromptSubmit", "0X19a2b3-4d5e-7f60-8000-000000000001", b + 72);
+        Ev("UserPromptSubmit", V7(b - 9, 2), b + 73);
+        sid = CodexSid(1105);
+        string second = "019a2b3c-0x4d-7e6f-8000-000000000001";
+        Ev("UserPromptSubmit", second, b + 80);
+        Ev("PreToolUse", second, b + 81, Bash("ls", "c9"));
+        Ev("UserPromptSubmit", "3f2504e0-4f89-41d3-9a0c-0305e82c3301", b + 82);
+        Ev("UserPromptSubmit", second, b + 83);
+        sid = CodexSid(1106);
+        Ev("UserPromptSubmit", second, b + 90);
+        Ev("UserPromptSubmit", V7(b - 10, 3), b + 91);
+        Ev("PreToolUse", V7(b - 10, 3), b + 92, Bash("ls", "c10"));
+        Ev("PreToolUse", second, b + 93, Bash("ls", "c11"));
+        Ev("Stop", second, b + 94);
+        Ev("UserPromptSubmit", "019A2B3C-+4D5-7E6F-8000-000000000001", b + 95);
+        Ev("UserPromptSubmit", V7(b - 8, 4), b + 96);
+        // a new thread's first turn has nothing to be compared with
+        Ev("PreToolUse", V7(b - 8, 5), b + 97, SubAgent("019a0000-0000-7000-8000-00000000c3c3", Bash("ls", "c12")));
+    }
+
+    // ------------------------------------------------------------------ Codex: tool calls
+    /// The last 64 calls of a turn; calls by id, and without; a request waiting 5 s for its call's PreToolUse; the
+    /// asking call's PostToolUse ending a rerun's wait; whole inputs as what a call runs; a sub-agent's calls.
+    static void CodexCalls(Replay r)
+    {
+        string sid = CodexSid(1200);
+        double b = r.T0 - 100;
+        string turn = V7(b - 60, 1);
+        string Ev(string ev, double at, JsonObject extra = null) => r.Codex(sid, ev, turn, at, extra);
+        JsonObject Web(string input, string id = null) => Tool("web_search", input).Also(o => { if (id != null) o["tool_use_id"] = id; });
+
+        Ev("UserPromptSubmit", b);
+        for (int i = 0; i <= 64; i++) Ev("PreToolUse", b + 1 + i * 0.01, Bash($"cmd {i}", $"call_{i:D2}"));
+        Ev("PostToolUse", b + 2, Bash("cmd 0", "call_00"));
+        Ev("PreToolUse", b + 2.1, Bash("cmd 0", "call_00"));
+        Ev("PostToolUse", b + 2.2, Bash("cmd 1", "call_01"));
+        Ev("PreToolUse", b + 2.3, Bash("cmd 1", "call_01"));
+        Ev("PermissionRequest", b + 2.4, Bash("cmd 2", "call_02"));
+        Ev("PreToolUse", b + 2.5, Bash("cmd 2", "call_02"));
+        // without ids
+        Ev("PreToolUse", b + 3, Bash("make"));
+        Ev("PermissionRequest", b + 3.1, Bash("make"));
+        Ev("PostToolUse", b + 3.2, Bash("make"));
+        Ev("PreToolUse", b + 3.3, Bash("make"));
+        Ev("PreToolUse", b + 3.4, Bash("make"));
+        // a request waits for its PreToolUse 5 s, and no more
+        Ev("PermissionRequest", b + 10, Bash("deploy"));
+        Ev("PreToolUse", b + 15, Bash("deploy", "call_d1"));
+        Ev("PermissionRequest", b + 20, Bash("deploy 2"));
+        Ev("PreToolUse", b + 25.001, Bash("deploy 2", "call_d2"));
+        Ev("PreToolUse", b + 24, Bash("deploy 3", "call_d3"));
+        Ev("PermissionRequest", b + 29, Bash("deploy 3"));
+        Ev("PreToolUse", b + 30, Bash("deploy 4", "call_d4"));
+        Ev("PermissionRequest", b + 35.001, Bash("deploy 4"));
+        // the asking call's PostToolUse ends the rerun's wait; a PostToolUse without its id takes the wait instead
+        Ev("PreToolUse", b + 40, Bash("npm test", "call_n1"));
+        Ev("PermissionRequest", b + 40.5, Bash("npm test"));
+        Ev("PostToolUse", b + 41, Bash("npm test", "call_n1"));
+        Ev("PreToolUse", b + 42, Bash("npm test", "call_n2"));
+        Ev("PreToolUse", b + 50, Bash("npm run", "call_r1"));
+        Ev("PermissionRequest", b + 50.5, Bash("npm run"));
+        Ev("PostToolUse", b + 51, Bash("npm run"));
+        Ev("PreToolUse", b + 52, Bash("npm run", "call_r2"));
+        // a request goes with the latest PreToolUse of its call, whichever is closer
+        Ev("PreToolUse", b + 60, Bash("cargo test", "call_c1"));
+        Ev("PreToolUse", b + 63, Bash("cargo test", "call_c2"));
+        Ev("PermissionRequest", b + 60.5, Bash("cargo test"));
+        Ev("PostToolUse", b + 64, Bash("cargo test", "call_c1"));
+        Ev("PreToolUse", b + 64.5, Bash("cargo test", "call_c1"));
+        Ev("PreToolUse", b + 64.6, Bash("cargo test", "call_c2"));
+        // whole inputs, as System.Text.Json writes them
+        Ev("PreToolUse", b + 70, Web("{\"query\":\"a\",\"n\":1.50}", "ws1"));
+        Ev("PermissionRequest", b + 70.5, Web("{\"query\":\"a\",\"n\":1.5}"));
+        Ev("PermissionRequest", b + 70.6, Web("{\"query\":\"a\",\"n\":1.50}"));
+        Ev("PreToolUse", b + 71, Web("{\"n\":1.50,\"query\":\"a\"}", "ws2"));
+        Ev("PreToolUse", b + 71.1, Web("{\"query\":\"a\",\"n\":1.50}", "ws1"));
+        Ev("PreToolUse", b + 72, Tool("apply_patch", J(new { command = "*** Update File: a.rs" })).Also(o => o["tool_use_id"] = "p1"));
+        Ev("PermissionRequest", b + 72.5, Tool("apply_patch", J(new { command = "*** Update File: a.rs", justification = "edit" })));
+        Ev("PreToolUse", b + 73, Tool("apply_patch", J(new { command = "*** Update File: a.rs" })).Also(o => o["tool_use_id"] = "p1"));
+        // two calls of one command whose hooks started in the same millisecond: a request goes with the later
+        Ev("PreToolUse", b + 74, Bash("tie", "call_t1"));
+        Ev("PreToolUse", b + 74, Bash("tie", "call_t2"));
+        Ev("PermissionRequest", b + 74.5, Bash("tie"));
+        Ev("PreToolUse", b + 74.6, Bash("tie", "call_t1"));
+        Ev("PreToolUse", b + 74.7, Bash("tie", "call_t2"));
+        // a sub-agent's calls, in its own thread: taken or not by at
+        string agent = "019a0000-0000-7000-8000-00000000b2b2", sub = V7(b - 30, 9);
+        r.Codex(sid, "PreToolUse", sub, b + 80, SubAgent(agent, Bash("ls", "s1")));
+        r.Codex(sid, "PermissionRequest", sub, b + 79.5, SubAgent(agent, Bash("ls")));
+        r.Codex(sid, "PreToolUse", sub, b + 81, SubAgent(agent, Bash("rm x", "s2")));
+        r.Codex(sid, "PermissionRequest", sub, b + 80.5, SubAgent(agent, Bash("rm x")));
+        r.Codex(sid, "PostToolUse", sub, b + 82, SubAgent(agent, Bash("rm x", "s2")));
+        r.Codex(sid, "PreToolUse", sub, b + 83, SubAgent(agent, Bash("rm x", "s2")));
+        Ev("Stop", b + 90);
+        // the last 64 calls: the chat's latest call, 63 calls (stale by at, recorded all the same) and its request,
+        // which goes with it; then 64 calls after it, and the request finds none and goes by at
+        foreach (var (n, later) in new[] { (2, 63), (3, 64) })
+        {
+            string next = V7(b - 60 + n, n);
+            // before now, which a time more than 5 s past would say the clock was set back since (the turn's start is
+            // taken whatever its time)
+            double s = b - 400 + 100 * n;
+            r.Codex(sid, "UserPromptSubmit", next, s);
+            r.Codex(sid, "PreToolUse", next, s + 50, Bash("asks " + n, "call_a" + n));
+            for (int i = 0; i < later; i++) r.Codex(sid, "PreToolUse", next, s + 1 + i * 0.01, Bash($"cmd {n} {i}", $"call_{n}_{i:D2}"));
+            r.Codex(sid, "PermissionRequest", next, s + 49.5, Bash("asks " + n));
+        }
+    }
+
+    // ------------------------------------------------------------------ Codex: a clock set back
+    /// Times and turn ids from while the clock was an hour ahead order nothing after it was set right; a tombstone from
+    /// then doesn't hold either.
+    static void CodexClock(Replay r)
+    {
+        string sid = CodexSid(1300);
+        double t0 = r.T0;
+        string ahead = V7(t0 + 3600, 1), now1 = V7(t0 - 50, 2), now2 = V7(t0 - 40, 3), now3 = V7(t0 - 10, 4);
+        r.Codex(sid, "SessionStart", null, t0 + 3600);
+        r.Codex(sid, "UserPromptSubmit", ahead, t0 + 3600.5, Obj(("prompt", "ahead")));
+        r.Codex(sid, "PreToolUse", ahead, t0 + 3601, Bash("ls", "c1"));
+        r.Codex(sid, "SessionStart", null, t0 - 60);
+        r.Codex(sid, "UserPromptSubmit", now1, t0 - 50, Obj(("prompt", "set right")));
+        r.Codex(sid, "PreToolUse", ahead, t0 + 3602, Bash("ls", "c2"));
+        r.Codex(sid, "PreToolUse", now1, t0 - 49, Bash("ls", "c3"));
+        r.Codex(sid, "UserPromptSubmit", now2, t0 - 40);
+        r.Codex(sid, "PreToolUse", now1, t0 - 39, Bash("ls", "c4"));
+        r.Codex(sid, "SessionEnd", null, t0 + 7200);
+        r.Codex(sid, "Stop", now2, t0 - 30);
+        r.Codex(sid, "SessionEnd", null, t0 - 20);
+        r.Codex(sid, "PreToolUse", now2, t0 - 25, Bash("ls", "c5"));
+        r.Codex(sid, "UserPromptSubmit", now3, t0 - 10);
+        r.Codex(sid, "Stop", null, t0 - 11);
+    }
+
+    // ------------------------------------------------------------------ Codex: SessionEnd and pruning
+    /// A tombstone holds off what started before the end, whatever its turn; a chat taken up again starts from its
+    /// event's turn; chats and tombstones not heard of for a day go.
+    static void CodexEnd(Replay r)
+    {
+        double t0 = r.T0;
+        string a = CodexSid(1400), b = CodexSid(1401), c = CodexSid(1402), d = CodexSid(1403);
+        string turn = V7(t0 - 200, 1), turn2 = V7(t0 - 100, 2);
+        r.Codex(a, "SessionStart", null, t0 - 90000);
+        r.Codex(b, "SessionEnd", null, t0 - 150);
+        r.Codex(c, "UserPromptSubmit", turn, t0 - 150, Obj(("prompt", "one")));
+        r.Codex(c, "SessionEnd", null, t0 - 140);
+        r.Codex(c, "PreToolUse", turn, t0 - 145, Bash("ls", "c1"));
+        r.Codex(c, "Stop", turn, t0 - 130);
+        r.Codex(c, "UserPromptSubmit", turn, t0 - 129, Obj(("prompt", "late")));
+        r.Codex(c, "PreToolUse", turn, t0 - 128, Bash("ls", "c2"));
+        r.Codex(c, "UserPromptSubmit", turn2, t0 - 120, Obj(("prompt", "two")));
+        r.Codex(b, "UserPromptSubmit", turn, t0 - 160);
+        r.Codex(b, "UserPromptSubmit", turn, t0 - 110);
+        r.Codex(d, "SessionStart", null, t0 - 100);
+        r.Codex(d, "Stop", null, t0 - 86400 - 200);
+        r.Codex(a, "SessionEnd", null, t0 - 90000);
+        r.Codex(d, "SomethingNew", null, t0 - 90);
+        r.Codex(d, "PreToolUse", null, t0 - 80, Bash("ls"));
+    }
+
+    // ------------------------------------------------------------------ Codex: random chats
+    /// One to three Codex chats at once, as their hooks would deliver them.
+    static void RandomCodexChats(Replay r, int seed)
+    {
+        var rng = new Random(seed);
+        var steps = new List<(double Arrive, int Seq, Action Take)>();
+        void Add(double arrive, Action take) => steps.Add((arrive, steps.Count, take));
+        // session_index.jsonl's lines, in the order Codex appends them
+        var index = new List<string>();
+        int chats = 1 + rng.Next(3);
+        for (int c = 0; c < chats; c++) RandomCodexChat(r, rng, index, Add);
+        foreach (var s in steps.OrderBy(s => s.Arrive).ThenBy(s => s.Seq)) s.Take();
+    }
+
+    static void RandomCodexChat(Replay r, Random rng, List<string> index, Action<double, Action> add)
+    {
+        string sid = new Guid(Enumerable.Range(0, 16).Select(_ => (byte)rng.Next(256)).ToArray()).ToString();
+        // on Windows Codex starts each hook through PowerShell, 1-4 s late, and has no PostToolUse hook
+        bool windows = rng.Next(2) == 0;
+        // well before now, so nothing is near the 5 s by which a time past now tells a clock set back; a chat whose
+        // first turns came while the clock was an hour ahead has them, and their turn ids, 3600 s later
+        double start = r.T0 - 400 + rng.NextDouble() * 100, t = start;
+        double setBack = rng.Next(8) == 0 ? start + 5 + rng.NextDouble() * 20 : double.NegativeInfinity;
+        string file = $"rollout-2026-09-29T10-00-00-{sid}.jsonl";
+        string transcript = rng.Next(5) > 0 ? Files + "/" + file : null;
+        string cwd = Pick(rng, @"\\?\C:\src\app", "/home/u/src/api", @"C:\tmp\scratch");
+        int call = 0;
+
+        void Emit(string ev, string turn, double when, JsonObject extra = null)
+        {
+            // the hook starts late, and `at` has ms precision
+            double delay = windows ? 1 + rng.NextDouble() * 3 : rng.NextDouble() * 0.02;
+            double at = Math.Floor((when + delay) * 1000) / 1000;
+            if (when < setBack) at += 3600;
+            // most hooks take tens of ms to deliver; a slow one, seconds
+            double late = rng.Next(7) == 0 ? 0.2 + rng.NextDouble() * 3 : rng.NextDouble() * 0.08;
+            var p = CodexPayload(sid, ev, turn, extra);
+            if (transcript != null && !p.ContainsKey("transcript_path")) p["transcript_path"] = transcript;
+            p["cwd"] = cwd;
+            var envelope = CodexEnvelope(at, p, 1000 + rng.Next(60000));
+            envelope[Ipc.Sent] = Math.Floor((at + late) * 1000) / 1000;
+            add(when + delay + late, () => r.Apply(envelope));
+            // delivered twice
+            if (rng.Next(25) == 0)
+            {
+                var again = (JsonObject)envelope.DeepClone();
+                add(when + delay + late + rng.NextDouble() * 2, () => r.Apply(again));
+            }
+        }
+        string Turn(double when) => V7(when < setBack ? when + 3600 : when, rng.Next(0x1000));
+
+        if (transcript != null)
+        {
+            var originator = Pick(rng, "Codex Desktop", "codex-tui", "codex_exec", "codex_vscode", "");
+            // Codex writes the transcript's first line as the chat starts; now and then a hook is quicker
+            add(t + (rng.Next(4) == 0 ? 3 : -1), () => r.Write(file, Part.T(MetaLine(originator) + "{\"type\":\"response_item\"}\n")));
+        }
+        if (rng.Next(3) > 0) Emit("SessionStart", null, t, Obj(("source", "startup")));
+        int turns = 1 + rng.Next(3);
+        for (int k = 0; k < turns; k++)
+        {
+            t += 0.5 + rng.NextDouble() * 4;
+            string turn = Turn(t);
+            Emit("UserPromptSubmit", turn, t, Obj(("prompt", Pick(rng, "fix the build", "/review", "", "explain\nthis", "Rename the helpers"))));
+            int calls = rng.Next(5);
+            for (int j = 0; j < calls; j++)
+            {
+                t += 0.05 + rng.NextDouble() * 2;
+                var (tool, input) = rng.Next(7) switch
+                {
+                    0 or 1 or 2 => ("shell", Obj(("command", Pick(rng, "ls", "npm test", "cargo build", "git status", "rm -rf build")))),
+                    3 => ("apply_patch", Obj(("command", "*** Begin Patch\n*** Update File: src/" + Pick(rng, "a.rs", "b.rs") + "\n*** End Patch"))),
+                    4 => ("web_search", Obj(("query", Pick(rng, "rust hooks", "codex")))),
+                    5 => ("view_image", Obj(("path", "/tmp/shot.png"))),
+                    _ => ("mcp__atlassian__search", Obj(("query", "PROJ-" + rng.Next(3)))),
+                };
+                string id = $"call_{call++:D3}";
+                JsonObject Call(bool withId = true, string description = null)
+                {
+                    var i = (JsonObject)input.DeepClone();
+                    if (description != null) i["description"] = description;
+                    var o = Obj(("tool_name", tool), ("tool_input", i));
+                    if (withId) o["tool_use_id"] = id;
+                    return o;
+                }
+                Emit("PreToolUse", turn, t, Call());
+                switch (tool == "shell" ? rng.Next(4) : 3)
+                {
+                    case 0:
+                        // it asks: the request's hook starts about when its PreToolUse's does
+                        Emit("PermissionRequest", turn, t + rng.NextDouble() * 0.2, Call(false, "run it"));
+                        t += 1 + rng.NextDouble() * 6;
+                        break;
+                    case 1:
+                        // it failed in the sandbox: Codex asks to run it again with approval, a second or two apart
+                        t += 5 + rng.NextDouble() * 20;
+                        Emit("PermissionRequest", turn, t, Call(false, "rerun with approval"));
+                        id = $"call_{call++:D3}";
+                        t += 1 + rng.NextDouble() * 1.5;
+                        Emit("PreToolUse", turn, t, Call());
+                        break;
+                }
+                t += 0.05 + rng.NextDouble() * 3;
+                if (!windows) Emit("PostToolUse", turn, t, Call());
+            }
+            if (rng.Next(4) == 0)
+            {
+                // a sub-agent, in a thread of its own, while the chat waits or goes on
+                string agent = V7(t, rng.Next(0x1000));
+                Emit("SubagentStart", turn, t += 0.1, Obj(("agent_type", Pick<JsonNode>(rng, "explorer", "default", null))));
+                double s = t + 0.05;
+                string subTurn = Turn(s);
+                Emit("UserPromptSubmit", subTurn, s, SubAgent(agent, Obj(("prompt", "look around"))));
+                for (int j = 1 + rng.Next(3); j > 0; j--)
+                {
+                    var o = Obj(("tool_name", "shell"), ("tool_input", Obj(("command", Pick(rng, "ls", "rg TODO")))), ("tool_use_id", $"sub_{call++:D3}"));
+                    Emit("PreToolUse", subTurn, s += 0.1 + rng.NextDouble(), SubAgent(agent, o));
+                    if (!windows) Emit("PostToolUse", subTurn, s += 0.1 + rng.NextDouble(), SubAgent(agent, (JsonObject)o.DeepClone()));
+                }
+                Emit("SubagentStop", subTurn, s += 0.2, SubAgent(agent));
+                t = rng.Next(2) == 0 ? s + 0.1 : t + 0.5;
+            }
+            if (rng.Next(8) == 0)
+            {
+                Emit("PreCompact", turn, t += 0.2, Obj(("trigger", "auto")));
+                Emit("PostCompact", turn, t += 2, Obj(("trigger", "auto")));
+            }
+            if (rng.Next(6) == 0)
+            {
+                // another thread under the session (Codex's own helper naming the chat), with a transcript of its own
+                string other = Files + $"/rollout-2026-09-29T10-00-01-helper{rng.Next(1000)}.jsonl", otherTurn = Turn(t + 0.1);
+                Emit("UserPromptSubmit", otherTurn, t + 0.1, Obj(("prompt", "name this chat"), ("transcript_path", other)));
+                Emit("Stop", otherTurn, t + 0.8, Obj(("transcript_path", other)));
+            }
+            t += 0.1 + rng.NextDouble();
+            Emit(rng.Next(8) == 0 ? "Interrupt" : "Stop", turn, t);
+            // Codex names the chat after its first turn, and renames it now and then
+            if (k == 0 && rng.Next(2) == 0 || rng.Next(6) == 0)
+            {
+                var name = Pick(rng, "Fix the build", "Explain the sessions", "", "a very long chat name that goes past the forty four characters");
+                add(t + 0.5 + rng.NextDouble() * 5, () =>
+                {
+                    index.Add(IndexLine(sid, name));
+                    r.Write("session_index.jsonl", Part.T(string.Concat(index)));
+                });
+            }
+            t += 3;
+        }
+        if (rng.Next(6) == 0)
+        {
+            // /compact: a turn of its own, with no Stop
+            string turn = Turn(t += 1);
+            Emit("PreCompact", turn, t, Obj(("trigger", "manual")));
+            Emit("PostCompact", turn, t += 3, Obj(("trigger", "manual")));
+        }
+        if (rng.Next(4) == 0)
+        {
+            Emit("SessionEnd", null, t += 1, Obj(("reason", "exit")));
+            if (rng.Next(3) == 0)
+            {
+                Emit("SessionStart", null, t += 5, Obj(("source", "resume")));
+                string turn = Turn(t += 1);
+                Emit("UserPromptSubmit", turn, t, Obj(("prompt", "and again")));
+                Emit("Stop", turn, t += 2);
+            }
+        }
+    }
+
 
     static T Also<T>(this T value, Action<T> change)
     {

@@ -4,11 +4,13 @@
 //! The chats as their hooks report them, kept by the running pet alone: every hook run forwards its event (see
 //! [`crate::server`]) and [`AgentSessions::apply`] places it. Events run in the background and can finish out of
 //! order, so each is placed by when the agent started it: Claude's by `at`, and a call's PreToolUse and
-//! PermissionRequest by each other (`claude`). A chat's `ts` only moves when what it shows changes.
+//! PermissionRequest by each other (`claude`); Codex's by its own turn and tool ids first (`codex`, `turns`). A
+//! chat's `ts` only moves when what it shows changes.
 //!
 //! Thread-safe: the hook server applies events from its handler threads and the Board takes a
-//! [`snapshot`](AgentSessions::snapshot) on the UI thread. Files (chat titles) are read on the caller's thread before
-//! the lock is taken, and only when the event will use them, which a copy of the chat's entry decides.
+//! [`snapshot`](AgentSessions::snapshot) on the UI thread. Files (chat titles, Codex's transcripts and session index)
+//! are read on the caller's thread before the lock is taken, and only when the event will use them, which a copy of
+//! the chat's entry decides.
 
 mod claude;
 mod codex;
@@ -16,7 +18,9 @@ mod describe;
 mod titles;
 mod turns;
 
+use std::collections::HashMap;
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use aipet_ipc::protocol;
@@ -88,26 +92,50 @@ pub struct Entry {
     pub turn_ended: bool,
     /// Claude: its latest PreToolUses and PermissionRequests, to pair a call's two. Only `apply` uses it.
     asks: Vec<claude::Ask>,
+    /// Codex: how far each of the chat's threads has come, by thread (`codex::order`). Only `apply` uses it.
+    threads: HashMap<String, turns::Turns>,
 }
 
 /// What [`AgentSessions::apply`] made of one event.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Applied {
-    /// The chat's state, `removed` after SessionEnd, `ignored` or `stale`: the hook's answer.
+    /// The chat's state, `removed` after SessionEnd, `ignored` or `stale`: the hook's answer. Or
+    /// `error:FormatException` for an event the C#'s Apply throws on (a Codex turn id that its Guid parser takes but
+    /// its hex reader doesn't), which its hook server refuses.
     pub outcome: &'static str,
     /// The line for hook-events.log, which never holds prompt text.
     pub log: String,
+}
+
+/// What the C#'s Apply throws on an event, as its hook server reports it: `error:<exception type>`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Thrown(&'static str);
+
+impl Thrown {
+    const FORMAT: Thrown = Thrown("error:FormatException");
 }
 
 /// The agent chats, in the order they first appeared: the Board breaks exact ties by it.
 #[derive(Default)]
 pub struct AgentSessions {
     chats: Mutex<Chats>,
+    /// Where Codex's session index is read: `$CODEX_HOME` (read each time, as the C#'s `Paths.CodexHome` is), unless
+    /// the store was given a folder of its own.
+    codex_home: Option<PathBuf>,
 }
 
 impl AgentSessions {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A store that reads Codex's chat names from `<codex_home>/session_index.jsonl` rather than `$CODEX_HOME`'s: for
+    /// tests, which keep off the user's data.
+    pub fn with_codex_home(codex_home: impl Into<PathBuf>) -> Self {
+        Self {
+            codex_home: Some(codex_home.into()),
+            ..Self::default()
+        }
     }
 
     /// Copies of the chats' entries, in the order the chats first appeared.
@@ -156,7 +184,63 @@ impl AgentSessions {
                     log: format!("claude {pid} {} {} where={place} -> {outcome}", clean(ev), sid13(sid)),
                 }
             }
-            // Codex's events aren't placed yet: their ordering is ported on its own
+            Some("codex") => {
+                // an older hook's "packaged" and "parent" (which process ran it) are ignored
+                let sid = str_of(Some(p), "session_id");
+                let (mut outcome, mut place) = ("ignored", None);
+                if let Some(sid) = sid.filter(|s| !s.is_empty()) {
+                    let key = format!("codex:{sid}");
+                    // read before the lock, and only when the event will look at them
+                    let (mut originator, mut name) = (None, None);
+                    if codex::EVENTS.contains(&ev) {
+                        let e = self.peek(&key, now);
+                        if e.as_ref().is_none_or(|e| e.r#where.is_none()) {
+                            originator = codex::originator(str_of(Some(p), "transcript_path"));
+                        }
+                        if codex::names_chat(ev) || !e.is_some_and(|e| has_text(&e.chat_title)) {
+                            let home = self.codex_home.clone().unwrap_or_else(aipet_ipc::paths::codex_home);
+                            name = titles::thread_name(&home, sid);
+                        }
+                    }
+                    let event = codex::Event {
+                        key: &key,
+                        envelope,
+                        p,
+                        ev,
+                        at,
+                        originator: originator.as_deref(),
+                        name: name.as_deref(),
+                    };
+                    let mut chats = self.lock();
+                    outcome = match codex::apply(&mut chats, &event, now) {
+                        Ok(outcome) => outcome,
+                        // as the C#'s hook server reports an exception
+                        Err(Thrown(error)) => {
+                            return Applied {
+                                outcome: error,
+                                log: format!("event -> {error}"),
+                            };
+                        }
+                    };
+                    place = chats.get(&key).and_then(|s| s.r#where.clone());
+                }
+                // lag: from the hook's start to its sending the event (reading stdin, waiting for the pet)
+                let sent = num(fields, protocol::SENT);
+                let lag = if sent > 0.0 {
+                    format!("{}ms", whole((sent - at) * 1000.0))
+                } else {
+                    "?".into()
+                };
+                let place = clean(place.as_deref().unwrap_or("?"));
+                Applied {
+                    outcome,
+                    log: format!(
+                        "codex {pid} {} {} lag={lag} where={place} -> {outcome}",
+                        clean(ev),
+                        sid13(sid.unwrap_or(""))
+                    ),
+                }
+            }
             _ => Applied {
                 outcome: "ignored",
                 log: format!("{} {pid} {} -> ignored", clean(agent.unwrap_or("?")), clean(ev)),
@@ -294,6 +378,44 @@ fn num(o: &Map<String, Value>, key: &str) -> f64 {
 
 fn has_text(s: &Option<String>) -> bool {
     s.as_deref().is_some_and(|s| !s.is_empty())
+}
+
+/// A number as .NET writes it with the custom format "0" in the invariant culture: to 15 significant digits, then
+/// rounded half away from zero to a whole number, which keeps its sign even when it is 0 (-0.4 gives "-0").
+fn whole(x: f64) -> String {
+    if x.is_nan() {
+        return "NaN".into();
+    }
+    let sign = if x.is_sign_negative() { "-" } else { "" };
+    if x.is_infinite() {
+        return format!("{sign}Infinity");
+    }
+    // d.dddddddddddddde<exponent>: 15 digits, correctly rounded (ties to even), as .NET's own conversion gives them
+    let scientific = format!("{:.14e}", x.abs());
+    let (mantissa, exponent) = scientific.split_once('e').expect("a number in scientific notation");
+    let mut digits: Vec<u8> = mantissa.bytes().filter(u8::is_ascii_digit).collect();
+    let exponent: i64 = exponent.parse().expect("an exponent");
+    // how many of the digits come before the point: none under 1, which rounds to 1 from 0.5 up and else to 0
+    let n = usize::try_from(exponent + 1).ok();
+    let up = n.is_some_and(|n| digits.get(n).is_some_and(|&d| d >= b'5'));
+    digits.resize(n.unwrap_or(0), b'0');
+    if up {
+        // carry: 999.5 becomes 1000
+        match digits.iter().rposition(|&d| d != b'9') {
+            Some(i) => {
+                digits[i] += 1;
+                digits[i + 1..].fill(b'0');
+            }
+            None => {
+                digits.fill(b'0');
+                digits.insert(0, b'1');
+            }
+        }
+    }
+    if digits.is_empty() {
+        digits.push(b'0');
+    }
+    format!("{sign}{}", String::from_utf8(digits).expect("ASCII digits"))
 }
 
 /// A session id as the log shows it: its first 13 UTF-16 units, or `-` for none.

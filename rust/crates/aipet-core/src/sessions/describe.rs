@@ -1,5 +1,5 @@
 //! The bubble's text for an event: a tool call's (`Describe`, `AgentSessions.cs:752-786`), a sub-agent's (`Helper`)
-//! and text cut to fit (`Short`, `:792-798`).
+//! and text cut to fit (`Short`, `:792-798`); and the other ways the C# compares and cases text.
 //!
 //! The C# counts and cuts text in UTF-16 units. A character cut in half leaves a lone surrogate there, which a UTF-8
 //! writer turns into U+FFFD; here it is U+FFFD straight away.
@@ -81,6 +81,38 @@ fn upper_invariant(c: char) -> char {
     if u32::from(c) > 0xFFFF || c == 'ı' {
         return c;
     }
+    simple_upper(c)
+}
+
+/// `text.Contains(needle, StringComparison.OrdinalIgnoreCase)`: .NET's ordinal casing compares each character's simple
+/// upper-case mapping, surrogate pairs too, but keeps ı and ſ, whose upper cases are ASCII.
+pub(super) fn contains_ignoring_case(text: &str, needle: &str) -> bool {
+    let upper = |s: &str| -> Vec<char> {
+        s.chars()
+            .map(|c| if c == 'ı' || c == 'ſ' { c } else { simple_upper(c) })
+            .collect()
+    };
+    let (text, needle) = (upper(text), upper(needle));
+    needle.is_empty() || text.windows(needle.len()).any(|w| w == needle)
+}
+
+/// .NET's `ToLowerInvariant`: each character's simple lower-case mapping, surrogate pairs too, but İ, whose lower
+/// case is i, stays (its full mapping, i and a dot, is the only one of more than one character).
+pub(super) fn lower_invariant(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            let mut lower = c.to_lowercase();
+            match (lower.next(), lower.next()) {
+                (Some(l), None) => l,
+                _ => c,
+            }
+        })
+        .collect()
+}
+
+/// A character's simple upper-case mapping (UnicodeData.txt), which `char::to_uppercase` gives where it is a single
+/// character.
+fn simple_upper(c: char) -> char {
     let mut upper = c.to_uppercase();
     match (upper.next(), upper.next()) {
         (Some(u), None) => u,
@@ -118,7 +150,7 @@ pub(super) fn utf16_prefix(s: &str, n: usize) -> Cow<'_, str> {
 }
 
 /// The file's name, as `Path.GetFileName` finds it past any trailing separators, or "a file".
-fn base_name(path: Option<&str>) -> Cow<'_, str> {
+pub(super) fn base_name(path: Option<&str>) -> Cow<'_, str> {
     let path = path.unwrap_or("").trim_end_matches(['/', '\\']);
     match file_name(path) {
         "" => "a file".into(),
