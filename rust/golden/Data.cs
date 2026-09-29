@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -15,13 +16,16 @@ namespace AiPet.Golden;
 ///              files.json          config.json, jira.json and github.json: each fixture file read by the app, with
 ///                                  its read status and the text the app writes back after reading it
 ///              secrets.json        the dictionary calls Linux's SecretTool makes on its fallback secrets.json
-///              hook_cleanup.json   HookCleanup.Names and HookCleanup.Agents
+///              hook_cleanup.json   HookCleanup.Names and HookCleanup.Agents, and what Names makes of each character
 ///              update_status.json  UpdateStatus' texts
+///              log.json            each culture's time separator, which Log.Write's lines carry
 ///   data read config|jira|github|secrets FILE...
 ///            the app reading files the Rust wrote: one JSON line per file, {"status", "written"}, where written is
 ///            what the app writes after reading it (so it holds every value the app read)
 ///   data secret write TARGET USER SECRET | read TARGET | delete TARGET
 ///            the app's Credential Manager code (Windows), on targets named AiPet:GoldenTest:… only
+///   data log
+///            a line Log.Write writes in this process's culture, printed
 ///
 /// A read's status is "loaded", "missing" (no file) or "corrupt" (the app couldn't read it, and kept its defaults).
 /// config.json's Config and the Credential Manager store are private to the app (src/AiPet.UI), which this project
@@ -116,6 +120,7 @@ static class DataMode
             [] => Generate(repo, data),
             ["read", "config" or "jira" or "github" or "secrets", _, ..] => ReadFiles(args[1], args[2..]),
             ["secret", _, _, ..] => Secret(args[1..]),
+            ["log"] => LogLine(),
             _ => Program.Usage(),
         };
     }
@@ -179,7 +184,7 @@ static class DataMode
             }).ToList(),
         });
         Save(dir, "secrets.json", SecretsCases());
-        Save(dir, "hook_cleanup.json", new { names = NamesCases(), agents = AgentsCases(data) });
+        Save(dir, "hook_cleanup.json", new { names = NamesCases(), agents = AgentsCases(data), chars = CharCases() });
         Save(dir, "update_status.json", new
         {
             repo = UpdateStatus.Repo,
@@ -192,6 +197,25 @@ static class DataMode
                      let s = new UpdateStatus(kind, version, 42, error)
                      select new { kind = kind.ToString(), version, percent = 42, error, text = s.Text, busy = s.Busy }).ToList(),
         });
+        Save(dir, "log.json", new
+        {
+            // Log.Write's HH:mm:ss.fff puts the culture's time separator between the hours, minutes and seconds. On
+            // Linux the culture's data is ICU's, which these are: each culture as its name gives it, without the
+            // user's overrides (which only Windows has).
+            time_separators = CultureInfo.GetCultures(CultureTypes.AllCultures)
+                .GroupBy(c => new CultureInfo(c.Name, useUserOverride: false).DateTimeFormat.TimeSeparator, c => c.Name)
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => new { separator = g.Key, cultures = g.Order(StringComparer.Ordinal).ToList() })
+                .ToList(),
+        });
+        return 0;
+    }
+
+    /// Log.Write's line in this process's culture: one written to the temp data folder's log, and printed.
+    static int LogLine()
+    {
+        Log.Write("golden");
+        Console.Write(File.ReadAllText(Paths.Log));
         return 0;
     }
 
@@ -484,10 +508,71 @@ static class DataMode
             ("C:\\\\\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe", hooks, true),
             ("C:/USERS/ÅSE/AppData/Local/AiPetApp/current/aipet-hook.exe", [nordic], true),
             ("C:/USERS/ÅSE/AppData/Local/AiPetApp/current/aipet-hook.exe", [nordic], false),
+            // OrdinalIgnoreCase keeps dotless ı and long ſ apart from I and S, and matches the cases of a letter past
+            // the BMP (Deseret) and of one whose full upper case is two letters (ᾳ, ΑΙ)
+            ("C:/Users/IDA/AiPet/aipet-hook.exe", [@"C:\Users\ıda\AiPet\aipet-hook.exe"], true),
+            ("C:/Users/ıda/AiPet/aipet-hook.exe", [@"C:\Users\Ida\AiPet\aipet-hook.exe"], true),
+            ("C:/Users/SAM/AiPet/aipet-hook.exe", [@"C:\Users\ſam\AiPet\aipet-hook.exe"], true),
+            ("C:/Users/𐐀𐐁/AiPet/aipet-hook.exe", [@"C:\Users\𐐨𐐩\AiPet\aipet-hook.exe"], true),
+            ("C:/Users/𐐨𐐩/AiPet/aipet-hook.exe", [@"C:\Users\𐐀𐐁\AiPet\aipet-hook.exe"], false),
+            ("C:/Users/ᾼ/AiPet/aipet-hook.exe", [@"C:\Users\ᾳ\AiPet\aipet-hook.exe"], true),
+            // a letter or a decimal digit continues a name; other numbers, marks and symbols don't
+            ("C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe²", hooks, true),
+            ("C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exeⅫ", hooks, true),
+            ("C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\u0345", hooks, true),
+            ("C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exeⒶ", hooks, true),
+            ("C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe٣", hooks, true),
+            ("C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exeª", hooks, true),
             (unix + " --agent codex", [unix], false),
             (unix, ["", null, unix], false),
         };
         return cases.Select(c => new { text = c.Text, hooks = c.Hooks, ignore_case = c.IgnoreCase, names = HookCleanup.Names(c.Text, c.Hooks, c.IgnoreCase) }).ToList();
+    }
+
+    /// What Names makes of every character, which the Rust checks its own against: OrdinalIgnoreCase's upper case of
+    /// each code point that has another ("hex hex"), and the UTF-16 units that char.IsLetterOrDigit takes for more of a
+    /// file name ("first..last").
+    static object CharCases()
+    {
+        var upper = new List<string>();
+        for (int c = 0; c <= 0x10FFFF; c++)
+            if (!IsSurrogate(c) && OrdinalUpper(c) is var u && u != c)
+                upper.Add($"{c:X4} {u:X4}");
+        return new
+        {
+            upper,
+            letter_or_digit = Ranges(0xFFFF, c => !IsSurrogate(c) && char.IsLetterOrDigit((char)c)),
+        };
+    }
+
+    static bool IsSurrogate(int c) => c is >= 0xD800 and <= 0xDFFF;
+
+    /// OrdinalIgnoreCase's upper case of a code point. Comparing ignoring case returns the difference of the first
+    /// upper cases that differ (OrdinalCasing), and U+0000 and U+10000 are their own upper case; the result is checked.
+    static int OrdinalUpper(int c)
+    {
+        string s = char.ConvertFromUtf32(c);
+        int upper = c < 0x10000
+            ? string.Compare(s, "\0", StringComparison.OrdinalIgnoreCase)
+            : string.Compare(s, "\U00010000", StringComparison.OrdinalIgnoreCase) + 0x10000;
+        if (upper is < 0 or > 0x10FFFF || IsSurrogate(upper) || upper < 0x10000 != c < 0x10000 ||
+            !string.Equals(s, char.ConvertFromUtf32(upper), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"can't tell OrdinalIgnoreCase's upper case of U+{c:X4} (got U+{upper:X4})");
+        return upper;
+    }
+
+    /// The runs of code points up to `last` in the set, as "first..last" in hex.
+    static List<string> Ranges(int last, Func<int, bool> has)
+    {
+        var ranges = new List<string>();
+        for (int c = 0; c <= last; c++)
+        {
+            if (!has(c)) continue;
+            int first = c;
+            while (c < last && has(c + 1)) c++;
+            ranges.Add($"{first:X4}..{c:X4}");
+        }
+        return ranges;
     }
 
     /// VelopackTests' HookCleanupTests: the configs the hook's own registration code writes, and the agents whose

@@ -3,12 +3,14 @@
 //! - files.json: config.json, jira.json and github.json read, then written back, byte for byte;
 //! - secrets.json: the fallback secrets.json read, written and deleted from;
 //! - hook_cleanup.json: which configs name the installed hook (VelopackTests' cases, and configs the hook's own
-//!   registration code wrote);
-//! - update_status.json: the texts Settings shows.
+//!   registration code wrote), and what the C# makes of each character (src/cleanup.rs's tests);
+//! - update_status.json: the texts Settings shows;
+//! - log.json: each culture's time separator, which the log's lines carry.
 //!
 //! When `AIPET_GOLDEN` names the golden generator's dll (CI sets it; see aipet-ipc's src/csharp.rs to run it
-//! locally), the C# also reads every file the Rust writes (the rollback path), and on Windows it writes a Credential
-//! Manager token the Rust reads, and reads one the Rust writes, under a test-only target.
+//! locally), the C# also reads every file the Rust writes (the rollback path), writes a log line in the same culture
+//! as the Rust, and on Windows it writes a Credential Manager token the Rust reads, and reads one the Rust writes,
+//! under a test-only target.
 //!
 //! When the C# changes: `dotnet run --project rust/golden -c Release -- data` from the repository root, then fix the
 //! port until this passes. Never edit the golden files by hand.
@@ -19,6 +21,7 @@ use std::process::Command;
 
 use aipet_core::cleanup::{self, AgentConfigs};
 use aipet_core::config::{Config, GitHubSettings, JiraSettings, LoadStatus};
+use aipet_core::log;
 use aipet_core::secrets::{FileSecrets, SecretStore};
 use aipet_core::update_status::{self, Kind, UpdateStatus};
 use serde_json::Value;
@@ -421,6 +424,41 @@ fn update_status_texts_are_the_apps() {
         assert_eq!(status.text(), case["text"].as_str().unwrap(), "{status:?}");
         assert_eq!(status.busy(), case["busy"].as_bool().unwrap(), "{status:?}");
     }
+}
+
+/// Each culture's time separator is the one .NET has on ICU (Linux).
+#[test]
+fn log_time_separators_are_the_apps() {
+    let golden = golden("log.json");
+    let mut checked = 0;
+    for group in golden["time_separators"].as_array().unwrap() {
+        let separator = group["separator"].as_str().unwrap();
+        for culture in group["cultures"].as_array().unwrap() {
+            let culture = culture.as_str().unwrap();
+            assert_eq!(log::culture_time_separator(culture), separator, "{culture:?}");
+            checked += 1;
+        }
+    }
+    assert!(checked > 500, "{checked} cultures");
+}
+
+/// The C#'s log line, written in this environment's culture, has the Rust's time separator: `HH:mm:ss.fff line`
+/// with the culture's separator for `:`.
+#[test]
+fn the_log_has_the_apps_time_separator() {
+    let Some(dll) = std::env::var_os("AIPET_GOLDEN") else {
+        eprintln!("skipped: AIPET_GOLDEN doesn't name the golden generator's dll (see this file's doc)");
+        return;
+    };
+    let out = Command::new("dotnet").arg(&dll).args(["data", "log"]).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let line = String::from_utf8(out.stdout).unwrap();
+    let time = line.strip_suffix(" golden\n").unwrap_or_else(|| panic!("{line:?}"));
+    let separator: String = time[2..].chars().take_while(|c| !c.is_ascii_digit()).collect();
+    assert_eq!(separator, log::time_separator(), "{line:?}");
+    let sep = log::time_separator();
+    let shape: String = time.chars().map(|c| if c.is_ascii_digit() { '0' } else { c }).collect();
+    assert_eq!(shape, format!("00{sep}00{sep}00.000"), "{line:?}");
 }
 
 /// A token in Credential Manager is the .NET app's: written with the target name as the key and the secret as its
