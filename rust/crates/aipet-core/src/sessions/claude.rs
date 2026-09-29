@@ -2,13 +2,13 @@
 //! `Stamp`), except that a call's PreToolUse and PermissionRequest are paired within a 1 s window (`ClaudePair`,
 //! `:487-560`), by what the call runs (`CallKey`, `:735-741`).
 
+use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::io;
 
 use serde_json::{Map, Value};
 
 use super::describe::{describe, helper, short};
-use super::{Chats, Entry, has_text, str_of};
+use super::{Chats, Entry, Envelope, has_text, str_of};
 
 /// The events a Claude chat takes (SessionEnd, which leaves its tombstone, aside).
 pub(super) const EVENTS: [&str; 16] = [
@@ -41,6 +41,9 @@ pub(super) fn names_chat(ev: &str) -> bool {
 /// One Claude event, as `AgentSessions::apply` read it from its envelope.
 pub(super) struct Event<'a> {
     pub key: &'a str,
+    /// The envelope, whose line has a tool call's whole input as the hook wrote it (`call_key`).
+    pub envelope: &'a Envelope<'a>,
+    /// Its payload.
     pub p: &'a Map<String, Value>,
     pub ev: &'a str,
     pub at: f64,
@@ -66,14 +69,14 @@ pub(super) fn apply(chats: &mut Chats, e: &Event, now: f64) -> &'static str {
 
     // an event Claude started before the last one recorded arrived late: it's out of date
     if let Some(old) = chats.get_mut(e.key)
-        && is_stale(old, p, ev, at, now)
+        && is_stale(old, e, now)
     {
         return "stale";
     }
     let (s, is_new) = chats.open(e.key);
     // a new chat (or one taken up again after it ended) starts pairing calls from this event
     if is_new {
-        pair(s, p, ev, at);
+        pair(s, e);
     }
     stamp(s, ev, at, now);
     let before = (s.state, s.detail.clone());
@@ -296,9 +299,9 @@ pub(super) fn stamp(s: &mut Entry, ev: &str, at: f64, now: f64) {
 }
 
 /// Claude's order: by `at` (`stale`), except for a call's PreToolUse and PermissionRequest (`pair`).
-fn is_stale(s: &mut Entry, p: &Map<String, Value>, ev: &str, at: f64, now: f64) -> bool {
-    let paired = if s.ended.is_none() { pair(s, p, ev, at) } else { None };
-    paired.unwrap_or_else(|| stale(s, ev, at, now))
+fn is_stale(s: &mut Entry, e: &Event, now: f64) -> bool {
+    let paired = if s.ended.is_none() { pair(s, e) } else { None };
+    paired.unwrap_or_else(|| stale(s, e.ev, e.at, now))
 }
 
 /// How far apart the hooks of one Claude call's PreToolUse and PermissionRequest can start, in seconds.
@@ -324,12 +327,13 @@ pub(super) struct Ask {
 ///
 /// Anything else goes by `at` (none). Each half pairs once, so the same command run again soon after isn't taken for
 /// the earlier call. Recorded even when its time then finds it stale.
-fn pair(s: &mut Entry, p: &Map<String, Value>, ev: &str, at: f64) -> Option<bool> {
+fn pair(s: &mut Entry, e: &Event) -> Option<bool> {
+    let (ev, at) = (e.ev, e.at);
     let request = ev == "PermissionRequest";
     if !request && ev != "PreToolUse" {
         return None;
     }
-    let what = call_key(p);
+    let what = call_key(e.p, e.envelope);
     let mut closest: Option<usize> = None;
     for (j, a) in s.asks.iter().enumerate() {
         if a.what == what
@@ -364,11 +368,10 @@ fn pair(s: &mut Entry, p: &Map<String, Value>, ev: &str, at: f64) -> Option<bool
 /// a description to a shell command's input) or file, or else its whole input. The C#'s hash is seeded per process,
 /// so only which calls it takes for the same must match, never the value.
 ///
-/// The whole input goes in as serde_json writes it, and the C#'s as System.Text.Json writes it: the same text for the
-/// same input as Claude writes it. Written otherwise, inputs whose keys come in another order or whose numbers are
-/// spelled otherwise (1.50 and 1.5) are one call here and two in the C#, as is a command whose text is another call's
-/// input with characters System.Text.Json escapes.
-pub(super) fn call_key(p: &Map<String, Value>) -> u64 {
+/// The whole input is the text System.Text.Json writes for it (`ToJsonString`), which the C# hashes as it hashes a
+/// command: its keys in the order the line has them and its numbers spelled as there (1.50 isn't 1.5), which the
+/// fields lose, so it's written from the line (`like_stj`).
+pub(super) fn call_key(p: &Map<String, Value>, envelope: &Envelope) -> u64 {
     let mut h = DefaultHasher::new();
     str_of(Some(p), "tool_name").hash(&mut h);
     let Some(input) = p.get("tool_input").filter(|v| !v.is_null()) else {
@@ -384,59 +387,178 @@ pub(super) fn call_key(p: &Map<String, Value>) -> u64 {
     });
     match command.and_then(Value::as_str) {
         Some(command) => h.write(command.as_bytes()),
-        None => serde_json::to_writer(HashWriter(&mut h), input).expect("writing to a hasher can't fail"),
+        None => {
+            // the line has it, unless a caller gave the fields a tool_input the line hasn't: then as serde_json
+            // writes that
+            let text = envelope
+                .tool_input_text()
+                .map_or_else(|| Cow::Owned(input.to_string()), Cow::Borrowed);
+            like_stj(&text, &mut |bytes| h.write(bytes));
+        }
     }
     h.finish()
 }
 
-/// Feeds what is written to it to a hasher.
-struct HashWriter<'a>(&'a mut DefaultHasher);
-
-impl io::Write for HashWriter<'_> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.write(buf);
-        Ok(buf.len())
+/// Writes a JSON text as System.Text.Json's `ToJsonString` writes the node it parses: without whitespace; the members
+/// in their order, duplicates too, and the numbers and literals as spelled, since it keeps their text; each string
+/// decoded and escaped again (`escape_like_stj`). The text is valid JSON: serde_json has read it.
+fn like_stj(json: &str, out: &mut impl FnMut(&[u8])) {
+    let bytes = json.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b' ' | b'\t' | b'\n' | b'\r' => i += 1,
+            b'"' => {
+                let start = i;
+                i += 1;
+                while bytes[i] != b'"' {
+                    i += if bytes[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+                let body = &json[start + 1..i - 1];
+                let text: Cow<str> = if body.contains('\\') {
+                    Cow::Owned(serde_json::from_str(&json[start..i]).expect("serde_json has read the string"))
+                } else {
+                    Cow::Borrowed(body)
+                };
+                escape_like_stj(&text, out);
+            }
+            // punctuation, numbers and literals, as they stand
+            _ => {
+                let start = i;
+                while i < bytes.len() && !matches!(bytes[i], b' ' | b'\t' | b'\n' | b'\r' | b'"') {
+                    i += 1;
+                }
+                out(&bytes[start..i]);
+            }
+        }
     }
+}
 
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+/// A string as System.Text.Json's writer escapes it with its default encoder: printable ASCII as it is, but for
+/// `" & ' + < > \` and the backtick; \b \t \n \f \r and \\ short; the rest (control characters, DEL, everything past
+/// ASCII) as \uXXXX in upper case, a surrogate pair past U+FFFF.
+fn escape_like_stj(text: &str, out: &mut impl FnMut(&[u8])) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    out(b"\"");
+    let mut plain = 0;
+    for (i, c) in text.char_indices() {
+        if matches!(c, ' '..='~') && !matches!(c, '"' | '&' | '\'' | '+' | '<' | '>' | '\\' | '`') {
+            continue;
+        }
+        out(&text.as_bytes()[plain..i]);
+        plain = i + c.len_utf8();
+        match c {
+            '\u{8}' => out(b"\\b"),
+            '\t' => out(b"\\t"),
+            '\n' => out(b"\\n"),
+            '\u{c}' => out(b"\\f"),
+            '\r' => out(b"\\r"),
+            '\\' => out(b"\\\\"),
+            _ => {
+                for unit in c.encode_utf16(&mut [0; 2]) {
+                    let digit = |shift: u16| HEX[usize::from((*unit >> shift) & 0xF)];
+                    out(&[b'\\', b'u', digit(12), digit(8), digit(4), digit(0)]);
+                }
+            }
+        }
     }
+    out(&text.as_bytes()[plain..]);
+    out(b"\"");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
-    fn key(p: Value) -> u64 {
-        call_key(p.as_object().unwrap())
+    /// The call key of a payload, sent in a line of its own as written.
+    fn key(payload: &str) -> u64 {
+        let line = format!(r#"{{"payload":{payload}}}"#);
+        let envelope = Envelope::parse(&line).expect("a JSON object");
+        let p = envelope.fields["payload"].as_object().expect("an object payload");
+        call_key(p, &envelope)
+    }
+
+    fn stj(json: &str) -> String {
+        let mut text = Vec::new();
+        like_stj(json, &mut |bytes| text.extend_from_slice(bytes));
+        String::from_utf8(text).unwrap()
     }
 
     /// The hash is the same whether the text came as a command or as the JSON of a whole input, as the C#'s string
-    /// is; and serde_json writes the input in pieces, which mustn't matter.
+    /// is; and the input is written in pieces, which mustn't matter.
     #[test]
     fn a_command_and_a_whole_input_with_the_same_text_are_the_same_call() {
-        let input = json!({"x": 1, "y": [true, null, "a"]});
-        let text = serde_json::to_string(&input).unwrap();
+        let input = r#"{"x":1,"y":[true,null,"a"]}"#;
+        let command = serde_json::to_string(input).unwrap();
         assert_eq!(
-            key(json!({"tool_name": "Bash", "tool_input": input})),
-            key(json!({"tool_name": "Bash", "tool_input": {"command": text}}))
+            key(&format!(r#"{{"tool_name":"Bash","tool_input":{input}}}"#)),
+            key(&format!(
+                r#"{{"tool_name":"Bash","tool_input":{{"command":{command}}}}}"#
+            ))
         );
         assert_ne!(
-            key(json!({"tool_name": "Bash", "tool_input": input})),
-            key(json!({"tool_name": "Grep", "tool_input": input}))
+            key(&format!(r#"{{"tool_name":"Bash","tool_input":{input}}}"#)),
+            key(&format!(r#"{{"tool_name":"Grep","tool_input":{input}}}"#))
         );
         assert_ne!(
-            key(json!({"tool_name": "Bash"})),
-            key(json!({"tool_name": "Bash", "tool_input": {}}))
+            key(r#"{"tool_name":"Bash"}"#),
+            key(r#"{"tool_name":"Bash","tool_input":{}}"#)
         );
         assert_eq!(
-            key(json!({"tool_name": "Bash"})),
-            key(json!({"tool_name": "Bash", "tool_input": null}))
+            key(r#"{"tool_name":"Bash"}"#),
+            key(r#"{"tool_name":"Bash","tool_input":null}"#)
         );
         assert_ne!(
-            key(json!({"tool_input": {"command": "ls"}})),
-            key(json!({"tool_name": "", "tool_input": {"command": "ls"}}))
+            key(r#"{"tool_input":{"command":"ls"}}"#),
+            key(r#"{"tool_name":"","tool_input":{"command":"ls"}}"#)
         );
+    }
+
+    /// Keys in another order and numbers spelled otherwise make other calls, as in the C#; how the line spaces or
+    /// escapes them doesn't.
+    #[test]
+    fn a_whole_input_is_the_call_as_the_line_writes_it() {
+        let call = |input: &str| key(&format!(r#"{{"tool_name":"WebFetch","tool_input":{input}}}"#));
+        assert_ne!(call(r#"{"url":"x","prompt":"y"}"#), call(r#"{"prompt":"y","url":"x"}"#));
+        for (a, b) in [
+            ("1.50", "1.5"),
+            ("1e2", "100"),
+            ("1E2", "1e2"),
+            ("1e+2", "1e2"),
+            ("-0", "0"),
+        ] {
+            assert_ne!(
+                call(&format!(r#"{{"n":{a}}}"#)),
+                call(&format!(r#"{{"n":{b}}}"#)),
+                "{a} and {b}"
+            );
+        }
+        assert_eq!(
+            call(r#"{"url":"x","prompt":"y"}"#),
+            call("{ \"url\" :\t\"\\u0078\",\r\n\"pro\\u006dpt\": \"y\" }")
+        );
+        assert_eq!(call(r#"{"s":"\u00e9\ud83d\ude00"}"#), call(r#"{"s":"é😀"}"#));
+        // the last of a key, as the fields have it
+        assert_eq!(
+            key(r#"{"tool_name":"WebFetch","tool_input":{"a":1},"tool_input":{"b":2}}"#),
+            call(r#"{"b":2}"#)
+        );
+    }
+
+    #[test]
+    fn a_whole_input_is_written_as_system_text_json_writes_it() {
+        assert_eq!(
+            stj(r#" { "b" : [ 1.50 , -0, 1E+2, true, false, null ], "a" : { } , "a" : "" } "#),
+            r#"{"b":[1.50,-0,1E+2,true,false,null],"a":{},"a":""}"#
+        );
+        assert_eq!(
+            stj(r#""<é&'+`\"\\\/\n\t\b\f\r\u0001\u001f\u007f\u0080\u2028\ufffd😀 ~!#$%()*,-.:;=?@[]^_{|}""#),
+            concat!(
+                r#""\u003C\u00E9\u0026\u0027\u002B\u0060\u0022\\/\n\t\b\f\r\u0001\u001F\u007F\u0080\u2028\uFFFD"#,
+                r#"\uD83D\uDE00 ~!#$%()*,-.:;=?@[]^_{|}""#
+            )
+        );
+        assert_eq!(stj(r#""plain text""#), r#""plain text""#);
     }
 }

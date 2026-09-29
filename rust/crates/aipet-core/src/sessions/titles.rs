@@ -1,14 +1,11 @@
 //! Chat titles, read from the transcripts (`ChatTitle`, `AgentSessions.cs:266-289`).
 
 use std::collections::HashSet;
-use std::fmt;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 
-use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
-use serde_json::value::RawValue;
-
 use super::describe::short;
+use super::members;
 
 /// How much of the end of a transcript is read for its title.
 const TAIL: u64 = 512 * 1024;
@@ -86,7 +83,7 @@ fn custom_title(line: &str) -> Option<String> {
     if depth(line) > MAX_DEPTH {
         return None;
     }
-    let Fields(fields) = serde_json::from_str(line).ok()?;
+    let fields = members(line)?;
     let mut keys = HashSet::new();
     if !fields.iter().all(|(key, _)| keys.insert(key.as_str())) {
         return None;
@@ -119,29 +116,4 @@ fn depth(text: &str) -> usize {
         }
     }
     deepest
-}
-
-/// A JSON object's members in order, duplicates too, their values unparsed.
-struct Fields(Vec<(String, Box<RawValue>)>);
-
-impl<'de> Deserialize<'de> for Fields {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct Members;
-        impl<'de> Visitor<'de> for Members {
-            type Value = Fields;
-
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("a JSON object")
-            }
-
-            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Fields, A::Error> {
-                let mut fields = Vec::new();
-                while let Some(member) = map.next_entry()? {
-                    fields.push(member);
-                }
-                Ok(Fields(fields))
-            }
-        }
-        deserializer.deserialize_map(Members)
-    }
 }

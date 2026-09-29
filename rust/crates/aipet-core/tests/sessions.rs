@@ -13,25 +13,56 @@ use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-use aipet_core::sessions::{AgentSessions, Entry};
+use aipet_core::sessions::{AgentSessions, Entry, Envelope};
 use aipet_ipc::protocol::unix_time;
+use serde::Deserialize;
+use serde_json::value::RawValue;
 use serde_json::{Value, json};
 
 /// A transcript_path in the case's own folder, which the replay puts in its place.
 const FILES: &str = "{files}";
 
-fn golden() -> &'static Value {
-    static GOLDEN: OnceLock<Value> = OnceLock::new();
-    GOLDEN.get_or_init(|| {
+fn golden_text() -> &'static str {
+    static TEXT: OnceLock<String> = OnceLock::new();
+    TEXT.get_or_init(|| {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/sessions/claude.json");
-        let text = fs::read_to_string(&path).unwrap_or_else(|e| {
+        fs::read_to_string(&path).unwrap_or_else(|e| {
             panic!(
                 "{}: {e} (write it with: dotnet run --project rust/golden -c Release -- sessions)",
                 path.display()
             )
-        });
-        serde_json::from_str(&text).expect("claude.json parses")
+        })
     })
+}
+
+fn golden() -> &'static Value {
+    static GOLDEN: OnceLock<Value> = OnceLock::new();
+    GOLDEN.get_or_init(|| serde_json::from_str(golden_text()).expect("claude.json parses"))
+}
+
+/// Each case's envelopes as the golden file writes them: the lines HookServer parsed, whose text a whole tool input's
+/// call key reads (the order of its keys, the spelling of its numbers).
+#[derive(Deserialize)]
+struct Lines<'a> {
+    #[serde(borrow)]
+    cases: Vec<CaseLines<'a>>,
+}
+
+#[derive(Deserialize)]
+struct CaseLines<'a> {
+    #[serde(borrow)]
+    steps: Vec<StepLine<'a>>,
+}
+
+#[derive(Deserialize)]
+struct StepLine<'a> {
+    #[serde(borrow)]
+    envelope: Option<&'a RawValue>,
+}
+
+fn golden_lines() -> &'static Lines<'static> {
+    static LINES: OnceLock<Lines<'static>> = OnceLock::new();
+    LINES.get_or_init(|| serde_json::from_str(golden_text()).expect("claude.json parses"))
 }
 
 fn array<'a>(v: &'a Value, key: &str) -> &'a Vec<Value> {
@@ -54,13 +85,13 @@ fn every_golden_case_matches_the_csharp() {
     let golden = golden();
     let os = golden["os"].as_str().expect("the golden file names its OS");
     let (mut failures, mut replayed) = (Vec::new(), 0);
-    for (i, case) in array(golden, "cases").iter().enumerate() {
+    for (i, (case, lines)) in array(golden, "cases").iter().zip(&golden_lines().cases).enumerate() {
         // Path.GetFileName's rules differ by OS, and the file holds the ones of the OS it was written on
         if case["os_specific"] == json!(true) && os != this_os() {
             continue;
         }
         replayed += 1;
-        if let Err(e) = replay(case, i) {
+        if let Err(e) = replay(case, lines, i) {
             failures.push(e);
         }
     }
@@ -129,19 +160,19 @@ fn the_golden_data_covers_the_claude_path() {
 }
 
 /// Replays one case in a folder of its own; the first difference is the error.
-fn replay(case: &Value, index: usize) -> Result<(), String> {
+fn replay(case: &Value, lines: &CaseLines, index: usize) -> Result<(), String> {
     let name = case["name"].as_str().expect("a case has a name");
     let dir = std::env::temp_dir().join(format!("aipet-sessions-golden-{}-{index}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
-    let result = replay_in(case, name, &dir);
+    let result = replay_in(case, lines, name, &dir);
     let _ = fs::remove_dir_all(&dir);
     result
 }
 
-fn replay_in(case: &Value, name: &str, dir: &Path) -> Result<(), String> {
+fn replay_in(case: &Value, lines: &CaseLines, name: &str, dir: &Path) -> Result<(), String> {
     let sessions = AgentSessions::new();
-    for (n, step) in array(case, "steps").iter().enumerate() {
+    for (n, (step, line)) in array(case, "steps").iter().zip(&lines.steps).enumerate() {
         let at = format!("{name}, step {n}");
         if let Some(file) = step["write"].as_str() {
             let bytes = file_bytes(array(step, "parts"));
@@ -152,14 +183,18 @@ fn replay_in(case: &Value, name: &str, dir: &Path) -> Result<(), String> {
             retry(|| fs::remove_file(dir.join(file)));
             continue;
         }
-        let mut envelope = step["envelope"].clone();
-        if let Some(path) = envelope.pointer_mut("/payload/transcript_path")
+        let line = line.envelope.expect("a step is a write, a delete or an envelope").get();
+        let mut envelope = Envelope::parse(line).expect("an envelope is an object");
+        if let Some(path) = envelope
+            .fields
+            .get_mut("payload")
+            .and_then(|p| p.get_mut("transcript_path"))
             && let Some(rest) = path.as_str().and_then(|p| p.strip_prefix(FILES))
         {
             *path = Value::String(format!("{}{rest}", dir.display()));
         }
         let now = step["now"].as_f64().expect("a step has its now");
-        let applied = sessions.apply(envelope.as_object().expect("an envelope is an object"), now);
+        let applied = sessions.apply(&envelope, now);
         if step["outcome"] != applied.outcome {
             return Err(format!(
                 "{at}: the outcome is {:?}, the C#'s {}",
@@ -337,11 +372,12 @@ mod ordering {
                 .as_object_mut()
                 .unwrap()
                 .extend(extra.as_object().unwrap().clone());
-            let envelope = json!({
+            let line = json!({
                 "v": 1, "type": "event", "agent": "claude", "at": at, "sent": at + 0.01, "pid": 4242, "env": {},
                 "payload": payload,
-            });
-            self.sessions.apply(envelope.as_object().unwrap(), now()).outcome
+            })
+            .to_string();
+            self.sessions.apply(&Envelope::parse(&line).unwrap(), now()).outcome
         }
 
         fn chat(&self) -> Option<Entry> {
