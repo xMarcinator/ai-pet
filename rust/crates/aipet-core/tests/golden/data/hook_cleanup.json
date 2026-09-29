@@ -1,0 +1,431 @@
+{
+  "names": [
+    {
+      "text": "{\"hooks\":{\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\"args\":[\"--agent\",\"claude\"]}]}]}}",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "{\"command\":\"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe\"}",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "{\"command\":\"c:/users/ann/appdata/local/aipetapp/current/AIPET-HOOK.EXE\"}",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "command = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\n",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "command = 'C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe --agent codex'\n",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "command = \"& 'C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe' --agent codex\"\n",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": null,
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "{\"command\":\"C:/Tools/AiPet/aipet-hook.exe\"}",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "{\"command\":\"C:/Users/Ann/src/ai-pet/artifacts/win-x64/hook/aipet-hook.exe\"}",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "{\"command\":\"sh\",\"args\":[\"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\",\"--agent\",\"claude\"]}",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "{\"command\":\"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe.old\"}",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "{\"command\":\"D:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\"}",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "{\"command\":\"c:/users/ann/appdata/local/aipetapp/current/aipet-hook.exe\"}",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": false,
+      "names": false
+    },
+    {
+      "text": "command = \"C:\\\\Users\\\\ANNSMI~1\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\n",
+      "hooks": [
+        "C:\\Users\\Ann Smith\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe",
+        "C:\\Users\\ANNSMI~1\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "command = \"C:\\\\Users\\\\ANNSMI~1\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\n",
+      "hooks": [
+        "C:\\Users\\Ann Smith\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "{\"command\":\"& 'C:\\\\Users\\\\O''Brien\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe' --agent codex\"}",
+      "hooks": [
+        "C:\\Users\\O'Brien\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe_x C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe-2",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe9",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exeé",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\uD83D\uDE00",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe/",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "C:\\\\\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe",
+      "hooks": [
+        "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": false
+    },
+    {
+      "text": "C:/USERS/ÅSE/AppData/Local/AiPetApp/current/aipet-hook.exe",
+      "hooks": [
+        "C:\\Users\\Åse\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": true,
+      "names": true
+    },
+    {
+      "text": "C:/USERS/ÅSE/AppData/Local/AiPetApp/current/aipet-hook.exe",
+      "hooks": [
+        "C:\\Users\\Åse\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+      ],
+      "ignore_case": false,
+      "names": false
+    },
+    {
+      "text": "/home/ann/.local/share/AiPet/aipet-hook --agent codex",
+      "hooks": [
+        "/home/ann/.local/share/AiPet/aipet-hook"
+      ],
+      "ignore_case": false,
+      "names": true
+    },
+    {
+      "text": "/home/ann/.local/share/AiPet/aipet-hook",
+      "hooks": [
+        "",
+        null,
+        "/home/ann/.local/share/AiPet/aipet-hook"
+      ],
+      "ignore_case": false,
+      "names": true
+    }
+  ],
+  "agents": [
+    {
+      "step": "nothing registered",
+      "claude_settings": null,
+      "config_toml": null,
+      "hooks_json": null,
+      "results": [
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": []
+        },
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": []
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": []
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": []
+        }
+      ]
+    },
+    {
+      "step": "claude",
+      "claude_settings": "{\r\n  \"hooks\": {\r\n    \"SessionStart\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"UserPromptSubmit\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"PreToolUse\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ],\r\n        \"matcher\": \"*\"\r\n      }\r\n    ],\r\n    \"PostToolUse\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ],\r\n        \"matcher\": \"*\"\r\n      }\r\n    ],\r\n    \"PostToolUseFailure\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ],\r\n        \"matcher\": \"*\"\r\n      }\r\n    ],\r\n    \"PermissionRequest\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ],\r\n        \"matcher\": \"*\"\r\n      }\r\n    ],\r\n    \"PermissionDenied\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"Notification\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"Elicitation\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"ElicitationResult\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"PreCompact\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"PostCompact\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"SubagentStart\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"SubagentStop\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"Stop\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"StopFailure\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"SessionEnd\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ]\r\n  }\r\n}",
+      "config_toml": null,
+      "hooks_json": null,
+      "results": [
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": [
+            "claude"
+          ]
+        },
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": [
+            "claude"
+          ]
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": []
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": []
+        }
+      ]
+    },
+    {
+      "step": "claude and codex",
+      "claude_settings": "{\r\n  \"hooks\": {\r\n    \"SessionStart\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"UserPromptSubmit\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"PreToolUse\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ],\r\n        \"matcher\": \"*\"\r\n      }\r\n    ],\r\n    \"PostToolUse\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ],\r\n        \"matcher\": \"*\"\r\n      }\r\n    ],\r\n    \"PostToolUseFailure\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ],\r\n        \"matcher\": \"*\"\r\n      }\r\n    ],\r\n    \"PermissionRequest\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ],\r\n        \"matcher\": \"*\"\r\n      }\r\n    ],\r\n    \"PermissionDenied\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"Notification\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"Elicitation\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"ElicitationResult\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"PreCompact\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"PostCompact\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"SubagentStart\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"SubagentStop\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"Stop\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"StopFailure\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ],\r\n    \"SessionEnd\": [\r\n      {\r\n        \"hooks\": [\r\n          {\r\n            \"type\": \"command\",\r\n            \"command\": \"C:/Users/Ann/AppData/Local/AiPetApp/current/aipet-hook.exe\",\r\n            \"args\": [\r\n              \"--agent\",\r\n              \"claude\"\r\n            ],\r\n            \"timeout\": 5,\r\n            \"async\": true\r\n          }\r\n        ]\r\n      }\r\n    ]\r\n  }\r\n}",
+      "config_toml": "\n\n# >>> AiPet hooks (written by aipet-hook --install codex; Codex asks you to trust them again if they change) >>>\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.PermissionRequest]]\n[[hooks.PermissionRequest.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.PreCompact]]\n[[hooks.PreCompact.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.PostCompact]]\n[[hooks.PostCompact.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.SubagentStop]]\n[[hooks.SubagentStop.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n# <<< AiPet hooks <<<\n",
+      "hooks_json": null,
+      "results": [
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": [
+            "claude",
+            "codex"
+          ]
+        },
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": [
+            "claude",
+            "codex"
+          ]
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": []
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": []
+        }
+      ]
+    },
+    {
+      "step": "codex",
+      "claude_settings": "{}",
+      "config_toml": "\n\n# >>> AiPet hooks (written by aipet-hook --install codex; Codex asks you to trust them again if they change) >>>\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.PermissionRequest]]\n[[hooks.PermissionRequest.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.PreCompact]]\n[[hooks.PreCompact.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.PostCompact]]\n[[hooks.PostCompact.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n[[hooks.SubagentStop]]\n[[hooks.SubagentStop.hooks]]\ntype = \"command\"\ncommand = \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\"\ntimeout = 30\nasync = true\n\n# <<< AiPet hooks <<<\n",
+      "hooks_json": null,
+      "results": [
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": [
+            "codex"
+          ]
+        },
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": [
+            "codex"
+          ]
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": []
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": []
+        }
+      ]
+    },
+    {
+      "step": "codex in hooks.json",
+      "claude_settings": null,
+      "config_toml": null,
+      "hooks_json": "{\n  \"hooks\": {\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"other-tool\"\n          }\n        ]\n      },\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\",\n            \"timeout\": 30,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SessionStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\",\n            \"timeout\": 30,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"UserPromptSubmit\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\",\n            \"timeout\": 30,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\",\n            \"timeout\": 30,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PermissionRequest\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\",\n            \"timeout\": 30,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\",\n            \"timeout\": 30,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PostCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\",\n            \"timeout\": 30,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\",\n            \"timeout\": 30,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"C:\\\\Users\\\\Ann\\\\AppData\\\\Local\\\\AiPetApp\\\\current\\\\aipet-hook.exe --agent codex\",\n            \"timeout\": 30,\n            \"async\": true\n          }\n        ]\n      }\n    ]\n  }\n}",
+      "results": [
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": [
+            "codex"
+          ]
+        },
+        {
+          "hooks": [
+            "C:\\Users\\Ann\\AppData\\Local\\AiPetApp\\current\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": [
+            "codex"
+          ]
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": true,
+          "agents": []
+        },
+        {
+          "hooks": [
+            "C:\\Tools\\AiPet\\aipet-hook.exe"
+          ],
+          "ignore_case": false,
+          "agents": []
+        }
+      ]
+    }
+  ]
+}

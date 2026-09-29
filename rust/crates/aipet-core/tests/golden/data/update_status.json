@@ -1,0 +1,232 @@
+{
+  "repo": "https://github.com/xMarcinator/ai-pet",
+  "channel": "win",
+  "first_check_seconds": 180,
+  "every_seconds": 21600,
+  "cases": [
+    {
+      "kind": "Off",
+      "version": null,
+      "percent": 42,
+      "error": null,
+      "text": "This copy doesn't update itself. To update, install AiPet again.",
+      "busy": false
+    },
+    {
+      "kind": "Off",
+      "version": null,
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "This copy doesn't update itself. To update, install AiPet again.",
+      "busy": false
+    },
+    {
+      "kind": "Off",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": null,
+      "text": "This copy doesn't update itself. To update, install AiPet again.",
+      "busy": false
+    },
+    {
+      "kind": "Off",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "This copy doesn't update itself. To update, install AiPet again.",
+      "busy": false
+    },
+    {
+      "kind": "Idle",
+      "version": null,
+      "percent": 42,
+      "error": null,
+      "text": "Checks for updates a few minutes after the pet starts, then every few hours.",
+      "busy": false
+    },
+    {
+      "kind": "Idle",
+      "version": null,
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Checks for updates a few minutes after the pet starts, then every few hours.",
+      "busy": false
+    },
+    {
+      "kind": "Idle",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": null,
+      "text": "Checks for updates a few minutes after the pet starts, then every few hours.",
+      "busy": false
+    },
+    {
+      "kind": "Idle",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Checks for updates a few minutes after the pet starts, then every few hours.",
+      "busy": false
+    },
+    {
+      "kind": "Checking",
+      "version": null,
+      "percent": 42,
+      "error": null,
+      "text": "Checking for updates…",
+      "busy": true
+    },
+    {
+      "kind": "Checking",
+      "version": null,
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Checking for updates…",
+      "busy": true
+    },
+    {
+      "kind": "Checking",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": null,
+      "text": "Checking for updates…",
+      "busy": true
+    },
+    {
+      "kind": "Checking",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Checking for updates…",
+      "busy": true
+    },
+    {
+      "kind": "UpToDate",
+      "version": null,
+      "percent": 42,
+      "error": null,
+      "text": "Up to date.",
+      "busy": false
+    },
+    {
+      "kind": "UpToDate",
+      "version": null,
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Up to date.",
+      "busy": false
+    },
+    {
+      "kind": "UpToDate",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": null,
+      "text": "Up to date.",
+      "busy": false
+    },
+    {
+      "kind": "UpToDate",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Up to date.",
+      "busy": false
+    },
+    {
+      "kind": "Downloading",
+      "version": null,
+      "percent": 42,
+      "error": null,
+      "text": "Downloading AiPet … 42%",
+      "busy": true
+    },
+    {
+      "kind": "Downloading",
+      "version": null,
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Downloading AiPet … 42%",
+      "busy": true
+    },
+    {
+      "kind": "Downloading",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": null,
+      "text": "Downloading AiPet 0.3.0… 42%",
+      "busy": true
+    },
+    {
+      "kind": "Downloading",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Downloading AiPet 0.3.0… 42%",
+      "busy": true
+    },
+    {
+      "kind": "Ready",
+      "version": null,
+      "percent": 42,
+      "error": null,
+      "text": "AiPet  is ready. It's installed when you quit the pet, or restart now.",
+      "busy": false
+    },
+    {
+      "kind": "Ready",
+      "version": null,
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "AiPet  is ready. It's installed when you quit the pet, or restart now.",
+      "busy": false
+    },
+    {
+      "kind": "Ready",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": null,
+      "text": "AiPet 0.3.0 is ready. It's installed when you quit the pet, or restart now.",
+      "busy": false
+    },
+    {
+      "kind": "Ready",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "AiPet 0.3.0 is ready. It's installed when you quit the pet, or restart now.",
+      "busy": false
+    },
+    {
+      "kind": "Failed",
+      "version": null,
+      "percent": 42,
+      "error": null,
+      "text": "Couldn't check for updates: ",
+      "busy": false
+    },
+    {
+      "kind": "Failed",
+      "version": null,
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Couldn't check for updates: No such host is known.",
+      "busy": false
+    },
+    {
+      "kind": "Failed",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": null,
+      "text": "Couldn't update to AiPet 0.3.0: ",
+      "busy": false
+    },
+    {
+      "kind": "Failed",
+      "version": "0.3.0",
+      "percent": 42,
+      "error": "No such host is known.",
+      "text": "Couldn't update to AiPet 0.3.0: No such host is known.",
+      "busy": false
+    }
+  ]
+}
