@@ -196,9 +196,16 @@ impl Shell {
                 let setup = native_call(pet, "setting up the pet window", move |w| {
                     native::setup_pet_window(w, on_top)
                 });
+                // AIPET_DEBUG's GPU probe blocks the event loop for up to seconds, so it runs while the window is
+                // still hidden: input that queued up behind it came out of order (a press with no position)
+                let gpu = if self.debug.is_some() {
+                    window::run(pet, describe_gpu).map(Message::Gpu)
+                } else {
+                    Task::none()
+                };
                 // then, whatever came of it, show it, and say "above" again now that it is mapped (winit said it
                 // while it was not)
-                setup.chain(Task::batch([
+                setup.chain(gpu).chain(Task::batch([
                     window::set_mode(pet, window::Mode::Windowed),
                     window::set_level(pet, level(on_top)),
                     window::scale_factor(pet).map(Message::Shown),
@@ -207,15 +214,10 @@ impl Shell {
             Message::Shown(scale) => {
                 self.scale = Some(scale);
                 self.log(|| format!("pet window shown, scale factor {scale}"));
-                let gpu = if self.debug.is_some() {
-                    window::run(self.pet, describe_gpu).map(Message::Gpu)
-                } else {
-                    Task::none()
-                };
                 if std::mem::take(&mut self.open_settings) {
-                    return Task::batch([gpu, self.open_settings()]);
+                    return self.open_settings();
                 }
-                gpu
+                Task::none()
             }
             Message::Gpu(lines) => {
                 for line in lines {
@@ -310,8 +312,16 @@ impl Shell {
                 self.scale = Some(scale);
                 return self.sync_region(Instant::now(), true);
             }
-            // a click elsewhere took the focus: the menu goes, as a menu does
-            Event::Window(window::Event::Unfocused) => return self.set_menu(false),
+            // a click elsewhere took the focus: the menu goes, as a menu does. So does a drag: whatever took the focus
+            // (the Start menu, Alt+Tab) takes its release too, and on Windows the button's state was then seen to
+            // stay held
+            Event::Window(window::Event::Unfocused) => {
+                if self.drag.take().is_some() {
+                    self.ui.update(aipet_ui::Message::DragCancelled);
+                    self.log(|| "the pet lost the focus: drag cancelled".to_owned());
+                }
+                return self.set_menu(false);
+            }
             // it has no title bar, but Alt+F4 and the like quit
             Event::Window(window::Event::CloseRequested | window::Event::Closed) => return iced::exit(),
             _ => {}
@@ -537,11 +547,12 @@ fn native_call(
     })
 }
 
-/// AIPET_DEBUG: which GPU draws the pet, and whether its surface can be transparent. iced keeps its choice to
-/// itself, so this asks wgpu again the way iced_wgpu 0.14 does (`window/compositor.rs`): the backends and the power
-/// preference from the environment (all, and high performance, without), an adapter that can draw on the pet
-/// window, and its surface's alpha modes, of which iced asks for PostMultiplied, else PreMultiplied, else Auto, which
-/// wgpu takes as Opaque (or Inherit). Only a transparent mode lets the desktop through where the pet draws nothing.
+/// AIPET_DEBUG: which GPU draws the pet, and what its surface offers. iced keeps its choice to itself, so this asks
+/// wgpu again the way iced_wgpu 0.14 does (`window/compositor.rs`): the backends and the power preference from the
+/// environment (all, and high performance, without), an adapter that can draw on the pet window, and its surface's
+/// alpha modes, of which iced asks for PostMultiplied, else PreMultiplied, else Auto, which wgpu takes as Opaque (or
+/// Inherit). The modes don't settle transparency on Windows: Vulkan and GL surfaces that offer only Opaque showed the
+/// desktop through, a DX12 one didn't (rust/proofs/windows.md).
 fn describe_gpu(w: &dyn window::Window) -> Vec<String> {
     use iced::advanced::graphics::color::GAMMA_CORRECTION;
     use iced::wgpu::{
@@ -719,6 +730,26 @@ mod tests {
         assert!(!drag.release_lost(false, ms(130)));
         assert!(!drag.release_lost(false, ms(200)));
         assert!(drag.release_lost(false, ms(230)));
+    }
+
+    #[test]
+    fn a_drag_is_let_go_when_the_pet_loses_the_focus() {
+        let mut shell = shown();
+        shell.drag = Some(Drag {
+            pressed: Some(Point::ORIGIN),
+            window: Some(Point::ORIGIN),
+            last: None,
+            up_since: None,
+        });
+        shell.ui.update(aipet_ui::Message::DragStarted);
+        shell
+            .ui
+            .update(aipet_ui::Message::DragMoved(iced::Vector::new(50.0, 0.0)));
+        assert!(shell.ui.drag_moved());
+        // the Start menu, Alt+Tab or another app took the focus, and with it the release
+        let _ = shell.pet_input(Event::Window(window::Event::Unfocused), event::Status::Ignored);
+        assert!(shell.drag.is_none());
+        assert!(!shell.ui.drag_moved());
     }
 
     #[test]
