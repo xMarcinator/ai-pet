@@ -1,7 +1,4 @@
 {
-  "assignee": null,
-  "claim_note": "",
-  "claimed_at": null,
   "created_at": "2026-09-28T18:09:42.242841Z",
   "depends_on": [
     "fn-1-migrate-aipet-from-net-to-rust.1"
@@ -12,5 +9,5 @@
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.7.md",
   "status": "todo",
   "title": "Core golden harness and AgentSessions (Claude path)",
-  "updated_at": "2026-09-28T18:25:24.037496Z"
+  "updated_at": "2026-09-28T20:21:28.273367Z"
 }

@@ -41,8 +41,8 @@ The mode is filled in here and extended by task 8.
 - [ ] The Claude cases in `OrderingTests` are ported as Rust tests.
 - [ ] Missing or oversized transcripts and malformed payloads give the C#'s outcomes.
 ## Done summary
-TBD
-
+Blocked:
+Paused for the day before any code was written; restart from scratch.
 ## Evidence
 - Commits:
 - Tests:
