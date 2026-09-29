@@ -72,6 +72,11 @@ impl Object {
         self.members.iter().map(|(k, _)| k.as_str())
     }
 
+    /// The members, in their order.
+    pub(crate) fn iter(&self) -> impl ExactSizeIterator<Item = (&str, &Node)> {
+        self.members.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
     pub(crate) fn values_mut(&mut self) -> impl Iterator<Item = &mut Node> {
         self.members.iter_mut().map(|(_, v)| v)
     }
