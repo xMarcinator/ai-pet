@@ -19,7 +19,8 @@ namespace AiPet.Golden;
 /// as "{files}". The cases:
 ///  - each Claude case of tests/AiPet.Tests/OrderingTests.cs;
 ///  - the event and tool tables, where and host ids, titles from transcripts (missing, oversized, odd encodings and
-///    lines), when titles are read, pruning, pairing and ordering edges, and malformed envelopes;
+///    lines), when titles are read, pruning, pairing and ordering edges (tool inputs whose keys come in another order,
+///    whose numbers are spelled otherwise, or whose lines space and escape them otherwise), and malformed envelopes;
 ///  - seeded random chats: late hooks, a PermissionRequest either side of its PreToolUse, duplicates, SessionEnd and
 ///    resumes, a clock set back, renamed transcripts. Chance is only in how the inputs were made: they're all written
 ///    out.
@@ -169,9 +170,11 @@ static class SessionsMode
         public string Claude(string sid, string ev, double at, JsonObject extra = null, JsonObject env = null, bool? snapshot = null) =>
             Apply(Envelope(at, Payload(sid, ev, extra), env), snapshot);
 
-        public string Apply(JsonObject envelope, bool? snapshot = null)
+        public string Apply(JsonObject envelope, bool? snapshot = null) => Apply(envelope.ToJsonString(Json), snapshot);
+
+        /// A request line as it's written, which may space and escape its JSON as the hook wouldn't.
+        public string Apply(string line, bool? snapshot = null)
         {
-            var line = envelope.ToJsonString(Json);
             // as HookServer.Answer parses it
             var req = (JsonObject)JsonNode.Parse(line, documentOptions: new JsonDocumentOptions { MaxDepth = Ipc.MaxDepth });
             if (req[Ipc.Payload] is JsonObject p && p["transcript_path"] is JsonValue v && v.TryGetValue(out string path)
@@ -823,6 +826,57 @@ static class SessionsMode
             r.Claude(sid, "SessionEnd", b + 11);
             r.Claude(sid, "PermissionRequest", b + 12, Bash("after"));
             r.Claude(sid, "PreToolUse", b + 12.001, Bash("after", "toolu_e"));
+        }
+        {
+            // a whole input is the call as System.Text.Json writes it (CallKey's ToJsonString): its keys in their
+            // order, its numbers as spelled, its strings escaped as its encoder escapes them, whatever the line did.
+            // Each request comes before its PreToolUse: a PreToolUse that pairs with it is stale, one that doesn't
+            // works.
+            var r = newCase("claude/pairing-whole-inputs", 1, false);
+            double b = r.T0 - 100;
+            r.Claude(sid, "UserPromptSubmit", b);
+            void Both(string tool, string request, string pre)
+            {
+                b += 2;
+                r.Claude(sid, "PermissionRequest", b, Tool(tool, request));
+                r.Claude(sid, "PreToolUse", b + 0.5, Tool(tool, pre));
+            }
+            Both("WebFetch", "{\"url\":\"x\",\"prompt\":\"y\"}", "{\"url\":\"x\",\"prompt\":\"y\"}");
+            Both("WebFetch", "{\"url\":\"x\",\"prompt\":\"y\"}", "{\"prompt\":\"y\",\"url\":\"x\"}");
+            Both("WebFetch", "{\"n\":1.50}", "{\"n\":1.50}");
+            Both("WebFetch", "{\"n\":1.50}", "{\"n\":1.5}");
+            Both("WebFetch", "{\"n\":1e2}", "{\"n\":100}");
+            Both("WebFetch", "{\"n\":1E2}", "{\"n\":1e2}");
+            Both("WebFetch", "{\"n\":1e+2}", "{\"n\":1e2}");
+            Both("WebFetch", "{\"n\":-0}", "{\"n\":0}");
+            Both("WebFetch", "{\"n\":[1,{\"b\":2,\"a\":null}]}", "{\"n\":[1,{\"a\":null,\"b\":2}]}");
+
+            // a command whose text is another call's whole input as System.Text.Json writes it is that call; as the
+            // line wrote it (another encoder), it isn't
+            const string odd = @"{""s"":""<é&'+`\""\\/\n\t\b\f\r\u0001\u001f\u007f\u0080 �😀 ~""}";
+            foreach (var (text, id) in new[] { (Parse(odd).ToJsonString(), "toolu_w"), (Parse(odd).ToJsonString(Json), "toolu_x") })
+            {
+                b += 2;
+                r.Claude(sid, "PermissionRequest", b, Tool("Bash", odd));
+                r.Claude(sid, "PreToolUse", b + 0.5, Bash(text, id));
+            }
+
+            // lines as another hook could write them: spaced, and escaped otherwise
+            string Line(string ev, double at, string input) =>
+                "{ \"v\": 1, \"type\": \"event\", \"agent\": \"claude\", \"at\": " + J(at) + ", \"pid\": 4242, \"env\": { },\t\"payload\": "
+                + "{ \"hook_event_name\": " + J(ev) + ", \"session_id\": " + J(sid) + ", \"tool_name\": \"WebFetch\", \"tool_input\": " + input + " } }";
+            void Lines(string request, string pre)
+            {
+                b += 2;
+                r.Apply(Line("PermissionRequest", b, request));
+                r.Apply(Line("PreToolUse", b + 0.5, pre));
+            }
+            Lines(@"{ ""url"" : ""x"" ,  ""prompt"":""y"" }", @"{""url"":""x"",""prompt"":""y""}");
+            Lines(@"{""url"":""x""}", @"{""url"":""x""}");
+            Lines(@"{""s"":""é😀\/""}", @"{""s"":""é😀/""}");
+            Lines(@"{""s"":""é""}", @"{""s"":""é""}");
+            Lines(@"{""a"":{""k"":1,""k"":2}}", @"{""a"":{""k"":1,""k"":2}}");
+            Lines(@"{""a"":{""k"":1,""k"":2}}", @"{""a"":{""k"":2}}");
         }
     }
 

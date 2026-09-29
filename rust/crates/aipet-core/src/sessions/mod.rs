@@ -16,10 +16,38 @@ mod describe;
 mod titles;
 mod turns;
 
+use std::fmt;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use aipet_ipc::protocol;
+use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
+use serde_json::value::RawValue;
 use serde_json::{Map, Value};
+
+/// A request line as the hook server parsed it: `HookServer.Answer`'s JsonObject.
+///
+/// `fields` are its members as serde_json reads them. The line is kept for what they lose and the C# still has: the
+/// order of an object's keys and how its numbers are spelled, which make a tool call's whole input one call or another
+/// (`claude::call_key`). That input is read from the line, so changing `fields` (as the golden replay changes a
+/// transcript_path) doesn't change it.
+pub struct Envelope<'a> {
+    pub fields: Map<String, Value>,
+    line: &'a str,
+}
+
+impl<'a> Envelope<'a> {
+    /// The line's members; none when it isn't a JSON object, as the C# takes none.
+    pub fn parse(line: &'a str) -> Option<Self> {
+        let fields = serde_json::from_str(line).ok()?;
+        Some(Self { fields, line })
+    }
+
+    /// The payload's `tool_input` as the line writes it: the last of each key, as `fields` keep them.
+    fn tool_input_text(&self) -> Option<&'a str> {
+        let payload = last(members(self.line)?, protocol::PAYLOAD)?;
+        last(members(payload.get())?, "tool_input").map(RawValue::get)
+    }
+}
 
 /// A chat, keyed `claude:<sid>` or `codex:<sid>`. After SessionEnd only `id`, `ended` and `ts` are left, for a day.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -89,22 +117,23 @@ impl AgentSessions {
 
     /// Places one hook event: an envelope (`aipet_ipc::protocol`) as the hook server parsed it, at `now` (Unix
     /// seconds, as `protocol::unix_time` gives them). An envelope without a numeric `at` counts as started at `now`.
-    pub fn apply(&self, envelope: &Map<String, Value>, now: f64) -> Applied {
+    pub fn apply(&self, envelope: &Envelope, now: f64) -> Applied {
+        let fields = &envelope.fields;
         let empty = Map::new();
-        let p = envelope
+        let p = fields
             .get(protocol::PAYLOAD)
             .and_then(Value::as_object)
             .unwrap_or(&empty);
-        let agent = str_of(Some(envelope), protocol::AGENT);
+        let agent = str_of(Some(fields), protocol::AGENT);
         let ev = str_of(Some(p), "hook_event_name").unwrap_or("");
-        let at = envelope.get(protocol::AT).and_then(Value::as_f64).unwrap_or(now);
+        let at = fields.get(protocol::AT).and_then(Value::as_f64).unwrap_or(now);
         // `as` truncates and saturates, as the C#'s (long) cast does
-        let pid = format!("pid={}", num(envelope, protocol::PID) as i64);
+        let pid = format!("pid={}", num(fields, protocol::PID) as i64);
         match agent {
             Some("claude") => {
                 let sid = str_of(Some(p), "session_id").unwrap_or("default");
                 let key = format!("claude:{sid}");
-                let env = envelope.get(protocol::ENV).and_then(Value::as_object);
+                let env = fields.get(protocol::ENV).and_then(Value::as_object);
                 let place = claude::place(str_of(env, "CLAUDE_CODE_ENTRYPOINT"));
                 // read before the lock, and only when the event will look at it (None: not read)
                 let title = (claude::EVENTS.contains(&ev)
@@ -112,6 +141,7 @@ impl AgentSessions {
                 .then(|| titles::chat_title(str_of(Some(p), "transcript_path")));
                 let event = claude::Event {
                     key: &key,
+                    envelope,
                     p,
                     ev,
                     at,
@@ -222,6 +252,39 @@ impl Chats {
 /// A string field of a JSON object; none when it's missing or not a string.
 fn str_of<'a>(o: Option<&'a Map<String, Value>>, key: &str) -> Option<&'a str> {
     o?.get(key)?.as_str()
+}
+
+/// A JSON text's members in order, duplicates too, their values as the text writes them; none when it isn't an
+/// object.
+fn members(text: &str) -> Option<Vec<(String, &RawValue)>> {
+    struct Members<'a>(Vec<(String, &'a RawValue)>);
+    impl<'de> Deserialize<'de> for Members<'de> {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            struct Each;
+            impl<'de> Visitor<'de> for Each {
+                type Value = Members<'de>;
+
+                fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    f.write_str("a JSON object")
+                }
+
+                fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Members<'de>, A::Error> {
+                    let mut members = Vec::new();
+                    while let Some(member) = map.next_entry()? {
+                        members.push(member);
+                    }
+                    Ok(Members(members))
+                }
+            }
+            deserializer.deserialize_map(Each)
+        }
+    }
+    serde_json::from_str::<Members>(text).ok().map(|m| m.0)
+}
+
+/// The value of the last member with the key.
+fn last<'a>(members: Vec<(String, &'a RawValue)>, key: &str) -> Option<&'a RawValue> {
+    members.into_iter().rev().find(|(k, _)| k == key).map(|(_, v)| v)
 }
 
 /// A numeric field of a JSON object; 0 when it's missing or not a number.
