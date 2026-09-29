@@ -36,9 +36,21 @@ no dependencies.
 - [ ] The spec's parked unknown about the update path is resolved: in place (full or delta), or a one-time reinstall
       with the steps written.
 ## Done summary
-TBD
+The Velopack proof passed and its results are in rust/proofs/velopack.md. An installed .NET 0.1.98 (packId AiPetApp) updates in place to a Rust-packed 0.1.99 by a full package and by a delta across the runtimes (584,265 B against a 2,660,151 B full). The Rust app's --veloapp-updated and --veloapp-uninstall hooks ran, and the data folder stayed byte-identical. The parked unknown resolves to "in place, delta works". No one-time reinstall is needed.
 
+- Harness (e0bdff0): .github/workflows/velopack-proof.yml, rust/notes/prototypes/velopack-proof/ (Rust stand-in, a .NET update driver using the pet's own Velopack calls, proof.ps1). Run 36477504598 passed all three jobs.
+- Results doc (3322916): rust/proofs/velopack.md with the method, the full and delta outcomes, the consequences for tasks 21 and 23, and the limits. The same commit fixes a wrong proof.ps1 comment (the Start menu entry points at current\AiPet.exe, not the launcher).
+- For task 23: the Rust package must carry aipet-hook.exe at current\. An update replaces current\ wholesale, and install.ps1's registrations name %LOCALAPPDATA%\AiPetApp\current\aipet-hook.exe.
+- For task 21: vpk checks VelopackApp.Run only in .NET exes. The Rust pet needs its own test that run() comes first.
+- Follow-up for the conductor: the spec's "Parked unknowns" line about the update path can now say it was resolved in place (spec edits are outside this task's Touches).
+- Gates on Windows: cargo green after re-checking out avatars/hood-green.json. The worktree still had its pre-merge CRLF copy. dotnet green with -p:UseAppHost=false (160 passed, 42 Unix-only skipped).
+- Commit list: the task's own commits only (--first-parent --no-merges). The workspace also holds the conductor's merge 7248b70 of the work branch (2553c06, 242d7cc).
+
+stage: impl-review - skipped(policy: parallel-wave - conductor owns the gate)
+
+stage: impl-review - ran (codex: SHIP, 0 findings, no fix commits)
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: e0bdff0bb6de9d99f112309028599edd5ec50a0f, 332291677a1ba19f17d7ace3a8984d463d20eaf2
+- Tests: baseline: green (cargo) per the paused run's pre-edit baseline on Linux; dotnet test AiPet.slnx was an inherited env red there (5 ResourceTests/VelopackTests need src/AiPet.UI/bin), green after dotnet build AiPet.slnx, gate classify --base 88b528fb14c628ff0f13d0381fa8a0652ac63454: FULL (unmatched: .gitattributes, from the merged work-branch commit 242d7cc), cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check (Windows, first run red: aipet-sprite golden tests, avatars/hood-green.json checked out CRLF before the merge brought 242d7cc's eol=lf attribute; re-checked out that file, no content change, then green: 91 tests passed, fmt clean, clippy exit 0 with pre-existing warnings in aipet-sprite/aipet-ui; receipt 33229167-unittest), dotnet build AiPet.slnx -p:UseAppHost=false --nologo -v q && dotnet test AiPet.slnx --no-build --nologo (Windows: 160 passed, 42 skipped = the Unix/Linux-only tests, 0 failed; receipt 33229167-dotnet-test), proof run https://github.com/xMarcinator/ai-pet/actions/runs/36477504598 at e0bdff0: success (pack, Update full, Update delta), integrated verify (Windows, work branch 42c4d13 = tasks 14 + 2 + the Rust 1.98 upgrade): cd rust && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check green; dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped, 0 failed
 - PRs:
