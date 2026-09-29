@@ -42,6 +42,10 @@ run the Rust hook, and the C# hook, against it.
 ### Key context
 - Don't use `PipeOptions.CurrentUserOnly`-style checks that compare the token owner. They break between elevated and
   normal processes of the same user (dotnet/runtime#123903).
+**From task 7's review (2026-09-29):** `AgentSessions::apply` takes an `Envelope`: the parsed fields plus the raw
+request line, which pairing needs to key a whole tool input as System.Text.Json writes it. The server calls
+`Envelope::parse(line)` and passes the result to `apply`, not a parsed `Map`.
+
 ## Acceptance
 - [ ] Rust tests cover every case of `HookServerTests`, `HookServerUnixTests` and `StarvedPoolTests`, on Linux, and on
       Windows where they apply.
