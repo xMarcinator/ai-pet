@@ -88,13 +88,8 @@ pub fn straight_rgba(px: &[u32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(px.len() * 4);
     for &p in px {
         let a = p >> 24;
-        let unmul = |c: u32| {
-            if a == 0 {
-                0
-            } else {
-                ((c * 255 + a / 2) / a).min(255) as u8
-            }
-        };
+        // a transparent pixel has no colour to recover
+        let unmul = |c: u32| (c * 255 + a / 2).checked_div(a).map_or(0, |v| v.min(255) as u8);
         out.extend_from_slice(&[unmul((p >> 16) & 255), unmul((p >> 8) & 255), unmul(p & 255), a as u8]);
     }
     out

@@ -16,8 +16,8 @@ run the Rust hook, and the C# hook, against it.
   - `RefuseLiveServer` (connect first), then remove a stale socket file, `bind`, `chmod 0600`, and only then `listen`.
     Use `socket2` or `libc` to separate bind from listen; `std`'s `UnixListener::bind` also listens.
   - Accept on 8 threads.
-  - Peer credentials: `SO_PEERCRED` through `libc` on Linux, `getpeereid` elsewhere. `std`'s `peer_cred` isn't stable
-    on Rust 1.89.
+  - Peer credentials: `SO_PEERCRED` through `libc` on Linux, `getpeereid` elsewhere. `std`'s `peer_cred` wasn't stable
+    on Rust 1.89 (the workspace is on 1.98 now: check it before choosing).
 - Windows (`:330-351`):
   - `CreateNamedPipeW` with a security descriptor (owner = the current user's SID, network denied),
     `FILE_FLAG_FIRST_PIPE_INSTANCE` on the first instance, and 8 blocking `ConnectNamedPipe` listeners.

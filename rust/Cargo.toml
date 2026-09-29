@@ -11,7 +11,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 # the toolchain the workspace is built with (CI pins it); the resolver picks dependency versions that support it
-rust-version = "1.89"
+rust-version = "1.98"
 publish = false
 
 # Every dependency the product crates are planned to need is declared here and in their manifests from the start, so

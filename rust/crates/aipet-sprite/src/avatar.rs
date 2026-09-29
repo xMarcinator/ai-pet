@@ -514,20 +514,23 @@ pub fn read_all_text(path: &Path) -> io::Result<String> {
 }
 
 fn decode_text(bytes: &[u8]) -> String {
+    // a trailing partial code unit (the remainder of as_chunks) becomes one U+FFFD
     fn utf16(b: &[u8], unit: fn([u8; 2]) -> u16) -> String {
-        let units: Vec<u16> = b.chunks_exact(2).map(|c| unit([c[0], c[1]])).collect();
+        let (whole, partial) = b.as_chunks::<2>();
+        let units: Vec<u16> = whole.iter().map(|&c| unit(c)).collect();
         let mut s = String::from_utf16_lossy(&units);
-        if b.len() % 2 != 0 {
+        if !partial.is_empty() {
             s.push(char::REPLACEMENT_CHARACTER);
         }
         s
     }
     fn utf32(b: &[u8], unit: fn([u8; 4]) -> u32) -> String {
-        let mut s: String = b
-            .chunks_exact(4)
-            .map(|c| char::from_u32(unit([c[0], c[1], c[2], c[3]])).unwrap_or(char::REPLACEMENT_CHARACTER))
+        let (whole, partial) = b.as_chunks::<4>();
+        let mut s: String = whole
+            .iter()
+            .map(|&c| char::from_u32(unit(c)).unwrap_or(char::REPLACEMENT_CHARACTER))
             .collect();
-        if b.len() % 4 != 0 {
+        if !partial.is_empty() {
             s.push(char::REPLACEMENT_CHARACTER);
         }
         s
@@ -892,6 +895,10 @@ mod tests {
             assert_eq!(decode_text(&b), s);
         }
         assert_eq!(decode_text(b"a\xFFb"), "a\u{FFFD}b");
+        // a trailing partial code unit
+        assert_eq!(decode_text(&[0xFF, 0xFE, b'a', 0, b'b']), "a\u{FFFD}");
+        assert_eq!(decode_text(&[0xFE, 0xFF, 0, b'a', 0]), "a\u{FFFD}");
+        assert_eq!(decode_text(&[0xFF, 0xFE, 0, 0, b'a', 0, 0, 0, b'b', 0, 0]), "a\u{FFFD}");
     }
 
     #[test]

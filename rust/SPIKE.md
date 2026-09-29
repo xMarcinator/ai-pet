@@ -21,7 +21,7 @@ cd rust
 cargo run -p aipet-spike
 ```
 
-To build it you need Rust 1.89 or newer, a C linker, pkg-config and the libxkbcommon development files (Arch:
+To build it you need Rust 1.98 or newer, a C linker, pkg-config and the libxkbcommon development files (Arch:
 `pkgconf libxkbcommon`; Debian/Ubuntu: `pkg-config libxkbcommon-dev`; Fedora: `pkgconf-pkg-config libxkbcommon-devel`).
 The first build downloads about 300 crates. To run it on Linux you need Wayland, EGL/GL (Mesa) and, for the desktop
 shell, X11 or XWayland. The spike starts about 420 px left of the bottom-right corner, so it doesn't
