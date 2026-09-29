@@ -354,7 +354,9 @@ names before tasks fn-1-migrate-aipet-from-net-to-rust.15 onwards.
 - The default shell on Hyprland: layer-shell (planned) or XWayland. Resolved by the hands-on pass in task fn-1-migrate-aipet-from-net-to-rust.22 and
   the user's call.
 - The version numbers for milestones 1, 2 and 3: suggested 0.2.0, 0.3.0 and 1.0.0. The user decides.
-- The update path from .NET to Rust on Windows: in place, or a one-time reinstall. Resolved by task fn-1-migrate-aipet-from-net-to-rust.14.
+- ~~The update path from .NET to Rust on Windows: in place, or a one-time reinstall.~~ Resolved by task
+  fn-1-migrate-aipet-from-net-to-rust.14 (2026-09-29): in place, by full package and by delta, with the data folder
+  unchanged ([rust/proofs/velopack.md](../../rust/proofs/velopack.md)). No one-time reinstall.
 - The Windows transparency route if the plain wgpu window isn't transparent: a layered window fed by a CPU renderer, or
   another wgpu surface mode. Resolved by task fn-1-migrate-aipet-from-net-to-rust.13.
 

@@ -30,6 +30,9 @@ Windows updates in the Rust pet, following task 14's proof:
 - `rust/proofs/velopack.md` — task 14's results
 **Optional:**
 - https://docs.rs/velopack
+**From task 14's proof (2026-09-29):** `vpk pack` checks that `VelopackApp.Run` comes first only in .NET exes, so the
+Rust pet needs its own test that Velopack's `run()` runs before anything else in `main` ([rust/proofs/velopack.md](../../rust/proofs/velopack.md)).
+
 ## Acceptance
 - [ ] On the Windows CI, a local-feed test downloads an update and applies it on quit. The status texts match the C#.
 - [ ] Uninstalling a test install runs the hook cleanup (the proof workflow extended).
