@@ -1,0 +1,91 @@
+# Mixed runtimes, until .NET is gone: the Rust hook (rust/crates/aipet-hook) against the .NET pet, on Windows and
+# Linux. The C#'s own black-box hook suites run unchanged, with AIPET_TEST_HOOK pointing their event-path runs
+# (TestEnv.StartHook, HookRun) at the Rust hook instead of `dotnet hook/aipet-hook.dll`; the pet is the C#'s
+# HookServer, as in CI. The reverse direction (the .NET hook against the Rust pet) joins this file with the Rust hook
+# server. Nothing is published here.
+name: Cross-runtime
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  rust-hook:
+    name: Rust hook, .NET pet (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            hook: aipet-hook.exe
+          - os: ubuntu-22.04
+            hook: aipet-hook
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # a fresh unsigned exe gets scanned on every start, which the tests' time budgets would feel; best effort
+      - name: Leave rust/target to Defender's exclusions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          try { Add-MpPreference -ExclusionPath (Join-Path $env:GITHUB_WORKSPACE 'rust\target') -ErrorAction Stop }
+          catch { Write-Output "No Defender exclusion: $($_.Exception.Message)" }
+      # the workspace's rust-version, as in ci.yml
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.89.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Build the Rust hook
+        working-directory: rust
+        run: cargo build -p aipet-hook --release --locked
+      # the tests and the pet (AiPet.Core) they run; the .NET hook is built too, for the modes that still run it
+      - name: Build the tests
+        run: dotnet build tests/AiPet.Tests -c Release --nologo
+      # The classes that run the hook on its event path. Those of the other system report as skipped. A filter that
+      # selects nothing, or a run where nothing passed, fails: a green run must have run the Rust hook.
+      - name: The C#'s hook suites against the Rust hook
+        shell: bash
+        env:
+          AIPET_TEST_HOOK: ${{ github.workspace }}/rust/target/release/${{ matrix.hook }}
+        run: |
+          classes=(HookContractTests HookSocketTests HookRequestSizeTests EndToEndTests HookServerTests NoPetTests
+                   HookServerUnixTests StarvedPoolTests)
+          filter=$(printf 'FullyQualifiedName~AiPet.Tests.%s.|' "${classes[@]}")
+          set -o pipefail
+          dotnet test tests/AiPet.Tests -c Release --nologo --no-build --filter "${filter%|}" 2>&1 | tee test.log
+          passed=$(sed -nE 's/.*Passed: *([0-9]+),.*/\1/p' test.log | tail -n 1)
+          echo "passed: ${passed:-none}"
+          [ "${passed:-0}" -gt 0 ]
+      # The trace log's checks as root, where a file another user owns can still be opened, so the owner check is
+      # what refuses it (a_file_another_user_owns_is_left_alone skips for anyone else). The rest run as root too.
+      - name: The trace log's tests as root
+        if: runner.os == 'Linux'
+        working-directory: rust
+        run: |
+          set -o pipefail
+          exe=$(cargo test -p aipet-hook --release --locked --no-run --message-format=json \
+            | jq -r 'select(.reason == "compiler-artifact" and .target.kind == ["bin"] and .profile.test) | .executable')
+          [ -n "$exe" ] || { echo "no test executable for the hook"; exit 1; }
+          sudo "$exe" trace:: --test-threads=1 --nocapture 2>&1 | tee trace.log
+          grep -q 'a_file_another_user_owns_is_left_alone ... ok' trace.log
+          ! grep -q 'skipped: only root' trace.log
