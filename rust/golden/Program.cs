@@ -15,8 +15,8 @@ namespace AiPet.Golden;
 ///   board          the Board's bubbles (Board.cs)
 ///   ipc            the endpoint and data paths in this process's environment, for aipet-ipc's tests (IpcMode.cs)
 ///
-/// sprite, ipc, sessions (the Claude path so far) and data are written; registration, doctor and board are filled in
-/// by the tasks that port their C#.
+/// sprite, ipc, sessions, data and registration (Claude so far) are written; registration's Codex half, doctor and
+/// board are filled in by the tasks that port their C#.
 ///
 /// Nothing touches the user's pet or data. Every mode but ipc runs with AIPET_DATA_DIR pointing Core at a temp folder,
 /// set before Paths is first used, and removed afterwards; a mode sets up anything else it needs (a temp
