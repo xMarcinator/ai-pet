@@ -55,6 +55,8 @@ enum Message {
     DragOrigin(Option<Point>),
     /// A native call failed: what it was doing, and why.
     Native(&'static str, NativeError),
+    /// AIPET_DEBUG: the lines [`describe_gpu`] wrote.
+    Gpu(Vec<String>),
 }
 
 struct Shell {
@@ -205,8 +207,19 @@ impl Shell {
             Message::Shown(scale) => {
                 self.scale = Some(scale);
                 self.log(|| format!("pet window shown, scale factor {scale}"));
+                let gpu = if self.debug.is_some() {
+                    window::run(self.pet, describe_gpu).map(Message::Gpu)
+                } else {
+                    Task::none()
+                };
                 if std::mem::take(&mut self.open_settings) {
-                    return self.open_settings();
+                    return Task::batch([gpu, self.open_settings()]);
+                }
+                gpu
+            }
+            Message::Gpu(lines) => {
+                for line in lines {
+                    self.log(|| line);
                 }
                 Task::none()
             }
@@ -522,6 +535,99 @@ fn native_call(
         Ok(()) => Task::none(),
         Err(e) => Task::done(Message::Native(what, e)),
     })
+}
+
+/// AIPET_DEBUG: which GPU draws the pet, and whether its surface can be transparent. iced keeps its choice to
+/// itself, so this asks wgpu again the way iced_wgpu 0.14 does (`window/compositor.rs`): the backends and the power
+/// preference from the environment (all, and high performance, without), an adapter that can draw on the pet
+/// window, and its surface's alpha modes, of which iced asks for PostMultiplied, else PreMultiplied, else Auto, which
+/// wgpu takes as Opaque (or Inherit). Only a transparent mode lets the desktop through where the pet draws nothing.
+fn describe_gpu(w: &dyn window::Window) -> Vec<String> {
+    use iced::advanced::graphics::color::GAMMA_CORRECTION;
+    use iced::wgpu::{
+        AdapterInfo, Backends, CompositeAlphaMode, Instance, InstanceDescriptor, InstanceFlags, PowerPreference,
+        RequestAdapterOptions, SurfaceTargetUnsafe,
+    };
+
+    let describe = |i: &AdapterInfo| {
+        format!(
+            "{:?} {} ({:?}, driver {} {})",
+            i.backend, i.name, i.device_type, i.driver, i.driver_info
+        )
+    };
+    let backends = Backends::from_env().unwrap_or(Backends::all());
+    let power = PowerPreference::from_env().unwrap_or(PowerPreference::HighPerformance);
+    let instance = Instance::new(&InstanceDescriptor {
+        backends,
+        flags: InstanceFlags::empty(),
+        ..Default::default()
+    });
+    let all: Vec<String> = instance
+        .enumerate_adapters(backends)
+        .iter()
+        .map(|a| describe(&a.get_info()))
+        .collect();
+    let mut lines = vec![format!("GPU adapters for {backends:?}: {}", all.join("; "))];
+    // SAFETY: the window outlives the surface, which is dropped before this returns
+    let surface = match unsafe { SurfaceTargetUnsafe::from_window(&w) }
+        .map_err(|e| e.to_string())
+        .and_then(|target| unsafe { instance.create_surface_unsafe(target) }.map_err(|e| e.to_string()))
+    {
+        Ok(surface) => surface,
+        Err(e) => {
+            lines.push(format!("GPU: no surface for the pet window: {e}"));
+            return lines;
+        }
+    };
+    let options = RequestAdapterOptions {
+        power_preference: power,
+        compatible_surface: Some(&surface),
+        force_fallback_adapter: false,
+    };
+    let adapter = match ready(instance.request_adapter(&options)) {
+        Some(Ok(adapter)) => adapter,
+        Some(Err(e)) => {
+            lines.push(format!("GPU: no adapter for the pet window ({power:?}): {e}"));
+            return lines;
+        }
+        None => {
+            lines.push("GPU: the adapter request didn't finish at once".to_owned());
+            return lines;
+        }
+    };
+    let caps = surface.get_capabilities(&adapter);
+    let alpha = &caps.alpha_modes;
+    let asked = [CompositeAlphaMode::PostMultiplied, CompositeAlphaMode::PreMultiplied]
+        .into_iter()
+        .find(|mode| alpha.contains(mode))
+        .unwrap_or(CompositeAlphaMode::Auto);
+    let gets = match asked {
+        CompositeAlphaMode::Auto => alpha
+            .iter()
+            .find(|mode| matches!(mode, CompositeAlphaMode::Opaque | CompositeAlphaMode::Inherit)),
+        _ => Some(&asked),
+    };
+    let format = caps
+        .formats
+        .iter()
+        .filter(|format| format.required_features().is_empty())
+        .find(|format| format.is_srgb() == GAMMA_CORRECTION)
+        .or(caps.formats.first());
+    lines.push(format!(
+        "GPU for the pet: {} ({power:?}); surface alpha modes {alpha:?}: iced asks {asked:?}, which is {gets:?}; format {format:?} of {:?}",
+        describe(&adapter.get_info()),
+        caps.formats
+    ));
+    lines
+}
+
+/// A future's output if it is ready at once, as wgpu's are on the desktop.
+fn ready<F: Future>(future: F) -> Option<F::Output> {
+    let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+    match std::pin::pin!(future).poll(&mut context) {
+        std::task::Poll::Ready(output) => Some(output),
+        std::task::Poll::Pending => None,
+    }
 }
 
 fn env_is_1(name: &str) -> bool {
