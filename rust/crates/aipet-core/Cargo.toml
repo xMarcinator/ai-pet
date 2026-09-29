@@ -19,10 +19,12 @@ ureq.workspace = true
 libc.workspace = true
 socket2.workspace = true
 
-# the hook server's pipe (its owner and ACL, first instance, cancelling a silent client) and Credential Manager
+# the hook server's pipe (its owner and ACL, first instance, cancelling a silent client), Credential Manager, and the
+# log's time format
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Security_Credentials",
