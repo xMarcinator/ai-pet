@@ -9,7 +9,7 @@ mode so the Rust output is checked byte for byte against the C#'s. Task 4 reuses
 
 **Size:** M
 **Files:** `rust/golden/Registration.cs`, `rust/crates/aipet-hook/src/{install,claude,plugin_hooks,json_out}.rs`, `rust/crates/aipet-hook/tests/registration.rs`, `rust/crates/aipet-hook/tests/golden/registration/**`
-**Touches:** [rust/golden/Registration.cs, rust/crates/aipet-hook/src/install.rs, rust/crates/aipet-hook/src/claude.rs, rust/crates/aipet-hook/src/plugin_hooks.rs, rust/crates/aipet-hook/src/json_out.rs, rust/crates/aipet-hook/tests/registration.rs, rust/crates/aipet-hook/tests/golden/registration/**]
+**Touches:** [rust/golden/Registration.cs, rust/crates/aipet-hook/src/install.rs, rust/crates/aipet-hook/src/claude.rs, rust/crates/aipet-hook/src/plugin_hooks.rs, rust/crates/aipet-hook/src/json_out.rs, rust/crates/aipet-hook/tests/registration.rs, rust/crates/aipet-hook/tests/golden/registration/**, rust/crates/aipet-hook/src/main.rs, rust/crates/aipet-hook/src/json.rs, rust/crates/aipet-hook/src/event.rs, tests/AiPet.Tests/TestEnv.cs, tests/AiPet.Tests/PluginHooksTests.cs, tests/AiPet.Tests/RegistrationTests.cs (widened by the conductor: ACs 2 and 4 need the C# tests to honour AIPET_TEST_HOOK)]
 
 ### Approach
 - Golden mode `registration`: for each fixture, a starting `settings.json` plus a flag for the plugin being
