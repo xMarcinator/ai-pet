@@ -7,7 +7,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use serde_json::{Map, Value};
 
-use super::describe::{describe, helper, short};
+use super::describe::{contains_ignoring_case, describe, helper, short};
 use super::{Chats, Entry, Envelope, has_text, str_of};
 
 /// The events a Claude chat takes (SessionEnd, which leaves its tombstone, aside).
@@ -149,7 +149,7 @@ pub(super) fn apply(chats: &mut Chats, e: &Event, now: f64) -> &'static str {
     s.state.unwrap_or_default()
 }
 
-fn set(s: &mut Entry, state: &'static str, detail: impl Into<String>, prop: Option<&'static str>) {
+pub(super) fn set(s: &mut Entry, state: &'static str, detail: impl Into<String>, prop: Option<&'static str>) {
     s.state = Some(state);
     s.detail = Some(detail.into());
     s.prop = prop;
@@ -190,14 +190,6 @@ fn notification(s: &mut Entry, kind: &str, message: &str) {
     }
 }
 
-/// `text.Contains(needle, StringComparison.OrdinalIgnoreCase)` for a lower-case ASCII needle. .NET's ordinal casing
-/// maps no other character onto an ASCII letter (it keeps ı and ſ, unlike ToUpperInvariant), so only ASCII matches.
-fn contains_ignoring_case(text: &str, needle: &str) -> bool {
-    text.as_bytes()
-        .windows(needle.len())
-        .any(|w| w.eq_ignore_ascii_case(needle.as_bytes()))
-}
-
 /// What stopped the turn, from StopFailure's error_type.
 fn stop_error(kind: Option<&str>) -> &'static str {
     match kind.unwrap_or("") {
@@ -234,7 +226,7 @@ fn is_host_id(id: &str) -> bool {
 
 /// `Guid.TryParseExact(id, "D")` on 36 characters: hex digits in groups of 8-4-4-4-12. For compatibility .NET also
 /// takes groups that begin with `+` and/or `0x` (their width counting them), except the last eight digits.
-fn is_guid_d(id: &[u8]) -> bool {
+pub(super) fn is_guid_d(id: &[u8]) -> bool {
     if id.len() != 36 || [8, 13, 18, 23].iter().any(|&i| id[i] != b'-') {
         return false;
     }
