@@ -39,6 +39,10 @@ gives the same verdict on every run.
 - `rust/crates/aipet-ui/src/lib.rs` (`frame_interval`)
 **Optional:**
 - `rust/notes/iced.md` §7 — redraw behaviour
+**From task 13's proof (2026-09-29):** the spike's Windows numbers (12.8 % of a core, 178 MB working set, 140 MB
+private, busy demo script) were taken on Vulkan. Measure on the backend the pet ships with (GL on Windows after
+task 15), and reuse or replace the sampler in `.flow/tmp/wave-2026-09-29/task-13-sampler/` (a `dotnet` helper, since
+there is no wmic on Windows 11 and PowerShell is off limits).
 ## Acceptance
 - [ ] `pet-bench.sh` and `pet-bench.ps1` run end to end and print both pets' medians and the verdict.
 - [ ] R18's budgets pass on Linux and Windows. The numbers and conditions are recorded in `rust/proofs/performance.md`.

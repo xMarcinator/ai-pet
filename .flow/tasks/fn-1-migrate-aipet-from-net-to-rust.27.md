@@ -10,7 +10,7 @@ the desktop shell. This task can't be completed while a Windows check fails.
 
 **Size:** M
 **Files:** `rust/crates/aipet-desktop/src/{shell,native/win32,platform/windows}.rs`, `rust/proofs/windows-hands-on.md` (results, new)
-**Touches:** [rust/crates/aipet-desktop/src/**, rust/crates/aipet-ui/src/style.rs, rust/proofs/windows-hands-on.md]
+**Touches:** [rust/crates/aipet-desktop/src/**, rust/crates/aipet-ui/src/style.rs, rust/crates/aipet-ui/src/menu.rs, rust/crates/aipet-ui/src/view.rs, rust/proofs/windows-hands-on.md]
 
 ### Approach
 - Use task 13's chosen transparency route (`rust/proofs/windows.md`). Check:
@@ -29,6 +29,19 @@ the desktop shell. This task can't be completed while a Windows check fails.
 - `rust/SPIKE.md` — the hands-on tests for Windows
 **Optional:**
 - `src/AiPet.UI/Platform/WindowsPlatform.cs` — the behaviour to match
+
+**From task 13's proof (2026-09-29)** ([rust/proofs/windows.md](../../rust/proofs/windows.md)):
+- **Crossing monitors at different scales fails.** Dragging between a 150 % and a 100 % monitor flips the scale up to
+  7 times at the edge, and the pet jumps to the far side before snapping back. The window's larger part decides its
+  DPI, and its size changes with the DPI. Chosen fix: the win32 subclass holds `WM_DPICHANGED` while the drag's button
+  is down and applies the window's DPI at the drop, placed so the grabbed spot stays under the pointer.
+- **Re-run by hand:** ending a drag on focus loss (pressing Win mid-drag used to leave the pet following the pointer),
+  and the `AIPET_DEBUG` GPU probe moved to before the window shows. Both are unit-tested only.
+- **Menu rows:** each item's label and check mark sit at the top of its 32 px row, 6–7 px above centre, because an iced
+  button lays its content out from the top. Centre them in `menu.rs` (for example `container(..).height(Fill)
+  .align_y(Center)`). The cause is iced's layout, so the fix applies on Linux as well.
+- **Line height:** `style::LINE_HEIGHT` stays 1.362 (Noto Sans) on Windows, where Segoe UI's is 1.330. `view.rs`
+  hard-codes 1.362 in `TITLE_Y` and `DETAIL_Y`; derive both from `style` to make Windows exact.
 
 ## Acceptance
 - [ ] Every check passes on Windows 10 and 11, recorded in `rust/proofs/windows-hands-on.md`. No failure is left open.

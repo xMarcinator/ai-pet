@@ -10,7 +10,7 @@ dependencies. **It needs the user or a Windows machine.**
 
 **Size:** M
 **Files:** `rust/crates/aipet-desktop/src/{shell,native/win32}.rs`, `rust/crates/aipet-ui/src/style.rs` (font fallback), `rust/proofs/windows.md` (results, new)
-**Touches:** [rust/crates/aipet-desktop/src/shell.rs, rust/crates/aipet-desktop/src/native/**, rust/crates/aipet-ui/src/style.rs, rust/proofs/windows.md]
+**Touches:** [rust/crates/aipet-desktop/src/shell.rs, rust/crates/aipet-desktop/src/native/**, rust/crates/aipet-ui/src/style.rs, rust/proofs/windows.md, rust/proofs/windows/*.png (widened by the conductor for the screenshots)]
 
 ### Approach
 - Build and run the desktop shell on Windows 10 or 11 (`cargo run -p aipet-spike`) with DX12, Vulkan and GL, and record

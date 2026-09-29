@@ -38,6 +38,10 @@ It depends on task 13 so the desktop shell's Windows route is settled first.
 - `rust/crates/aipet-ui/src/lib.rs:104-230`, `rust/crates/aipet-spike/src/main.rs`
 **Optional:**
 - `rust/crates/aipet-ui/src/demo.rs` — the scene shape to replace
+**From task 13's proof (2026-09-29):** make GL the default GPU backend on Windows too, in the pet and the spike, the
+way the spike already does on Linux (`WGPU_BACKEND=gl` unless the user set it). On Windows GL is transparent, shows the
+pet in 0.9 s against 4.5–7.3 s for Vulkan, doesn't load the NVIDIA driver and never falls back to DX12, which is opaque
+through iced 0.14 ([rust/proofs/windows.md](../../rust/proofs/windows.md)).
 ## Acceptance
 - [ ] Unit tests map Board snapshots to bubbles and mood (states, props, alerts).
 - [ ] With real Claude and Codex hooks on the developer's machine, the Rust pet shows real chats (manual check, noted in
