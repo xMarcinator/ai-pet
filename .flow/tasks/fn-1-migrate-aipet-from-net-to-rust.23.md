@@ -33,7 +33,7 @@ remediation task they add.
 **Optional:**
 - `rust/proofs/*.md` — the results of tasks 13, 14, 22, 27 and 28
 **From task 14's proof (2026-09-29):** an update replaces `current\` completely, and the hook registrations the installer
-makes point at `%LOCALAPPDATA%\AiPetApp\currentipet-hook.exe`, so the Rust package must ship `aipet-hook.exe` in
+makes point at `%LOCALAPPDATA%\AiPetApp\current\aipet-hook.exe`, so the Rust package must ship `aipet-hook.exe` in
 `current\` ([rust/proofs/velopack.md](../../rust/proofs/velopack.md)).
 
 ## Acceptance
