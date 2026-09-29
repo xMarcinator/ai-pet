@@ -55,6 +55,8 @@ enum Message {
     DragOrigin(Option<Point>),
     /// A native call failed: what it was doing, and why.
     Native(&'static str, NativeError),
+    /// AIPET_DEBUG: the lines [`describe_gpu`] wrote.
+    Gpu(Vec<String>),
 }
 
 struct Shell {
@@ -194,9 +196,16 @@ impl Shell {
                 let setup = native_call(pet, "setting up the pet window", move |w| {
                     native::setup_pet_window(w, on_top)
                 });
+                // AIPET_DEBUG's GPU probe blocks the event loop for up to seconds, so it runs while the window is
+                // still hidden: input that queued up behind it came out of order (a press with no position)
+                let gpu = if self.debug.is_some() {
+                    window::run(pet, describe_gpu).map(Message::Gpu)
+                } else {
+                    Task::none()
+                };
                 // then, whatever came of it, show it, and say "above" again now that it is mapped (winit said it
                 // while it was not)
-                setup.chain(Task::batch([
+                setup.chain(gpu).chain(Task::batch([
                     window::set_mode(pet, window::Mode::Windowed),
                     window::set_level(pet, level(on_top)),
                     window::scale_factor(pet).map(Message::Shown),
@@ -207,6 +216,12 @@ impl Shell {
                 self.log(|| format!("pet window shown, scale factor {scale}"));
                 if std::mem::take(&mut self.open_settings) {
                     return self.open_settings();
+                }
+                Task::none()
+            }
+            Message::Gpu(lines) => {
+                for line in lines {
+                    self.log(|| line);
                 }
                 Task::none()
             }
@@ -297,8 +312,16 @@ impl Shell {
                 self.scale = Some(scale);
                 return self.sync_region(Instant::now(), true);
             }
-            // a click elsewhere took the focus: the menu goes, as a menu does
-            Event::Window(window::Event::Unfocused) => return self.set_menu(false),
+            // a click elsewhere took the focus: the menu goes, as a menu does. So does a drag: whatever took the focus
+            // (the Start menu, Alt+Tab) takes its release too, and on Windows the button's state was then seen to
+            // stay held
+            Event::Window(window::Event::Unfocused) => {
+                if self.drag.take().is_some() {
+                    self.ui.update(aipet_ui::Message::DragCancelled);
+                    self.log(|| "the pet lost the focus: drag cancelled".to_owned());
+                }
+                return self.set_menu(false);
+            }
             // it has no title bar, but Alt+F4 and the like quit
             Event::Window(window::Event::CloseRequested | window::Event::Closed) => return iced::exit(),
             _ => {}
@@ -524,6 +547,100 @@ fn native_call(
     })
 }
 
+/// AIPET_DEBUG: which GPU draws the pet, and what its surface offers. iced keeps its choice to itself, so this asks
+/// wgpu again the way iced_wgpu 0.14 does (`window/compositor.rs`): the backends and the power preference from the
+/// environment (all, and high performance, without), an adapter that can draw on the pet window, and its surface's
+/// alpha modes, of which iced asks for PostMultiplied, else PreMultiplied, else Auto, which wgpu takes as Opaque (or
+/// Inherit). The modes don't settle transparency on Windows: Vulkan and GL surfaces that offer only Opaque showed the
+/// desktop through, a DX12 one didn't (rust/proofs/windows.md).
+fn describe_gpu(w: &dyn window::Window) -> Vec<String> {
+    use iced::advanced::graphics::color::GAMMA_CORRECTION;
+    use iced::wgpu::{
+        AdapterInfo, Backends, CompositeAlphaMode, Instance, InstanceDescriptor, InstanceFlags, PowerPreference,
+        RequestAdapterOptions, SurfaceTargetUnsafe,
+    };
+
+    let describe = |i: &AdapterInfo| {
+        format!(
+            "{:?} {} ({:?}, driver {} {})",
+            i.backend, i.name, i.device_type, i.driver, i.driver_info
+        )
+    };
+    let backends = Backends::from_env().unwrap_or(Backends::all());
+    let power = PowerPreference::from_env().unwrap_or(PowerPreference::HighPerformance);
+    let instance = Instance::new(&InstanceDescriptor {
+        backends,
+        flags: InstanceFlags::empty(),
+        ..Default::default()
+    });
+    let all: Vec<String> = instance
+        .enumerate_adapters(backends)
+        .iter()
+        .map(|a| describe(&a.get_info()))
+        .collect();
+    let mut lines = vec![format!("GPU adapters for {backends:?}: {}", all.join("; "))];
+    // SAFETY: the window outlives the surface, which is dropped before this returns
+    let surface = match unsafe { SurfaceTargetUnsafe::from_window(&w) }
+        .map_err(|e| e.to_string())
+        .and_then(|target| unsafe { instance.create_surface_unsafe(target) }.map_err(|e| e.to_string()))
+    {
+        Ok(surface) => surface,
+        Err(e) => {
+            lines.push(format!("GPU: no surface for the pet window: {e}"));
+            return lines;
+        }
+    };
+    let options = RequestAdapterOptions {
+        power_preference: power,
+        compatible_surface: Some(&surface),
+        force_fallback_adapter: false,
+    };
+    let adapter = match ready(instance.request_adapter(&options)) {
+        Some(Ok(adapter)) => adapter,
+        Some(Err(e)) => {
+            lines.push(format!("GPU: no adapter for the pet window ({power:?}): {e}"));
+            return lines;
+        }
+        None => {
+            lines.push("GPU: the adapter request didn't finish at once".to_owned());
+            return lines;
+        }
+    };
+    let caps = surface.get_capabilities(&adapter);
+    let alpha = &caps.alpha_modes;
+    let asked = [CompositeAlphaMode::PostMultiplied, CompositeAlphaMode::PreMultiplied]
+        .into_iter()
+        .find(|mode| alpha.contains(mode))
+        .unwrap_or(CompositeAlphaMode::Auto);
+    let gets = match asked {
+        CompositeAlphaMode::Auto => alpha
+            .iter()
+            .find(|mode| matches!(mode, CompositeAlphaMode::Opaque | CompositeAlphaMode::Inherit)),
+        _ => Some(&asked),
+    };
+    let format = caps
+        .formats
+        .iter()
+        .filter(|format| format.required_features().is_empty())
+        .find(|format| format.is_srgb() == GAMMA_CORRECTION)
+        .or(caps.formats.first());
+    lines.push(format!(
+        "GPU for the pet: {} ({power:?}); surface alpha modes {alpha:?}: iced asks {asked:?}, which is {gets:?}; format {format:?} of {:?}",
+        describe(&adapter.get_info()),
+        caps.formats
+    ));
+    lines
+}
+
+/// A future's output if it is ready at once, as wgpu's are on the desktop.
+fn ready<F: Future>(future: F) -> Option<F::Output> {
+    let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+    match std::pin::pin!(future).poll(&mut context) {
+        std::task::Poll::Ready(output) => Some(output),
+        std::task::Poll::Pending => None,
+    }
+}
+
 fn env_is_1(name: &str) -> bool {
     std::env::var_os(name).is_some_and(|v| v == "1")
 }
@@ -613,6 +730,26 @@ mod tests {
         assert!(!drag.release_lost(false, ms(130)));
         assert!(!drag.release_lost(false, ms(200)));
         assert!(drag.release_lost(false, ms(230)));
+    }
+
+    #[test]
+    fn a_drag_is_let_go_when_the_pet_loses_the_focus() {
+        let mut shell = shown();
+        shell.drag = Some(Drag {
+            pressed: Some(Point::ORIGIN),
+            window: Some(Point::ORIGIN),
+            last: None,
+            up_since: None,
+        });
+        shell.ui.update(aipet_ui::Message::DragStarted);
+        shell
+            .ui
+            .update(aipet_ui::Message::DragMoved(iced::Vector::new(50.0, 0.0)));
+        assert!(shell.ui.drag_moved());
+        // the Start menu, Alt+Tab or another app took the focus, and with it the release
+        let _ = shell.pet_input(Event::Window(window::Event::Unfocused), event::Status::Ignored);
+        assert!(shell.drag.is_none());
+        assert!(!shell.ui.drag_moved());
     }
 
     #[test]

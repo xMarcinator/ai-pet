@@ -6,13 +6,17 @@ use iced::widget::canvas::{self, Frame, Geometry, Path, Stroke, stroke};
 use iced::{Color, Font, Pixels, Point, Rectangle, Renderer, Size, Theme, alignment, font, mouse};
 
 /// The UI font. The C# asks for Segoe UI Variable Text, Segoe UI, Ubuntu, Cantarell, Noto Sans…; on the Linux
-/// desktops the pet runs on that comes down to Noto Sans.
-pub const UI: Font = Font::with_name("Noto Sans");
+/// desktops the pet runs on that comes down to Noto Sans. Windows has no Noto Sans, so there it is Segoe UI, which
+/// every Windows 10 and 11 has with its semibold face. Segoe UI Variable Text is not asked for: it is an instance of
+/// Windows 11's variable font, whose family name is Segoe UI Variable, and it has the same metrics as Segoe UI.
+pub const UI: Font = Font::with_name(if cfg!(windows) { "Segoe UI" } else { "Noto Sans" });
 pub const UI_SEMIBOLD: Font = Font {
     weight: font::Weight::Semibold,
     ..UI
 };
 /// Noto Sans' line spacing (ascender 1069 + descender 293 per 1000 em), which Avalonia uses for a line's height.
+/// Segoe UI's is 1.330 (2210 + 514 per 2048, the same in Segoe UI Variable); the lines are kept at Noto Sans' on
+/// Windows too, because the bubbles' text positions are worked out from it.
 pub const LINE_HEIGHT: text::LineHeight = text::LineHeight::Relative(1.362);
 
 /// A colour from 0xAARRGGBB.
@@ -138,5 +142,40 @@ impl<Message> canvas::Program<Message> for Glyph {
             .with_line_join(stroke::LineJoin::Round);
         frame.stroke(&path, pen);
         vec![frame.into_geometry()]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each UI font names a face Windows has, at its own weight: for a family that isn't there, or a weight its
+    /// family lacks, the text stack would substitute another face.
+    #[cfg(windows)]
+    #[test]
+    fn the_ui_fonts_are_faces_windows_has() {
+        use iced::advanced::graphics::text::cosmic_text::fontdb::{Family, Query, Weight};
+        use iced::advanced::graphics::text::font_system;
+
+        let mut fonts = font_system().write().expect("the font system");
+        let db = fonts.raw().db();
+        for (font, weight) in [(UI, 400), (UI_SEMIBOLD, 600)] {
+            let font::Family::Name(name) = font.family else {
+                panic!("{font:?} names no family");
+            };
+            let query = Query {
+                families: &[Family::Name(name)],
+                weight: Weight(weight),
+                ..Query::default()
+            };
+            let face = db.query(&query).and_then(|id| db.face(id));
+            let face = face.unwrap_or_else(|| panic!("Windows has no {name:?}"));
+            assert_eq!(face.weight, Weight(weight), "{name:?} at {weight}");
+            assert!(
+                face.families.iter().any(|(family, _)| family == name),
+                "{name:?}: {:?}",
+                face.families
+            );
+        }
     }
 }
