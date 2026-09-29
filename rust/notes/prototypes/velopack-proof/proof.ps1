@@ -181,8 +181,8 @@ switch ($Step) {
     }
 
     'restart' {
-        # the Start menu entry Setup made (--shortcuts StartMenuRoot): it starts the launcher AiPetApp\AiPet.exe, which
-        # starts current\AiPet.exe
+        # the Start menu entry Setup made (--shortcuts StartMenuRoot), which points at current\AiPet.exe; without one,
+        # the launcher AiPetApp\AiPet.exe
         $programs = [Environment]::GetFolderPath('Programs')
         $shell = New-Object -ComObject WScript.Shell
         $links = @(Get-ChildItem -LiteralPath $programs -Filter *.lnk -Recurse |
