@@ -200,6 +200,15 @@ fn diff(expected: &[u32], actual: &[u32]) -> String {
     format!("{map}{}", cells.join("\n"))
 }
 
+/// Whether this platform's sin and cos are the ones the golden data was made with (.NET on glibc), so motion must
+/// match bit for bit. Elsewhere it may differ in the last bits, and `near` decides.
+const EXACT_LIBM: bool = cfg!(all(target_os = "linux", target_env = "gnu"));
+
+/// Equal to 1 part in 10⁹, far below anything the pet could show (it moves in DIPs).
+fn near(actual: f64, expected: f64) -> bool {
+    (actual - expected).abs() <= 1e-9 * actual.abs().max(expected.abs()).max(1.0)
+}
+
 /// Replays one case; the first difference is the error.
 fn replay(case: &Value, layers: &[Vec<u32>]) -> Result<usize, String> {
     let name = str_of(case, "name");
@@ -282,8 +291,9 @@ fn replay(case: &Value, layers: &[Vec<u32>]) -> Result<usize, String> {
         ];
         for (key, actual) in motion {
             let expected = f64_of(s, key);
-            // bit for bit: -0.0 is not 0.0
-            if actual.to_bits() != expected.to_bits() {
+            // bit for bit (-0.0 is not 0.0) where the golden data was made: sin and cos come from the platform's C
+            // library, and elsewhere (the MSVC CRT) their last bit can differ from glibc's
+            if actual.to_bits() != expected.to_bits() && !(!EXACT_LIBM && near(actual, expected)) {
                 return Err(format!("{at}: {key} is {actual:?}, the C# says {expected:?}"));
             }
         }
