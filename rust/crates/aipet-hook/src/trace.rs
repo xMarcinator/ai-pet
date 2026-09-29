@@ -2,8 +2,9 @@
 //! (`src/AiPet.Hook/Program.cs:193-220`).
 //!
 //! Problems only, one line each: `HH:mm:ss user=<user> pipe=<endpoint> <line>`. The temp folder is writable even when
-//! an agent runs hooks as a restricted sandbox user. The log is deleted and begun again once it is past 64 KB.
-//! - Windows: `%TMP%\aipet-hook.log` (else `%TEMP%`). The folder is the user's own.
+//! an agent runs hooks as a restricted sandbox user. The log is begun again once it is past 64 KB.
+//! - Windows: `%TMP%\aipet-hook.log` (else `%TEMP%`). The folder is the user's own, so rotation deletes the log and
+//!   makes it anew, as the C# does.
 //! - Unix: `$TMPDIR/aipet-hook-<euid>.log` (else `/tmp`). That folder is shared, so the log is the user's own and
 //!   only they can read it, and another user may have put a file or a link at its name first (where
 //!   `fs.protected_regular` or `protected_symlinks` is off). This goes further than the C# on purpose (R2):
@@ -12,8 +13,9 @@
 //!     at once instead of holding up the hook);
 //!   - through the open file it must be a regular file with one link, owned by the effective user, with mode exactly
 //!     0600, and on Linux `/proc/self/fd` must name it where it was opened. Otherwise nothing is written;
-//!   - rotation deletes the name only while it is still the file that was checked (its device and inode), then
-//!     starts a new file the same way. A name swapped meanwhile is left alone, and nothing is written.
+//!   - rotation empties the checked file through its open handle and never deletes or opens anything by name, so a
+//!     file swapped in at the name can't be touched however the steps interleave. It first makes sure the name still
+//!     leads to the open file (its device and inode); a name swapped before that is left alone, and nothing is written.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -133,33 +135,24 @@ mod unix {
     use super::{ROTATE_AT, Write};
 
     pub(super) fn append(path: &Path, text: &[u8]) -> bool {
-        let Some((log, seen)) = opened(path, false) else {
+        let Some((log, seen)) = opened(path) else {
             return false;
         };
-        let log = if seen.size > ROTATE_AT {
-            match rotated(&seen, path) {
-                Some(log) => log,
-                None => return false,
-            }
-        } else {
-            log
-        };
+        if seen.size > ROTATE_AT && !rotated(&log, &seen, path) {
+            return false;
+        }
         (&log).write_all(text).is_ok()
     }
 
-    /// The file at `path`, opened for appending (made 0600 when missing, or only made when `fresh`) and checked.
-    pub(super) fn opened(path: &Path, fresh: bool) -> Option<(File, Seen)> {
-        let mut options = OpenOptions::new();
-        options
+    /// The file at `path`, opened for appending (made 0600 when missing) and checked.
+    pub(super) fn opened(path: &Path) -> Option<(File, Seen)> {
+        let log = OpenOptions::new()
             .append(true)
+            .create(true)
             .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_NOCTTY);
-        if fresh {
-            options.create_new(true);
-        } else {
-            options.create(true);
-        }
-        let log = options.open(path).ok()?;
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_NOCTTY)
+            .open(path)
+            .ok()?;
         let seen = checked(&log, path)?;
         Some((log, seen))
     }
@@ -229,16 +222,18 @@ mod unix {
         true
     }
 
-    /// The log begun again: its name deleted only while it still is the file `seen` describes (`lstat` against the
-    /// open file's `fstat`), then a new file made there the same way. `None` when the name leads elsewhere now, or
-    /// the new file isn't ours alone.
-    pub(super) fn rotated(seen: &Seen, path: &Path) -> Option<File> {
-        let now = std::fs::symlink_metadata(path).ok()?;
-        if (now.dev(), now.ino()) != (seen.dev, seen.ino) {
-            return None;
-        }
-        std::fs::remove_file(path).ok()?;
-        opened(path, true).map(|(log, _)| log)
+    /// The log begun again, only while its name still leads to the open file `seen` describes (`lstat` against the
+    /// open file's `fstat`); whether it was. The name is only looked at: the change itself goes through the open
+    /// file, so a file swapped in at the name after that look is never touched.
+    pub(super) fn rotated(log: &File, seen: &Seen, path: &Path) -> bool {
+        let named = std::fs::symlink_metadata(path).is_ok_and(|now| (now.dev(), now.ino()) == (seen.dev, seen.ino));
+        named && emptied(log)
+    }
+
+    /// Rotation's one change: the checked file emptied through its handle (`ftruncate`), never through a name. It is
+    /// open for appending, so the next write lands at its new start.
+    pub(super) fn emptied(log: &File) -> bool {
+        log.set_len(0).is_ok()
     }
 }
 
@@ -246,7 +241,7 @@ mod unix {
 mod tests {
     #[cfg(target_os = "linux")]
     use super::unix::checked;
-    use super::unix::{Seen, opened, rotated};
+    use super::unix::{Seen, emptied, opened, rotated};
     use super::*;
     use std::fs;
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -296,7 +291,7 @@ mod tests {
         assert_eq!(mode(&s.log()), 0o600);
     }
 
-    /// Past 64 KB the log is begun again with the new line; at 64 KB it is appended to.
+    /// Past 64 KB the log is begun again with the new line, in the same file; at 64 KB it is appended to.
     #[test]
     fn a_log_past_64_kb_is_begun_again() {
         let s = Scratch::new("rotate");
@@ -305,11 +300,17 @@ mod tests {
             (ROTATE_AT + 1, LINE.len()),
         ] {
             let log = s.file("aipet-hook-test.log", &vec![b'x'; size as usize], 0o600);
+            let ino = fs::symlink_metadata(&log).unwrap().ino();
             assert!(append(&log, LINE), "{size}");
             let content = fs::read(&log).unwrap();
             assert_eq!(content.len(), after, "{size}");
             assert!(content.ends_with(LINE));
             assert_eq!(mode(&log), 0o600);
+            assert_eq!(
+                fs::symlink_metadata(&log).unwrap().ino(),
+                ino,
+                "{size}: not the same file"
+            );
         }
     }
 
@@ -434,31 +435,53 @@ mod tests {
     #[test]
     fn an_open_file_named_otherwise_is_refused() {
         let s = Scratch::new("fd");
-        let (log, _) = opened(&s.log(), false).unwrap();
+        let (log, _) = opened(&s.log()).unwrap();
         assert!(checked(&log, &s.log()).is_some());
         fs::rename(s.log(), s.0.join("elsewhere.log")).unwrap();
         assert!(checked(&log, &s.log()).is_none());
         // and one deleted since
-        let (log, _) = opened(&s.log(), false).unwrap();
+        let (log, _) = opened(&s.log()).unwrap();
         fs::remove_file(s.log()).unwrap();
         assert!(checked(&log, &s.log()).is_none());
     }
 
-    /// The name swapped for another file between the checks and the rotation: that file isn't deleted, and nothing
+    /// The name swapped for another file between the checks and the rotation: that file isn't touched, and nothing
     /// is written.
     #[test]
     fn a_name_swapped_before_the_rotation_is_left_alone() {
         let s = Scratch::new("swap");
         let log = s.file("aipet-hook-test.log", &vec![b'x'; ROTATE_AT as usize + 1], 0o600);
-        let (open, seen) = opened(&log, false).unwrap();
+        let (open, seen) = opened(&log).unwrap();
         let other = s.file("other", b"theirs", 0o600);
         fs::rename(&other, &log).unwrap();
-        assert!(rotated(&seen, &log).is_none());
+        assert!(!rotated(&open, &seen, &log));
         assert_eq!(fs::read(&log).unwrap(), b"theirs");
         assert_eq!(
             open.metadata().unwrap().len(),
             ROTATE_AT + 1,
             "the checked file was written to"
+        );
+    }
+
+    /// The name swapped for another file after the rotation looked at it, before the rotation changed anything: the
+    /// change goes through the checked file's handle, so the file now at the name still isn't touched.
+    #[test]
+    fn a_name_swapped_during_the_rotation_is_left_alone() {
+        let s = Scratch::new("swap-during");
+        let log = s.file("aipet-hook-test.log", &vec![b'x'; ROTATE_AT as usize + 1], 0o600);
+        let (open, seen) = opened(&log).unwrap();
+        // the look `rotated` makes first passes while the name is still the checked file's
+        assert_eq!(fs::symlink_metadata(&log).unwrap().ino(), seen.ino);
+        let other = s.file("other", b"theirs", 0o600);
+        fs::rename(&other, &log).unwrap();
+        // then the change it makes
+        assert!(emptied(&open));
+        assert_eq!(fs::read(&log).unwrap(), b"theirs");
+        assert_eq!(mode(&log), 0o600);
+        assert_eq!(
+            open.metadata().unwrap().len(),
+            0,
+            "the checked file wasn't the one emptied"
         );
     }
 }
