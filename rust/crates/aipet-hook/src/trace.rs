@@ -244,7 +244,9 @@ mod unix {
 
 #[cfg(all(test, unix))]
 mod tests {
-    use super::unix::{Seen, checked, opened, rotated};
+    #[cfg(target_os = "linux")]
+    use super::unix::checked;
+    use super::unix::{Seen, opened, rotated};
     use super::*;
     use std::fs;
     use std::os::unix::fs::{MetadataExt, PermissionsExt};

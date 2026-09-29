@@ -164,11 +164,9 @@ fn payload_of(input: &[u8]) -> Result<Object, String> {
 fn decoded(input: &[u8]) -> String {
     /// The units of `N` bytes; one cut short at the end is U+FFFD.
     fn units<const N: usize>(bytes: &[u8], unit: fn([u8; N]) -> u32) -> impl Iterator<Item = u32> + '_ {
-        let chunks = bytes.chunks_exact(N);
-        let rest = (!chunks.remainder().is_empty()).then_some(0xFFFD);
-        chunks
-            .map(move |c| unit(c.try_into().expect("chunks of N bytes")))
-            .chain(rest)
+        let (units, rest) = bytes.as_chunks::<N>();
+        let rest = (!rest.is_empty()).then_some(0xFFFD);
+        units.iter().map(move |&u| unit(u)).chain(rest)
     }
     fn utf16(bytes: &[u8], unit: fn([u8; 2]) -> u32) -> String {
         char::decode_utf16(units(bytes, unit).map(|u| u as u16))
