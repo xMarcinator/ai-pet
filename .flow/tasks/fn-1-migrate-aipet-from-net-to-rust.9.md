@@ -45,6 +45,16 @@ run the Rust hook, and the C# hook, against it.
 **From task 7's review (2026-09-29):** `AgentSessions::apply` takes an `Envelope`: the parsed fields plus the raw
 request line, which pairing needs to key a whole tool input as System.Text.Json writes it. The server calls
 `Envelope::parse(line)` and passes the result to `apply`, not a parsed `Map`.
+**From task 3 (2026-09-29):** `PluginHooksTests` and `RegistrationTests` now run the hook through
+`TestEnv.HookStartInfo`, so `AIPET_TEST_HOOK` reaches them. Add `PluginHooksTests` to `cross-runtime.yml`'s class list:
+it passes against the Rust hook on Windows, and its Unix-only case (`check-plugin.sh --hook`) has never run against
+it. Don't add `RegistrationTests` yet: its Unix-only doctor cases run `--doctor codex` through the hook, which the Rust
+hook doesn't port until task 5, so they would fail there. Task 5 adds it.
+**From task 8 (2026-09-29):** `apply` can return `Applied { outcome: "error:FormatException", log: "event ->
+error:FormatException" }`, as the C# does when a Codex turn id passes .NET's Guid parser but not
+`Convert.ToInt64(…, 16)`. Do what `HookServer.Answer` does with any `error:` outcome: log the line, reply
+`{"ok":false,"error":<outcome>}`, and don't fire Changed. Server tests should build their store with
+`AgentSessions::with_codex_home(dir)`, so they never read the user's `~/.codex`.
 
 ## Acceptance
 - [ ] Rust tests cover every case of `HookServerTests`, `HookServerUnixTests` and `StarvedPoolTests`, on Linux, and on

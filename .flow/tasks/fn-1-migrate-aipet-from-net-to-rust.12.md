@@ -9,7 +9,7 @@ against a new golden mode for the Board.
 
 **Size:** M
 **Files:** `rust/crates/aipet-core/src/{codex_watcher,board}.rs`, `rust/golden/Board.cs`, `rust/crates/aipet-core/tests/board.rs`, `rust/crates/aipet-core/tests/golden/board/**`
-**Touches:** [rust/crates/aipet-core/src/codex_watcher.rs, rust/crates/aipet-core/src/board.rs, rust/crates/aipet-core/tests/board.rs, rust/crates/aipet-core/tests/golden/board/**, rust/golden/Board.cs]
+**Touches:** [rust/crates/aipet-core/src/codex_watcher.rs, rust/crates/aipet-core/src/sessions/describe.rs, rust/crates/aipet-core/src/board.rs, rust/crates/aipet-core/tests/board.rs, rust/crates/aipet-core/tests/golden/board/**, rust/golden/Board.cs]
 
 ### Approach
 - `CodexWatcher` (`src/AiPet.Core/CodexWatcher.cs`): polls the session files every 2 s on a thread, reads the same
@@ -27,6 +27,10 @@ against a new golden mode for the Board.
 - `tests/AiPet.Tests/BoardTests.cs`
 **Optional:**
 - `docs/ARCHITECTURE.md` §5 (the Board)
+**From task 8 (2026-09-29):** Codex entries carry `turn` (the chat's own current turn id) and `turn_ended`, which the
+Board's ByTurn ordering reads. .NET's OrdinalIgnoreCase `Contains` and `ToLowerInvariant` are ported as
+`contains_ignoring_case` and `lower_invariant` in `sessions/describe.rs` (pub(super)); if the watcher needs them, make
+them pub(crate) there rather than copying them.
 ## Acceptance
 - [ ] Every Board golden case gives the same bubbles, order, sections and links.
 - [ ] `BoardTests` is ported. The watcher reads the same files as the C# on a fixture Codex home.

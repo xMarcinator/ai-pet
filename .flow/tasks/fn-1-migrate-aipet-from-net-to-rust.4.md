@@ -10,7 +10,7 @@ file to port, so it has a task of its own.
 
 **Size:** M
 **Files:** `rust/crates/aipet-hook/src/{codex,toml_text}.rs`, `rust/golden/Registration.cs` (Codex fixtures), `rust/crates/aipet-hook/tests/golden/codex/**`, `rust/crates/aipet-hook/tests/codex.rs`
-**Touches:** [rust/crates/aipet-hook/src/codex.rs, rust/crates/aipet-hook/src/toml_text.rs, rust/crates/aipet-hook/tests/codex.rs, rust/crates/aipet-hook/tests/golden/codex/**, rust/golden/Registration.cs]
+**Touches:** [rust/crates/aipet-hook/src/codex.rs, rust/crates/aipet-hook/src/install.rs, rust/crates/aipet-hook/src/toml_text.rs, rust/crates/aipet-hook/tests/codex.rs, rust/crates/aipet-hook/tests/golden/codex/**, rust/golden/Registration.cs]
 
 ### Approach
 - Port `CodexConfig` (`src/AiPet.Hook/CodexConfig.cs`):
@@ -42,6 +42,11 @@ file to port, so it has a task of its own.
 ### Key context
 - Never re-serialise `config.toml`. A format-preserving crate may be used to read it, but the output must come from the
   line-based algorithm.
+**From task 3 (2026-09-29):** `install::run` (`install.rs`) answers `codex` with "registering with Codex isn't ported
+to this hook yet" and exit 1; replace that arm with `codex::install` / `codex::uninstall`. The exe-name check already
+runs before the agent split. Reuse `install::{save, read_text, …}`, `json_out` (JsonNode.Parse with .NET's messages,
+the indented writer) and `plugin_hooks::CODEX_EVENTS` instead of second copies, and add the Codex fixtures to
+`rust/golden/Registration.cs` beside `ClaudeCorpus` with its `Step`, `Settled` and `Tree` helpers.
 ## Acceptance
 - [ ] Every Codex fixture's install and uninstall output (`config.toml`, `hooks.json`, and stderr warnings) is
       byte-identical to the C#'s, on Linux and Windows.

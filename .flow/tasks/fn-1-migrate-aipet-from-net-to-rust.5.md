@@ -9,7 +9,7 @@ registration code: the doctor reuses its tables and file readers.
 
 **Size:** M
 **Files:** `rust/crates/aipet-hook/src/doctor.rs`, `rust/crates/aipet-hook/tests/doctor.rs`, `rust/golden/Doctor.cs` (doctor scenarios, run through the built C# hook), `rust/crates/aipet-hook/tests/golden/doctor/**`
-**Touches:** [rust/crates/aipet-hook/src/doctor.rs, rust/crates/aipet-hook/tests/doctor.rs, rust/crates/aipet-hook/tests/golden/doctor/**, rust/golden/Doctor.cs]
+**Touches:** [rust/crates/aipet-hook/src/doctor.rs, rust/crates/aipet-hook/src/main.rs, rust/crates/aipet-hook/tests/doctor.rs, rust/crates/aipet-hook/tests/golden/doctor/**, rust/golden/Doctor.cs, .github/workflows/cross-runtime.yml]
 
 ### Approach
 - Port `src/AiPet.Hook/Doctor.cs`:
@@ -30,6 +30,11 @@ registration code: the doctor reuses its tables and file readers.
 - `tests/AiPet.Tests/RegistrationTests.cs` — the doctor cases
 **Optional:**
 - `docs/ARCHITECTURE.md` §7 (checking)
+**From task 3 (2026-09-29):** `RegistrationTests` now runs the hook through `TestEnv.HookStartInfo`, so its doctor
+cases (`Doctor_KnowsLegacyCodexHooks`, `Doctor_WithoutHooksList_KnowsThePlugin` and the other `--doctor` runs) go to
+`AIPET_TEST_HOOK` when it is set. Most are Unix-only, so Windows never runs them against the Rust hook. Once
+`--doctor` is ported, add `RegistrationTests` to `cross-runtime.yml`'s class list so they run against it on Linux.
+Task 3 left `--doctor <agent>` printing "isn't ported to this hook yet" with exit 1 (`main.rs`); replace that stub.
 ## Acceptance
 - [ ] Doctor output and exit codes match the C#'s for every scenario, on Linux and Windows.
 - [ ] `--probe` finds the probe event through a live pet, and reports its absence when there is no pet.
