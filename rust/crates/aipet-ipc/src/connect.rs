@@ -406,7 +406,7 @@ mod sys {
             deadline: Instant,
             start: impl FnOnce(HANDLE, *mut OVERLAPPED) -> BOOL,
         ) -> io::Result<usize> {
-            let ms = left(deadline)?.as_millis().min(u128::from(u32::MAX - 1)) as u32;
+            left(deadline)?;
             let h = self.pipe.as_raw_handle() as HANDLE;
             // SAFETY: an all-zero OVERLAPPED is the start of an operation
             let mut ov: OVERLAPPED = unsafe { std::mem::zeroed() };
@@ -419,14 +419,19 @@ mod sys {
                     return Err(io::Error::from_raw_os_error(err as i32));
                 }
             }
-            // SAFETY: ov is the operation just started on h
-            if unsafe { GetOverlappedResultEx(h, &ov, &mut n, ms, FALSE) } != 0 {
-                return Ok(n as usize);
-            }
-            // SAFETY: reads this thread's last error
-            let err = unsafe { GetLastError() };
-            if err != WAIT_TIMEOUT && err != ERROR_IO_INCOMPLETE {
-                return Err(io::Error::from_raw_os_error(err as i32));
+            // Wait until the deadline itself. The wait takes whole milliseconds, and the system timer can end it a
+            // little early, so a wait that timed out before the deadline waits again for what is left.
+            while let Some(remaining) = deadline.checked_duration_since(Instant::now()).filter(|d| !d.is_zero()) {
+                let ms = remaining.as_nanos().div_ceil(1_000_000).min(u128::from(u32::MAX - 1)) as u32;
+                // SAFETY: ov is the operation just started on h
+                if unsafe { GetOverlappedResultEx(h, &ov, &mut n, ms, FALSE) } != 0 {
+                    return Ok(n as usize);
+                }
+                // SAFETY: reads this thread's last error
+                let err = unsafe { GetLastError() };
+                if err != WAIT_TIMEOUT && err != ERROR_IO_INCOMPLETE {
+                    return Err(io::Error::from_raw_os_error(err as i32));
+                }
             }
             // SAFETY: cancels only this operation, then waits until it has let go of the buffer and ov
             unsafe { CancelIoEx(h, &ov) };
