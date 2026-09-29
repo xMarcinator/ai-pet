@@ -57,9 +57,29 @@ Port the core's data layer so the Rust pet reads and writes what the .NET app do
 - [ ] A missing or corrupt config gives defaults with the right load status. The loader never writes.
 - [ ] The `HookCleanup` cases match the C#'s. The log rotates at 256 KB.
 ## Done summary
-TBD
+Ported the core's data layer to aipet-core: secrets in the C#'s schema (Credential Manager target = key; secret-tool service=aipet key=<key> with the 0600 secrets.json fallback; memory on macOS), config.json/jira.json/github.json with System.Text.Json's read/write rules and a Loaded/Missing/Corrupt load status (the loader never writes), aipet.log with the 256 KB rotation, HookCleanup Names/Agents/Run, and the update status texts. Golden mode `data` (rust/golden/Data.cs) records the app's own reads and writes; tests/data.rs replays them byte for byte and, with AIPET_GOLDEN, has the C# read every file the Rust writes and round-trip a test Credential Manager target with the Rust.
 
+Acceptance:
+- Tokens both ways: Windows `credential_manager_tokens_are_the_apps` (tests/data.rs; C# half needs AIPET_GOLDEN, as CI sets it; ran green locally). Linux: the manual check is the ignored test `secret_service_round_trip_with_the_csharps_commands`, documented in secrets/linux.rs; stand-in secret-tool tests pin the C#'s exact argv, stdin, TrimEnd and fallbacks.
+- config.json byte-for-byte round trip incl. legacy Toolbar: 74 golden file cases (config, jira, github); `the_app_reads_what_the_rust_writes` has the C# read every Rust-written file.
+- Missing/corrupt give defaults with the right status, and the load leaves the file untouched and creates nothing (asserted per case).
+- HookCleanup: VelopackTests' Names cases plus extra ones, Agents on configs the hook's own registration code wrote, Run tests (Unix stand-in script and hang; Windows with whoami.exe). Log rotation test at exactly 256 KB and 256 KB + 1.
+
+Choices to review:
+- C# nulls are `Option` (Avatar, the jira/github strings, the GitHub lists and their items), so null round-trips.
+- .NET 10 reads `WindowHeight: 1e400` as infinity and then can't write it; Rust matches (save_to errs, writes nothing).
+- `SecretStore::write` returns io::Result. The C# ignores a failed CredWrite, while the Linux file fallback throws; the caller decides.
+- `cleanup::names` works on UTF-16 like the C#. Past ASCII, "letter or digit" is Rust's is_alphanumeric (documented); the two differ only for marks and non-decimal numbers.
+- aipet.log always uses ':' as the time separator (the C# uses the culture's).
+- The golden copies the app's private Config and CredentialManager into Data.cs. Every run checks both, and the config.json read/write lines, against src/AiPet.UI's source. Golden.csproj is unchanged.
+
+Follow-ups (outside Touches): rust/golden/Program.cs still says only sprite and ipc are written. On a fresh worktree `dotnet test AiPet.slnx` needs `dotnet build AiPet.slnx` first (inherited). Linux-only code is cross-target clippy-checked (build-std) but its tests run only in Linux CI. Notes: NOTES_DIR/task-10-data-layer.md.
+
+stage: impl-review - skipped(policy: parallel-wave - conductor owns the gate)
+
+stage: impl-review - ran (codex: NEEDS_WORK then SHIP; fix d8c80ae)
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 5ad6b8ad5210f17d5a4bb11881fb165588fee4c2, d8c80ae
+- Tests: cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check, dotnet test AiPet.slnx, AIPET_GOLDEN=<repo>/rust/golden/bin/Release/net10.0/aipet-golden.dll cargo test -p aipet-core, dotnet run --project rust/golden -c Release -- data (regenerated: no diff), RUSTC_BOOTSTRAP=1 cargo clippy --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu|aarch64-apple-darwin -- -D warnings (aipet-core via scratch manifest), baseline: cargo green; dotnet test AiPet.slnx red pre-edit on the fresh worktree (6 tests need AiPet.UI built; green after dotnet build AiPet.slnx), integrated verify (Windows, work branch 952d0c3): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green (that test writes a test entry into the real Credential Manager; it first runs in Windows CI), clippy --workspace --all-targets -D warnings and fmt --check clean, rust/golden builds (0 warnings), not run anywhere yet: the Linux-only tests (stand-in secret-tool, 0600 file, Unix Run tests, a_locale_names_its_culture) - first in Linux CI
 - PRs:
