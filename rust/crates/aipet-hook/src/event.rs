@@ -161,7 +161,8 @@ fn payload_of(input: &[u8]) -> Result<Object, String> {
 
 /// Stdin's text as .NET's `StreamReader(stdin, Encoding.UTF8)` reads it: UTF-8 unless a byte order mark says
 /// otherwise (UTF-16 or UTF-32, either byte order), without the mark, and with each invalid sequence as U+FFFD.
-fn decoded(input: &[u8]) -> String {
+/// `File.ReadAllText` reads a file so too.
+pub(crate) fn decoded(input: &[u8]) -> String {
     /// The units of `N` bytes; one cut short at the end is U+FFFD.
     fn units<const N: usize>(bytes: &[u8], unit: fn([u8; N]) -> u32) -> impl Iterator<Item = u32> + '_ {
         let (units, rest) = bytes.as_chunks::<N>();

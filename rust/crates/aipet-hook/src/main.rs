@@ -4,8 +4,9 @@
 //! isn't running it does nothing at all: it writes nothing anywhere and starts nothing. It only observes: it never
 //! prints anything back to the agent, and it always exits 0, so it can't disturb the agent (see [`event`]).
 //!
-//! Also `aipet-hook --install|--uninstall claude|codex`, `aipet-hook --doctor claude|codex [--probe]` and
-//! `aipet-hook --print-plugin-hooks claude|codex`. A port of `src/AiPet.Hook`; those modes are still to be ported.
+//! Also `aipet-hook --install|--uninstall claude|codex` ([`install`]), `aipet-hook --doctor claude|codex [--probe]`
+//! and `aipet-hook --print-plugin-hooks claude|codex` ([`plugin_hooks`]), which aren't hook runs: they print, and
+//! exit with their own codes. A port of `src/AiPet.Hook`; Codex's registration and the doctor are still to be ported.
 
 mod claude;
 mod codex;
@@ -28,9 +29,37 @@ compile_error!("aipet-hook must be built with panic = \"unwind\": its event path
 fn main() {
     // `at`, before anything else and before stdin is read
     let launched = event::Launched::now();
-    silently(|| {
-        let args: Vec<OsString> = std::env::args_os().skip(1).collect();
-        event::run(&launched, &args);
+    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if let Some(code) = mode(&args) {
+        std::process::exit(code);
+    }
+    silently(|| event::run(&launched, &args))
+}
+
+/// `Program.Main` before its event path: the modes that aren't a hook run, and their exit codes. `None` for a hook
+/// run.
+fn mode(args: &[OsString]) -> Option<i32> {
+    let first = args.first()?.to_str()?;
+    if !matches!(first, "--install" | "--uninstall" | "--doctor" | "--print-plugin-hooks") {
+        return None;
+    }
+    let Some(agent) = args.get(1).map(|a| a.to_string_lossy().to_lowercase()) else {
+        // without an agent this would otherwise run as a hook and wait for an event on stdin
+        install::warn(match first {
+            "--doctor" => "usage: aipet-hook --doctor claude|codex [--probe]",
+            "--print-plugin-hooks" => plugin_hooks::USAGE,
+            _ => install::USAGE,
+        });
+        return Some(2);
+    };
+    Some(match first {
+        "--print-plugin-hooks" => plugin_hooks::print(&agent),
+        // fn-1-migrate-aipet-from-net-to-rust.5 ports Doctor
+        "--doctor" => {
+            install::warn("aipet-hook --doctor isn't ported to this hook yet");
+            1
+        }
+        _ => install::run(first, &agent),
     })
 }
 

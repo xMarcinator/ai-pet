@@ -59,12 +59,13 @@ static class TestEnv
     /// hook/aipet-hook.dll in the output (the csproj copies it there), run with `dotnet` as the antivirus rule asks.
     public static readonly string HookDll = Path.Combine(AppContext.BaseDirectory, "hook", "aipet-hook.dll");
 
-    /// AIPET_TEST_HOOK=<path>: the event-path tests (StartHook, HookRun) run that binary itself instead, the Rust hook
-    /// in cross-runtime.yml. The other modes (--install, --doctor, --print-plugin-hooks) still run HookDll.
+    /// AIPET_TEST_HOOK=<path>: the tests that run the hook run that binary itself instead, the Rust hook in
+    /// cross-runtime.yml: on its event path (StartHook, HookRun) and in its other modes (RegistrationTests,
+    /// PluginHooksTests), all through HookStartInfo.
     public static readonly string TestHook =
         Environment.GetEnvironmentVariable("AIPET_TEST_HOOK") is { Length: > 0 } hook ? Path.GetFullPath(hook) : null;
 
-    /// How to start the hook on its event path with `args`: `dotnet hook/aipet-hook.dll`, or TestHook directly.
+    /// How to start the hook with `args`: `dotnet hook/aipet-hook.dll`, or TestHook directly.
     public static ProcessStartInfo HookStartInfo(params string[] args)
     {
         var hook = TestHook ?? HookDll;
