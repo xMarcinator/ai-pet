@@ -8,7 +8,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use crate::claude;
+use crate::{claude, codex};
 
 /// `Environment.NewLine`, which `Console.WriteLine` ends a line with and the settings files are written with.
 pub(crate) const NEWLINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
@@ -26,7 +26,7 @@ pub(crate) fn warn(line: &str) {
 }
 
 /// `Install.Run(action, agent)`: `agent` in lower case. What a registration throws (its `Exception.Message`) comes
-/// back as the `Err` of [`claude::install`] and [`claude::uninstall`], and is said here.
+/// back as the `Err` of [`claude::install`], [`codex::install`] and the uninstalls, and is said here.
 pub(crate) fn run(action: &str, agent: &str) -> i32 {
     if agent != "claude" && agent != "codex" {
         warn(USAGE);
@@ -46,12 +46,12 @@ pub(crate) fn run(action: &str, agent: &str) -> i32 {
         );
         return 1;
     }
-    let say = &mut |line: &str| say(line);
+    let (out, err) = (&mut |line: &str| say(line), &mut |line: &str| warn(line));
     let done = match (agent, exe) {
-        ("claude", Some(exe)) if install => claude::install(&exe, &claude::process_vars, say),
-        ("claude", _) => claude::uninstall(&claude::process_vars, say),
-        // fn-1-migrate-aipet-from-net-to-rust.4 ports CodexConfig
-        _ => Err("registering with Codex isn't ported to this hook yet".to_owned()),
+        ("claude", Some(exe)) if install => claude::install(&exe, &claude::process_vars, out),
+        ("claude", _) => claude::uninstall(&claude::process_vars, out),
+        (_, Some(exe)) if install => codex::install(&exe, out, err),
+        _ => codex::uninstall(out, err),
     };
     done.unwrap_or_else(|message| {
         warn(&format!("Couldn't update {agent} settings: {message}"));
@@ -66,18 +66,32 @@ fn is_hook(exe: &Path) -> bool {
         .is_some_and(|name| name == "AIPET-HOOK" || name == "AIPET-HOOK.EXE")
 }
 
-/// The text as `StringComparison.OrdinalIgnoreCase` compares it: each character in upper case, where that is one
-/// character (`ı` is `I`, `ß` stays).
+/// The text as `StringComparison.OrdinalIgnoreCase` compares it: each character as its simple upper case (`ǆ` is
+/// `Ǆ`, `ᾳ` is `ᾼ`, `ß` stays), but for `ı` and `ſ`, which .NET's ordinal casing keeps as they are.
 pub(crate) fn upper(s: &str) -> String {
-    s.chars()
-        .map(|c| {
+    s.chars().map(ordinal_upper).collect()
+}
+
+fn ordinal_upper(c: char) -> char {
+    match c {
+        'ı' | 'ſ' => c,
+        // the small letters with ypogegrammeni: their full upper case is two characters (with a capital iota), their
+        // simple one the letter with prosgegrammeni
+        '\u{1F80}'..='\u{1F87}' | '\u{1F90}'..='\u{1F97}' | '\u{1FA0}'..='\u{1FA7}' => {
+            char::from_u32(u32::from(c) + 8).unwrap_or(c)
+        }
+        '\u{1FB3}' => '\u{1FBC}',
+        '\u{1FC3}' => '\u{1FCC}',
+        '\u{1FF3}' => '\u{1FFC}',
+        // anywhere else the full upper case is the simple one where it is one character, and none where it is more
+        _ => {
             let mut up = c.to_uppercase();
             match (up.next(), up.next()) {
                 (Some(u), None) => u,
                 _ => c,
             }
-        })
-        .collect()
+        }
+    }
 }
 
 // ------------------------------------------------------------------ files
@@ -177,4 +191,120 @@ fn system_text(e: &io::Error) -> String {
         Some(at) => text[..at].to_owned(),
         None => text,
     }
+}
+
+/// `RealPath`: the file a symlink ends at (`File.ResolveLinkTarget(path, returnFinalTarget: true)`), each link's
+/// relative target taken from where that link is, as a full path (`FileSystemInfo.FullName`). Not a link, a chain
+/// past .NET's 40 links, or no full path to be had (`FullName` throws, and `RealPath` catches): the path itself.
+/// (Codex's registration; claude.rs has its own copy.)
+pub(crate) fn real_path(path: &Path) -> PathBuf {
+    const MAX_FOLLOWED_LINKS: usize = 40;
+    let Ok(mut target) = fs::read_link(path) else {
+        return path.to_owned();
+    };
+    let mut current = path.to_owned();
+    for _ in 0..MAX_FOLLOWED_LINKS {
+        current = match current.parent() {
+            Some(dir) if target.is_relative() => dir.join(&target),
+            _ => target,
+        };
+        match fs::read_link(&current) {
+            Ok(next) => target = next,
+            Err(_) => return full_path(&current).unwrap_or_else(|| path.to_owned()),
+        }
+    }
+    path.to_owned()
+}
+
+/// `Path.GetFullPath`: a relative path taken from the working folder, then `.` and `..` taken out of the text. `None`
+/// where .NET throws: there is no working folder.
+#[cfg(unix)]
+fn full_path(path: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+
+    let mut full = PathBuf::new();
+    for part in std::path::absolute(path).ok()?.components() {
+        match part {
+            Component::ParentDir => {
+                full.pop();
+            }
+            Component::CurDir => {}
+            other => full.push(other),
+        }
+    }
+    Some(full)
+}
+
+#[cfg(not(unix))]
+fn full_path(path: &Path) -> Option<PathBuf> {
+    std::path::absolute(path).ok()
+}
+
+/// `Backup`: `<file>.aipet-<local time>.bak` before each change, and the newest three of them kept. It never fails
+/// the change. (Codex's registration; claude.rs has its own copy.)
+pub(crate) fn backup(path: &Path) {
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+        return;
+    };
+    let mut copy = path.as_os_str().to_owned();
+    copy.push(format!(".aipet-{}.bak", local_stamp()));
+    if fs::copy(path, copy).is_err() {
+        return;
+    }
+    // Directory.GetFiles(dir, "<file>.aipet-*.bak"): the name's case counts on Unix only
+    let fold = |s: &str| if cfg!(windows) { upper(s) } else { s.to_owned() };
+    let prefix = fold(&format!("{}.aipet-", name.to_string_lossy()));
+    let suffix = fold(".bak");
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    let mut backups: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .filter(|e| e.path().is_file())
+        .filter(|e| {
+            let name = fold(&e.file_name().to_string_lossy());
+            name.len() >= prefix.len() + suffix.len() && name.starts_with(&prefix) && name.ends_with(&suffix)
+        })
+        .map(|e| e.path())
+        .collect();
+    backups.sort_unstable_by(|a, b| b.as_os_str().cmp(a.as_os_str()));
+    for old in backups.iter().skip(3) {
+        if fs::remove_file(old).is_err() {
+            return;
+        }
+    }
+}
+
+/// The local time as `yyyyMMdd-HHmmss`.
+#[cfg(unix)]
+fn local_stamp() -> String {
+    // SAFETY: time only returns the time when given no pointer; localtime_r writes only tm
+    let now = unsafe { libc::time(std::ptr::null_mut()) };
+    // SAFETY: an all-zero tm is a valid value to be filled in
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    // SAFETY: both pointers are to live locals
+    if unsafe { libc::localtime_r(&now, &mut tm) }.is_null() {
+        return "00000000-000000".to_owned();
+    }
+    format!(
+        "{:04}{:02}{:02}-{:02}{:02}{:02}",
+        tm.tm_year + 1900,
+        tm.tm_mon + 1,
+        tm.tm_mday,
+        tm.tm_hour,
+        tm.tm_min,
+        tm.tm_sec
+    )
+}
+
+#[cfg(windows)]
+fn local_stamp() -> String {
+    use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+
+    // SAFETY: an all-zero SYSTEMTIME is a valid value to be filled in
+    let mut now = unsafe { std::mem::zeroed() };
+    // SAFETY: GetLocalTime only writes the SYSTEMTIME it is given
+    unsafe { GetLocalTime(&mut now) };
+    format!(
+        "{:04}{:02}{:02}-{:02}{:02}{:02}",
+        now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond
+    )
 }
