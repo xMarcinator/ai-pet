@@ -20,7 +20,8 @@ fn-1-migrate-aipet-from-net-to-rust.13).
   - NVIDIA RTX 2000 Ada Generation Laptop GPU (driver 32.0.15.9658, Vulkan 596.58).
 - Two monitors:
   - the main one, landscape, 2560 × 1440 (by the start position in the logs), at 100 %, and at 150 % for one run;
-  - a portrait one above it, always at 100 %.
+  - a portrait one to the right of it (by the pointer positions in the `05` log: x 2642–2661, past the main one's
+    right edge, at y 916–930), always at 100 %.
 - The pet ran over an empty, maximised Notepad, so its white page showed through wherever the pet was transparent.
 - The build was the release `aipet-spike.exe` from `wave/fn-1.13` at `db3db70` (SHA-256 `b42ecf60…60df`).
 - Each run had `AIPET_DEBUG=1` except the CPU runs. With it, the log names the wgpu adapters, the one chosen for the
@@ -49,18 +50,20 @@ Three things failed. Two are fixed here, and the third has a chosen fix:
 | Transparency, `WGPU_BACKEND=vulkan` | Pass | [03-vulkan-transparency.png](windows/03-vulkan-transparency.png) |
 | Transparency, `WGPU_BACKEND=gl` | Pass | [04-gl-transparency.png](windows/04-gl-transparency.png) |
 | Transparency, `WGPU_BACKEND=dx12` | **Fail**: black inside the region | [02-dx12-transparency.png](windows/02-dx12-transparency.png) |
-| Click-through beside the pet and between bubbles (`SetWindowRgn`) | Pass, with every backend | user; log |
+| Click-through beside the pet and between bubbles (`SetWindowRgn`) | Pass with the default backend (Vulkan), at 100 % and 150 %; not reported for the `dx12`, `vulkan` and `gl` runs | user |
 | Flicker or clipping while the region follows the pet | Pass: none seen at 14–18 region updates a second | user; logs |
-| `HWND_TOPMOST`, and "Always on top" off and on | Pass | user |
-| Out of Alt+Tab, Task View and the taskbar (`WS_EX_TOOLWINDOW` subclass) | Pass | user |
-| Drag at 100 %, and onto the other 100 % monitor | Pass | user; `01` log |
+| `HWND_TOPMOST`, and unticking "Always on top" | Pass (what ticking it again did wasn't reported) | user; `01` log |
+| Out of Alt+Tab, Task View and the taskbar (`WS_EX_TOOLWINDOW` subclass) | Pass | user (Alt+Tab, Task View); `01-taskbar.png`, not kept (taskbar) |
+| Drag at 100 % | Pass | user; `01` log |
+| Drag onto the other 100 % monitor | Not shown | `01` log |
 | Drag at 150 % on one monitor | Pass | user; `05` log |
 | Drag across monitors at 150 % and 100 % | **Fail**, transient: the scale flips at the crossing | user; `05` log |
 | Lost release (Start menu mid-drag) | **Failed**; fixed here, not yet re-run by hand | `07` log; unit test |
 | First click after start; click with the pointer resting on the pet | Pass; one press without a position, caused by the debug probe (fixed) | `01`, `02`, `07` logs |
 | Font | Segoe UI on Windows, nothing bundled | [01-settings-font.png](windows/01-settings-font.png); unit test |
 | The menu's rows | Off-centre: follow-up | [01-menu-offset.png](windows/01-menu-offset.png) |
-| Scale 150 %: crisp pixels and text, whole menu, nothing cut off | Pass | [05-150-transparency.png](windows/05-150-transparency.png) |
+| Scale 150 %: crisp pixels and text, nothing cut off (header, bubbles and sprite) | Pass | [05-150-transparency.png](windows/05-150-transparency.png) |
+| The menu at 150 % | Not checked: opened only at scale 1 | `05` log |
 | CPU and memory | Measured (below) | sampler output |
 
 ## Findings
@@ -69,7 +72,7 @@ Three things failed. Two are fixed here, and the third has a chosen fix:
 
 | Backend | Adapter chosen | Alpha modes offered | iced gets | Seen | Shown after start |
 |---|---|---|---|---|---|
-| default (all) | Vulkan, Intel UHD | Opaque, Inherit | Opaque | transparent | 4.5–7.3 s (4 runs) |
+| default (all) | Vulkan, Intel UHD | Opaque, Inherit | Opaque | transparent | 4.5–7.3 s (3 runs: 6.8, 7.3 and 4.5 s) |
 | `vulkan` | Vulkan, Intel UHD | Opaque, Inherit | Opaque | transparent | 6.5 s |
 | `gl` | GL 4.6, Intel UHD | Opaque | Opaque | transparent | 0.9 s |
 | `dx12` | DX12, Intel UHD | Opaque | Opaque | opaque (black) | 14.0 s |
@@ -82,9 +85,10 @@ Three things failed. Two are fixed here, and the third has a chosen fix:
   Why wasn't established. The likely reason is that winit asks DWM for blur-behind on a transparent window, and the
   Intel driver's Vulkan and GL presentation keeps the alpha through it.
 - DX12 makes its swapchain from the window's HWND with the alpha ignored, which is the only mode wgpu offers there.
-  Inside the window region
-  everything the pet doesn't paint came out black, in rectangles around the bubble and the sprite. Outside the region
-  the desktop still showed, and clicks still went through.
+  Inside the window region everything the pet doesn't paint came out black, in rectangles around the bubble and the
+  sprite. Outside the region the desktop still showed. Clicks weren't checked in this run: the user reported only
+  "dark boxes around the pet". The black boxes are the window region, which clips hit-testing as well as drawing, so
+  clicks outside them would go through.
   - wgpu 27 has a transparent DX12 path, a DirectComposition swapchain (`WGPU_DX12_PRESENTATION_SYSTEM=Visual`). iced
     0.14 can't use it, because iced_wgpu builds its wgpu instance with the default options and ignores that
     variable.
@@ -101,34 +105,46 @@ Three things failed. Two are fixed here, and the third has a chosen fix:
 
 ### The window region, topmost, Alt+Tab and the taskbar
 
-- **Click-through:** clicks on the Notepad page beside the pet and in the gaps between bubbles went to Notepad, with
-  every backend. As designed, the pet takes clicks close to its sprite and bubbles, where its glow and shadows are
-  drawn. The log shows two presses just left of the sprite that landed in its glow and were taken by the pet ("not on
-  the sprite").
+- **Click-through:** with the default backend (Vulkan on the Intel GPU), clicks on the Notepad page beside the pet and
+  in a gap between bubbles went to Notepad at 100 %, and a click beside the pet went to Notepad at 150 %. The `dx12`,
+  `vulkan` and `gl` runs have no report on clicks, and their logs can't show one: a click that goes through never
+  reaches the pet. The window region (`SetWindowRgn` on the HWND) doesn't depend on the backend. As designed, the pet
+  takes clicks close to its sprite and bubbles, where its glow and shadows are drawn. The `01` log shows two presses
+  just left of the sprite that landed in its glow and were taken by the pet ("not on the sprite").
 - **Flicker:** the user watched the pet hop and the bubbles slide, fold and spread, and saw no flicker, flash or
   cut-off edge. At the time the window region changed 14–18 times a second (16.4 a second over run `01`'s 7 minutes),
   each change a `SetWindowRgn` with redraw. The region slack that SPIKE.md holds in reserve for this isn't needed.
-- **Topmost:** a Notepad window dragged over the pet stayed behind it. Unticking "Always on top" let Notepad cover the
-  pet, and ticking it again brought the pet back in front.
+- **Topmost:** a Notepad window dragged over the pet stayed behind it, and with "Always on top" unticked Notepad
+  covered the pet. "Always on top" was ticked again afterwards (the `01` log's press at 289.518 s lands on that row),
+  but what that did wasn't reported.
 - **Alt+Tab, Task View, taskbar:** the pet ("AiPet spike") showed in none of them. The taskbar screenshot isn't kept
   here, because it shows the user's own pinned apps.
 
 ### Dragging and DPI
 
-- **At 100 % and at 150 %:** dragging slowly and quickly kept the grabbed spot under the pointer, and each drop landed
-  with the squash. At 100 % the pet crossed onto the portrait monitor and back (a window position with a negative y in
-  the log) with no problem.
+- **At 100 % and at 150 %:** dragging slowly and quickly kept the grabbed spot under the pointer.
+- **Onto the other monitor at 100 %:** not shown. Every drop in run `01` had the pointer on the main monitor, and the
+  user's answers for that run don't mention the second monitor. The log's only window position with a negative y is
+  (2022, −329), after a drag up (100.2–100.5 s). The pointer was then at (2225, 195) and the sprite's box at
+  y 139–259, on the main monitor: only the top of the window went past the main monitor's top edge.
 - **Across 150 % and 100 %:** the pet flickered at the crossing, changing between its two sizes, and could land on
   the far side of the target monitor, away from the pointer. It snapped back under the pointer as soon as the pointer
   moved on.
-  - The log shows the scale flipping between 1 and 1.5 up to 7 times in about 0.1 s at each crossing:
-    - 87.812–87.912 s;
-    - 93.502–93.672 s;
-    - 105.945–106.184 s;
-    - 110.930–111.120 s.
-  - Cause: Windows gives the window the scale of the monitor that holds most of its area. The pet's window is mostly
-    empty room for bubbles above the sprite, and it changes size with the scale (380 × 600 at 100 %, 570 × 900 at
-    150 %). Near the edge, the window placed for one scale has its larger part on the other monitor.
+  - The log shows the scale flipping between 1 and 1.5 three to seven times within 0.10–0.24 s at four of the five
+    crossings, all during drags:
+    - 87.812–87.912 s: 5 changes in 0.10 s;
+    - 93.502–93.672 s: 3 in 0.17 s;
+    - 105.945–106.184 s: 7 in 0.24 s;
+    - 110.930–111.120 s: 5 in 0.19 s.
+  - The other crossing, back onto the 150 % monitor at 108.482 s in the same drag as the last two, was a single change
+    with no flipping.
+  - Every crossing was sideways, through the main monitor's right edge. On the 100 % monitor the pointer was at
+    (2642, 917) and (2661, 930), in physical pixels, when two drags ended there, and at (2651, 916) when one began
+    there: right of the main monitor's 2560 px and within its height. The user noted that the second monitor is
+    portrait and the main one landscape. Stacked monitors weren't tried.
+  - Cause: Windows gives the window the scale of the monitor that holds most of its area, and the pet's window changes
+    size with the scale (380 × 600 at 100 %, 570 × 900 at 150 %). Near the edge, the window placed for one scale has
+    its larger part on the other monitor.
     - At each change, winit resizes the window and moves it onto the new monitor, nudging it pixel by pixel where the
       new size doesn't fit.
     - The next frame of the drag puts the grabbed spot back under the pointer at the new size, which puts the larger
@@ -143,8 +159,8 @@ Three things failed. Two are fixed here, and the third has a chosen fix:
       down.
     - At the drop, hand winit the window's current DPI, with the window placed so the grabbed spot stays under the
       pointer.
-    - The user thought the portrait monitor above the landscape one makes the crossing worse. That fits the cause: the
-      pet's empty room is above the sprite, so it reaches the upper monitor first.
+- **The menu at 150 %** wasn't checked. In run `05` it was opened three times (200.7, 259.0 and 297.9 s), all after
+  the last drag had left the window at scale 1 (111.120 s), so the whole menu the user saw then was drawn at 100 %.
 - **A lost release:** the user started a drag, pressed Win while still holding the button (the Start menu opened), then
   let go. The pet kept following the pointer until the next click, 9.4 s later (09.1–18.5 s in the `07` log), and no
   `drag cancelled` line came.
@@ -157,10 +173,13 @@ Three things failed. Two are fixed here, and the third has a chosen fix:
 - **The first click after start** poked. It arrived with its position (`Left press at Some(..): on the sprite`).
   - The earlier run's click that came without a position didn't recur in any normal run.
   - One did come in the DX12 run: `entered`, `left`, then `Left press at None`, all at 18.167 s.
-    - That was the moment the debug probe released the event loop after blocking it for 4.1 s with the window shown.
-    - The user's click had queued up behind the probe. When the loop resumed, a "pointer left" message was handled
-      before the queued press, so the press had no position. winit's Windows backend drops the position a button
-      message carries, and Windows takes posted messages such as `WM_MOUSELEAVE` from the queue before input.
+    - They came with the GPU line, 0.36 s after the event loop was running again: the log's first line after the
+      stall is at 17.808 s, so the debug probe had blocked the loop for at most 3.8 s (14.033–17.808 s) with the window
+      shown.
+    - The user's click had queued up behind the probe, and then, like the probe's own result, behind the frame ticks
+      that had queued up during the stall. A "pointer left" message was handled before the queued press, so the press
+      had no position. winit's Windows backend drops the position a button message carries, and Windows takes posted
+      messages such as `WM_MOUSELEAVE` from the queue before input.
   - Fixed: the probe now runs before the window is shown.
   - If a press without a position ever shows up without the probe, the fix is in the subclass: pass winit a
     `WM_MOUSEMOVE` carrying the press's own position just before the press.
@@ -182,19 +201,21 @@ Three things failed. Two are fixed here, and the third has a chosen fix:
 - The line height stays at Noto Sans' 1.362 em on Windows, because the bubbles' text positions (`view.rs`) are worked
   out from it. Segoe UI's own line height, which Avalonia uses there, is 1.330 em (2210 + 514 per 2048). The
   difference is under half a pixel per line at the pet's sizes.
-- **The menu's rows:** the user saw the labels and check marks off-centre in their rows. Measured on
-  [01-menu-offset.png](windows/01-menu-offset.png), each label's capitals sit 6–7 px above the centre of its 32 px row,
-  with the spare room all below. `menu.rs` places each item's content at the top of its button, since iced lays a
-  button's content out from its top-left corner. The C#'s menu items centre theirs. The same view draws the Wayland
-  shell's menu.
+- **The menu's rows:** the user noticed the menu's text "a bit offset". They didn't mention the check marks or say
+  which way the text was off. Measured on [01-menu-offset.png](windows/01-menu-offset.png), the offset is vertical, and
+  the check marks share it: each label's capitals sit about 6 px above the centre of its 32 px row, the two check
+  marks about 7 px, and the spare room is all below. `menu.rs` places each item's content at the top of its button,
+  since iced lays a button's content out from its top-left corner. The C#'s menu items centre theirs. The same view
+  draws the Wayland shell's menu.
 
 ### CPU and memory
 
 This is the release build with no debug logging, at 100 %, running the spike's busy 40 s demo script (bubbles, moods,
-an attention alert). Nobody touched the mouse, and no build ran (0 of 60 checks saw `rustc` or `cargo`). Each run had a
-60 s settle, then 60 one-second samples, taken with the sampler in [Re-running it](#re-running-it) (a slightly
-trimmed copy of it is shown there). CPU is a share of one core, out of 20 logical
-cores. The backend was the default, Vulkan on the Intel GPU.
+an attention alert). The runbook asked that nobody touch the mouse during the two minutes; that wasn't recorded, since
+these runs had no debug logging and the user reported nothing for this step. No build ran (0 of 60 checks saw `rustc`
+or `cargo`). Each run had a 60 s settle, then 60 one-second samples, taken with the sampler in
+[Re-running it](#re-running-it) (a slightly trimmed copy of it is shown there). CPU is a share of one core, out of 20
+logical cores. The backend was the default, Vulkan on the Intel GPU.
 
 | | CPU mean | CPU median | CPU range | Working set | Private bytes |
 |---|---|---|---|---|---|
@@ -211,8 +232,12 @@ cores. The backend was the default, Vulkan on the Intel GPU.
 - `aipet-ui/src/style.rs`: Segoe UI on Windows, with its test.
 - `aipet-desktop/src/shell.rs`:
   - With `AIPET_DEBUG=1`, the shell logs two `GPU` lines: the adapters, the one chosen for the pet window, its
-    surface's alpha modes, what iced asks for and gets, and the format. iced exposes none of this, so the shell asks
-    wgpu again the same way iced_wgpu does. The probe runs before the window is shown.
+    surface's alpha modes, what iced asks for and gets, and the format. The probe runs before the window is shown.
+    - iced's API doesn't give the shell this. iced_wgpu logs it at info level through the `log` crate (the adapters,
+      the one selected, the surface's formats and alpha modes, and the format and alpha mode it asks for), but the
+      spike installs no logger, and `iced::system::information` needs the `sysinfo` feature, which isn't enabled, and
+      gives only the adapter's name and backend. So the shell asks wgpu again the same way iced_wgpu does.
+    - A `log` backend would show iced_wgpu's own record instead, as `notes/iced.md` §11 suggests.
   - Losing the focus ends a drag, with its test.
 
 ## What later tasks take from this
@@ -223,10 +248,19 @@ cores. The backend was the default, Vulkan on the Intel GPU.
     DX12.
   - Measure GL's CPU cost when this lands (task 28).
 - **Task 27 (the Windows parity pass):**
-  - Hold the scale change during a drag, as chosen above, and check the crossing by hand at 100 % and 150 %, with the
-    monitors side by side and stacked.
+  - Hold the scale change during a drag, as chosen above, and check the crossing between 150 % and 100 % by hand, with
+    the monitors side by side, as here, and stacked, which wasn't tried.
+  - Check by hand what this run didn't show:
+    - the drag onto the other monitor at 100 %: drag the pet onto it, let go there, and drag it back;
+    - the menu at 150 %, opened with the pet on the 150 % monitor: whole, crisp and not cut off;
+    - click-through with GL and with Vulkan, beside the pet and in a gap between bubbles;
+    - ticking "Always on top" again: once Notepad is clicked, the pet is back in front within 2 s.
   - Check the lost release through the Start menu, Alt+Tab and Win+D.
-  - Check transparency with the NVIDIA GPU drawing (`WGPU_POWER_PREF=high`).
+  - Check transparency with the NVIDIA GPU drawing, through Vulkan, the alternative route
+    (`WGPU_BACKEND=vulkan WGPU_POWER_PREF=high`). Run with `AIPET_DEBUG=1`, and confirm that the "GPU for the pet" line
+    names the RTX 2000.
+    - Under the GL default, `WGPU_POWER_PREF` changes nothing, because GL lists only the Intel GPU. The NVIDIA GPU
+      could draw GL only if something outside wgpu forces it, and that hasn't been tried.
 - **The menu (`aipet-ui/src/menu.rs`):** centre each item's content in its 32 px row, for example with a
   `container(...).height(Fill).align_y(Center)` inside the button. This is for whichever task next touches the menu
   (17 or 27).
@@ -240,8 +274,14 @@ cores. The backend was the default, Vulkan on the Intel GPU.
 - One machine, and only the Intel GPU ever presented; the NVIDIA GPU never drew the pet. No AMD GPU and no Windows 10
   were tried.
 - The CPU figures are the spike running its demo script, measured on Vulkan only, not the benchmark R18 asks for.
-- The lost-release fix and the moved probe are covered by a unit test and by reading the code, but not yet re-run by
-  hand.
+- The lost-release fix is covered by a unit test and by reading the code, the moved probe only by reading the code, and
+  neither has been re-run by hand.
+- Not shown by hand:
+  - the drag onto the other monitor at 100 %: every drop in run `01` had the pointer on the main monitor;
+  - the menu at 150 %: in run `05` it was opened only after the window's last rescale, to 1 at 111.120 s;
+  - click-through in the `dx12`, `vulkan` and `gl` runs: no click was reported for them;
+  - what ticking "Always on top" again did.
+- Only the side-by-side layout of the two monitors was tried, not one above the other.
 - The screenshot of the pet after a drag onto the 100 % monitor was not taken.
 
 ## Re-running it
