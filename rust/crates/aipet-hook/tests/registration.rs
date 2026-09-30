@@ -18,6 +18,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -113,45 +114,46 @@ fn hook_written() -> String {
 // ------------------------------------------------------------------ the fixtures
 /// A case's folder made as its setup says: claude/ (CLAUDE_CONFIG_DIR) and anything around it, and the harness
 /// folder the C# had too, with a bash.exe to find and an empty folder for PATH.
-fn set_up(case: &Value, root: &Path, exe: &str) {
+fn set_up(case: &Value, root: &Path, exe: &str) -> io::Result<()> {
     let setup = &case["setup"];
-    fs::create_dir_all(root.join("harness").join("nobin")).unwrap();
-    fs::write(root.join("harness").join("bash.exe"), "").unwrap();
+    fs::create_dir_all(root.join("harness").join("nobin"))?;
+    fs::write(root.join("harness").join("bash.exe"), "")?;
     if setup.get("config_dir") != Some(&Value::Bool(false)) {
-        fs::create_dir_all(root.join("claude")).unwrap();
+        fs::create_dir_all(root.join("claude"))?;
     }
     let entries = |key: &str| setup.get(key).and_then(Value::as_object).cloned().unwrap_or_default();
     for dir in setup.get("dirs").and_then(Value::as_array).into_iter().flatten() {
-        fs::create_dir_all(root.join(text(dir))).unwrap();
+        fs::create_dir_all(root.join(text(dir)))?;
     }
     let file = |path: &str, bytes: Vec<u8>| {
         let path = root.join(path);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, bytes).unwrap();
+        fs::create_dir_all(path.parent().unwrap())?;
+        fs::write(path, bytes)
     };
     for (path, content) in entries("files") {
-        file(&path, text(&content).replace("{exe}", exe).into_bytes());
+        file(&path, text(&content).replace("{exe}", exe).into_bytes())?;
     }
     for (path, hex) in entries("bytes") {
-        file(&path, from_hex(text(&hex)));
+        file(&path, from_hex(text(&hex)))?;
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::{PermissionsExt, symlink};
         for (path, target) in entries("links") {
-            symlink(text(&target), root.join(path)).unwrap();
+            symlink(text(&target), root.join(path))?;
         }
         for (path, mode) in entries("modes") {
             let mode = u32::from_str_radix(text(&mode), 8).unwrap();
-            fs::set_permissions(root.join(path), fs::Permissions::from_mode(mode)).unwrap();
+            fs::set_permissions(root.join(path), fs::Permissions::from_mode(mode))?;
         }
     }
     for path in setup.get("read_only").and_then(Value::as_array).into_iter().flatten() {
         let path = root.join(text(path));
-        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        let mut permissions = fs::metadata(&path)?.permissions();
         permissions.set_readonly(true);
-        fs::set_permissions(path, permissions).unwrap();
+        fs::set_permissions(path, permissions)?;
     }
+    Ok(())
 }
 
 fn from_hex(hex: &str) -> Vec<u8> {
@@ -229,23 +231,24 @@ fn backups(config: &Path) -> Vec<String> {
 
 /// Everything under the case's folder but the harness, as the golden has it: a folder, a symlink's target, or a
 /// file's text ({exe} for the hook) or bytes, and on Unix its mode.
-fn tree(root: &Path, exe: &str) -> BTreeMap<String, Value> {
-    fn walk(root: &Path, dir: &Path, exe: &str, entries: &mut BTreeMap<String, Value>) {
-        for entry in fs::read_dir(dir).unwrap().filter_map(Result::ok) {
+fn tree(root: &Path, exe: &str) -> io::Result<BTreeMap<String, Value>> {
+    fn walk(root: &Path, dir: &Path, exe: &str, entries: &mut BTreeMap<String, Value>) -> io::Result<()> {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
             let path = entry.path();
             let rel = path.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
             if rel == "harness" {
                 continue;
             }
-            let kind = entry.file_type().unwrap();
+            let kind = entry.file_type()?;
             if kind.is_symlink() {
-                let target = fs::read_link(&path).unwrap();
+                let target = fs::read_link(&path)?;
                 entries.insert(rel, json!({ "link": target.to_string_lossy() }));
             } else if kind.is_dir() {
                 entries.insert(rel, json!({ "dir": true }));
-                walk(root, &path, exe, entries);
+                walk(root, &path, exe, entries)?;
             } else {
-                let bytes = fs::read(&path).unwrap();
+                let bytes = fs::read(&path)?;
                 let mut e = Map::new();
                 match String::from_utf8(bytes) {
                     Ok(t) if !t.starts_with('\u{feff}') => e.insert("text".into(), t.replace(exe, "{exe}").into()),
@@ -255,16 +258,17 @@ fn tree(root: &Path, exe: &str) -> BTreeMap<String, Value> {
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
-                    let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o7777;
+                    let mode = fs::metadata(&path)?.permissions().mode() & 0o7777;
                     e.insert("mode".into(), format!("{mode:o}").into());
                 }
                 entries.insert(rel, Value::Object(e));
             }
         }
+        Ok(())
     }
     let mut entries = BTreeMap::new();
-    walk(root, root, exe, &mut entries);
-    entries
+    walk(root, root, exe, &mut entries)?;
+    Ok(entries)
 }
 
 /// How a corpus written elsewhere is compared here: its newline as this OS's, and modes only when both have them.
@@ -307,8 +311,45 @@ impl Adapt {
     }
 }
 
-/// Every case of a corpus this OS can make, through the built hook. A case that doesn't come out as the C#'s is run
-/// again, twice at most: a virus scanner can hold a file just written for a moment (Windows) and fail a step.
+/// Why a run of a case didn't come out as the C#'s.
+enum Failure {
+    /// Another process kept a file from the hook, or from the harness around it: a sharing or lock violation. A virus
+    /// scanner can hold a file just written for a moment (Windows), and such a run says nothing of the port.
+    Held(String),
+    /// The hook's answer isn't the C#'s.
+    Differs(String),
+}
+
+/// A sharing and a lock violation, the errors of a file another process has: Windows' ERROR_SHARING_VIOLATION and
+/// ERROR_LOCK_VIOLATION (Unix has neither).
+const HELD: [i32; 2] = [32, 33];
+
+/// Whether another process has the file.
+fn held(e: &io::Error) -> bool {
+    cfg!(windows) && e.raw_os_error().is_some_and(|code| HELD.contains(&code))
+}
+
+/// The harness's own work on the case's files failed: a held file sets the run aside, anything else is a bug here.
+fn harness(what: &str, e: io::Error) -> Failure {
+    assert!(held(&e), "{what}: {e}");
+    Failure::Held(format!("{what}: {e}"))
+}
+
+/// Whether the hook said it was kept from a file: the system's text for a sharing or lock violation, which
+/// install.rs's `thrown` and `moved` pass on. The golden never has one, since its generator sets such runs aside.
+fn hook_held(said: &str) -> bool {
+    cfg!(windows)
+        && HELD.into_iter().any(|code| {
+            let error = io::Error::from_raw_os_error(code).to_string();
+            let (text, _) = error.rsplit_once(" (os error ").unwrap_or((error.as_str(), ""));
+            said.contains(text)
+        })
+}
+
+/// Every case of a corpus this OS can make, through the built hook. Every run of a case must come out as the C#'s,
+/// but for a run another process kept from a file, which says nothing of the port: the hook or the harness met a
+/// sharing or lock violation (a virus scanner can hold a file just written for a moment, on Windows). That run is
+/// set aside, said, and the case run again, twice at most. Any other difference fails at once.
 fn replay(corpus: &Value, scratch: &Scratch) {
     let exe = hook_written();
     let adapt = Adapt::of(corpus);
@@ -331,29 +372,25 @@ fn replay(corpus: &Value, scratch: &Scratch) {
             eprintln!("{name}: skipped, Git Bash is in ProgramFiles");
             continue;
         }
-        let mut result = Err(String::new());
-        for attempt in 1..=3 {
-            result = replay_case(
-                case,
-                &scratch.0.join(format!("{n:02}-{attempt}")),
-                &exe,
-                &adapt,
-                git_bash,
-            );
-            match &result {
-                Ok(_) => break,
-                Err(why) => eprintln!("{name}, attempt {attempt}: {why}"),
+        let mut run = 1;
+        steps += loop {
+            match replay_case(case, &scratch.0.join(format!("{n:02}-{run}")), &exe, &adapt, git_bash) {
+                Ok(count) => break count,
+                Err(Failure::Held(why)) if run < 3 => {
+                    eprintln!("{name}, run {run} set aside, a file was held: {why}");
+                    run += 1;
+                }
+                Err(Failure::Held(why) | Failure::Differs(why)) => panic!("{name}: {why}"),
             }
-        }
-        steps += result.unwrap_or_else(|why| panic!("{name}: {why}"));
+        };
     }
     assert!(steps > 50, "only {steps} steps were replayed");
 }
 
 /// A case's steps, each held against the C#'s: its exit code, what it printed and the files it left. How many
 /// steps, or the first difference.
-fn replay_case(case: &Value, root: &Path, exe: &str, adapt: &Adapt, git_bash: bool) -> Result<usize, String> {
-    set_up(case, root, exe);
+fn replay_case(case: &Value, root: &Path, exe: &str, adapt: &Adapt, git_bash: bool) -> Result<usize, Failure> {
+    set_up(case, root, exe).map_err(|e| harness("setting the case up", e))?;
     let config = root.join("claude");
     let settings = config.join("settings.json");
     let mut made = 0;
@@ -368,7 +405,7 @@ fn replay_case(case: &Value, root: &Path, exe: &str, adapt: &Adapt, git_bash: bo
                 config.join(backup),
                 config.join(format!("settings.json.aipet-20000101-{made:06}.bak")),
             )
-            .unwrap();
+            .map_err(|e| harness("renaming a new backup", e))?;
         }
         let said = |bytes: &[u8]| {
             adapt.text(
@@ -384,12 +421,15 @@ fn replay_case(case: &Value, root: &Path, exe: &str, adapt: &Adapt, git_bash: bo
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         let exit = expected["exit"].as_i64().map(|c| c as i32);
+        // a step the hook couldn't finish for a held file gave no answer of the port's
+        let held = hook_held(&said(&out.stderr));
+        let failure = if held { Failure::Held } else { Failure::Differs };
         let differ = |what: &str, rust: &dyn std::fmt::Debug, csharp: &dyn std::fmt::Debug| {
-            Err(format!(
+            Err(failure(format!(
                 "step {i} ({action}), {what}:
   the hook: {rust:#?}
   the C#:   {csharp:#?}"
-            ))
+            )))
         };
         if out.status.code() != exit {
             return differ("exit", &out, &expected["stderr"]);
@@ -404,7 +444,8 @@ fn replay_case(case: &Value, root: &Path, exe: &str, adapt: &Adapt, git_bash: bo
         if said(&out.stderr) != stderr {
             return differ("stderr", &said(&out.stderr), &stderr);
         }
-        let (rust, csharp) = (adapt.files(&tree(root, exe)), adapt.files(&files));
+        let rust = tree(root, exe).map_err(|e| harness("reading the case's files", e))?;
+        let (rust, csharp) = (adapt.files(&rust), adapt.files(&files));
         if rust != csharp {
             return differ("files", &rust, &csharp);
         }
@@ -417,6 +458,28 @@ fn replay_case(case: &Value, root: &Path, exe: &str, adapt: &Adapt, git_bash: bo
 fn claude_registration_is_the_csharps() {
     let scratch = Scratch::new("claude");
     replay(&load(&golden_dir().join("claude.json")), &scratch);
+}
+
+/// What sets a run aside is known from what the hook says: here settings.json is held as a virus scanner can hold
+/// it, open and shared with nobody, and the hook's refusal is a sharing violation. (Unix has none.)
+#[cfg(windows)]
+#[test]
+fn a_held_file_is_known_from_what_the_hook_says() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let scratch = Scratch::new("held");
+    let case = json!({ "setup": { "files": { "claude/settings.json": "{}" } } });
+    set_up(&case, &scratch.0, &hook_written()).unwrap();
+    let settings = scratch.0.join("claude").join("settings.json");
+    let held = fs::OpenOptions::new().read(true).share_mode(0).open(&settings).unwrap();
+    let out = step(&scratch.0, "install", true);
+    drop(held);
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{said}");
+    assert!(hook_held(&said), "{said}");
+    // the read-only fixture's refusal is an answer of the port's
+    let denied = "Couldn't update claude settings: Access to the path is denied.";
+    assert!(!hook_held(denied));
 }
 
 /// With `AIPET_GOLDEN`, the C# writes the corpus on this OS, and that is replayed too. The System.Text.Json data
