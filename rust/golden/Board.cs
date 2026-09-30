@@ -891,12 +891,15 @@ static class BoardMode
             yield return c.Poll();
         }
         {
+            // a name 400 KB from the end is in the last 512 KB, and not in the last 256
             var filler = "{\"id\":\"" + Sid(99) + "\",\"thread_name\":\"" + new string('x', 1000) + "\"}\n";
             yield return new WatcherCase(root, "index-tail")
-                .Write("session_index.jsonl", -60, Part.T($"{{\"id\":\"{Sid(1)}\",\"thread_name\":\"Too far back\"}}\n"), Part.T(filler, 600),
+                .Write("session_index.jsonl", -60, Part.T($"{{\"id\":\"{Sid(1)}\",\"thread_name\":\"Too far back\"}}\n"), Part.T(filler, 300),
+                    Part.T($"{{\"id\":\"{Sid(3)}\",\"thread_name\":\"In the tail\"}}\n"), Part.T(filler, 400),
                     Part.T($"{{\"id\":\"{Sid(2)}\",\"thread_name\":\"At the end\"}}\n"))
                 .Write(Rollout("2026/09/29", Sid(1)), -60, Part.T(Meta(Sid(1), "") + Ev(-30, "task_started")))
                 .Write(Rollout("2026/09/30", Sid(2)), -60, Part.T(Meta(Sid(2), "") + Ev(-30, "task_started")))
+                .Write(Rollout("2026/09/28", Sid(3)), -60, Part.T(Meta(Sid(3), "") + Ev(-30, "task_started")))
                 .Poll();
         }
 
@@ -944,13 +947,19 @@ static class BoardMode
             .Poll()
             .Poll();
         {
-            var filler = Ev(-45, "task_complete") + new string(' ', 200) + "\n";
+            // events 400 KB from the end are in the last 512 KB, and not in the last 256; the lines after them aren't
+            // events; a first line of 3 MB is read whole, one past 4 MB isn't
+            var events = Ev(-45, "task_complete") + new string(' ', 200) + "\n";
+            var other = "{\"timestamp\":\"%T-38%\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\"}}" + new string(' ', 200) + "\n";
             yield return new WatcherCase(root, "tails")
-                .Write("session_index.jsonl", -60, Part.T(Index((Sid(1), "Long"), (Sid(2), "Long first line"))))
+                .Write("session_index.jsonl", -60, Part.T(Index((Sid(1), "Long"), (Sid(2), "Long first line"), (Sid(3), "First line of 3 MB"))))
                 .Write(Rollout("2026/09/29", Sid(1)), -60, Part.T(Meta(Sid(1), ",\"cwd\":\"/w/long\"")), Part.T(Ev(-50, "task_complete")),
-                    Part.T(filler, 3000), Part.T(Ev(-40, "task_started") + Ev(-39, "item_completed", ",\"item\":{\"type\":\"FileChange\"}")))
+                    Part.T(events, 3000), Part.T(Ev(-40, "task_started") + Ev(-39, "item_completed", ",\"item\":{\"type\":\"FileChange\"}")),
+                    Part.T(other, 1400))
                 .Write(Rollout("2026/09/30", Sid(2)), -60, Part.T("{\"type\":\"session_meta\",\"payload\":{\"cwd\":\"/w/first\",\"instructions\":\""),
                     Part.T(new string('i', 1024), 4200), Part.T("\"}}\n" + Ev(-40, "task_started")))
+                .Write(Rollout("2026/09/28", Sid(3)), -60, Part.T("{\"type\":\"session_meta\",\"payload\":{\"cwd\":\"/w/three\",\"instructions\":\""),
+                    Part.T(new string('i', 1024), 3000), Part.T("\"}}\n" + Ev(-40, "task_started")))
                 .Poll();
         }
         yield return new WatcherCase(root, "no-home").Poll();
