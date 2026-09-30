@@ -50,6 +50,11 @@ MainWindow.axaml.cs:122-130 does: `github.set_jira_keys(...)` over a shared `Arc
 Dropping a watcher stops its loop. Also: aipet-ui's `tests::a_poke_and_a_hop_are_smooth` (`lib.rs`, in this task's
 Touches) failed once under load in task 11's full-suite baseline (a 33.3 ms step where 16.7 ms was expected, at
 `lib.rs:789`) and passed alone three times; make it independent of how busy the machine is.
+**From task 9 (2026-09-30):** the hook server is `aipet_core::server::HookServer::new(Arc<AgentSessions>, changed)`,
+then `start() -> io::Result<()>` and `stop()`; dropping it stops it too. `start` logs "hooks: listening on …" or
+"hooks: can't listen on …: …" to aipet.log as the C# does, and also returns the error; the pet runs on either way.
+`changed` runs on the hook's own handler thread before the hook gets its answer, so it must not block: post to the
+core thread, never wait for the UI. `Options { endpoint, events_log, log }` keeps tests off the user's endpoint and data.
 ## Acceptance
 - [ ] Unit tests map Board snapshots to bubbles and mood (states, props, alerts).
 - [ ] With real Claude and Codex hooks on the developer's machine, the Rust pet shows real chats (manual check, noted in

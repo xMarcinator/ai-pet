@@ -32,6 +32,14 @@ sandbox harness. Keep a ledger that maps every C# test to its Rust equivalent, c
 recorded once from .NET 10 (the C#'s request code against a local stub, in a scratch app), not by `rust/golden`, so CI
 doesn't replay them against the C#. Record that in the ledger, or add a golden mode before the cutover removes the C#.
 The deliberate deviations are listed in the module docs of `jira.rs`, `github.rs` and `http.rs`.
+**From task 9 (2026-09-30):** a .NET 10 probe of the C#'s HookServer found events the C# applies but the port's
+`Envelope::parse` (sessions, tasks 7 and 8) refuses, so the Rust server gives them no answer: a number past a double's
+range (`1e400`), a lone-surrogate escape (the C# applies it, or answers `error:InvalidOperationException` when Apply
+reads that string), and nesting exactly 128 deep (serde_json stops at 127; System.Text.Json allows 128). A payload
+with a member twice gets `error:ArgumentException` from the C#, while the port applies it with the last value. No
+hook sends any of these (the hooks mend lone surrogates, nest at most 65 deep, and send `{}` for a repeated member).
+Record them as deviations in the ledger, or propose a follow-up task that backs `Envelope` with raw JSON values;
+the sessions code is outside this task's Touches.
 ## Acceptance
 - [ ] Every entry in `PARITY.md` is mapped, and the check script passes in CI.
 - [ ] No Rust test reads or writes the real home, config or data (the sandbox is asserted in the testkit's own tests).
