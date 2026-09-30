@@ -1,5 +1,6 @@
 //! The bubble's text for an event: a tool call's (`Describe`, `AgentSessions.cs:752-786`), a sub-agent's (`Helper`)
-//! and text cut to fit (`Short`, `:792-798`); and the other ways the C# compares and cases text.
+//! and text cut to fit (`Short`, `:792-798`); and the other ways the C# compares and cases text, which the Board and
+//! the Codex log watcher share through [`AgentSessions`].
 //!
 //! The C# counts and cuts text in UTF-16 units. A character cut in half leaves a lone surrogate there, which a UTF-8
 //! writer turns into U+FFFD; here it is U+FFFD straight away.
@@ -7,6 +8,8 @@
 use std::borrow::Cow;
 
 use serde_json::{Map, Value};
+
+use super::AgentSessions;
 
 /// The state, detail and prop a PreToolUse of `tool` shows.
 pub(super) fn describe(tool: &str, input: Option<&Map<String, Value>>) -> (&'static str, String, Option<&'static str>) {
@@ -214,6 +217,36 @@ fn windows_root_len(p: &[u8]) -> usize {
         if p.len() > 2 && sep(p[2]) { 3 } else { 2 }
     } else {
         0
+    }
+}
+
+/// What the Board (`crate::board`) and the Codex log watcher (`crate::codex_watcher`) share with AgentSessions: its
+/// statics that Board.cs calls, and the .NET rules they read ids and text by.
+impl AgentSessions {
+    /// `AgentSessions.V7Before`: whether UUIDv7 `a` was made before `b` (see `turns::v7_before`). None where the C#
+    /// throws: a turn id that .NET's Guid parser takes but whose time `Convert.ToInt64` can't read.
+    pub(crate) fn v7_before(a: &str, b: &str, now: f64) -> Option<bool> {
+        super::turns::v7_before(a, b, now).ok()
+    }
+
+    /// `AgentSessions.IsHostId`: the Claude app's id for a chat, `local_<uuid>`, and nothing else.
+    pub(crate) fn is_host_id(id: &str) -> bool {
+        id.len() == 42 && id.starts_with("local_") && AgentSessions::is_guid(&id[6..])
+    }
+
+    /// `Guid.TryParseExact(id, "D")`, with the forms .NET also takes (see `claude::is_guid_d`).
+    pub(crate) fn is_guid(id: &str) -> bool {
+        super::claude::is_guid_d(id.as_bytes())
+    }
+
+    /// .NET's `ToLowerInvariant`.
+    pub(crate) fn lower_invariant(text: &str) -> String {
+        lower_invariant(text)
+    }
+
+    /// `Path.GetFileName`, by the rules of the OS it runs on.
+    pub(crate) fn file_name(path: &str) -> &str {
+        file_name(path)
     }
 }
 
