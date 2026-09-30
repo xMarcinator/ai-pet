@@ -66,8 +66,13 @@ fn is_hook(exe: &Path) -> bool {
         .is_some_and(|name| name == "AIPET-HOOK" || name == "AIPET-HOOK.EXE")
 }
 
-/// The text as `StringComparison.OrdinalIgnoreCase` compares it: each character as its simple upper case (`ǆ` is
-/// `Ǆ`, `ᾳ` is `ᾼ`, `ß` stays), but for `ı` and `ſ`, which .NET's ordinal casing keeps as they are.
+/// The text as `StringComparison.OrdinalIgnoreCase` compares it in the hook: each character as its simple upper case
+/// (`ǆ` is `Ǆ`, `ᾳ` is `ᾼ`, `ß` stays), but for `ı` and `ſ`, which .NET's ordinal casing keeps as they are.
+///
+/// The hook is built with InvariantGlobalization, where .NET cases with its own Unicode data: Unicode 16 in .NET 10, so
+/// the case pairs Unicode 17 added (which Rust's data has) aren't pairs there. The app cases with ICU instead, which
+/// has fewer of Unicode 16's (aipet-core's cleanup.rs). tests/golden/codex/codex.json has the hook's upper case of
+/// every character.
 pub(crate) fn upper(s: &str) -> String {
     s.chars().map(ordinal_upper).collect()
 }
@@ -75,6 +80,8 @@ pub(crate) fn upper(s: &str) -> String {
 fn ordinal_upper(c: char) -> char {
     match c {
         'ı' | 'ſ' => c,
+        // Unicode 17's
+        '\u{A7CF}' | '\u{A7D3}' | '\u{A7D5}' | '\u{16EBB}'..='\u{16ED3}' => c,
         // the small letters with ypogegrammeni: their full upper case is two characters (with a capital iota), their
         // simple one the letter with prosgegrammeni
         '\u{1F80}'..='\u{1F87}' | '\u{1F90}'..='\u{1F97}' | '\u{1FA0}'..='\u{1FA7}' => {
@@ -83,11 +90,12 @@ fn ordinal_upper(c: char) -> char {
         '\u{1FB3}' => '\u{1FBC}',
         '\u{1FC3}' => '\u{1FCC}',
         '\u{1FF3}' => '\u{1FFC}',
-        // anywhere else the full upper case is the simple one where it is one character, and none where it is more
+        // anywhere else the full upper case is the simple one where it is one character of the same length in UTF-16
+        // (.NET's casing never changes a string's length), and none otherwise
         _ => {
             let mut up = c.to_uppercase();
             match (up.next(), up.next()) {
-                (Some(u), None) => u,
+                (Some(u), None) if u.len_utf16() == c.len_utf16() => u,
                 _ => c,
             }
         }

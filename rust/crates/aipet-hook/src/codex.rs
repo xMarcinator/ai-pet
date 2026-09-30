@@ -1203,6 +1203,33 @@ mod tests {
         }
     }
 
+    /// Every character is in [`upper`] case as the hook's OrdinalIgnoreCase has it, in the hook's invariant
+    /// globalization mode (.NET's own Unicode data, older than Rust's).
+    #[test]
+    fn every_character_is_cased_as_the_hook_cases_it() {
+        let corpus = corpus();
+        let hex = |s: &str| u32::from_str_radix(s, 16).unwrap();
+        let dotnet: HashMap<u32, u32> = corpus["ordinal_upper"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|pair| {
+                let (c, upper) = text(pair).split_once(' ').unwrap();
+                (hex(c), hex(upper))
+            })
+            .collect();
+        assert!(dotnet.len() > 1400, "only {} upper cases", dotnet.len());
+        let wrong: Vec<String> = (0..=0x10FFFF)
+            .filter_map(char::from_u32)
+            .filter_map(|c| {
+                let want = dotnet.get(&u32::from(c)).copied().unwrap_or(u32::from(c));
+                let got: Vec<u32> = upper(c.encode_utf8(&mut [0; 4])).chars().map(u32::from).collect();
+                (got != [want]).then(|| format!("U+{:04X}: {got:04X?}, not U+{want:04X}", u32::from(c)))
+            })
+            .collect();
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
     /// BuildCommand in folders made as the C# made them: quotes, spaces (the 8.3 forms, where the volume makes them)
     /// and folders that aren't there (PowerShell's `&` form). On Unix it looks at no file.
     #[test]
