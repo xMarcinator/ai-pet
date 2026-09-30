@@ -42,6 +42,14 @@ It depends on task 13 so the desktop shell's Windows route is settled first.
 way the spike already does on Linux (`WGPU_BACKEND=gl` unless the user set it). On Windows GL is transparent, shows the
 pet in 0.9 s against 4.5–7.3 s for Vulkan, doesn't load the NVIDIA driver and never falls back to DX12, which is opaque
 through iced 0.14 ([rust/proofs/windows.md](../../rust/proofs/windows.md)).
+**From task 11 (2026-09-30):** build the watchers with `JiraWatcher::new(data_dir, secrets, Http::new(), sender)` and
+the same for `GitHubWatcher`. `E: From<Event>` lets one channel of the app's own enum carry both; `data_dir` is
+`aipet_ipc::paths::data_dir()`, and `secrets::platform()`'s Box goes in with `.into()`. Wire them as
+MainWindow.axaml.cs:122-130 does: `github.set_jira_keys(...)` over a shared `Arc<JiraWatcher>`; on
+`jira::Event::Changed`, call `github.jira_changed()`, then refresh; on `NewReviews(_)`, alert; then `restart()` both.
+Dropping a watcher stops its loop. Also: aipet-ui's `tests::a_poke_and_a_hop_are_smooth` (`lib.rs`, in this task's
+Touches) failed once under load in task 11's full-suite baseline (a 33.3 ms step where 16.7 ms was expected, at
+`lib.rs:789`) and passed alone three times; make it independent of how busy the machine is.
 ## Acceptance
 - [ ] Unit tests map Board snapshots to bubbles and mood (states, props, alerts).
 - [ ] With real Claude and Codex hooks on the developer's machine, the Rust pet shows real chats (manual check, noted in

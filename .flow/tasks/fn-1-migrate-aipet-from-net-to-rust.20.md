@@ -24,6 +24,13 @@ watchers restarting on save.
 - `src/AiPet.Core/Jira.cs`, `src/AiPet.Core/GitHub.cs` — the Test, Save and Forget APIs
 **Optional:**
 - `src/AiPet.UI/SettingsWindow.axaml` — layout
+**From task 11 (2026-09-30):** Jira's Test is `jira::search(&http, &settings, token)`; the page's own texts ("Paste an
+API token first.", "Connected. The search finds ...") are this task's. GitHub's is `github.test(host, typed_token)`,
+which gives `Ok(message)` or `Err(message)`. `save(settings, new_token)` (an empty token keeps the stored one) and
+`forget_token()` restart the loop, as in the C#. Import defaults uses `Preset::parse` (it takes the file's text and
+drops a leading BOM), `apply_to_jira`, `apply_to_github`, `moves_jira`, `moves_github` and `describe`. Mock-server tests
+use `Http::local(timeout)`, plain HTTP to this computer only (point the site or host at `127.0.0.1:port`), and the
+doc-hidden `watcher.poll()` for one synchronous poll.
 ## Acceptance
 - [ ] With a mock server, Test success and failure show the C#'s texts. Save persists and restarts the watcher. Forget
       removes the token.

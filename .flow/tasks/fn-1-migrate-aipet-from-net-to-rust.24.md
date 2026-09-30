@@ -28,6 +28,10 @@ sandbox harness. Keep a ledger that maps every C# test to its Rust equivalent, c
 - `tests/AiPet.Tests/*.cs` — the inventory
 **Optional:**
 - `rust/crates/aipet-sprite/tests/golden.rs` — golden replay style
+**From task 11 (2026-09-30):** the watchers' expected requests and error texts in `aipet-core/tests/watchers.rs` were
+recorded once from .NET 10 (the C#'s request code against a local stub, in a scratch app), not by `rust/golden`, so CI
+doesn't replay them against the C#. Record that in the ledger, or add a golden mode before the cutover removes the C#.
+The deliberate deviations are listed in the module docs of `jira.rs`, `github.rs` and `http.rs`.
 ## Acceptance
 - [ ] Every entry in `PARITY.md` is mapped, and the check script passes in CI.
 - [ ] No Rust test reads or writes the real home, config or data (the sandbox is asserted in the testkit's own tests).

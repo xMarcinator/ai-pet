@@ -31,6 +31,10 @@ against a new golden mode for the Board.
 Board's ByTurn ordering reads. .NET's OrdinalIgnoreCase `Contains` and `ToLowerInvariant` are ported as
 `contains_ignoring_case` and `lower_invariant` in `sessions/describe.rs` (pub(super)); if the watcher needs them, make
 them pub(crate) there rather than copying them.
+**From task 11 (2026-09-30):** the Board reads `jira.config()`, `jira.issues()`, `jira.last_error()`, `github.config()`,
+`github.review_requests()`, `github.pr_for_key()` and `github.last_error()`. C# nulls in `Issue` and `PullRequest`
+fields are `""` here, so the C# Board's crash on a null Jira key (`PrForKey.GetValueOrDefault(null)`) can't happen.
+`http.rs` carries its own `simple_upper` beside `describe.rs`'s casing helpers: share them if the Board needs them.
 ## Acceptance
 - [ ] Every Board golden case gives the same bubbles, order, sections and links.
 - [ ] `BoardTests` is ported. The watcher reads the same files as the C# on a fixture Codex home.
