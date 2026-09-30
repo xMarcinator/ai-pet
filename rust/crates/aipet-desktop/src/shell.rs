@@ -550,9 +550,9 @@ fn native_call(
 /// AIPET_DEBUG: which GPU draws the pet, and what its surface offers. iced keeps its choice to itself, so this asks
 /// wgpu again the way iced_wgpu 0.14 does (`window/compositor.rs`): the backends and the power preference from the
 /// environment (all, and high performance, without), an adapter that can draw on the pet window, and its surface's
-/// alpha modes, of which iced asks for PostMultiplied, else PreMultiplied, else Auto, which wgpu takes as Opaque (or
-/// Inherit). The modes don't settle transparency on Windows: Vulkan and GL surfaces that offer only Opaque showed the
-/// desktop through, a DX12 one didn't (rust/proofs/windows.md).
+/// alpha modes, of which iced asks for PostMultiplied, else PreMultiplied, else Auto, which wgpu takes as Opaque, or
+/// Inherit where Opaque isn't offered ([`configured_alpha`]). The modes don't settle transparency on Windows: Vulkan
+/// and GL surfaces that offer only Opaque showed the desktop through, a DX12 one didn't (rust/proofs/windows.md).
 fn describe_gpu(w: &dyn window::Window) -> Vec<String> {
     use iced::advanced::graphics::color::GAMMA_CORRECTION;
     use iced::wgpu::{
@@ -612,12 +612,7 @@ fn describe_gpu(w: &dyn window::Window) -> Vec<String> {
         .into_iter()
         .find(|mode| alpha.contains(mode))
         .unwrap_or(CompositeAlphaMode::Auto);
-    let gets = match asked {
-        CompositeAlphaMode::Auto => alpha
-            .iter()
-            .find(|mode| matches!(mode, CompositeAlphaMode::Opaque | CompositeAlphaMode::Inherit)),
-        _ => Some(&asked),
-    };
+    let gets = configured_alpha(asked, alpha);
     let format = caps
         .formats
         .iter()
@@ -630,6 +625,26 @@ fn describe_gpu(w: &dyn window::Window) -> Vec<String> {
         caps.formats
     ));
     lines
+}
+
+/// The alpha mode wgpu 27 configures a surface with when `asked` for one (wgpu-core's `Global::surface_configure`):
+/// the mode itself if the surface offers it, and for Auto otherwise Opaque if offered, else Inherit, in that order
+/// whatever the surface's own order. `None` where wgpu refuses the configuration.
+fn configured_alpha(
+    asked: iced::wgpu::CompositeAlphaMode,
+    offered: &[iced::wgpu::CompositeAlphaMode],
+) -> Option<iced::wgpu::CompositeAlphaMode> {
+    use iced::wgpu::CompositeAlphaMode;
+
+    if offered.contains(&asked) {
+        return Some(asked);
+    }
+    match asked {
+        CompositeAlphaMode::Auto => [CompositeAlphaMode::Opaque, CompositeAlphaMode::Inherit]
+            .into_iter()
+            .find(|mode| offered.contains(mode)),
+        _ => None,
+    }
 }
 
 /// A future's output if it is ready at once, as wgpu's are on the desktop.
@@ -750,6 +765,23 @@ mod tests {
         let _ = shell.pet_input(Event::Window(window::Event::Unfocused), event::Status::Ignored);
         assert!(shell.drag.is_none());
         assert!(!shell.ui.drag_moved());
+    }
+
+    #[test]
+    fn the_gpu_probe_resolves_auto_the_way_wgpu_does_whatever_the_surfaces_order() {
+        use iced::wgpu::CompositeAlphaMode::{Auto, Inherit, Opaque, PostMultiplied, PreMultiplied};
+        // wgpu prefers Opaque, then Inherit, however the surface lists them
+        assert_eq!(configured_alpha(Auto, &[Inherit, Opaque]), Some(Opaque));
+        assert_eq!(configured_alpha(Auto, &[Opaque, Inherit]), Some(Opaque));
+        assert_eq!(configured_alpha(Auto, &[Inherit]), Some(Inherit));
+        // a mode the surface offers is taken as it is, Auto included
+        assert_eq!(
+            configured_alpha(PostMultiplied, &[Opaque, PostMultiplied]),
+            Some(PostMultiplied)
+        );
+        assert_eq!(configured_alpha(Auto, &[Inherit, Auto, Opaque]), Some(Auto));
+        // one it doesn't offer is refused
+        assert_eq!(configured_alpha(PreMultiplied, &[Opaque]), None);
     }
 
     #[test]
