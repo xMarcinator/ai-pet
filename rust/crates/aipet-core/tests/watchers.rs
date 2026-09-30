@@ -4,9 +4,9 @@
 //! The expected requests and texts are what the C# (`src/AiPet.Core/Jira.cs`, `GitHub.cs`) sent and said against
 //! the same kind of stub, recorded with .NET 10: only the headers it sets (no User-Agent, Accept or Accept-Encoding
 //! of HttpClient's own), `Uri.EscapeDataString`'s escaping, System.Text.Json's for the GraphQL body. The C# always
-//! uses `https://`; the stub speaks plain HTTP through `Http::local`, which reaches this computer only, so no test can
-//! reach the real Jira or GitHub. Tokens are kept in memory and the settings in a folder of the test's own, never the
-//! user's.
+//! uses `https://`; the stub speaks plain HTTP through `Http::local`, which reaches this computer only, a redirect's
+//! hop included, so no test can reach the real Jira or GitHub. Tokens are kept in memory and the settings in a folder
+//! of the test's own, never the user's.
 
 use std::collections::HashMap;
 use std::fs;
@@ -39,6 +39,10 @@ struct Request {
 enum Reply {
     /// A status, its reason phrase and a body.
     Answer(u16, &'static str, String),
+    /// A status line as it is, bytes and all, and a body.
+    Status(&'static [u8], String),
+    /// `302 Found` to this address.
+    Redirect(String),
     /// Nothing, for longer than the client waits.
     Silence,
 }
@@ -107,25 +111,31 @@ fn serve(stream: TcpStream, sender: &Sender<(Instant, Request)>, replies: &Mutex
             }
         };
         let _ = sender.send((Instant::now(), request));
-        match reply {
-            Reply::Answer(status, reason, body) => {
-                let head = format!(
-                    "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json; charset=utf-8\r\n\
-                     Content-Length: {}\r\n\r\n",
-                    body.len()
-                );
-                if writer
-                    .write_all(head.as_bytes())
-                    .and_then(|_| writer.write_all(body.as_bytes()))
-                    .is_err()
-                {
-                    return;
-                }
-            }
+        let (status_line, headers, body) = match reply {
+            Reply::Answer(status, reason, body) => (
+                format!("HTTP/1.1 {status} {reason}").into_bytes(),
+                "Content-Type: application/json; charset=utf-8\r\n".to_string(),
+                body,
+            ),
+            Reply::Status(line, body) => (line.to_vec(), String::new(), body),
+            Reply::Redirect(to) => (
+                b"HTTP/1.1 302 Found".to_vec(),
+                format!("Location: {to}\r\n"),
+                String::new(),
+            ),
             Reply::Silence => {
                 thread::sleep(Duration::from_secs(5));
                 return;
             }
+        };
+        let head = format!("\r\n{headers}Content-Length: {}\r\n\r\n", body.len());
+        if writer
+            .write_all(&status_line)
+            .and_then(|_| writer.write_all(head.as_bytes()))
+            .and_then(|_| writer.write_all(body.as_bytes()))
+            .is_err()
+        {
+            return;
         }
     }
 }
@@ -133,6 +143,8 @@ fn serve(stream: TcpStream, sender: &Sender<(Instant, Request)>, replies: &Mutex
 fn clone(reply: &Reply) -> Reply {
     match reply {
         Reply::Answer(status, reason, body) => Reply::Answer(*status, reason, body.clone()),
+        Reply::Status(line, body) => Reply::Status(line, body.clone()),
+        Reply::Redirect(to) => Reply::Redirect(to.clone()),
         Reply::Silence => Reply::Silence,
     }
 }
@@ -321,10 +333,23 @@ fn jira_errors_are_the_csharps() {
             Reply::Answer(403, "Forbidden", "not json".into()),
             "Jira returned 403 Forbidden".into(),
         ),
-        // a rate limit
+        // rate limits
         (
             Reply::Answer(429, "Too Many Requests", String::new()),
             "Jira returned 429 Too Many Requests".into(),
+        ),
+        (
+            Reply::Answer(403, "Rate Limit Exceeded", String::new()),
+            "Jira returned 403 Rate Limit Exceeded".into(),
+        ),
+        // the reason phrase as .NET reads it: none is empty, its bytes are Latin-1
+        (
+            Reply::Status(b"HTTP/1.1 429", String::new()),
+            "Jira returned 429 ".into(),
+        ),
+        (
+            Reply::Status(b"HTTP/1.1 403 Forbidd\xe9n", String::new()),
+            "Jira returned 403 Forbiddén".into(),
         ),
         (
             Reply::Answer(500, "Internal Server Error", r#"{"errorMessages":[]}"#.into()),
@@ -338,6 +363,25 @@ fn jira_errors_are_the_csharps() {
             ok(""),
             "Jira search failed: The input does not contain any JSON tokens. Expected the input to start with a \
              valid JSON token, when isFinalBlock is true. LineNumber: 0 | BytePositionInLine: 0."
+                .into(),
+        ),
+        // an answer cut short, a wrong literal, a trailing comma
+        (
+            ok(r#"{"issues":[{"key":"ABC-1","fields":{"summary":"Fix"#),
+            "Jira search failed: Expected end of string, but instead reached end of data. LineNumber: 0 | \
+             BytePositionInLine: 50."
+                .into(),
+        ),
+        (
+            ok(r#"{"issues":[{"key":"ABC-1","fields":{"summary":nul}}]}"#),
+            "Jira search failed: 'nul}}]}' is an invalid JSON literal. Expected the literal 'null'. LineNumber: 0 | \
+             BytePositionInLine: 49."
+                .into(),
+        ),
+        (
+            ok(r#"{"issues":[],}"#),
+            "Jira search failed: The JSON object contains a trailing comma at the end which is not supported in this \
+             mode. Change the reader options. LineNumber: 0 | BytePositionInLine: 13."
                 .into(),
         ),
         (
@@ -376,6 +420,31 @@ fn jira_says_what_is_wrong_with_the_address_or_the_network() {
         search(&format!("127.0.0.1:{port}")),
         format!("Couldn't reach Jira: {refused} (127.0.0.1:{port})")
     );
+}
+
+#[test]
+fn a_redirect_off_this_computer_goes_nowhere() {
+    // the stub sends the search on to GitHub's API, which the stub's client refuses before it looks the name up
+    let stub = Stub::new(vec![Reply::Redirect("http://api.github.com/graphql".into())]);
+    assert_eq!(
+        jira::search(&quick(), &jira_settings(&stub.site()), "t"),
+        Err("Jira search failed: api.github.com isn't this computer, and plain HTTP goes nowhere else".into())
+    );
+    stub.request();
+    stub.no_more_requests();
+}
+
+#[test]
+fn a_redirect_is_followed_without_the_credentials() {
+    // as .NET's HttpClient follows one: the Authorization header isn't sent on
+    let moved = Stub::new(vec![issues(&["ABC-1"])]);
+    let stub = Stub::new(vec![Reply::Redirect(format!("http://{}/moved", moved.site()))]);
+    let found = jira::search(&quick(), &jira_settings(&stub.site()), "t").unwrap();
+    assert_eq!(found.len(), 1);
+    assert!(stub.request().headers.iter().any(|(name, _)| name == "authorization"));
+    let request = moved.request();
+    assert_eq!((request.method.as_str(), request.target.as_str()), ("GET", "/moved"));
+    assert!(!request.headers.iter().any(|(name, _)| name == "authorization"));
 }
 
 /// A Jira watcher on the stub, with a token saved, and its events.
@@ -712,6 +781,27 @@ fn github_errors_are_the_csharps() {
         (
             Reply::Answer(429, "Too Many Requests", "{}".into()),
             "GitHub returned 429 Too Many Requests".into(),
+        ),
+        (
+            Reply::Answer(
+                403,
+                "Rate Limit Exceeded",
+                r#"{"message":"API rate limit exceeded"}"#.into(),
+            ),
+            "GitHub returned 403 Rate Limit Exceeded".into(),
+        ),
+        // an answer cut short, a wrong literal
+        (
+            ok(r#"{"data":{"search":{"nodes":[{"number":12"#),
+            "GitHub search failed: '2' is an invalid end of a number. Expected a delimiter. LineNumber: 0 | \
+             BytePositionInLine: 40."
+                .into(),
+        ),
+        (
+            ok(r#"{"data":{"search":{"nodes":[{"number":1,"title":tru}]}}}"#),
+            "GitHub search failed: 'tru}]}}}' is an invalid JSON literal. Expected the literal 'true'. LineNumber: 0 \
+             | BytePositionInLine: 51."
+                .into(),
         ),
         (
             ok(r#"{"errors":[{"message":"Bad query"}]}"#),
