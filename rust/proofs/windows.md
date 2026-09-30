@@ -286,7 +286,7 @@ logical cores. The backend was the default, Vulkan on the Intel GPU.
 
 ## Re-running it
 
-From the repository root, in Git Bash (no PowerShell), after `cd rust && cargo build --release -p aipet-spike`:
+From the repository root, in Git Bash (no PowerShell), after `(cd rust && cargo build --release -p aipet-spike)`, which leaves you at the root:
 
 ```bash
 SPIKE=rust/target/release/aipet-spike.exe
