@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::install::{NEWLINE, is_file, read_text, save, thrown, upper};
+use crate::install::{NEWLINE, backup, is_file, read_text, real_path, save, thrown, upper};
 use crate::json::{Node, Object};
 use crate::json_out::{self, deep_equals, member, read};
 
@@ -62,7 +62,7 @@ pub(crate) fn process_vars(name: &str) -> Option<OsString> {
 }
 
 /// `ClaudeConfig.Dir`: `$CLAUDE_CONFIG_DIR` when it is set, else `.claude` in the user's home folder.
-fn dir(vars: Vars) -> PathBuf {
+pub(crate) fn dir(vars: Vars) -> PathBuf {
     match vars("CLAUDE_CONFIG_DIR") {
         Some(dir) if !dir.is_empty() => dir.into(),
         _ => aipet_ipc::paths::home().join(".claude"),
@@ -385,121 +385,6 @@ pub(crate) fn group(event: &Event, mut hook: Object) -> Node {
     Node::Object(group)
 }
 
-/// `RealPath`: the file a symlink ends at (`File.ResolveLinkTarget(path, returnFinalTarget: true)`), each link's
-/// relative target taken from where that link is, as a full path (`FileSystemInfo.FullName`). Not a link, a chain
-/// past .NET's 40 links, or no full path to be had (`FullName` throws, and `RealPath` catches): the path itself.
-fn real_path(path: &Path) -> PathBuf {
-    const MAX_FOLLOWED_LINKS: usize = 40;
-    let Ok(mut target) = fs::read_link(path) else {
-        return path.to_owned();
-    };
-    let mut current = path.to_owned();
-    for _ in 0..MAX_FOLLOWED_LINKS {
-        current = match current.parent() {
-            Some(dir) if target.is_relative() => dir.join(&target),
-            _ => target,
-        };
-        match fs::read_link(&current) {
-            Ok(next) => target = next,
-            Err(_) => return full_path(&current).unwrap_or_else(|| path.to_owned()),
-        }
-    }
-    path.to_owned()
-}
-
-/// `Path.GetFullPath`: a relative path (a relative `CLAUDE_CONFIG_DIR`) taken from the working folder, then `.` and
-/// `..` taken out of the text. `None` where .NET throws: there is no working folder.
-#[cfg(unix)]
-fn full_path(path: &Path) -> Option<PathBuf> {
-    use std::path::Component;
-
-    let mut full = PathBuf::new();
-    for part in std::path::absolute(path).ok()?.components() {
-        match part {
-            Component::ParentDir => {
-                full.pop();
-            }
-            Component::CurDir => {}
-            other => full.push(other),
-        }
-    }
-    Some(full)
-}
-
-#[cfg(not(unix))]
-fn full_path(path: &Path) -> Option<PathBuf> {
-    std::path::absolute(path).ok()
-}
-
-/// `Backup`: settings.json.aipet-<local time>.bak before each change, and the newest three of them kept. It never
-/// fails the change.
-fn backup(path: &Path) {
-    let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
-        return;
-    };
-    let mut copy = path.as_os_str().to_owned();
-    copy.push(format!(".aipet-{}.bak", local_stamp()));
-    if fs::copy(path, copy).is_err() {
-        return;
-    }
-    // Directory.GetFiles(dir, "settings.json.aipet-*.bak"): the name's case counts on Unix only
-    let fold = |s: &str| if cfg!(windows) { upper(s) } else { s.to_owned() };
-    let prefix = fold(&format!("{}.aipet-", name.to_string_lossy()));
-    let suffix = fold(".bak");
-    let Ok(entries) = fs::read_dir(dir) else { return };
-    let mut backups: Vec<PathBuf> = entries
-        .filter_map(Result::ok)
-        .filter(|e| e.path().is_file())
-        .filter(|e| {
-            let name = fold(&e.file_name().to_string_lossy());
-            name.len() >= prefix.len() + suffix.len() && name.starts_with(&prefix) && name.ends_with(&suffix)
-        })
-        .map(|e| e.path())
-        .collect();
-    backups.sort_unstable_by(|a, b| b.as_os_str().cmp(a.as_os_str()));
-    for old in backups.iter().skip(3) {
-        if fs::remove_file(old).is_err() {
-            return;
-        }
-    }
-}
-
-/// The local time as `yyyyMMdd-HHmmss`.
-#[cfg(unix)]
-fn local_stamp() -> String {
-    // SAFETY: time only returns the time when given no pointer; localtime_r writes only tm
-    let now = unsafe { libc::time(std::ptr::null_mut()) };
-    // SAFETY: an all-zero tm is a valid value to be filled in
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    // SAFETY: both pointers are to live locals
-    if unsafe { libc::localtime_r(&now, &mut tm) }.is_null() {
-        return "00000000-000000".to_owned();
-    }
-    format!(
-        "{:04}{:02}{:02}-{:02}{:02}{:02}",
-        tm.tm_year + 1900,
-        tm.tm_mon + 1,
-        tm.tm_mday,
-        tm.tm_hour,
-        tm.tm_min,
-        tm.tm_sec
-    )
-}
-
-#[cfg(windows)]
-fn local_stamp() -> String {
-    use windows_sys::Win32::System::SystemInformation::GetLocalTime;
-
-    // SAFETY: an all-zero SYSTEMTIME is a valid value to be filled in
-    let mut now = unsafe { std::mem::zeroed() };
-    // SAFETY: GetLocalTime only writes the SYSTEMTIME it is given
-    unsafe { GetLocalTime(&mut now) };
-    format!(
-        "{:04}{:02}{:02}-{:02}{:02}{:02}",
-        now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -620,7 +505,8 @@ mod tests {
         }
     }
 
-    /// A chain of links ends at the file, each relative target taken from its own link's folder, `.` and `..` out.
+    /// A chain of links to settings.json ends at the file, each relative target taken from its own link's folder, `.`
+    /// and `..` out (install.rs's real_path, which the edit writes through).
     #[cfg(unix)]
     #[test]
     fn real_path_follows_a_chain_of_links() {
@@ -640,7 +526,8 @@ mod tests {
     }
 
     /// A relative CLAUDE_CONFIG_DIR whose settings.json links above it: the file is found from the working folder,
-    /// as `FileSystemInfo.FullName` finds it, with every `..` of the link's target.
+    /// as `FileSystemInfo.FullName` finds it (`Path.GetFullPath`), with every `..` of the link's target, none lost
+    /// where it climbs above the path's first folder.
     #[cfg(unix)]
     #[test]
     fn real_path_under_a_relative_config_folder_climbs_above_it() {
@@ -657,16 +544,5 @@ mod tests {
         relative.push(claude.join("settings.json").strip_prefix("/").unwrap());
         assert!(relative.is_relative());
         assert_eq!(real_path(&relative), real);
-    }
-
-    /// `Path.GetFullPath` takes a relative path from the working folder before `..` comes out: none is lost where it
-    /// climbs above the path's first folder.
-    #[test]
-    fn full_path_takes_a_relative_path_from_the_working_folder() {
-        let here = std::env::current_dir().unwrap();
-        assert_eq!(
-            full_path(Path::new("claude/../../dotfiles/settings.json")),
-            Some(here.parent().unwrap().join("dotfiles").join("settings.json"))
-        );
     }
 }

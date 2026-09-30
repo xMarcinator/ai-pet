@@ -508,6 +508,61 @@ fn plugin(home: &Home) -> Result<Option<String>, String> {
     Ok(None)
 }
 
+// ------------------------------------------------------------------ what the doctor reads
+/// `CodexConfig.ConfigToml` and `CodexConfig.HooksJson`: the two files in `$CODEX_HOME` (else `~/.codex`) the hooks
+/// can be in.
+pub(crate) fn files() -> (PathBuf, PathBuf) {
+    let home = Home::at(aipet_ipc::paths::codex_home());
+    (home.config, home.hooks)
+}
+
+/// `CodexConfig.Plugin()`, in `$CODEX_HOME`.
+pub(crate) fn enabled_plugin() -> Result<Option<String>, String> {
+    plugin(&Home::at(aipet_ipc::paths::codex_home()))
+}
+
+/// A command hook in the user's config.toml or hooks.json.
+pub(crate) struct Handler {
+    pub(crate) event: String,
+    pub(crate) command: String,
+    /// The file it is in.
+    pub(crate) file: PathBuf,
+}
+
+/// `CodexConfig.AllHandlers`: every command hook in the user's config.toml and then in hooks.json, for the doctor
+/// when Codex itself can't be asked. A handler whose command isn't a string is left out, and so is a hooks.json that
+/// isn't there, isn't JSON or has no `hooks` object. What reading hooks.json's nodes throws (a name given twice) is
+/// the error.
+pub(crate) fn all_handlers() -> Result<Vec<Handler>, String> {
+    let home = Home::at(aipet_ipc::paths::codex_home());
+    let text = read_text(&home.config).unwrap_or_default();
+    let segs = toml_text::parse(&text);
+    let mut all: Vec<Handler> = positions(&segs.iter().collect::<Vec<_>>())
+        .into_iter()
+        .filter_map(|(s, _, _)| {
+            Some(Handler {
+                event: s.handler.clone()?,
+                command: s.command.clone()?,
+                file: home.config.clone(),
+            })
+        })
+        .collect();
+    let root = read_text(&home.hooks).and_then(|text| json_out::parse(&text));
+    if let Ok(Ok(Some(Node::Object(hooks)))) = root.as_ref().map(|root| member(root, "hooks")) {
+        json_positions(hooks, |event, _, _, hook| {
+            if let Some(command) = command_of(hook)? {
+                all.push(Handler {
+                    event: event.to_owned(),
+                    command: command.to_owned(),
+                    file: home.hooks.clone(),
+                });
+            }
+            Ok(false)
+        })?;
+    }
+    Ok(all)
+}
+
 // ------------------------------------------------------------------ config.toml as text
 /// `InlineHooks`: a line (or header) of config.toml that defines hooks as values (`hooks = {...}`,
 /// `hooks.Stop = [...]`, or `Stop = [...]` under `[hooks]`) or as a plain `[hooks.Stop]` table, for an event AiPet

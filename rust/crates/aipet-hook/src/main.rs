@@ -5,8 +5,8 @@
 //! prints anything back to the agent, and it always exits 0, so it can't disturb the agent (see [`event`]).
 //!
 //! Also `aipet-hook --install|--uninstall claude|codex` ([`install`]), `aipet-hook --doctor claude|codex [--probe]`
-//! and `aipet-hook --print-plugin-hooks claude|codex` ([`plugin_hooks`]), which aren't hook runs: they print, and
-//! exit with their own codes. A port of `src/AiPet.Hook`; the doctor is still to be ported.
+//! ([`doctor`]) and `aipet-hook --print-plugin-hooks claude|codex` ([`plugin_hooks`]), which aren't hook runs: they
+//! print, and exit with their own codes. A port of `src/AiPet.Hook`.
 
 mod claude;
 mod codex;
@@ -54,11 +54,7 @@ fn mode(args: &[OsString]) -> Option<i32> {
     };
     Some(match first {
         "--print-plugin-hooks" => plugin_hooks::print(&agent),
-        // fn-1-migrate-aipet-from-net-to-rust.5 ports Doctor
-        "--doctor" => {
-            install::warn("aipet-hook --doctor isn't ported to this hook yet");
-            1
-        }
+        "--doctor" => doctor::run(&agent, args.iter().any(|a| a == "--probe")),
         _ => install::run(first, &agent),
     })
 }
