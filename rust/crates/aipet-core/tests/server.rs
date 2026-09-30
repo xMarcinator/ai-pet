@@ -1017,6 +1017,11 @@ fn a_live_pet_is_not_replaced() {
 /// `Listeners_AnswerHooks_WhileThePoolIsStarved`. The Rust pet has no thread pool: its listeners and handlers are
 /// threads of their own, which nothing else of the pet's holds up. So here every CPU is busy, twice over, while 20
 /// hooks run at once.
+///
+/// What is timed is the pet's part of each run, by the hook itself: one that finds no free instance within its budget,
+/// or gets no answer within `TIMEOUT` of sending, gives up and traces why. The C#'s ceiling on the whole batch (15 s)
+/// isn't kept: on CPUs this busy it mostly timed how long 20 processes take to start, `dotnet` ones above all, and
+/// missed by a second now and then with every answer in time.
 #[test]
 fn listeners_answer_hooks_while_every_cpu_is_busy() {
     let _alone = alone();
@@ -1027,7 +1032,6 @@ fn listeners_answer_hooks_while_every_cpu_is_busy() {
     finish(start_hook(&env, "claude", "{}", &env.dir("tmp-first"), &[]), HOOK_LIMIT);
     let busy = Busy::new();
     let sids: Vec<String> = (0..20).map(|i| format!("{i:02x}busy-{}", uuid())).collect();
-    let since = Instant::now();
     // all at once
     let runs: Vec<_> = sids
         .iter()
@@ -1040,14 +1044,13 @@ fn listeners_answer_hooks_while_every_cpu_is_busy() {
         .into_iter()
         .map(|run| finish(run, Duration::from_secs(30)))
         .collect();
-    let took = since.elapsed();
     assert!(busy.all_spinning(), "the CPUs weren't busy throughout");
     drop(busy);
 
     for r in &results {
         r.silent();
     }
-    // a hook that gave up traces why
+    // a hook that gave up, on a busy pipe or a late answer, traces why
     let traces = traces(&tmp);
     assert!(
         traces.is_empty(),
@@ -1061,8 +1064,6 @@ fn listeners_answer_hooks_while_every_cpu_is_busy() {
         assert_eq!(chat.state, Some("thinking"));
         assert_eq!(pet.outcomes(sid), ["thinking"]);
     }
-    // a hook that got no answer waits TIMEOUT for it; these were answered at once
-    assert!(took < Duration::from_secs(15), "the hooks took {took:?}");
 }
 
 /// `SilentClients_AreCutOff_AndStopReturns_WhileThePoolIsStarved`, on Windows too: the cut-off is a thread of the
