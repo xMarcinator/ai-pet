@@ -48,20 +48,35 @@ pub(super) struct State {
 }
 
 pub(super) fn start(shared: &Arc<Shared>) -> io::Result<()> {
+    start_with(shared, instance, run)
+}
+
+/// [`start`], given how instances are made and listeners run: a test's fail some.
+fn start_with(
+    shared: &Arc<Shared>,
+    mut make: impl FnMut(&OsStr, &Security, bool) -> io::Result<File>,
+    mut spawn: impl FnMut(Box<dyn FnOnce() + Send>) -> io::Result<()>,
+) -> io::Result<()> {
     let made = Security::only_me()?;
     let security = shared.sys.security.get_or_init(|| made);
+    let name = &shared.options.endpoint;
     // ERROR_ACCESS_DENIED when the name is taken
-    let mut first = Some(instance(&shared.options.endpoint, security, true)?);
+    let mut first = Some(make(name, security, true)?);
     shared.sys.listening.store(true, Ordering::SeqCst);
-    for _ in 0..LISTENERS {
+    let started = shared.start_listeners(|| {
         let pipe = match first.take() {
             Some(pipe) => pipe,
-            None => instance(&shared.options.endpoint, security, false)?,
+            None => make(name, security, false)?,
         };
         let shared = Arc::clone(shared);
-        run(move || listen(&shared, pipe))?;
+        // a listener that can't run closes its instance
+        spawn(Box::new(move || listen(&shared, pipe)))
+    });
+    if started.is_err() {
+        // not even the first listener runs, and its instance, the name's first, is closed: hooks find no pet
+        shared.sys.listening.store(false, Ordering::SeqCst);
     }
-    Ok(())
+    started
 }
 
 /// A listener's wait for a hook can't be cancelled, so each is woken by a connection of its own, sees the pet stopping
@@ -376,6 +391,10 @@ fn cut_off(shared: &Shared) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::server::{HookServer, Options};
+    use crate::sessions::AgentSessions;
+    use aipet_ipc::connect::connect_to;
+    use aipet_ipc::protocol::CONNECT;
     use windows_sys::Win32::Security::Authorization::{
         ConvertSecurityDescriptorToStringSecurityDescriptorW, GetSecurityInfo, SE_KERNEL_OBJECT,
     };
@@ -433,5 +452,81 @@ mod tests {
         let taken = instance(&name, &security, true).unwrap_err();
         assert_eq!(taken.raw_os_error(), Some(5), "{taken}");
         instance(&name, &security, false).unwrap();
+    }
+
+    /// A server at a pipe of its own, not started, and the lines it logs. Only pings come to it: it writes nothing.
+    fn unstarted(test: &str) -> (HookServer, OsString, Arc<Mutex<Vec<String>>>) {
+        let name = OsString::from(format!("aipet-core-server-test-{}-{test}", std::process::id()));
+        let dir = std::env::temp_dir().join(&name);
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let lines = Arc::clone(&log);
+        let server = HookServer::with_options(
+            Arc::new(AgentSessions::with_codex_home(dir.join("codex"))),
+            || {},
+            Options {
+                endpoint: name.clone(),
+                events_log: dir.join("hook-events.log"),
+                log: Box::new(move |line| lock(&lines).push(line.to_owned())),
+            },
+        );
+        (server, name, log)
+    }
+
+    /// Whether a pet at `name` answers a ping.
+    fn pings(name: &OsStr) -> bool {
+        let Ok(mut pet) = connect_to(name, CONNECT) else {
+            return false;
+        };
+        matches!(pet.ask(r#"{"v":1,"type":"ping"}"#), Ok(Some(reply)) if reply.starts_with(r#"{"ok":true,"#))
+    }
+
+    /// A start that gets fewer than the 8 listeners, as no more instances or threads are to be had, serves with those
+    /// it got, and the log says how many.
+    #[test]
+    fn a_start_serves_with_the_listeners_it_got() {
+        // the third instance can't be made: two listeners
+        let (server, name, log) = unstarted("fewer-instances");
+        let mut made = 0;
+        let started = start_with(
+            &server.shared,
+            |name, security, first| {
+                made += 1;
+                if made == 3 {
+                    return Err(io::Error::other("no instance"));
+                }
+                instance(name, security, first)
+            },
+            run,
+        );
+        started.unwrap();
+        assert_eq!(*lock(&log), ["hooks: 2 of 8 listeners: no instance"]);
+        assert!(pings(&name) && pings(&name));
+
+        // the second listener's thread can't be had: one listener
+        let (server, name, log) = unstarted("fewer-threads");
+        let mut spawned = 0;
+        let started = start_with(&server.shared, instance, |listener| {
+            spawned += 1;
+            if spawned == 2 {
+                return Err(io::Error::other("no thread"));
+            }
+            run(listener)
+        });
+        started.unwrap();
+        assert_eq!(*lock(&log), ["hooks: 1 of 8 listeners: no thread"]);
+        assert!(pings(&name) && pings(&name));
+    }
+
+    /// A start whose first listener can't run fails and leaves nothing listening: its instance, the name's first, is
+    /// closed, so the name is free for another pet.
+    #[test]
+    fn a_start_without_a_listener_leaves_the_name_free() {
+        let (server, name, log) = unstarted("no-listener");
+        let started = start_with(&server.shared, instance, |_| Err(io::Error::other("no thread")));
+        assert_eq!(started.unwrap_err().to_string(), "no thread");
+        assert!(lock(&log).is_empty());
+        assert!(!server.shared.sys.listening.load(Ordering::SeqCst));
+        assert!(!pings(&name));
+        instance(&name, &Security::only_me().unwrap(), true).unwrap();
     }
 }

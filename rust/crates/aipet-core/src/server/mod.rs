@@ -115,10 +115,13 @@ impl HookServer {
     }
 
     /// Starts listening, once, after the app's single-instance check. Whether it could goes to the log as well; the
-    /// pet runs on without hooks when it couldn't.
+    /// pet runs on without hooks when it couldn't, and then nothing of the server's is left listening.
     /// - Windows: the pipe's first instance is made as the first, so a name that is taken already fails (another pet,
     ///   or a squatter).
     /// - Unix: a live pet at the socket's path fails it; what a crashed one left there is replaced.
+    ///
+    /// Fewer than the 8 listeners (no more threads or pipe instances to be had, say) is a start all the same, with a
+    /// line in the log saying how many run.
     pub fn start(&self) -> io::Result<()> {
         let shared = &self.shared;
         let endpoint = shared.options.endpoint.to_string_lossy();
@@ -150,6 +153,22 @@ impl Shared {
 
     fn log(&self, line: &str) {
         (self.options.log)(line);
+    }
+
+    /// Starts the listeners, each with `start_one`, as the C# starts its Unix ones: when one can't start, those
+    /// already running serve on, and the log says how many; when not even the first can, the start fails, for the
+    /// caller to take down what it made for them.
+    fn start_listeners(&self, mut start_one: impl FnMut() -> io::Result<()>) -> io::Result<()> {
+        for started in 0..LISTENERS {
+            if let Err(e) = start_one() {
+                if started == 0 {
+                    return Err(e);
+                }
+                self.log(&format!("hooks: {started} of {LISTENERS} listeners: {e}"));
+                break;
+            }
+        }
+        Ok(())
     }
 
     /// A log line about connections the pet couldn't take, at most one every 10 s.
@@ -246,4 +265,47 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
         .copied()
         .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
         .unwrap_or("a panic")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A listener that can't start leaves those already running to serve, and the log says how many; the start fails
+    /// only when not even the first listener starts.
+    #[test]
+    fn listeners_that_cant_start_leave_the_others_serving() {
+        // which listener can't start (None: all start), what the start gives, and what the log gets
+        for (fails, expected, logged) in [
+            (None, Ok(()), vec![]),
+            (Some(3), Ok(()), vec!["hooks: 3 of 8 listeners: no thread"]),
+            (Some(0), Err("no thread".to_owned()), vec![]),
+        ] {
+            let log = Arc::new(Mutex::new(Vec::new()));
+            let lines = Arc::clone(&log);
+            let dir = std::env::temp_dir().join(format!("aipet-core-server-unit-{}", std::process::id()));
+            // never started: nothing listens at the endpoint, and nothing is written
+            let server = HookServer::with_options(
+                Arc::new(AgentSessions::with_codex_home(dir.join("codex"))),
+                || {},
+                Options {
+                    endpoint: "aipet-core-server-unit-never-listening".into(),
+                    events_log: dir.join("hook-events.log"),
+                    log: Box::new(move |line| lock(&lines).push(line.to_owned())),
+                },
+            );
+            let mut tried = 0;
+            let started = server.shared.start_listeners(|| {
+                tried += 1;
+                match fails {
+                    Some(at) if at + 1 == tried => Err(io::Error::other("no thread")),
+                    _ => Ok(()),
+                }
+            });
+            assert_eq!(started.map_err(|e| e.to_string()), expected, "{fails:?}");
+            assert_eq!(*lock(&log), logged, "{fails:?}");
+            // none is tried after the one that couldn't start
+            assert_eq!(tried, fails.map_or(LISTENERS, |at| at + 1), "{fails:?}");
+        }
+    }
 }

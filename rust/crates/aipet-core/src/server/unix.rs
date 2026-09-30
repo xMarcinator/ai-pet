@@ -31,20 +31,16 @@ pub(super) fn start(shared: &Arc<Shared>) -> io::Result<()> {
     refuse_live_server(path)?;
     let socket = Arc::new(listening(bound(path)?, path)?);
     *lock(&shared.sys.listener) = Some(Arc::clone(&socket));
-    for started in 0..LISTENERS {
-        let (shared_, socket_) = (Arc::clone(shared), Arc::clone(&socket));
-        if let Err(e) = run(move || accept(&shared_, &socket_)) {
-            if started > 0 {
-                shared.log(&format!("hooks: {started} of {LISTENERS} listeners: {e}"));
-                break;
-            }
-            // hooks would wait for answers nobody gives; with no socket they find no pet
-            lock(&shared.sys.listener).take();
-            let _ = fs::remove_file(path);
-            return Err(e);
-        }
+    let started = shared.start_listeners(|| {
+        let (shared, socket) = (Arc::clone(shared), Arc::clone(&socket));
+        run(move || accept(&shared, &socket))
+    });
+    if started.is_err() {
+        // hooks would wait for answers nobody gives; with no socket they find no pet
+        lock(&shared.sys.listener).take();
+        let _ = fs::remove_file(path);
     }
-    Ok(())
+    started
 }
 
 /// A connection wakes each listener in `accept` (closing the socket doesn't do that everywhere), then the socket is
