@@ -73,8 +73,8 @@ static class RegistrationMode
         if (!source.Contains(CatchLine)) throw new InvalidOperationException("Install.Run no longer catches with: " + CatchLine);
     }
 
-    /// Runs a step as Install.Run does, with what it prints.
-    static (int Exit, string Stdout, string Stderr) Step(Func<int> step, string agent)
+    /// Runs a step as Install.Run does, with what it prints, and what it threw (null when nothing was).
+    static (int Exit, string Stdout, string Stderr, Exception Thrown) Step(Func<int> step, string agent)
     {
         TextWriter output = Console.Out, errors = Console.Error;
         var stdout = new StringWriter();
@@ -82,6 +82,7 @@ static class RegistrationMode
         Console.SetOut(stdout);
         Console.SetError(stderr);
         int exit;
+        Exception thrown = null;
         try
         {
             try { exit = step(); }
@@ -89,6 +90,7 @@ static class RegistrationMode
             {
                 Console.Error.WriteLine($"Couldn't update {agent} settings: {ex.Message}");
                 exit = 1;
+                thrown = ex;
             }
         }
         finally
@@ -96,8 +98,15 @@ static class RegistrationMode
             Console.SetOut(output);
             Console.SetError(errors);
         }
-        return (exit, stdout.ToString(), stderr.ToString());
+        return (exit, stdout.ToString(), stderr.ToString(), thrown);
     }
+
+    const int SharingViolation = unchecked((int)0x80070020), LockViolation = unchecked((int)0x80070021);
+
+    /// Whether another process has the file: a sharing or lock violation (Windows' ERROR_SHARING_VIOLATION and
+    /// ERROR_LOCK_VIOLATION, as an IOException's HResult). A virus scanner can hold a file just written for a moment.
+    static bool Held(Exception ex) =>
+        OperatingSystem.IsWindows() && ex is IOException { HResult: SharingViolation or LockViolation };
 
     // ------------------------------------------------------------------ Claude
     sealed class Fixture
@@ -447,7 +456,7 @@ static class RegistrationMode
         string current;
         using (new Env(("CLAUDE_CONFIG_DIR", Path.Combine(root, "current"))))
         {
-            var (exit, _, err) = Step(() => ClaudeConfig.Install(Exe), "claude");
+            var (exit, _, err, _) = Step(() => ClaudeConfig.Install(Exe), "claude");
             if (exit != 0) throw new InvalidOperationException(err);
             current = File.ReadAllText(ClaudeConfig.Settings).Replace(ExeWritten, ExeToken, StringComparison.Ordinal);
         }
@@ -486,7 +495,7 @@ static class RegistrationMode
                      ("--install", "codex"), ("--uninstall", "claude"),
                  })
         {
-            var (exit, stdout, stderr) = Step(() => Install.Run(action, agent), agent);
+            var (exit, stdout, stderr, _) = Step(() => Install.Run(action, agent), agent);
             if (Directory.EnumerateFileSystemEntries(config).Any()) throw new InvalidOperationException($"{action} {agent} wrote something");
             string Norm(string s) => s.Replace(Environment.ProcessPath!, ExeToken, StringComparison.Ordinal)
                 .Replace(ClaudeConfig.Settings, SettingsToken, StringComparison.Ordinal);
@@ -498,67 +507,87 @@ static class RegistrationMode
         return cases;
     }
 
-    /// A case run until two runs in a row agree: a virus scanner can hold a file just written for a moment (Windows)
-    /// and fail a step that doesn't fail otherwise.
+    /// A case run until two runs agree, and every run must: a run that comes out otherwise than the first stops the
+    /// generator, since the C# gave two answers. The one exception is a run another process kept from a file (a virus
+    /// scanner can hold a file just written for a moment, on Windows): a step, or the harness around it, met a sharing
+    /// or lock violation, which says nothing of Install.cs. That run is set aside and said; a third one stops it too.
     static JsonObject Settled(string caseRoot, Fixture f)
     {
-        string last = null;
-        for (int attempt = 1; attempt <= 5; attempt++)
+        JsonObject first = null;
+        int clean = 0, setAside = 0;
+        for (int run = 1; clean < 2; run++)
         {
-            var result = RunCase($"{caseRoot}-{attempt}", f);
-            var json = result.ToJsonString();
-            if (json == last) return result;
-            last = json;
+            JsonObject result;
+            try { result = RunCase($"{caseRoot}-{run}", f); }
+            catch (IOException ex) when (Held(ex))
+            {
+                Console.Error.WriteLine($"{f.Name}: run {run} set aside, a file was held: {ex.Message}");
+                if (++setAside == 3) throw new InvalidOperationException($"{f.Name}: a file was held in {setAside} runs");
+                continue;
+            }
+            first ??= result;
+            if (result.ToJsonString() != first.ToJsonString())
+                throw new InvalidOperationException($"{f.Name}: run {run} came out otherwise than the first, so the C# gives two answers:\n"
+                                                    + $"{first.ToJsonString()}\n{result.ToJsonString()}");
+            clean++;
         }
-        throw new InvalidOperationException($"{f.Name}: no two runs in a row agree");
+        return first;
     }
 
+    /// A run of a case in a folder of its own. A step that met a held file (see Held) throws what it met.
     static JsonObject RunCase(string caseRoot, Fixture f)
     {
-        Directory.CreateDirectory(caseRoot);
-        var config = Path.Combine(caseRoot, "claude");
-        // not recorded: a bash.exe to find, and an empty folder for PATH and the install folders
-        var harness = Directory.CreateDirectory(Path.Combine(caseRoot, "harness")).FullName;
-        var nobin = Directory.CreateDirectory(Path.Combine(harness, "nobin")).FullName;
-        var bash = Path.Combine(harness, "bash.exe");
-        File.WriteAllText(bash, "");
-        if (f.ConfigDir) Directory.CreateDirectory(config);
-        foreach (var d in f.Dirs) Directory.CreateDirectory(Path.Combine(caseRoot, d));
-        foreach (var (p, text) in f.Files)
-        {
-            var path = Path.Combine(caseRoot, p);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, text.Replace(ExeToken, ExeWritten, StringComparison.Ordinal));
-        }
-        foreach (var (p, hex) in f.Bytes) File.WriteAllBytes(Path.Combine(caseRoot, p), Convert.FromHexString(hex));
-        foreach (var (p, target) in f.Links) File.CreateSymbolicLink(Path.Combine(caseRoot, p), target);
-        if (!OperatingSystem.IsWindows())
-            foreach (var (p, mode) in f.Modes) File.SetUnixFileMode(Path.Combine(caseRoot, p), (UnixFileMode)Convert.ToInt32(mode, 8));
-        foreach (var p in f.ReadOnly) File.SetAttributes(Path.Combine(caseRoot, p), File.GetAttributes(Path.Combine(caseRoot, p)) | FileAttributes.ReadOnly);
-
         var steps = new JsonArray();
-        int backups = 0;
-        using (new Env(("CLAUDE_CONFIG_DIR", config), ("CLAUDE_CODE_GIT_BASH_PATH", f.GitBash ? bash : null), ("PATH", nobin),
-                   ("ProgramFiles", nobin), ("LOCALAPPDATA", nobin)))
+        try
         {
-            foreach (var action in f.Actions)
+            Directory.CreateDirectory(caseRoot);
+            var config = Path.Combine(caseRoot, "claude");
+            // not recorded: a bash.exe to find, and an empty folder for PATH and the install folders
+            var harness = Directory.CreateDirectory(Path.Combine(caseRoot, "harness")).FullName;
+            var nobin = Directory.CreateDirectory(Path.Combine(harness, "nobin")).FullName;
+            var bash = Path.Combine(harness, "bash.exe");
+            File.WriteAllText(bash, "");
+            if (f.ConfigDir) Directory.CreateDirectory(config);
+            foreach (var d in f.Dirs) Directory.CreateDirectory(Path.Combine(caseRoot, d));
+            foreach (var (p, text) in f.Files)
             {
-                var before = Backups(config).ToHashSet();
-                var (exit, stdout, stderr) = Step(() => action == "install" ? ClaudeConfig.Install(Exe) : ClaudeConfig.Uninstall(), "claude");
-                foreach (var name in Backups(config).Where(b => !before.Contains(b)).Order(StringComparer.Ordinal))
-                    File.Move(Path.Combine(config, name), Path.Combine(config, $"settings.json.aipet-20000101-{++backups:D6}.bak"));
-                string Norm(string s) => s.Replace(ClaudeConfig.Settings, SettingsToken, StringComparison.Ordinal)
-                    .Replace(caseRoot, RootToken, StringComparison.Ordinal);
-                steps.Add(new JsonObject
+                var path = Path.Combine(caseRoot, p);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, text.Replace(ExeToken, ExeWritten, StringComparison.Ordinal));
+            }
+            foreach (var (p, hex) in f.Bytes) File.WriteAllBytes(Path.Combine(caseRoot, p), Convert.FromHexString(hex));
+            foreach (var (p, target) in f.Links) File.CreateSymbolicLink(Path.Combine(caseRoot, p), target);
+            if (!OperatingSystem.IsWindows())
+                foreach (var (p, mode) in f.Modes) File.SetUnixFileMode(Path.Combine(caseRoot, p), (UnixFileMode)Convert.ToInt32(mode, 8));
+            foreach (var p in f.ReadOnly) File.SetAttributes(Path.Combine(caseRoot, p), File.GetAttributes(Path.Combine(caseRoot, p)) | FileAttributes.ReadOnly);
+
+            int backups = 0;
+            using (new Env(("CLAUDE_CONFIG_DIR", config), ("CLAUDE_CODE_GIT_BASH_PATH", f.GitBash ? bash : null), ("PATH", nobin),
+                       ("ProgramFiles", nobin), ("LOCALAPPDATA", nobin)))
+            {
+                foreach (var action in f.Actions)
                 {
-                    ["action"] = action, ["exit"] = exit, ["stdout"] = Norm(stdout), ["stderr"] = Norm(stderr),
-                    ["files"] = Tree(caseRoot),
-                });
+                    var before = Backups(config).ToHashSet();
+                    var (exit, stdout, stderr, thrown) = Step(() => action == "install" ? ClaudeConfig.Install(Exe) : ClaudeConfig.Uninstall(), "claude");
+                    if (Held(thrown)) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(thrown);
+                    foreach (var name in Backups(config).Where(b => !before.Contains(b)).Order(StringComparer.Ordinal))
+                        File.Move(Path.Combine(config, name), Path.Combine(config, $"settings.json.aipet-20000101-{++backups:D6}.bak"));
+                    string Norm(string s) => s.Replace(ClaudeConfig.Settings, SettingsToken, StringComparison.Ordinal)
+                        .Replace(caseRoot, RootToken, StringComparison.Ordinal);
+                    steps.Add(new JsonObject
+                    {
+                        ["action"] = action, ["exit"] = exit, ["stdout"] = Norm(stdout), ["stderr"] = Norm(stderr),
+                        ["files"] = Tree(caseRoot),
+                    });
+                }
             }
         }
-        // a read-only file (and its backups, which keep the attribute) would stop the temp folder's removal
-        if (OperatingSystem.IsWindows())
-            foreach (var file in Directory.EnumerateFiles(caseRoot, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+        finally
+        {
+            // a read-only file (and its backups, which keep the attribute) would stop the temp folder's removal
+            if (OperatingSystem.IsWindows() && Directory.Exists(caseRoot))
+                foreach (var file in Directory.EnumerateFiles(caseRoot, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
+        }
 
         var c = new JsonObject { ["name"] = f.Name };
         if (f.Only != null) c["only"] = f.Only;
