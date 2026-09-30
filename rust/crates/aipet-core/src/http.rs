@@ -1,18 +1,22 @@
 //! What Jira, GitHub and the presets share: the HTTP client, with the C#'s 20 s timeout, the watchers' polling
 //! threads, and the .NET rules the C# reads addresses and answers by, so the error texts are the C#'s:
 //! - [`Http`]: the C#'s shared `HttpClient`. It sends only the headers the C# sets (no User-Agent, Accept or
-//!   Accept-Encoding of its own), follows up to 50 redirects without the credentials, and reads 4xx and 5xx answers.
+//!   Accept-Encoding of its own), follows up to 50 redirects without the credentials, reads 4xx and 5xx answers, and
+//!   keeps each answer's reason phrase as the server sent it (ureq drops it; .NET's `ReasonPhrase` has it).
 //! - [`Failure`]: how a request failed, as the C#'s `catch` blocks tell them apart: a timeout
 //!   (`TaskCanceledException`), a server that couldn't be reached (`HttpRequestException`, with .NET's message), or
 //!   anything else.
 //! - [`Poller`]: a watcher's loop on a thread of its own, with a stop flag.
+//! - [`parse_json`]: `JsonDocument.Parse`, which refuses what .NET's reader refuses, with its message and position.
 //! - [`Element`]: a JSON value read as `JsonElement` reads it, each step failing with .NET's exception text.
 //! - [`unix_seconds`]: `DateTimeOffset.TryParse` of an ISO 8601 time, then `ToUnixTimeMilliseconds() / 1000.0`.
 //!
 //! .NET's own words after the C#'s texts are reproduced where the cause is common: a host or port that can't be
-//! reached (the OS's text, then `(host:port)`), a TLS failure, a body that is empty or can't start a JSON value (an
-//! HTML page, say). Rarer causes keep the C#'s text before the colon, with a message of their own after it.
+//! reached (the OS's text, then `(host:port)`), a TLS failure, a body that isn't JSON. Rarer causes keep the C#'s
+//! text before the colon, with a message of their own after it.
 
+use std::cell::RefCell;
+use std::fmt;
 use std::io;
 use std::net::IpAddr;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
@@ -21,9 +25,12 @@ use std::time::Duration;
 
 use serde_json::Value;
 use ureq::Agent;
-use ureq::config::ConfigBuilder;
+use ureq::config::{Config, ConfigBuilder};
+use ureq::http::Uri;
 use ureq::tls::{RootCerts, TlsConfig};
 use ureq::typestate::AgentScope;
+use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver};
+use ureq::unversioned::transport::{Buffers, ConnectionDetails, Connector, DefaultConnector, NextTimeout, Transport};
 
 /// The C#'s `HttpClient.Timeout` for Jira and GitHub: the whole request, answer included.
 pub const TIMEOUT: Duration = Duration::from_secs(20);
@@ -52,18 +59,18 @@ impl Http {
             .tls_config(TlsConfig::builder().root_certs(RootCerts::PlatformVerifier).build())
             .timeout_global(Some(TIMEOUT));
         Http {
-            agent: like_dotnet(config).build().new_agent(),
+            agent: agent(like_dotnet(config).build(), DefaultResolver::default()),
             local: false,
         }
     }
 
     /// Plain HTTP to this computer only (a stub server standing in for Jira or GitHub), with no proxy and the given
-    /// timeout. Jira and GitHub themselves are only reached through [`Http::new`]; this client refuses any other host,
-    /// so a test can't reach them by mistake.
+    /// timeout. Jira and GitHub themselves are only reached through [`Http::new`]; this client refuses any other host
+    /// before it looks the name up, a redirect's included ([`ThisComputer`]), so a test can't reach them by mistake.
     pub fn local(timeout: Duration) -> Http {
         let config = Agent::config_builder().proxy(None).timeout_global(Some(timeout));
         Http {
-            agent: like_dotnet(config).build().new_agent(),
+            agent: agent(like_dotnet(config).build(), ThisComputer::default()),
             local: true,
         }
     }
@@ -95,12 +102,9 @@ impl Http {
         };
         let default_port = if url.starts_with("http:") { 80 } else { 443 };
         let port = uri.as_ref().and_then(|u| u.port_u16()).unwrap_or(default_port);
-        if self.local && !loopback(host) {
-            return Err(Failure::Other(format!(
-                "{host} isn't this computer, and plain HTTP goes nowhere else"
-            )));
-        }
         let failed = |e: ureq::Error| failure(e, host, port);
+        // what an earlier request left there isn't this one's
+        take_status_line();
         let mut response = match body {
             None => headers
                 .iter()
@@ -113,6 +117,8 @@ impl Http {
         }
         .map_err(failed)?;
         let status = response.status().as_u16();
+        // the last status line read, a redirect's last hop's; a stray line (an interim 1xx, say) has another code
+        let reason = take_status_line().and_then(|(code, reason)| (code == status).then_some(reason));
         let bytes = response
             .body_mut()
             .with_config()
@@ -122,9 +128,15 @@ impl Http {
         // as `ReadAsStringAsync` reads it: by its byte order mark, else UTF-8
         Ok(Answer {
             status,
+            reason,
             body: crate::config::read_text(&bytes),
         })
     }
+}
+
+/// An agent whose connections note each answer's status line ([`StatusLines`]), looking names up with `resolver`.
+fn agent(config: Config, resolver: impl Resolver) -> Agent {
+    Agent::with_parts(config, DefaultConnector::default().chain(StatusLines), resolver)
 }
 
 impl Default for Http {
@@ -149,6 +161,9 @@ fn like_dotnet(config: ConfigBuilder<AgentScope>) -> ConfigBuilder<AgentScope> {
 #[derive(Debug)]
 pub(crate) struct Answer {
     pub status: u16,
+    /// The reason phrase of the answer's status line, as .NET reads it ([`read_status_line`]); `None` when the
+    /// line wasn't read.
+    pub reason: Option<String>,
     pub body: String,
 }
 
@@ -158,14 +173,17 @@ impl Answer {
         (200..300).contains(&self.status)
     }
 
-    /// `$"{(int)StatusCode} {ReasonPhrase}"`. .NET takes the phrase from the server's status line, which Jira and
-    /// GitHub send as the standard one; this is the standard one, and nothing for a code that has none.
+    /// `$"{(int)StatusCode} {ReasonPhrase}"`: the phrase the server sent, empty when it sent none, as .NET keeps it.
+    /// Should the line not have been read, the standard phrase, which is .NET's when it has none (and nothing for a
+    /// code without one).
     pub(crate) fn status_line(&self) -> String {
-        let reason = ureq::http::StatusCode::from_u16(self.status)
-            .ok()
-            .and_then(|s| s.canonical_reason())
-            .unwrap_or("");
-        format!("{} {reason}", self.status)
+        let standard = || {
+            ureq::http::StatusCode::from_u16(self.status)
+                .ok()
+                .and_then(|s| s.canonical_reason())
+                .unwrap_or("")
+        };
+        format!("{} {}", self.status, self.reason.as_deref().unwrap_or_else(standard))
     }
 }
 
@@ -204,9 +222,40 @@ fn failure(e: ureq::Error, host: &str, port: u16) -> Failure {
         E::BodyExceedsLimit(limit) => Failure::Other(format!(
             "Cannot write more bytes to the buffer than the configured maximum buffer size: {limit}."
         )),
+        E::Other(e) => match e.downcast_ref::<NotThisComputer>() {
+            Some(refused) => Failure::Other(refused.to_string()),
+            None => Failure::Unreachable(SENDING_FAILED.into()),
+        },
         _ => Failure::Unreachable(SENDING_FAILED.into()),
     }
 }
+
+/// Looks names up for [`Http::local`]: this computer's only. ureq asks before every connection it makes, a
+/// redirect's included, so nothing [`Http::local`] sends leaves this computer, not even a name lookup.
+#[derive(Debug, Default)]
+struct ThisComputer(DefaultResolver);
+
+impl Resolver for ThisComputer {
+    fn resolve(&self, uri: &Uri, config: &Config, timeout: NextTimeout) -> Result<ResolvedSocketAddrs, ureq::Error> {
+        let host = uri.host().unwrap_or_default();
+        if !loopback(host) {
+            return Err(ureq::Error::Other(Box::new(NotThisComputer(host.into()))));
+        }
+        self.0.resolve(uri, config, timeout)
+    }
+}
+
+/// [`Http::local`]'s refusal of a host that isn't this computer.
+#[derive(Debug)]
+struct NotThisComputer(String);
+
+impl fmt::Display for NotThisComputer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} isn't this computer, and plain HTTP goes nowhere else", self.0)
+    }
+}
+
+impl std::error::Error for NotThisComputer {}
 
 /// The OS's text for an error while connecting (a host that isn't known, a port nobody listens on), which .NET's
 /// `SocketException` carries too; `None` for an error after the connection was made.
@@ -326,6 +375,101 @@ pub(crate) fn base64(bytes: &[u8]) -> String {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// The status line's reason phrase, which .NET's `ReasonPhrase` keeps and ureq drops
+
+thread_local! {
+    /// The code and reason phrase of the last status line this thread read. ureq reads an answer on the thread
+    /// that sent its request, so [`Http::send`] finds its answer's here.
+    static STATUS_LINE: RefCell<Option<(u16, String)>> = const { RefCell::new(None) };
+}
+
+fn take_status_line() -> Option<(u16, String)> {
+    STATUS_LINE.with(|line| line.borrow_mut().take())
+}
+
+/// The last connector of each agent's chain, after TLS, so it sees the answers as they are: it wraps every connection
+/// in [`NotesStatusLines`]. The transport API is ureq's unversioned one, which may change in a minor version;
+/// Cargo.lock pins the one this is written for.
+#[derive(Debug)]
+struct StatusLines;
+
+impl Connector<Box<dyn Transport>> for StatusLines {
+    type Out = NotesStatusLines;
+
+    fn connect(
+        &self,
+        _: &ConnectionDetails,
+        chained: Option<Box<dyn Transport>>,
+    ) -> Result<Option<NotesStatusLines>, ureq::Error> {
+        Ok(chained.map(|inner| NotesStatusLines { inner, awaiting: false }))
+    }
+}
+
+/// A connection that notes the status line of each answer it reads: the first line in after a request went out.
+#[derive(Debug)]
+struct NotesStatusLines {
+    inner: Box<dyn Transport>,
+    /// A request went out, and its answer's first line hasn't come in yet.
+    awaiting: bool,
+}
+
+impl Transport for NotesStatusLines {
+    fn buffers(&mut self) -> &mut dyn Buffers {
+        self.inner.buffers()
+    }
+
+    fn transmit_output(&mut self, amount: usize, timeout: NextTimeout) -> Result<(), ureq::Error> {
+        self.awaiting = true;
+        self.inner.transmit_output(amount, timeout)
+    }
+
+    fn await_input(&mut self, timeout: NextTimeout) -> Result<bool, ureq::Error> {
+        let progress = self.inner.await_input(timeout)?;
+        if self.awaiting {
+            // what hasn't been read yet starts with the answer
+            let input = self.inner.buffers().input();
+            if !b"HTTP/".starts_with(&input[..input.len().min(5)]) {
+                self.awaiting = false;
+            } else if let Some(end) = input.iter().position(|&b| b == b'\n') {
+                self.awaiting = false;
+                let line = &input[..end];
+                let line = read_status_line(line.strip_suffix(b"\r").unwrap_or(line));
+                STATUS_LINE.with(|noted| *noted.borrow_mut() = line);
+            }
+        }
+        Ok(progress)
+    }
+
+    fn is_open(&mut self) -> bool {
+        self.inner.is_open()
+    }
+
+    fn is_tls(&self) -> bool {
+        self.inner.is_tls()
+    }
+}
+
+/// A status line's code and reason phrase as .NET reads them: `HTTP/1.` and a digit, a space, three digits, then
+/// nothing or a space and the phrase, kept as it is, its bytes as Latin-1. `None` for a line .NET refuses.
+fn read_status_line(line: &[u8]) -> Option<(u16, String)> {
+    let digits = line.get(9..12)?;
+    if !line.starts_with(b"HTTP/1.")
+        || !line[7].is_ascii_digit()
+        || line[8] != b' '
+        || !digits.iter().all(u8::is_ascii_digit)
+    {
+        return None;
+    }
+    let code = digits.iter().fold(0, |code, d| code * 10 + u16::from(d - b'0'));
+    let reason = match &line[12..] {
+        [] => String::new(),
+        [b' ', phrase @ ..] => phrase.iter().copied().map(char::from).collect(),
+        _ => return None,
+    };
+    Some((code, reason))
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // The watchers' polling threads
 
 /// A watcher's loop: a thread that polls, then waits, until the next start stops it (the C#'s `Restart`, with a
@@ -397,35 +541,450 @@ const NOT_AN_INT: &str = "One of the identified items was in an invalid format."
 /// .NET's `NullReferenceException`.
 pub(crate) const NULL_REFERENCE: &str = "Object reference not set to an instance of an object.";
 
-/// `JsonDocument.Parse(text)`: the document, or the exception's text. .NET's own words for a body with nothing in it
-/// and one that can't start a JSON value (an HTML page, say); serde_json's for the rarer failures.
+/// `JsonDocument.Parse(text)`: the document, or the exception's text. Whether the text is JSON, and what is wrong
+/// where when it isn't, is .NET's reader's call ([`JsonReader`]); what it reads and serde_json can't (a lone
+/// surrogate's escape, a number beyond `f64`) keeps serde_json's words.
 pub(crate) fn parse_json(text: &str) -> Result<Value, String> {
-    serde_json::from_str(text).map_err(|e| dotnet_parse_error(text).unwrap_or_else(|| e.to_string()))
+    if let Some(message) = JsonReader::syntax_error(text) {
+        return Err(message);
+    }
+    serde_json::from_str(text).map_err(|e| e.to_string())
 }
 
-fn dotnet_parse_error(text: &str) -> Option<String> {
-    let (mut line, mut column) = (0, 0);
-    for b in text.bytes() {
-        match b {
-            b'\n' => (line, column) = (line + 1, 0),
-            b' ' | b'\t' | b'\r' => column += 1,
-            b'{' | b'[' | b'"' | b'-' | b'0'..=b'9' | b't' | b'f' | b'n' => return None,
-            _ => {
-                let shown = if b.is_ascii_graphic() {
-                    char::from(b).to_string()
-                } else {
-                    format!("0x{b:02X}")
-                };
-                return Some(format!(
-                    "'{shown}' is an invalid start of a value. LineNumber: {line} | BytePositionInLine: {column}."
-                ));
+/// `Utf8JsonReader` as `JsonDocument.Parse` runs it over a whole text (the final block, the default options: no
+/// comments, no trailing commas, at most 64 levels deep), for what it refuses: its checks in its order, its messages,
+/// and the line and byte it names, counted as it counts them.
+struct JsonReader<'a> {
+    json: &'a [u8],
+    /// The bytes read.
+    at: usize,
+    /// `LineNumber` and `BytePositionInLine`, from 0.
+    line: usize,
+    column: usize,
+    token: Token,
+    /// The objects (true) and arrays (false) open, the innermost last.
+    open: Vec<bool>,
+    /// The text is an object or an array, not a single value.
+    not_primitive: bool,
+}
+
+/// The last token read, as far as it decides what may come next.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Token {
+    None,
+    StartObject,
+    StartArray,
+    PropertyName,
+    /// A value, or the end of an object or array.
+    Other,
+}
+
+// .NET's messages; `{0}` is the byte they name
+const NO_TOKENS: &str = "The input does not contain any JSON tokens. Expected the input to start with a valid JSON \
+                         token, when isFinalBlock is true.";
+const OPEN_AT_END: &str = "Expected depth to be zero at the end of the JSON payload. There is an open JSON object or \
+                           array that should be closed.";
+const START_OF_VALUE: &str = "'{0}' is an invalid start of a value.";
+const START_OF_PROPERTY: &str = "'{0}' is an invalid start of a property name. Expected a '\"'.";
+const AFTER_PROPERTY_NAME: &str = "'{0}' is invalid after a property name. Expected a ':'.";
+const VALUE_AT_END: &str = "Expected a value, but instead reached end of data.";
+const PROPERTY_OR_VALUE_AT_END: &str = "Expected start of a property name or value, but instead reached end of data.";
+const AFTER_VALUE: &str = "'{0}' is invalid after a value. Expected either ',', '}', or ']'.";
+const AFTER_SINGLE_VALUE: &str = "'{0}' is invalid after a single JSON value. Expected end of data.";
+const NO_MATCHING_OPEN: &str = "'{0}' is invalid without a matching open.";
+const TRAILING_COMMA_IN_OBJECT: &str = "The JSON object contains a trailing comma at the end which is not supported \
+                                        in this mode. Change the reader options.";
+const TRAILING_COMMA_IN_ARRAY: &str = "The JSON array contains a trailing comma at the end which is not supported in \
+                                       this mode. Change the reader options.";
+const OBJECT_TOO_DEEP: &str = "The maximum configured depth of 64 has been exceeded. Cannot read next JSON object.";
+const ARRAY_TOO_DEEP: &str = "The maximum configured depth of 64 has been exceeded. Cannot read next JSON array.";
+const STRING_AT_END: &str = "Expected end of string, but instead reached end of data.";
+const IN_STRING: &str = "'{0}' is invalid within a JSON string. The string should be correctly escaped.";
+const ESCAPE: &str = "'{0}' is an invalid escapable character within a JSON string. The string should be correctly \
+                      escaped.";
+const NOT_HEX: &str = "'{0}' is not a hex digit following '\\u' within a JSON string. The string should be correctly \
+                       escaped.";
+const END_OF_NUMBER: &str = "'{0}' is an invalid end of a number. Expected a delimiter.";
+const NOT_EXPONENT: &str = "'{0}' is an invalid end of a number. Expected 'E' or 'e'.";
+const AFTER_SIGN: &str = "'{0}' is invalid within a number, immediately after a sign character ('+' or '-'). Expected \
+                          a digit ('0'-'9').";
+const AFTER_POINT: &str = "'{0}' is invalid within a number, immediately after a decimal point ('.'). Expected a \
+                           digit ('0'-'9').";
+const DIGIT_AT_END: &str = "Expected a digit ('0'-'9'), but instead reached end of data.";
+const LEADING_ZERO: &str = "Invalid leading zero before '{0}'.";
+
+/// What may end a number.
+const DELIMITERS: &[u8] = b",}] \n\r\t/";
+
+impl JsonReader<'_> {
+    /// What .NET's reader refuses in the text, as `JsonException`'s message; `None` for a JSON document.
+    fn syntax_error(text: &str) -> Option<String> {
+        let mut reader = JsonReader {
+            json: text.as_bytes(),
+            at: 0,
+            line: 0,
+            column: 0,
+            token: Token::None,
+            open: Vec::new(),
+            not_primitive: false,
+        };
+        loop {
+            match reader.read() {
+                Ok(true) => {}
+                Ok(false) => return None,
+                Err(message) => return Some(message),
             }
         }
     }
-    Some(format!(
-        "The input does not contain any JSON tokens. Expected the input to start with a valid JSON token, when \
-         isFinalBlock is true. LineNumber: {line} | BytePositionInLine: {column}."
-    ))
+
+    /// The message, and where the reader is.
+    fn fail<T>(&self, text: &str) -> Result<T, String> {
+        Err(format!(
+            "{text} LineNumber: {} | BytePositionInLine: {}.",
+            self.line, self.column
+        ))
+    }
+
+    /// The message with the byte it names: printable ASCII as itself, anything else in hex.
+    fn fail_at<T>(&self, text: &str, byte: u8) -> Result<T, String> {
+        let shown = if (0x20..0x7F).contains(&byte) {
+            char::from(byte).to_string()
+        } else {
+            format!("0x{byte:02X}")
+        };
+        self.fail(&text.replace("{0}", &shown))
+    }
+
+    fn in_object(&self) -> bool {
+        self.open.last() == Some(&true)
+    }
+
+    fn advance(&mut self, bytes: usize) {
+        self.at += bytes;
+        self.column += bytes;
+    }
+
+    /// `Read`: whether it read a token.
+    fn read(&mut self) -> Result<bool, String> {
+        self.skip_white_space();
+        if !self.more()? {
+            // white space alone is no document
+            return if self.token == Token::None {
+                self.fail(NO_TOKENS)
+            } else {
+                Ok(false)
+            };
+        }
+        let first = self.json[self.at];
+        match self.token {
+            Token::None => self.first_token(first)?,
+            _ if first == b'/' => self.next_token(first)?,
+            Token::StartObject if first == b'}' => self.end_object()?,
+            Token::StartObject if first != b'"' => self.fail_at(START_OF_PROPERTY, first)?,
+            Token::StartObject => self.property_name()?,
+            Token::StartArray if first == b']' => self.end_array()?,
+            Token::StartArray | Token::PropertyName => self.value(first)?,
+            Token::Other => self.next_token(first)?,
+        }
+        Ok(true)
+    }
+
+    /// `HasMoreData`: whether there is more to read. An object or array still open at the end fails.
+    fn more(&self) -> Result<bool, String> {
+        if self.at < self.json.len() {
+            Ok(true)
+        } else if self.not_primitive && !self.open.is_empty() {
+            self.fail(OPEN_AT_END)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// JSON's white space; a line feed starts a line.
+    fn skip_white_space(&mut self) {
+        while let Some(&b) = self.json.get(self.at) {
+            match b {
+                b'\n' => (self.line, self.column) = (self.line + 1, 0),
+                b' ' | b'\r' | b'\t' => self.column += 1,
+                _ => return,
+            }
+            self.at += 1;
+        }
+    }
+
+    /// `ReadFirstToken`.
+    fn first_token(&mut self, first: u8) -> Result<(), String> {
+        match first {
+            b'{' | b'[' => {
+                self.start(first);
+                self.not_primitive = true;
+            }
+            b'0'..=b'9' | b'-' => {
+                let length = self.number()?;
+                self.advance(length);
+                self.token = Token::Other;
+            }
+            _ => self.value(first)?,
+        }
+        Ok(())
+    }
+
+    /// `StartObject` or `StartArray`, once the depth is checked.
+    fn start(&mut self, bracket: u8) {
+        self.open.push(bracket == b'{');
+        self.token = if bracket == b'{' {
+            Token::StartObject
+        } else {
+            Token::StartArray
+        };
+        self.advance(1);
+    }
+
+    /// `ConsumeValue`.
+    fn value(&mut self, first: u8) -> Result<(), String> {
+        match first {
+            b'"' => self.string(),
+            b'{' | b'[' if self.open.len() >= 64 => {
+                self.fail(if first == b'{' { OBJECT_TOO_DEEP } else { ARRAY_TOO_DEEP })
+            }
+            b'{' | b'[' => {
+                self.start(first);
+                Ok(())
+            }
+            b'0'..=b'9' | b'-' => {
+                let length = self.number()?;
+                self.advance(length);
+                self.token = Token::Other;
+                // the text can't end in a number inside an object or array
+                if self.at == self.json.len() && self.not_primitive {
+                    return self.fail_at(END_OF_NUMBER, self.json[self.at - 1]);
+                }
+                Ok(())
+            }
+            b't' => self.literal(b"true"),
+            b'f' => self.literal(b"false"),
+            b'n' => self.literal(b"null"),
+            _ => self.fail_at(START_OF_VALUE, first),
+        }
+    }
+
+    /// `ConsumeNextToken`: what may come after a value, or after an object's or array's end.
+    fn next_token(&mut self, marker: u8) -> Result<(), String> {
+        if self.open.is_empty() {
+            return self.fail_at(AFTER_SINGLE_VALUE, marker);
+        }
+        match marker {
+            b',' => {
+                self.advance(1);
+                if self.at == self.json.len() {
+                    // named at the comma
+                    self.at -= 1;
+                    self.column -= 1;
+                    return self.fail(PROPERTY_OR_VALUE_AT_END);
+                }
+                self.skip_white_space();
+                let Some(&first) = self.json.get(self.at) else {
+                    return self.fail(PROPERTY_OR_VALUE_AT_END);
+                };
+                match first {
+                    b'"' if self.in_object() => self.property_name(),
+                    b'}' if self.in_object() => self.fail(TRAILING_COMMA_IN_OBJECT),
+                    _ if self.in_object() => self.fail_at(START_OF_PROPERTY, first),
+                    b']' => self.fail(TRAILING_COMMA_IN_ARRAY),
+                    _ => self.value(first),
+                }
+            }
+            b'}' => self.end_object(),
+            b']' => self.end_array(),
+            _ => self.fail_at(AFTER_VALUE, marker),
+        }
+    }
+
+    /// `EndObject`.
+    fn end_object(&mut self) -> Result<(), String> {
+        if !self.in_object() {
+            return self.fail_at(NO_MATCHING_OPEN, b'}');
+        }
+        self.close();
+        Ok(())
+    }
+
+    /// `EndArray`.
+    fn end_array(&mut self) -> Result<(), String> {
+        if self.in_object() || self.open.is_empty() {
+            return self.fail_at(NO_MATCHING_OPEN, b']');
+        }
+        self.close();
+        Ok(())
+    }
+
+    fn close(&mut self) {
+        self.open.pop();
+        self.token = Token::Other;
+        self.advance(1);
+    }
+
+    /// `ConsumePropertyName`: a string, then a colon.
+    fn property_name(&mut self) -> Result<(), String> {
+        self.string()?;
+        self.skip_white_space();
+        match self.json.get(self.at) {
+            None => self.fail(VALUE_AT_END),
+            Some(b':') => {
+                self.advance(1);
+                self.token = Token::PropertyName;
+                Ok(())
+            }
+            Some(&other) => self.fail_at(AFTER_PROPERTY_NAME, other),
+        }
+    }
+
+    /// `ConsumeString`, from its opening quote.
+    fn string(&mut self) -> Result<(), String> {
+        let json = self.json;
+        let content = &json[self.at + 1..];
+        match content.iter().position(|&b| b == b'"' || b == b'\\' || b < b' ') {
+            Some(end) if content[end] == b'"' => {
+                self.advance(end + 2);
+                self.token = Token::Other;
+                Ok(())
+            }
+            Some(first) => self.escaped_string(content, first),
+            None => {
+                self.column += content.len() + 1;
+                self.fail(STRING_AT_END)
+            }
+        }
+    }
+
+    /// `ConsumeStringAndValidate`: a string's content byte by byte, from its first backslash or control character.
+    fn escaped_string(&mut self, content: &[u8], first: usize) -> Result<(), String> {
+        self.column += first + 1;
+        let mut escaped = false;
+        let mut i = first;
+        while i < content.len() {
+            let b = content[i];
+            if b == b'"' && !escaped {
+                self.column += 1;
+                self.at += i + 2;
+                self.token = Token::Other;
+                return Ok(());
+            } else if b == b'\\' {
+                escaped = !escaped;
+            } else if escaped {
+                if !b"\"nrt/ubf".contains(&b) {
+                    return self.fail_at(ESCAPE, b);
+                }
+                if b == b'u' {
+                    // four hex digits, each but the last counted as it is checked
+                    self.column += 1;
+                    for (n, &digit) in content.iter().skip(i + 1).take(4).enumerate() {
+                        if !digit.is_ascii_hexdigit() {
+                            return self.fail_at(NOT_HEX, digit);
+                        }
+                        if n < 3 {
+                            self.column += 1;
+                        }
+                    }
+                    if i + 4 >= content.len() {
+                        break;
+                    }
+                    i += 4;
+                }
+                escaped = false;
+            } else if b < b' ' {
+                return self.fail_at(IN_STRING, b);
+            }
+            self.column += 1;
+            i += 1;
+        }
+        self.fail(STRING_AT_END)
+    }
+
+    /// `ConsumeLiteral`: `true`, `false` or `null`. A wrong one is named with the rest of the text.
+    fn literal(&mut self, literal: &[u8]) -> Result<(), String> {
+        let json = self.json;
+        let rest = &json[self.at..];
+        if rest.starts_with(literal) {
+            self.advance(literal.len());
+            self.token = Token::Other;
+            return Ok(());
+        }
+        // `CheckLiteral`: at the first byte that differs, or where the text ends
+        let wrong = (1..literal.len())
+            .find(|&i| rest.get(i) != Some(&literal[i]))
+            .unwrap_or(literal.len());
+        self.column += wrong;
+        self.fail(&format!(
+            "'{}' is an invalid JSON literal. Expected the literal '{}'.",
+            String::from_utf8_lossy(rest),
+            String::from_utf8_lossy(literal)
+        ))
+    }
+
+    /// `TryGetNumber`: the number's length. A number that goes wrong fails where it does.
+    fn number(&mut self) -> Result<usize, String> {
+        let json = self.json;
+        let data = &json[self.at..];
+        let digits_from = |mut i: usize| {
+            while data.get(i).is_some_and(u8::is_ascii_digit) {
+                i += 1;
+            }
+            i
+        };
+        // a digit wanted at `i`: the end of the text, or the byte that isn't one
+        let digit_wanted = |i: usize, after: &'static str| if i == data.len() { DIGIT_AT_END } else { after };
+        let mut i = usize::from(data[0] == b'-');
+        if i == 1 && !data.get(1).is_some_and(u8::is_ascii_digit) {
+            return self.fail_ahead(i, digit_wanted(i, AFTER_SIGN));
+        }
+        // the whole part: a 0, or digits
+        let zero = data[i] == b'0';
+        i = if zero { i + 1 } else { digits_from(i + 1) };
+        match data.get(i) {
+            None => return Ok(i),
+            Some(b) if DELIMITERS.contains(b) => return Ok(i),
+            Some(b) if zero && b.is_ascii_digit() => return self.fail_ahead(i, LEADING_ZERO),
+            Some(b'.' | b'e' | b'E') => {}
+            Some(_) => return self.fail_ahead(i, END_OF_NUMBER),
+        }
+        if data[i] == b'.' {
+            i += 1;
+            if !data.get(i).is_some_and(u8::is_ascii_digit) {
+                return self.fail_ahead(i, digit_wanted(i, AFTER_POINT));
+            }
+            i = digits_from(i + 1);
+            match data.get(i) {
+                None => return Ok(i),
+                Some(b) if DELIMITERS.contains(b) => return Ok(i),
+                Some(b'e' | b'E') => {}
+                Some(_) => return self.fail_ahead(i, NOT_EXPONENT),
+            }
+        }
+        // the exponent: a sign or none, then digits
+        i += 1;
+        if matches!(data.get(i), Some(b'+' | b'-')) {
+            i += 1;
+        }
+        if !data.get(i).is_some_and(u8::is_ascii_digit) {
+            return self.fail_ahead(i, digit_wanted(i, AFTER_SIGN));
+        }
+        i = digits_from(i + 1);
+        match data.get(i) {
+            None => Ok(i),
+            Some(b) if DELIMITERS.contains(b) => Ok(i),
+            Some(_) => self.fail_ahead(i, END_OF_NUMBER),
+        }
+    }
+
+    /// Fails `ahead` bytes on from where the reader is, naming the byte there when the message names one.
+    fn fail_ahead<T>(&mut self, ahead: usize, text: &str) -> Result<T, String> {
+        self.column += ahead;
+        match self.json.get(self.at + ahead) {
+            Some(&byte) if text.contains("{0}") => self.fail_at(text, byte),
+            _ => self.fail(text),
+        }
+    }
 }
 
 /// A JSON value read as the C# reads a `JsonElement`: a step that doesn't fit fails with .NET's exception text.
@@ -789,19 +1348,339 @@ mod tests {
     }
 
     #[test]
-    fn json_failures_read_as_dotnets() {
-        // JsonDocument.Parse's and JsonElement's texts, as recorded from .NET 10
-        let invalid = |start: &str, line: u32, column: u32| {
-            format!("'{start}' is an invalid start of a value. LineNumber: {line} | BytePositionInLine: {column}.")
-        };
-        assert_eq!(parse_json("<html>").unwrap_err(), invalid("<", 0, 0));
-        assert_eq!(parse_json(" \n <x").unwrap_err(), invalid("<", 1, 1));
-        assert_eq!(parse_json("é").unwrap_err(), invalid("0xC3", 0, 0));
-        assert_eq!(
-            parse_json("   ").unwrap_err(),
-            "The input does not contain any JSON tokens. Expected the input to start with a valid JSON token, when \
-             isFinalBlock is true. LineNumber: 0 | BytePositionInLine: 3."
-        );
+    fn json_syntax_errors_are_dotnets() {
+        // JsonDocument.Parse's messages for text that isn't JSON, as recorded from .NET 10
+        let none = "The input does not contain any JSON tokens. Expected the input to start with a valid JSON token, \
+                    when isFinalBlock is true.";
+        let open = "Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array \
+                    that should be closed.";
+        let too_deep = "[".repeat(65);
+        for (text, message, line, column) in [
+            // what it starts with
+            ("<html>", "'<' is an invalid start of a value.", 0, 0),
+            (" \n <x", "'<' is an invalid start of a value.", 1, 1),
+            ("\r\n<html>", "'<' is an invalid start of a value.", 1, 0),
+            ("é", "'0xC3' is an invalid start of a value.", 0, 0),
+            ("\u{7f}", "'0x7F' is an invalid start of a value.", 0, 0),
+            ("   ", none, 0, 3),
+            ("\n\n", none, 2, 0),
+            // a text that ends too soon
+            ("{", open, 0, 1),
+            ("{\"a\":", open, 0, 5),
+            ("{\"a\":{\"b\":[]}\n", open, 1, 0),
+            ("{\"a\"", "Expected a value, but instead reached end of data.", 0, 4),
+            (
+                "{\"a\":1",
+                "'1' is an invalid end of a number. Expected a delimiter.",
+                0,
+                6,
+            ),
+            (
+                "{\"a\":-0",
+                "'0' is an invalid end of a number. Expected a delimiter.",
+                0,
+                7,
+            ),
+            (
+                "[1,",
+                "Expected start of a property name or value, but instead reached end of data.",
+                0,
+                2,
+            ),
+            (
+                "[1, ",
+                "Expected start of a property name or value, but instead reached end of data.",
+                0,
+                4,
+            ),
+            (
+                r#"{"issues":[{"key":"ABC-1","fields":{"summary":"Fix"#,
+                "Expected end of string, but instead reached end of data.",
+                0,
+                50,
+            ),
+            ("[\"é", "Expected end of string, but instead reached end of data.", 0, 4),
+            (
+                r#"{"a":"\u12"#,
+                "Expected end of string, but instead reached end of data.",
+                0,
+                10,
+            ),
+            (
+                r#"["a\u004"#,
+                "Expected end of string, but instead reached end of data.",
+                0,
+                8,
+            ),
+            (
+                r#"["x\\\"]"#,
+                "Expected end of string, but instead reached end of data.",
+                0,
+                8,
+            ),
+            (
+                "{\"a\":1.",
+                "Expected a digit ('0'-'9'), but instead reached end of data.",
+                0,
+                7,
+            ),
+            (
+                "{\"a\":1e+",
+                "Expected a digit ('0'-'9'), but instead reached end of data.",
+                0,
+                8,
+            ),
+            (
+                "-",
+                "Expected a digit ('0'-'9'), but instead reached end of data.",
+                0,
+                1,
+            ),
+            // literals: a wrong one is named with the rest of the text
+            (
+                "{\"a\":tru",
+                "'tru' is an invalid JSON literal. Expected the literal 'true'.",
+                0,
+                8,
+            ),
+            (
+                "{\"a\":nil}",
+                "'nil}' is an invalid JSON literal. Expected the literal 'null'.",
+                0,
+                6,
+            ),
+            (
+                "[fals]",
+                "'fals]' is an invalid JSON literal. Expected the literal 'false'.",
+                0,
+                5,
+            ),
+            (
+                "{\"a\":nulx, \"b\": \"a tail\"}",
+                "'nulx, \"b\": \"a tail\"}' is an invalid JSON literal. Expected the literal 'null'.",
+                0,
+                8,
+            ),
+            (
+                "[tré]",
+                "'tré]' is an invalid JSON literal. Expected the literal 'true'.",
+                0,
+                3,
+            ),
+            (
+                "[nu\nll]",
+                "'nu\nll]' is an invalid JSON literal. Expected the literal 'null'.",
+                0,
+                3,
+            ),
+            (
+                "{\"a\":nulll}",
+                "'l' is invalid after a value. Expected either ',', '}', or ']'.",
+                0,
+                9,
+            ),
+            (
+                "truex",
+                "'x' is invalid after a single JSON value. Expected end of data.",
+                0,
+                4,
+            ),
+            ("{\"a\":True}", "'T' is an invalid start of a value.", 0, 5),
+            // objects and arrays
+            (
+                "{\"a\":1 \"b\":2}",
+                "'\"' is invalid after a value. Expected either ',', '}', or ']'.",
+                0,
+                7,
+            ),
+            (
+                "{\"a\":1}}",
+                "'}' is invalid after a single JSON value. Expected end of data.",
+                0,
+                7,
+            ),
+            ("{\"a\":1]", "']' is invalid without a matching open.", 0, 6),
+            ("[1}", "'}' is invalid without a matching open.", 0, 2),
+            (
+                "{\"a\" 1}",
+                "'1' is invalid after a property name. Expected a ':'.",
+                0,
+                5,
+            ),
+            ("{\"a\":}", "'}' is an invalid start of a value.", 0, 5),
+            (
+                "{a:1}",
+                "'a' is an invalid start of a property name. Expected a '\"'.",
+                0,
+                1,
+            ),
+            ("[}", "'}' is an invalid start of a value.", 0, 1),
+            (
+                "{]",
+                "']' is an invalid start of a property name. Expected a '\"'.",
+                0,
+                1,
+            ),
+            (
+                "{\"a\":1,}",
+                "The JSON object contains a trailing comma at the end which is not supported in this mode. Change the \
+                 reader options.",
+                0,
+                7,
+            ),
+            (
+                "[1,]",
+                "The JSON array contains a trailing comma at the end which is not supported in this mode. Change the \
+                 reader options.",
+                0,
+                3,
+            ),
+            (
+                "{\"a\":/*c*/1}",
+                "'/' is invalid after a value. Expected either ',', '}', or ']'.",
+                0,
+                5,
+            ),
+            (
+                "{\"a\":1}//c",
+                "'/' is invalid after a single JSON value. Expected end of data.",
+                0,
+                7,
+            ),
+            (
+                "{\"a\":1}\u{a0}",
+                "'0xC2' is invalid after a single JSON value. Expected end of data.",
+                0,
+                7,
+            ),
+            (
+                &too_deep,
+                "The maximum configured depth of 64 has been exceeded. Cannot read next JSON array.",
+                0,
+                64,
+            ),
+            // lines and bytes: a line feed starts a line, a carriage return is a byte, a character is its UTF-8
+            (
+                "{\"a\":1}\n\n  x",
+                "'x' is invalid after a single JSON value. Expected end of data.",
+                2,
+                2,
+            ),
+            (
+                "{\n  \"a\": 1,\n  \"b\": [1, 2,\n    x]\n}",
+                "'x' is an invalid start of a value.",
+                3,
+                4,
+            ),
+            (
+                "[1,\r2 x]",
+                "'x' is invalid after a value. Expected either ',', '}', or ']'.",
+                0,
+                6,
+            ),
+            (
+                "{\"ab€\":1,x}",
+                "'x' is an invalid start of a property name. Expected a '\"'.",
+                0,
+                11,
+            ),
+            // numbers
+            ("{\"a\":01}", "Invalid leading zero before '1'.", 0, 6),
+            ("00", "Invalid leading zero before '0'.", 0, 1),
+            (
+                "{\"a\":1.x}",
+                "'x' is invalid within a number, immediately after a decimal point ('.'). Expected a digit ('0'-'9').",
+                0,
+                7,
+            ),
+            (
+                "{\"a\":1ex}",
+                "'x' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit \
+                 ('0'-'9').",
+                0,
+                7,
+            ),
+            (
+                "[- 1]",
+                "' ' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit \
+                 ('0'-'9').",
+                0,
+                2,
+            ),
+            (
+                "[1.5E+]",
+                "']' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit \
+                 ('0'-'9').",
+                0,
+                6,
+            ),
+            (
+                "{\"a\":1.5.5}",
+                "'.' is an invalid end of a number. Expected 'E' or 'e'.",
+                0,
+                8,
+            ),
+            (
+                "{\"a\":1e5e5}",
+                "'e' is an invalid end of a number. Expected a delimiter.",
+                0,
+                8,
+            ),
+            (
+                "[0-1]",
+                "'-' is an invalid end of a number. Expected a delimiter.",
+                0,
+                2,
+            ),
+            ("12x", "'x' is an invalid end of a number. Expected a delimiter.", 0, 2),
+            (
+                "[1\u{1}]",
+                "'0x01' is an invalid end of a number. Expected a delimiter.",
+                0,
+                2,
+            ),
+            // strings
+            (
+                "{\"a\":\"line\nbreak\"}",
+                "'0x0A' is invalid within a JSON string. The string should be correctly escaped.",
+                0,
+                10,
+            ),
+            (
+                r#"{"a":"\x"}"#,
+                "'x' is an invalid escapable character within a JSON string. The string should be correctly escaped.",
+                0,
+                7,
+            ),
+            (
+                r#"{"a":"\u12G4"}"#,
+                "'G' is not a hex digit following '\\u' within a JSON string. The string should be correctly escaped.",
+                0,
+                10,
+            ),
+            (
+                r#"{"a\u12":1}"#,
+                "'\"' is not a hex digit following '\\u' within a JSON string. The string should be correctly escaped.",
+                0,
+                7,
+            ),
+        ] {
+            let expected = format!("{message} LineNumber: {line} | BytePositionInLine: {column}.");
+            assert_eq!(parse_json(text).unwrap_err(), expected, "{text:?}");
+        }
+        // what .NET reads
+        let deepest = format!("{}{}", "[".repeat(64), "]".repeat(64));
+        for text in ["0", "-0", "1e5", "12 \n", "{\"a\":1,\"a\":2}", &deepest] {
+            assert!(parse_json(text).is_ok(), "{text:?}");
+        }
+        // and serde_json doesn't, a lone surrogate's escape, which keeps serde_json's words
+        assert_eq!(JsonReader::syntax_error(r#"["\ud800"]"#), None);
+        assert!(parse_json(r#"["\ud800"]"#).is_err());
+    }
+
+    #[test]
+    fn json_elements_read_as_dotnets() {
+        // JsonElement's texts, as recorded from .NET 10
         let wrong = |wanted: &str, actual: &str| {
             format!(
                 "The requested operation requires an element of type '{wanted}', but the target element has type \
@@ -871,16 +1750,43 @@ mod tests {
     }
 
     #[test]
-    fn status_lines_name_the_standard_reason() {
-        let line = |status| {
+    fn status_lines_are_read_as_dotnet_reads_them() {
+        // ReasonPhrase for these status lines, as recorded from .NET 10 (None: .NET refuses the line)
+        for (line, read) in [
+            (
+                &b"HTTP/1.1 403 Rate Limit Exceeded"[..],
+                Some((403, "Rate Limit Exceeded")),
+            ),
+            (b"HTTP/1.1 403 Forbidden", Some((403, "Forbidden"))),
+            (b"HTTP/1.1 403 forbidden", Some((403, "forbidden"))),
+            (b"HTTP/1.1 429 ", Some((429, ""))),
+            (b"HTTP/1.1 429", Some((429, ""))),
+            (b"HTTP/1.1 403  Two spaces", Some((403, " Two spaces"))),
+            (b"HTTP/1.1 403 Trailing  ", Some((403, "Trailing  "))),
+            (b"HTTP/1.1 403 Verboten \xc3\xbc", Some((403, "Verboten Ã¼"))),
+            (b"HTTP/1.1 403 Forbidd\xe9n", Some((403, "Forbiddén"))),
+            (b"HTTP/1.0 403 Nope", Some((403, "Nope"))),
+            (b"HTTP/1.1 999 Custom", Some((999, "Custom"))),
+            (b"HTTP/1.1 403\tTab", None),
+            (b"HTTP/2 403 Forbidden", None),
+            (b"HTTP/1.1 40x Bad", None),
+        ] {
+            let read = read.map(|(code, reason): (u16, &str)| (code, reason.to_string()));
+            assert_eq!(read_status_line(line), read, "{}", String::from_utf8_lossy(line));
+        }
+        let line = |status, reason: Option<&str>| {
             Answer {
                 status,
+                reason: reason.map(Into::into),
                 body: String::new(),
             }
             .status_line()
         };
-        assert_eq!(line(403), "403 Forbidden");
-        assert_eq!(line(429), "429 Too Many Requests");
-        assert_eq!(line(599), "599 ");
+        assert_eq!(line(403, Some("Rate Limit Exceeded")), "403 Rate Limit Exceeded");
+        assert_eq!(line(429, Some("")), "429 ");
+        // a line that wasn't read: the standard phrase, which .NET gives a code without its own, and nothing when
+        // there is none
+        assert_eq!(line(403, None), "403 Forbidden");
+        assert_eq!(line(599, None), "599 ");
     }
 }
