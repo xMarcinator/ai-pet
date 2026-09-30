@@ -37,6 +37,10 @@ the desktop shell. This task can't be completed while a Windows check fails.
   is down and applies the window's DPI at the drop, placed so the grabbed spot stays under the pointer.
 - **Re-run by hand:** ending a drag on focus loss (pressing Win mid-drag used to leave the pet following the pointer),
   and the `AIPET_DEBUG` GPU probe moved to before the window shows. Both are unit-tested only.
+- **Not shown by hand at all** (found when the proof was checked against its logs): the menu at 150 % (it was only
+  opened after the pet had moved to the 100 % screen), a drag onto the other screen at 100 %, and click-through with
+  each backend (only the default, Vulkan, was reported), GL included. On the test machine the second screen is a
+  portrait one to the right of the main one, so the crossings seen so far were sideways.
 - **Menu rows:** each item's label and check mark sit at the top of its 32 px row, 6–7 px above centre, because an iced
   button lays its content out from the top. Centre them in `menu.rs` (for example `container(..).height(Fill)
   .align_y(Center)`). The cause is iced's layout, so the fix applies on Linux as well.
