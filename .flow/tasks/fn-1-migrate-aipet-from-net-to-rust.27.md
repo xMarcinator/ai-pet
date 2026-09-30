@@ -17,7 +17,7 @@ the desktop shell. This task can't be completed while a Windows check fails.
   - poke, drag and landing at 100 % and 150 %, and across two monitors;
   - the menu inline above the pet, and click-through in the gaps between bubbles;
   - topmost, and staying out of Alt+Tab and the taskbar;
-  - Stop, Open and media buttons against the Claude and Codex desktop apps and Spotify;
+  - Open and media buttons against the Claude and Codex desktop apps and Spotify (there is no Stop button);
   - the Settings pages, including updates from task 21;
   - antivirus reactions to the new `AiPet.exe` and `aipet-hook.exe`, recorded for the false-positive reports.
 - Fix failures here. A failure too big for this task becomes a new task under this spec. That new task must be added

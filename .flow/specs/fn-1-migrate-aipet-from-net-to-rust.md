@@ -181,6 +181,10 @@ dotnet test AiPet.slnx   # the C# suite, until the cutover (with AIPET_TEST_HOOK
   - The Codex editor fails without writing when `config.toml` keeps changing under it. The C# overwrites on its third
     attempt, which can lose Codex's own changes and trust state. Uncontended edits stay byte-identical.
   - The config drops unknown fields, as the C# does.
+  - No Stop button (the user's decision, 2026-09-30). The C#'s Stop focuses the agent's app and sends it Escape
+    (`keybd_event` on Windows, `xdotool` or `wmctrl` on Linux). The Rust pet doesn't drive another app's window with
+    simulated keys, so it has no Stop button and no send-Escape service. A working chat keeps its Open button, which
+    opens the chat or brings its app forward.
 - **Secrets use the C#'s exact schema.** The keyring crate's default naming differs on both Windows and Linux. The
   platform APIs are used directly, or the crate's low-level attribute API, whichever reproduces the schema.
 - **Velopack stays.** Its official Rust SDK covers startup hooks and updates. Packing a Rust exe with `vpk` needs the
@@ -285,10 +289,8 @@ dotnet test AiPet.slnx   # the C# suite, until the cutover (with AIPET_TEST_HOOK
 - **R11:** The pet opens where the user left it, whichever shell saved the position (see Edge Cases), with the same
   off-screen reset. "Reset position" puts it at the default corner. Errors: an unknown output or scale → the default
   placement.
-- **R12:** Every C# pet-window and Settings feature works in Rust.
-  - Real bubbles for chats, reviews and music. Open, pull request, media and Stop buttons.
-  - Stop is shown on every working or thinking desktop chat. It sends Escape only when the pet has run more than
-    15 minutes, the chat is the only one of its agent, and focusing its app succeeded. Otherwise it opens the chat.
+- **R12:** Every C# pet-window and Settings feature works in Rust, except the Stop button (see Decision Context).
+  - Real bubbles for chats, reviews and music. Open, pull request and media buttons.
   - Deep links, and error bubbles that open their Settings page.
   - Hover, poke and drag. The menu: Show bubbles, Always on top, Avatars…, Settings…, Quit.
   - Settings:

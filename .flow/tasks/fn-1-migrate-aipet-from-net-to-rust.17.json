@@ -12,6 +12,6 @@
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.17.md",
   "status": "todo",
-  "title": "Bubble actions: Open, PR, media and Stop buttons, deep links, error bubbles",
-  "updated_at": "2026-09-28T18:25:52.557428Z"
+  "title": "Bubble actions: Open, PR and media buttons, deep links, error bubbles",
+  "updated_at": "2026-09-30T13:02:00.437707Z"
 }
