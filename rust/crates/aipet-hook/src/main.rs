@@ -6,7 +6,7 @@
 //!
 //! Also `aipet-hook --install|--uninstall claude|codex` ([`install`]), `aipet-hook --doctor claude|codex [--probe]`
 //! and `aipet-hook --print-plugin-hooks claude|codex` ([`plugin_hooks`]), which aren't hook runs: they print, and
-//! exit with their own codes. A port of `src/AiPet.Hook`; Codex's registration and the doctor are still to be ported.
+//! exit with their own codes. A port of `src/AiPet.Hook`; the doctor is still to be ported.
 
 mod claude;
 mod codex;
