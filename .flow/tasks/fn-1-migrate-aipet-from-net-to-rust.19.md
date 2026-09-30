@@ -8,10 +8,14 @@ Bring the Settings window to parity for the General page (without its updates se
 spike's page has switches and an avatar picker only.
 
 **Size:** M
-**Files:** `rust/crates/aipet-ui/src/settings/{mod,general,avatars}.rs` (split from `settings.rs`), `rust/crates/aipet-ui/tests/settings.rs`, `rust/crates/aipet-ui/Cargo.toml` (`rfd`)
-**Touches:** [rust/crates/aipet-ui/src/settings/mod.rs, rust/crates/aipet-ui/src/settings/general.rs, rust/crates/aipet-ui/src/settings/avatars.rs, rust/crates/aipet-ui/src/settings.rs, rust/crates/aipet-ui/tests/settings.rs, rust/crates/aipet-ui/Cargo.toml, rust/Cargo.lock]
+**Files:** `rust/crates/aipet-ui/src/settings/{general,avatars}.rs` (stubs from task 15), `rust/crates/aipet-ui/tests/settings.rs`
+**Touches:** [rust/crates/aipet-ui/src/settings/general.rs, rust/crates/aipet-ui/src/settings/avatars.rs, rust/crates/aipet-ui/tests/settings.rs]
 
 ### Approach
+- Task 15's groundwork provides `settings/mod.rs` (the window, the shared rows and fields, and the actions),
+  `rfd`, and the `Platform` trait. Reset position emits the action task 16 handles; Open data folder and Open avatars
+  folder go through the platform. Keep the General page's slot for the updates section (`settings/updates.rs`, task
+  21's). This task touches no `mod.rs` or Cargo file.
 - General (`src/AiPet.UI/SettingsWindow.axaml.cs:96-125`):
   - the switches: chat bubbles, always on top, and "Listen along with <player>" when a player exists;
   - Reset position, and Open data folder.

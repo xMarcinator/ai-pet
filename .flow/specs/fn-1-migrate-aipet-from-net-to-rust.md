@@ -167,6 +167,12 @@ dotnet test AiPet.slnx   # the C# suite, until the cutover (with AIPET_TEST_HOOK
   (hook contract, end-to-end, no-pet, Unix socket, launcher, plugin hooks, installer) can run against a Rust hook
   unchanged. It ships alone with the .NET pet at milestone 1, because the wire protocol is the seam. The core and the UI
   ship together at milestone 2: a Rust core can't feed the Avalonia UI without a bridge.
+- **The UI tasks run side by side** (the user's decision, 2026-09-30). Task 15 lays the groundwork they share: the
+  `Platform` trait, the Settings skeleton and the actions it emits, `main.rs`'s extension points, the config store's
+  API, and the crates they need. Tasks 16–21 then each own files of their own and wait only for task 15 (and 11 or
+  14 where they read those), instead of running one after another. The Linux and Windows hands-on passes (tasks 22
+  and 27) no longer wait for each other: they own separate files, and the shared desktop shell file goes to whichever
+  needs it while the other isn't running.
 - **Parity is proven against the C#, not re-imagined.** Small .NET golden generators turn fixture inputs into expected
   outputs, and Rust tests replay them byte for byte (or bit for bit). This is how the sprite was ported: 202 cases and
   3,914 frames. It covers registration (`settings.json`, `config.toml`, `hooks.json`, printed plugin hooks) and the

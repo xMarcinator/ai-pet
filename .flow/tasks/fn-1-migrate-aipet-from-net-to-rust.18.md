@@ -10,10 +10,12 @@ served is dropped (the user's decision, 2026-09-30; see the spec's Decision Cont
 another app.
 
 **Size:** M
-**Files:** `rust/crates/aipet-desktop/src/platform/{mod,linux,windows,mac}.rs`, `rust/crates/aipet-desktop/tests/platform.rs`, `rust/crates/aipet-desktop/Cargo.toml`, `rust/crates/aipet/src/main.rs` (handing the platform to the UI)
-**Touches:** [rust/crates/aipet-desktop/src/platform/**, rust/crates/aipet-desktop/src/lib.rs, rust/crates/aipet-desktop/tests/platform.rs, rust/crates/aipet-desktop/Cargo.toml, rust/crates/aipet/src/main.rs, rust/Cargo.lock]
+**Files:** `rust/crates/aipet-desktop/src/platform/{mod,linux,windows,mac}.rs` (stubs from task 15), `rust/crates/aipet-desktop/tests/platform.rs`
+**Touches:** [rust/crates/aipet-desktop/src/platform/**, rust/crates/aipet-desktop/tests/platform.rs]
 
 ### Approach
+- Task 15's groundwork declares the platform modules in `lib.rs`, hands them to the UI in `main.rs` and adds the
+  windows-sys features they need, so this task fills the stubs without touching `lib.rs`, `main.rs` or a Cargo file.
 - Linux (`src/AiPet.UI/Platform/LinuxPlatform.cs`):
   - `FocusAgent` through `xdotool`, falling back to `wmctrl` (`:28-70`; not `SendEscape`); `xdg-open` for URLs and
     folders.

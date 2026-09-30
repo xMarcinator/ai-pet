@@ -4,8 +4,7 @@
   "claimed_at": null,
   "created_at": "2026-09-28T18:09:42.243046Z",
   "depends_on": [
-    "fn-1-migrate-aipet-from-net-to-rust.16",
-    "fn-1-migrate-aipet-from-net-to-rust.18"
+    "fn-1-migrate-aipet-from-net-to-rust.15"
   ],
   "id": "fn-1-migrate-aipet-from-net-to-rust.19",
   "priority": null,

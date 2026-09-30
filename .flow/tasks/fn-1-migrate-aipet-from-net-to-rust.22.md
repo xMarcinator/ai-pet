@@ -6,11 +6,13 @@ satisfies: [R13]
 ## Description
 Run the hands-on tests with the real-data pet on the supported Linux desktops, fix what fails, and ship Hyprland rules
 for a layer surface. **It needs the user** (real clicks). Windows is task 27 and the performance gate task 28. This task
-can't be completed while a Linux check fails.
+can't be completed while a Linux check fails. It runs side by side with the Windows pass (task 27), on files of its
+own. The shared `aipet-desktop/src/shell.rs` is in neither pass's Touches: a fix there is reported, and the conductor
+adds the file to this task's Touches while task 27 isn't running.
 
 **Size:** M
-**Files:** `packaging/linux/hyprland/aipet.lua`, `packaging/linux/hyprland/aipet.conf`, `rust/crates/aipet-wayland/src/{drag,shell}.rs`, `rust/crates/aipet-desktop/src/shell.rs` (X11 fixes), `rust/proofs/linux-hands-on.md` (results, new)
-**Touches:** [packaging/linux/hyprland/**, rust/crates/aipet-wayland/src/**, rust/crates/aipet-desktop/src/shell.rs, rust/crates/aipet-desktop/src/native/x11.rs, rust/proofs/linux-hands-on.md]
+**Files:** `packaging/linux/hyprland/aipet.lua`, `packaging/linux/hyprland/aipet.conf`, `rust/crates/aipet-wayland/src/{drag,shell}.rs`, `rust/crates/aipet-desktop/src/{native/x11,platform/linux}.rs` (X11 and platform fixes), `rust/proofs/linux-hands-on.md` (results, new)
+**Touches:** [packaging/linux/hyprland/**, rust/crates/aipet-wayland/src/**, rust/crates/aipet-desktop/src/native/x11.rs, rust/crates/aipet-desktop/src/platform/linux.rs, rust/proofs/linux-hands-on.md]
 
 ### Approach
 - Go through `rust/SPIKE.md`'s hands-on list on Hyprland, KDE, Sway, GNOME (the winit fallback) and an X11 session:

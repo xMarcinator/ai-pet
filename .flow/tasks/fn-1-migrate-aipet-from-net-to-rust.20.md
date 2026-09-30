@@ -8,10 +8,12 @@ The Jira and GitHub Settings pages: fields, Test, Save and Forget, a token box t
 watchers restarting on save.
 
 **Size:** M
-**Files:** `rust/crates/aipet-ui/src/settings/{jira,github}.rs`, `rust/crates/aipet-ui/tests/settings_services.rs`
-**Touches:** [rust/crates/aipet-ui/src/settings/jira.rs, rust/crates/aipet-ui/src/settings/github.rs, rust/crates/aipet-ui/src/settings/mod.rs, rust/crates/aipet-ui/tests/settings_services.rs]
+**Files:** `rust/crates/aipet-ui/src/settings/{jira,github}.rs` (stubs from task 15), `rust/crates/aipet-ui/tests/settings_services.rs`
+**Touches:** [rust/crates/aipet-ui/src/settings/jira.rs, rust/crates/aipet-ui/src/settings/github.rs, rust/crates/aipet-ui/tests/settings_services.rs]
 
 ### Approach
+- Task 15's groundwork provides `settings/mod.rs`, the page stubs and the shared fields; this task doesn't touch
+  `mod.rs`.
 - Jira (`src/AiPet.UI/SettingsWindow.axaml.cs:284-347`): site, email, JQL and token. Test runs the watcher's search on a
   thread and shows the C#'s messages. Save writes `jira.json` and the secret, then restarts the watcher. Forget removes
   the secret.

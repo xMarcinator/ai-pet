@@ -9,8 +9,8 @@ instead of the demo script, and add the single-instance rules shared with the .N
 It depends on task 13 so the desktop shell's Windows route is settled first.
 
 **Size:** M
-**Files:** `rust/crates/aipet/` (renamed from `aipet-spike`: `Cargo.toml`, `src/main.rs`, `src/core_thread.rs`, `src/single.rs`), `rust/crates/aipet-ui/{Cargo.toml,src/lib.rs,src/demo.rs}`, `rust/crates/aipet-wayland/src/shell.rs`, `rust/crates/aipet-desktop/src/shell.rs`, `rust/Cargo.toml`
-**Touches:** [rust/crates/aipet/**, rust/crates/aipet-spike/**, rust/crates/aipet-ui/Cargo.toml, rust/crates/aipet-ui/src/lib.rs, rust/crates/aipet-ui/src/demo.rs, rust/crates/aipet-wayland/src/shell.rs, rust/crates/aipet-desktop/src/shell.rs, rust/Cargo.toml, rust/Cargo.lock]
+**Files:** `rust/crates/aipet/` (renamed from `aipet-spike`: `Cargo.toml`, `src/main.rs`, `src/core_thread.rs`, `src/single.rs`), `rust/crates/aipet-ui/{Cargo.toml,src/lib.rs,src/demo.rs}`, `rust/crates/aipet-wayland/src/shell.rs`, `rust/crates/aipet-desktop/src/shell.rs`, `rust/Cargo.toml`; groundwork for tasks 16–21: `rust/crates/aipet-ui/src/{platform.rs,settings/}` (split from `settings.rs`), `rust/crates/aipet-desktop/src/{lib.rs,platform/}`, `rust/crates/aipet-desktop/Cargo.toml`
+**Touches:** [rust/crates/aipet/**, rust/crates/aipet-spike/**, rust/crates/aipet-ui/Cargo.toml, rust/crates/aipet-ui/src/lib.rs, rust/crates/aipet-ui/src/demo.rs, rust/crates/aipet-ui/src/platform.rs, rust/crates/aipet-ui/src/settings.rs, rust/crates/aipet-ui/src/settings/**, rust/crates/aipet-wayland/src/shell.rs, rust/crates/aipet-desktop/src/shell.rs, rust/crates/aipet-desktop/src/lib.rs, rust/crates/aipet-desktop/src/platform/**, rust/crates/aipet-desktop/Cargo.toml, rust/Cargo.toml, rust/Cargo.lock]
 
 ### Approach
 - A core thread does what `MainWindow`'s constructor does (`src/AiPet.UI/MainWindow.axaml.cs:62-150`):
@@ -30,6 +30,26 @@ It depends on task 13 so the desktop shell's Windows route is settled first.
     server's live check and the other-session socket probe (`src/AiPet.UI/Program.cs:18-37`).
   - Quit quietly when another pet holds either, .NET or Rust.
 - Startup order: single-instance, then the core, then the shell. Task 21 puts Velopack first.
+- **Groundwork for tasks 16–21** (the user's decision, 2026-09-30), so each of them works in files of its own and they
+  can run side by side. Each piece is an interface with a minimal implementation, not the feature:
+  - `aipet-ui/src/platform.rs`: the `Platform` trait (`open_url`, `open_folder`, `focus_agent`, and media: poll,
+    previous, play-pause, next, focus), a no-op implementation, and a recording fake for tests. `PetUi` and Settings
+    take it. Task 17 calls it; task 18 implements it. There is no `send_escape` (no Stop button).
+  - `aipet-desktop/src/platform/{mod,linux,windows,mac}.rs`: no-op implementations, declared in
+    `aipet-desktop/src/lib.rs` and handed to the UI in `main.rs`, so task 18 fills them without touching either.
+  - `aipet-ui/src/settings/`: split `settings.rs` into `mod.rs` (the window, page navigation, the shared rows,
+    sections and fields, and the actions Settings emits: reset position, open data folder, import defaults, check
+    for updates, restart to update) and page stubs `general.rs`, `avatars.rs`, `jira.rs`, `github.rs` and
+    `updates.rs`. The General page shows the updates section from `updates.rs`. Tasks 19, 20 and 21 fill their pages
+    without touching `mod.rs`.
+  - `aipet/src/`: `main.rs` already calls, in startup order, `updates::startup()` (first, for task 21), the placement
+    hooks (load at start, save on a drop and on quit, reset) and the Settings action dispatch. `config.rs` holds the
+    config in memory with a dirty flag behind a small API; its first version writes at once, and task 16 completes the
+    write rules. `placement.rs` and `updates.rs` start as stubs. `PetUi` exposes what placement needs (the window's
+    size and a finished-drag event), so task 16 doesn't touch `lib.rs`.
+  - Crates: add `rfd` (task 19) to aipet-ui, `velopack` (task 21) to aipet, and the windows-sys features task 18 needs
+    (`EnumWindows`, `SetForegroundWindow`, `AttachThreadInput`, `ShellExecuteW`, `WM_APPCOMMAND`) to aipet-desktop, so
+    tasks 16–21 change no `Cargo.toml` and no `Cargo.lock`.
 
 ### Investigation targets
 **Required:**
@@ -63,6 +83,10 @@ core thread, never wait for the UI. `Options { endpoint, events_log, log }` keep
       where the Rust lock and task 6's C# lock contend on one file, including with different or unset
       `XDG_RUNTIME_DIR` values, plus a manual check with both apps).
 - [ ] `cargo run -p aipet --features demo` still runs the demo. A release build contains no demo code.
+- [ ] Groundwork: the stubs build, and the app runs with them (a no-op platform, placeholder Settings pages, the
+      default placement, no update check). The handover lists each extension point and the task that fills it. None of
+      tasks 16–21 needs to edit `main.rs`, `aipet-desktop/src/lib.rs`, `settings/mod.rs`, `platform/mod.rs`, a
+      `Cargo.toml` or `Cargo.lock`.
 ## Done summary
 TBD
 

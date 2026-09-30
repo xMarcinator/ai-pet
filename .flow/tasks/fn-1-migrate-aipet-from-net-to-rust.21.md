@@ -11,10 +11,12 @@ Windows updates in the Rust pet, following task 14's proof:
 - the updates section in Settings.
 
 **Size:** M
-**Files:** `rust/crates/aipet/src/{main,updates}.rs`, `rust/crates/aipet-ui/src/settings/general.rs` (updates section), `rust/crates/aipet/Cargo.toml`
-**Touches:** [rust/crates/aipet/src/main.rs, rust/crates/aipet/src/updates.rs, rust/crates/aipet/Cargo.toml, rust/crates/aipet-ui/src/settings/general.rs, rust/Cargo.lock]
+**Files:** `rust/crates/aipet/src/updates.rs`, `rust/crates/aipet-ui/src/settings/updates.rs` (the updates section; both stubs from task 15)
+**Touches:** [rust/crates/aipet/src/updates.rs, rust/crates/aipet-ui/src/settings/updates.rs]
 
 ### Approach
+- Task 15's groundwork calls `updates::startup()` first thing in `main.rs`, adds `velopack`, and has the General
+  page show `settings/updates.rs`, so this task touches neither `main.rs`, `general.rs` nor a Cargo file.
 - The first line of `main` is `VelopackApp::build()`, with the uninstall callback running the cleanup from task 10, as
   `Updates.App()` does (`src/AiPet.UI/Updates.cs:43-52`).
 - On Windows only, `Updates.Start` (`:73-113`): install a pending update first, wait the first-check delay, then check

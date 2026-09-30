@@ -5,12 +5,14 @@ satisfies: [R13]
 
 ## Description
 Run the hands-on tests with the real-data pet on Windows 10 and 11, and fix what fails. **It needs the user** or a
-Windows machine with real input. Split from task 22 so each fits an iteration, and ordered after it because both fix
-the desktop shell. This task can't be completed while a Windows check fails.
+Windows machine with real input. Split from task 22 so each fits an iteration. It doesn't wait for task 22 (the user's
+decision, 2026-09-30): the two passes own separate files and can run side by side. The shared
+`aipet-desktop/src/shell.rs` is in neither pass's Touches: a fix there is reported, and the conductor adds the file to
+this task's Touches while task 22 isn't running. This task can't be completed while a Windows check fails.
 
 **Size:** M
-**Files:** `rust/crates/aipet-desktop/src/{shell,native/win32,platform/windows}.rs`, `rust/proofs/windows-hands-on.md` (results, new)
-**Touches:** [rust/crates/aipet-desktop/src/**, rust/crates/aipet-ui/src/style.rs, rust/crates/aipet-ui/src/menu.rs, rust/crates/aipet-ui/src/view.rs, rust/proofs/windows-hands-on.md]
+**Files:** `rust/crates/aipet-desktop/src/{native/win32,platform/windows}.rs`, `rust/proofs/windows-hands-on.md` (results, new)
+**Touches:** [rust/crates/aipet-desktop/src/native/win32.rs, rust/crates/aipet-desktop/src/platform/windows.rs, rust/crates/aipet-ui/src/style.rs, rust/crates/aipet-ui/src/menu.rs, rust/crates/aipet-ui/src/view.rs, rust/proofs/windows-hands-on.md]
 
 ### Approach
 - Use task 13's chosen transparency route (`rust/proofs/windows.md`). Check:

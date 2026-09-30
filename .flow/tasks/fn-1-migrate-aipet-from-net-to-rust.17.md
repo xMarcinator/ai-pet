@@ -4,12 +4,12 @@ satisfies: [R12]
 # fn-1-migrate-aipet-from-net-to-rust.17 Bubble actions: Open, PR and media buttons, deep links, error bubbles
 
 ## Description
-Give the Rust bubbles the C#'s buttons and click routing, through a `Platform` trait the shells provide. The trait is
-defined here; task 18 implements it.
+Give the Rust bubbles the C#'s buttons and click routing, through the `Platform` trait the shells provide. The trait
+and its recording fake come from task 15's groundwork (`aipet-ui/src/platform.rs`); task 18 implements it.
 
 **Size:** M
-**Files:** `rust/crates/aipet-ui/src/{cards,view,lib,platform}.rs`, `rust/crates/aipet-ui/tests/actions.rs`
-**Touches:** [rust/crates/aipet-ui/src/cards.rs, rust/crates/aipet-ui/src/view.rs, rust/crates/aipet-ui/src/lib.rs, rust/crates/aipet-ui/src/platform.rs, rust/crates/aipet-ui/tests/actions.rs]
+**Files:** `rust/crates/aipet-ui/src/{cards,view,lib}.rs`, `rust/crates/aipet-ui/tests/actions.rs`
+**Touches:** [rust/crates/aipet-ui/src/cards.rs, rust/crates/aipet-ui/src/view.rs, rust/crates/aipet-ui/src/lib.rs, rust/crates/aipet-ui/tests/actions.rs]
 
 ### Approach
 - Buttons by bubble kind, as in `MakeCard` (`src/AiPet.UI/MainWindow.axaml.cs:352-435`): Open in Jira, Open pull
@@ -21,8 +21,8 @@ defined here; task 18 implements it.
 - `OpenItem` routing (`:458-467`): error bubbles open their Settings page, music focuses the player, Jira and GitHub
   bubbles open their URL, and a chat opens its deep link or focuses its agent.
 - The buttons join `hit_rects`.
-- `Platform` trait: `open_url`, `open_folder`, `focus_agent`, and media (poll, previous, play-pause, next, focus).
-  There is no `send_escape`.
+- Call the `Platform` trait from task 15 (`open_url`, `open_folder`, `focus_agent`, and media: poll, previous,
+  play-pause, next, focus); there is no `send_escape`.
 
 ### Investigation targets
 **Required:**

@@ -8,10 +8,14 @@ Load and save `config.json` through the core, and place the pet where the user l
 window's top-left corner in desktop pixels, and both shells must read it the same way.
 
 **Size:** M
-**Files:** `rust/crates/aipet/src/placement.rs`, `rust/crates/aipet-wayland/src/{shell,drag}.rs`, `rust/crates/aipet-desktop/src/shell.rs`, `rust/crates/aipet-ui/src/lib.rs`
-**Touches:** [rust/crates/aipet/src/placement.rs, rust/crates/aipet/src/main.rs, rust/crates/aipet-wayland/src/shell.rs, rust/crates/aipet-wayland/src/drag.rs, rust/crates/aipet-desktop/src/shell.rs, rust/crates/aipet-ui/src/lib.rs]
+**Files:** `rust/crates/aipet/src/{placement,config}.rs` (stubs from task 15), `rust/crates/aipet-wayland/src/{shell,drag}.rs`, `rust/crates/aipet-desktop/src/shell.rs`
+**Touches:** [rust/crates/aipet/src/placement.rs, rust/crates/aipet/src/config.rs, rust/crates/aipet-wayland/src/shell.rs, rust/crates/aipet-wayland/src/drag.rs, rust/crates/aipet-desktop/src/shell.rs]
 
 ### Approach
+- Task 15's groundwork already calls the placement hooks from `main.rs` (load at start, save on a drop and on
+  quit, reset), gives `config.rs` its API (first writing at once) and has `PetUi` expose the window's size and a
+  finished-drag event. This task implements placement and completes the config's write rules without touching
+  `main.rs` or `lib.rs`; Settings (task 19) emits the reset-position action this task handles.
 - Desktop shell: port `PlaceWindow`, `ResetPosition` and `SaveConfig` (`src/AiPet.UI/MainWindow.axaml.cs:160-201`). That
   covers the physical `Left`/`Top`, the `WindowHeight` and legacy `Toolbar` adjustments, the check that the pet is
   visible on some screen, and the reset.
