@@ -10,7 +10,8 @@
 //! When `AIPET_GOLDEN` names the golden generator's dll (CI sets it; see aipet-ipc's src/csharp.rs to run it
 //! locally), the C# also reads every file the Rust writes (the rollback path), writes a log line in the same culture
 //! as the Rust, and on Windows it writes a Credential Manager token the Rust reads, and reads one the Rust writes,
-//! under a test-only target.
+//! under a test-only target. That Credential Manager test runs only with `AIPET_TEST_CREDENTIAL_MANAGER` set, since
+//! it writes to the real Credential Manager (CI sets it).
 //!
 //! When the C# changes: `dotnet run --project rust/golden -c Release -- data` from the repository root, then fix the
 //! port until this passes. Never edit the golden files by hand.
@@ -462,11 +463,18 @@ fn the_log_has_the_apps_time_separator() {
 }
 
 /// A token in Credential Manager is the .NET app's: written with the target name as the key and the secret as its
-/// UTF-16 blob, it reads back in either app. The target is a test one, and is deleted whatever happens.
+/// UTF-16 blob, it reads back in either app. The target is a test one, and is deleted whatever happens. It writes to
+/// the real Credential Manager of whoever runs it, so it runs only when `AIPET_TEST_CREDENTIAL_MANAGER` is set (CI
+/// sets it).
 #[cfg(windows)]
 #[test]
 fn credential_manager_tokens_are_the_apps() {
     use aipet_core::secrets::CredentialManager;
+
+    if std::env::var_os("AIPET_TEST_CREDENTIAL_MANAGER").is_none() {
+        eprintln!("skipped: it writes to this user's Credential Manager; AIPET_TEST_CREDENTIAL_MANAGER=1 runs it");
+        return;
+    }
 
     struct Forget(String);
     impl Drop for Forget {

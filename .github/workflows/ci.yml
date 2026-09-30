@@ -121,6 +121,8 @@ jobs:
         run: cargo test --workspace --locked
         env:
           AIPET_GOLDEN: ${{ github.workspace }}/rust/golden/bin/Release/net10.0/aipet-golden.dll
+          # aipet-core's Credential Manager test writes a throwaway entry, which only a CI runner should get
+          AIPET_TEST_CREDENTIAL_MANAGER: "1"
       # As uid 0 in a user namespace there is no /run/user/<uid>, so the socket's path comes from XDG_RUNTIME_DIR or
       # the data folder: the rules the runner's own uid never gets to.
       - name: Test the endpoint without a /run/user folder
