@@ -386,8 +386,8 @@ pub(crate) fn group(event: &Event, mut hook: Object) -> Node {
 }
 
 /// `RealPath`: the file a symlink ends at (`File.ResolveLinkTarget(path, returnFinalTarget: true)`), each link's
-/// relative target taken from where that link is, and `..` taken out of the text. Not a link, or a chain past
-/// .NET's 40 links: the path itself.
+/// relative target taken from where that link is, as a full path (`FileSystemInfo.FullName`). Not a link, a chain
+/// past .NET's 40 links, or no full path to be had (`FullName` throws, and `RealPath` catches): the path itself.
 fn real_path(path: &Path) -> PathBuf {
     const MAX_FOLLOWED_LINKS: usize = 40;
     let Ok(mut target) = fs::read_link(path) else {
@@ -401,19 +401,20 @@ fn real_path(path: &Path) -> PathBuf {
         };
         match fs::read_link(&current) {
             Ok(next) => target = next,
-            Err(_) => return full_path(&current),
+            Err(_) => return full_path(&current).unwrap_or_else(|| path.to_owned()),
         }
     }
     path.to_owned()
 }
 
-/// `Path.GetFullPath`, for a path that is already absolute.
+/// `Path.GetFullPath`: a relative path (a relative `CLAUDE_CONFIG_DIR`) taken from the working folder, then `.` and
+/// `..` taken out of the text. `None` where .NET throws: there is no working folder.
 #[cfg(unix)]
-fn full_path(path: &Path) -> PathBuf {
+fn full_path(path: &Path) -> Option<PathBuf> {
     use std::path::Component;
 
     let mut full = PathBuf::new();
-    for part in path.components() {
+    for part in std::path::absolute(path).ok()?.components() {
         match part {
             Component::ParentDir => {
                 full.pop();
@@ -422,12 +423,12 @@ fn full_path(path: &Path) -> PathBuf {
             other => full.push(other),
         }
     }
-    full
+    Some(full)
 }
 
 #[cfg(not(unix))]
-fn full_path(path: &Path) -> PathBuf {
-    std::path::absolute(path).unwrap_or_else(|_| path.to_owned())
+fn full_path(path: &Path) -> Option<PathBuf> {
+    std::path::absolute(path).ok()
 }
 
 /// `Backup`: settings.json.aipet-<local time>.bak before each change, and the newest three of them kept. It never
@@ -636,5 +637,36 @@ mod tests {
         assert_eq!(real_path(&real), real);
         symlink("loop.json", claude.join("loop.json")).unwrap();
         assert_eq!(real_path(&claude.join("loop.json")), claude.join("loop.json"));
+    }
+
+    /// A relative CLAUDE_CONFIG_DIR whose settings.json links above it: the file is found from the working folder,
+    /// as `FileSystemInfo.FullName` finds it, with every `..` of the link's target.
+    #[cfg(unix)]
+    #[test]
+    fn real_path_under_a_relative_config_folder_climbs_above_it() {
+        use std::os::unix::fs::symlink;
+
+        let root = Scratch::new("relative");
+        let claude = root.0.join("work").join("claude");
+        fs::create_dir_all(&claude).unwrap();
+        let real = root.touch(&["dotfiles", "settings.json"]);
+        symlink("../../dotfiles/settings.json", claude.join("settings.json")).unwrap();
+        // the link as a path relative to the working folder: up to / and down to it
+        let here = std::env::current_dir().unwrap();
+        let mut relative: PathBuf = here.components().skip(1).map(|_| "..").collect();
+        relative.push(claude.join("settings.json").strip_prefix("/").unwrap());
+        assert!(relative.is_relative());
+        assert_eq!(real_path(&relative), real);
+    }
+
+    /// `Path.GetFullPath` takes a relative path from the working folder before `..` comes out: none is lost where it
+    /// climbs above the path's first folder.
+    #[test]
+    fn full_path_takes_a_relative_path_from_the_working_folder() {
+        let here = std::env::current_dir().unwrap();
+        assert_eq!(
+            full_path(Path::new("claude/../../dotfiles/settings.json")),
+            Some(here.parent().unwrap().join("dotfiles").join("settings.json"))
+        );
     }
 }
