@@ -44,6 +44,11 @@ of the first four, so delete them and use install's (claude.rs is in this task's
 repeats `tests/registration.rs`'s harness (Scratch, set_up, tree, the held-file rule): if the doctor's tests need it
 too, move it to `tests/common/` rather than make a third copy. In the golden, normalise the doctor fixtures' line
 endings (`ReplaceLineEndings`, as the Codex corpus does), so the output doesn't depend on the checkout's line endings.
+**From the integrated checks (2026-09-30):** `tests/registration.rs`'s `a_mode_without_an_agent_is_a_usage_error`
+failed once on a heavily loaded machine (three Codex reviews and builds running) and passed alone: it asserts the hook
+exits within 2 s of being spawned, which a fresh, antivirus-scanned exe can miss under load. Since the test holds stdin
+open, a hook that waited on stdin would hang rather than take 2 s; make that check robust (for example, a generous
+bound, or detect the wait without a wall-clock limit) when the doctor's tests touch this file.
 ## Acceptance
 - [ ] Doctor output and exit codes match the C#'s for every scenario, on Linux and Windows.
 - [ ] `--probe` finds the probe event through a live pet, and reports its absence when there is no pet.
