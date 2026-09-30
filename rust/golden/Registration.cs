@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -26,6 +27,10 @@ namespace AiPet.Golden;
 ///                 expression classes they rely on. Codex's events depend on the OS, so the whole file is compared
 ///                 only on the OS it was written on.
 ///
+/// The hook is built with InvariantGlobalization, where OrdinalIgnoreCase cases with .NET's own Unicode data, and this
+/// process cases with ICU's, which lacks some of its case pairs. So the ordinal casing comes from this mode run again in
+/// the invariant mode, as `registration --ordinal FILE` (which writes only that, to FILE).
+///
 /// The hook's path is `{exe}` in the fixtures: each side puts the path it registers in its place, and back. The
 /// settings file's path is `{settings}` in what a step printed, and the case's folder `{root}`. A new backup is named
 /// by the clock, so after each step it is renamed settings.json.aipet-20000101-<n>.bak (n counts the case's backups):
@@ -51,6 +56,7 @@ static class RegistrationMode
 
     public static int Run(string repo, string data, string[] args)
     {
+        if (args is ["--ordinal", var ordinalFile]) return WriteHookOrdinal(ordinalFile);
         if (args.Length > 1) return Program.Usage();
         string golden = Path.Combine(repo, "rust", "crates", "aipet-hook", "tests", "golden");
         string dir = args.Length == 1 ? Path.GetFullPath(args[0]) : Path.Combine(golden, "registration");
@@ -1027,6 +1033,7 @@ static class RegistrationMode
             var names = cases.Select(c => (string)c["name"]).ToList();
             if (names.Distinct().Count() != names.Count) throw new InvalidOperationException("two fixtures have the same name");
             Console.WriteLine($"codex: {cases.Count} fixtures, {cases.Sum(c => c["steps"].AsArray().Count)} steps");
+            var ordinal = HookOrdinal(Path.Combine(root, "ordinal"));
 
             return new JsonObject
             {
@@ -1041,7 +1048,8 @@ static class RegistrationMode
                 ["is_ours"] = IsOursCases(),
                 ["snake"] = new JsonArray(new[] { "PreToolUse", "Stop", "SubagentStop", "aB", "AB", "abC", "a1B", "aÀ", "àB", "\u0130x", "ΣΑ", "x_Y", "ǅa", "𐐨B" }
                     .Select(e => (JsonNode)new JsonObject { ["event"] = e, ["snake"] = CodexConfig.Snake(e) }).ToArray()),
-                ["ordinal"] = OrdinalCases(),
+                ["ordinal"] = ordinal["pairs"].DeepClone(),
+                ["ordinal_upper"] = ordinal["upper"].DeepClone(),
                 ["regex"] = new JsonObject { ["digits"] = Classes(@"^\d$"), ["word"] = Classes(@"^a\b", negate: true) },
             };
         }
@@ -1176,7 +1184,48 @@ static class RegistrationMode
         return list;
     }
 
-    /// string.Equals(a, b, OrdinalIgnoreCase), which IsOurs and the trust keys compare with.
+    // ------------------------------------------------------------------ OrdinalIgnoreCase as the hook has it
+    /// What OrdinalIgnoreCase answers in the hook's invariant globalization mode, {"pairs": OrdinalCases, "upper":
+    /// every code point's upper case where it has another}: this mode run again in a process of its own, with
+    /// DOTNET_SYSTEM_GLOBALIZATION_INVARIANT set, as this one runs (by dotnet, with the dll, or as its apphost).
+    static JsonNode HookOrdinal(string dir)
+    {
+        Directory.CreateDirectory(dir);
+        string file = Path.Combine(dir, "ordinal.json");
+        string host = Environment.ProcessPath ?? throw new InvalidOperationException("this process has no path");
+        var start = new ProcessStartInfo(host) { UseShellExecute = false, RedirectStandardError = true };
+        if (Path.GetFileNameWithoutExtension(host).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+            start.ArgumentList.Add(typeof(RegistrationMode).Assembly.Location);
+        foreach (var arg in new[] { "registration", "--ordinal", file }) start.ArgumentList.Add(arg);
+        start.Environment["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1";
+        using var process = Process.Start(start) ?? throw new InvalidOperationException($"couldn't start {host}");
+        string errors = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0) throw new InvalidOperationException($"registration --ordinal exited {process.ExitCode}: {errors}");
+        return JsonNode.Parse(File.ReadAllText(file));
+    }
+
+    /// `registration --ordinal FILE`: HookOrdinal's answers, written to FILE. Only in the invariant mode, where no
+    /// culture but the invariant one can be made.
+    static int WriteHookOrdinal(string file)
+    {
+        try
+        {
+            CultureInfo.GetCultureInfo("en-US");
+            Console.Error.WriteLine("registration --ordinal runs in the invariant globalization mode (DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1)");
+            return 2;
+        }
+        catch (CultureNotFoundException) { }
+        var upper = new JsonArray();
+        for (int c = 0; c <= 0x10FFFF; c++)
+            if (c is < 0xD800 or > 0xDFFF && OrdinalUpper(c) is var u && u != c)
+                upper.Add($"{c:X4} {u:X4}");
+        File.WriteAllText(file, new JsonObject { ["pairs"] = OrdinalCases(), ["upper"] = upper }.ToJsonString(), new UTF8Encoding(false));
+        return 0;
+    }
+
+    /// string.Equals(a, b, OrdinalIgnoreCase), which IsOurs and the trust keys compare with. The last ones are case pairs
+    /// Unicode 16 added (in .NET 10's data, not all in ICU's) and 17 added (in neither).
     static JsonArray OrdinalCases()
     {
         (string, string)[] pairs =
@@ -1184,10 +1233,26 @@ static class RegistrationMode
             ("\u0131", "I"), ("\u017F", "S"), ("\u1FB3", "\u1FBC"), ("\u1F80", "\u1F88"), ("\u1FA7", "\u1FAF"), ("\u1FF3", "\u1FFC"), ("\u00DF", "SS"),
             ("\u00DF", "\u1E9E"), ("\u212A", "k"), ("\u01C6", "\u01C4"), ("\u01C5", "\u01C4"), ("\u00B5", "\u039C"), ("\u00FF", "\u0178"),
             ("\U00010428", "\U00010400"), ("\u0130", "i"), ("aipet-hook", "AIPET-HOOK"), ("\u1E9B", "\u1E60"), ("\u0345", "\u0399"),
+            ("\u019B", "\uA7DC"), ("\u0264", "\uA7CB"), ("\U00010D70", "\U00010D50"), ("\uA7CF", "\uA7CE"), ("\U00016EBB", "\U00016EA0"),
         ];
         var list = new JsonArray();
         foreach (var (a, b) in pairs) list.Add(new JsonObject { ["a"] = a, ["b"] = b, ["equal"] = string.Equals(a, b, StringComparison.OrdinalIgnoreCase) });
         return list;
+    }
+
+    /// OrdinalIgnoreCase's upper case of a code point, found as Data.cs finds it: comparing ignoring case returns the
+    /// difference of the first upper cases that differ, and U+0000 and U+10000 are their own upper case; the result is
+    /// checked.
+    static int OrdinalUpper(int c)
+    {
+        string s = char.ConvertFromUtf32(c);
+        int upper = c < 0x10000
+            ? string.Compare(s, "\0", StringComparison.OrdinalIgnoreCase)
+            : string.Compare(s, "\U00010000", StringComparison.OrdinalIgnoreCase) + 0x10000;
+        if (upper is < 0 or > 0x10FFFF or (>= 0xD800 and <= 0xDFFF) || upper < 0x10000 != c < 0x10000 ||
+            !string.Equals(s, char.ConvertFromUtf32(upper), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"can't tell OrdinalIgnoreCase's upper case of U+{c:X4} (got U+{upper:X4})");
+        return upper;
     }
 
     /// The BMP characters (as [first, last] ranges) for which a regular expression matches: one character, or "a"

@@ -10,9 +10,9 @@
 //!   the file when it records trust.
 //! - Re-installing an identical definition changes nothing, wherever it sits, so trust is kept.
 //!
-//! One deliberate change from the C# (the spec's R4): when config.toml keeps changing under the edit (Codex writing
-//! it), the edit reads it [`ATTEMPTS`] times, and then writes nothing and fails. The C# writes on its last attempt
-//! anyway, which can lose Codex's own changes and trust entries.
+//! One deliberate change from the C# (the spec's R4): config.toml is checked right before it is replaced, and when it
+//! keeps changing under the edit (Codex writing it), the edit reads it [`ATTEMPTS`] times, and then writes nothing and
+//! fails. The C# writes on its last attempt anyway, which can lose Codex's own changes and trust entries.
 //!
 //! What the C# reads with `StringComparison.OrdinalIgnoreCase` is compared in [`upper`] case, and its regular
 //! expressions are matched as .NET matches them ([`legacy_command`], [`disabled_inline`]).
@@ -23,7 +23,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use crate::install::{NEWLINE, backup, is_file, read_text, real_path, save, thrown, upper};
+use crate::install::{NEWLINE, StagedBackup, backup, is_file, read_text, real_path, save, stage, thrown, upper};
 use crate::json::{Node, Object};
 use crate::json_out::{self, deep_equals, member, read};
 use crate::toml_text::{self, Segment};
@@ -581,9 +581,10 @@ fn stamp(path: &Path) -> Option<Stamp> {
 /// `EditToml`: config.toml without AiPet's hooks (and their trust entries, also those of AiPet's hooks in the
 /// `remove_trust_for` files), then, when `command` is given, AiPet's block appended. Whether the file changed.
 ///
-/// Before the edit is written, the file must still be the one read: otherwise it is read and edited again, and after
-/// [`ATTEMPTS`] reads nothing is written and it fails. `meanwhile` runs after each edit and before that check (a test
-/// changes the file there, as Codex could).
+/// The file must still be the one read when the edit replaces it: the edit and the backup are written next to it
+/// first, and it is checked right before the replace. When it changed, both are removed again, and it is read and
+/// edited again; after [`ATTEMPTS`] reads nothing is written and it fails. `meanwhile` runs right before that check,
+/// with the edit and the backup written (a test changes the file there, as Codex could).
 fn edit_toml(
     path: &Path,
     command: Option<&str>,
@@ -680,15 +681,20 @@ fn edit_toml(
         if let Some(dir) = real.parent() {
             fs::create_dir_all(dir).map_err(|e| thrown(&e, dir))?;
         }
+        // written first, so that nothing but the replace comes after the check (and dropped when it fails)
+        let staged = stage(&real, &result)?;
+        let backup = if is_file(path) { StagedBackup::make(path) } else { None };
         meanwhile();
         // Codex wrote it meanwhile: read it again (the C# wrote over it on its last attempt)
         if stamp(&real) != stamp_read {
             continue;
         }
-        if is_file(path) {
-            backup(path);
+        let replaced = staged.commit();
+        // the C# backs up before it replaces, so the backup stays when the replace fails
+        if let Some(backup) = backup {
+            backup.keep();
         }
-        save(&real, &result)?;
+        replaced?;
         return Ok(true);
     }
     Err(format!(
@@ -1197,6 +1203,33 @@ mod tests {
         }
     }
 
+    /// Every character is in [`upper`] case as the hook's OrdinalIgnoreCase has it, in the hook's invariant
+    /// globalization mode (.NET's own Unicode data, older than Rust's).
+    #[test]
+    fn every_character_is_cased_as_the_hook_cases_it() {
+        let corpus = corpus();
+        let hex = |s: &str| u32::from_str_radix(s, 16).unwrap();
+        let dotnet: HashMap<u32, u32> = corpus["ordinal_upper"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|pair| {
+                let (c, upper) = text(pair).split_once(' ').unwrap();
+                (hex(c), hex(upper))
+            })
+            .collect();
+        assert!(dotnet.len() > 1400, "only {} upper cases", dotnet.len());
+        let wrong: Vec<String> = (0..=0x10FFFF)
+            .filter_map(char::from_u32)
+            .filter_map(|c| {
+                let want = dotnet.get(&u32::from(c)).copied().unwrap_or(u32::from(c));
+                let got: Vec<u32> = upper(c.encode_utf8(&mut [0; 4])).chars().map(u32::from).collect();
+                (got != [want]).then(|| format!("U+{:04X}: {got:04X?}, not U+{want:04X}", u32::from(c)))
+            })
+            .collect();
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
     /// BuildCommand in folders made as the C# made them: quotes, spaces (the 8.3 forms, where the volume makes them)
     /// and folders that aren't there (PowerShell's `&` form). On Unix it looks at no file.
     #[test]
@@ -1286,9 +1319,14 @@ mod tests {
         names
     }
 
-    /// config.toml changed once between the edit's read and its write: the edit reads it again, and the second
-    /// attempt writes what an edit of the changed file writes when nothing is in the way, which is the C#'s (the
-    /// golden's "other-tools-hooks", where it was written).
+    /// What an edit has written next to config.toml when `meanwhile` runs: the edit and the backup, right before the
+    /// replace.
+    const STAGED: [&str; 3] = ["config.toml", "config.toml.aipet-backup-tmp", "config.toml.aipet-tmp"];
+
+    /// config.toml changed once between the edit's read and its replace (at the last moment, with the edit and its
+    /// backup already written): the edit reads it again, and the second attempt writes what an edit of the changed
+    /// file writes when nothing is in the way, which is the C#'s (the golden's "other-tools-hooks", where it was
+    /// written).
     #[test]
     fn an_edit_reads_again_when_the_file_changed_once() {
         let corpus = corpus();
@@ -1300,6 +1338,7 @@ mod tests {
         let mut attempts = 0;
         let mut meanwhile = || {
             attempts += 1;
+            assert_eq!(names(config.parent().unwrap()), STAGED, "attempt {attempts}");
             if attempts == 1 {
                 replace(&config, &changed);
             }
@@ -1355,9 +1394,9 @@ mod tests {
         assert_eq!(fs::read_to_string(config.with_file_name(&backups[0])).unwrap(), changed);
     }
 
-    /// config.toml changed before every attempt (moved over, and rewritten in place): the edit reads it three times,
-    /// then writes nothing and fails, saying config.toml kept changing and to close Codex and retry. --install and
-    /// --uninstall print that as "Couldn't update codex settings: ..." and exit 1, as for any failure.
+    /// config.toml changed right before every replace (moved over, and rewritten in place): the edit reads it three
+    /// times, then writes nothing and fails, saying config.toml kept changing and to close Codex and retry. --install
+    /// and --uninstall print that as "Couldn't update codex settings: ..." and exit 1, as for any failure.
     #[test]
     fn an_edit_that_keeps_changing_writes_nothing() {
         let corpus = corpus();
@@ -1367,6 +1406,7 @@ mod tests {
         let mut attempts = 0;
         let mut meanwhile = || {
             attempts += 1;
+            assert_eq!(names(config.parent().unwrap()), STAGED, "attempt {attempts}");
             let text = format!("{changed}# change {attempts}\n");
             match attempts {
                 2 => rewrite(&config, &text, 1_000_000),

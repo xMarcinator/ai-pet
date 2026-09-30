@@ -66,8 +66,13 @@ fn is_hook(exe: &Path) -> bool {
         .is_some_and(|name| name == "AIPET-HOOK" || name == "AIPET-HOOK.EXE")
 }
 
-/// The text as `StringComparison.OrdinalIgnoreCase` compares it: each character as its simple upper case (`ǆ` is
-/// `Ǆ`, `ᾳ` is `ᾼ`, `ß` stays), but for `ı` and `ſ`, which .NET's ordinal casing keeps as they are.
+/// The text as `StringComparison.OrdinalIgnoreCase` compares it in the hook: each character as its simple upper case
+/// (`ǆ` is `Ǆ`, `ᾳ` is `ᾼ`, `ß` stays), but for `ı` and `ſ`, which .NET's ordinal casing keeps as they are.
+///
+/// The hook is built with InvariantGlobalization, where .NET cases with its own Unicode data: Unicode 16 in .NET 10, so
+/// the case pairs Unicode 17 added (which Rust's data has) aren't pairs there. The app cases with ICU instead, which
+/// has fewer of Unicode 16's (aipet-core's cleanup.rs). tests/golden/codex/codex.json has the hook's upper case of
+/// every character.
 pub(crate) fn upper(s: &str) -> String {
     s.chars().map(ordinal_upper).collect()
 }
@@ -75,6 +80,8 @@ pub(crate) fn upper(s: &str) -> String {
 fn ordinal_upper(c: char) -> char {
     match c {
         'ı' | 'ſ' => c,
+        // Unicode 17's
+        '\u{A7CF}' | '\u{A7D3}' | '\u{A7D5}' | '\u{16EBB}'..='\u{16ED3}' => c,
         // the small letters with ypogegrammeni: their full upper case is two characters (with a capital iota), their
         // simple one the letter with prosgegrammeni
         '\u{1F80}'..='\u{1F87}' | '\u{1F90}'..='\u{1F97}' | '\u{1FA0}'..='\u{1FA7}' => {
@@ -83,11 +90,12 @@ fn ordinal_upper(c: char) -> char {
         '\u{1FB3}' => '\u{1FBC}',
         '\u{1FC3}' => '\u{1FCC}',
         '\u{1FF3}' => '\u{1FFC}',
-        // anywhere else the full upper case is the simple one where it is one character, and none where it is more
+        // anywhere else the full upper case is the simple one where it is one character of the same length in UTF-16
+        // (.NET's casing never changes a string's length), and none otherwise
         _ => {
             let mut up = c.to_uppercase();
             match (up.next(), up.next()) {
-                (Some(u), None) => u,
+                (Some(u), None) if u.len_utf16() == c.len_utf16() => u,
                 _ => c,
             }
         }
@@ -111,20 +119,51 @@ pub(crate) fn read_text(path: &Path) -> Result<String, String> {
 /// so a reader or a crash never sees half a file. `real` is the file itself, not a link to it. It keeps the old
 /// file's Unix mode (Codex keeps config.toml 0600, and these files often hold tokens); a new file is 0600.
 pub(crate) fn save(real: &Path, text: &str) -> Result<(), String> {
+    stage(real, text)?.commit()
+}
+
+/// [`save`]'s first half: the text written next to the file (`<file>.aipet-tmp`), which [`Staged::commit`] then moves
+/// over it. An edit that must still find the file as it read it checks that in between, right before the replace.
+pub(crate) fn stage(real: &Path, text: &str) -> Result<Staged, String> {
     let mut tmp = real.as_os_str().to_owned();
     tmp.push(".aipet-tmp");
-    let tmp = PathBuf::from(tmp);
+    let staged = Staged {
+        tmp: PathBuf::from(tmp),
+        real: real.to_owned(),
+        moved: false,
+    };
     // a leftover would keep its own mode: the one given here only applies to a new file
-    match fs::remove_file(&tmp) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(thrown(&e, &tmp)),
+    match fs::remove_file(&staged.tmp) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(thrown(&e, &staged.tmp)),
         _ => {}
     }
-    let written = write_new(&tmp, text, mode_of(real));
-    let saved = written.and_then(|()| fs::rename(&tmp, real).map_err(|e| moved(&e, &tmp)));
-    if saved.is_err() {
-        let _ = fs::remove_file(&tmp);
+    write_new(&staged.tmp, text, mode_of(real))?;
+    Ok(staged)
+}
+
+/// A replacement [`stage`] wrote next to its file. Dropped without [`Staged::commit`] (or when that fails), it is
+/// removed, and the file stays as it was.
+pub(crate) struct Staged {
+    tmp: PathBuf,
+    real: PathBuf,
+    moved: bool,
+}
+
+impl Staged {
+    /// [`save`]'s second half: the replacement moved over the file.
+    pub(crate) fn commit(mut self) -> Result<(), String> {
+        fs::rename(&self.tmp, &self.real).map_err(|e| moved(&e, &self.tmp))?;
+        self.moved = true;
+        Ok(())
     }
-    saved
+}
+
+impl Drop for Staged {
+    fn drop(&mut self) {
+        if !self.moved {
+            let _ = fs::remove_file(&self.tmp);
+        }
+    }
 }
 
 /// The mode a replacement gets: the file's, or 0600 for a new one.
@@ -243,14 +282,73 @@ fn full_path(path: &Path) -> Option<PathBuf> {
 /// `Backup`: `<file>.aipet-<local time>.bak` before each change, and the newest three of them kept. It never fails
 /// the change. (Codex's registration; claude.rs has its own copy.)
 pub(crate) fn backup(path: &Path) {
+    let Some(named) = backup_path(path) else {
+        return;
+    };
+    if fs::copy(path, named).is_ok() {
+        prune_backups(path);
+    }
+}
+
+/// The name [`backup`] copies a file to, `<file>.aipet-<local time>.bak`. `None` for a path with no folder or name.
+fn backup_path(path: &Path) -> Option<PathBuf> {
+    path.parent()?;
+    path.file_name()?;
+    let mut named = path.as_os_str().to_owned();
+    named.push(format!(".aipet-{}.bak", local_stamp()));
+    Some(PathBuf::from(named))
+}
+
+/// [`backup`] for an edit that is written only if the file is still the one it read: the copy is made under a name of
+/// its own (`<file>.aipet-backup-tmp`) before that check, and takes its backup name, the older backups pruned, once the
+/// file is replaced ([`StagedBackup::keep`]). Dropped instead, it is removed: an edit that wrote nothing leaves no
+/// backup.
+pub(crate) struct StagedBackup {
+    path: PathBuf,
+    copy: PathBuf,
+    named: PathBuf,
+    kept: bool,
+}
+
+impl StagedBackup {
+    /// The copy. `None` when there's none to be had, which never fails the change.
+    pub(crate) fn make(path: &Path) -> Option<StagedBackup> {
+        let mut copy = path.as_os_str().to_owned();
+        copy.push(".aipet-backup-tmp");
+        let staged = StagedBackup {
+            path: path.to_owned(),
+            copy: PathBuf::from(copy),
+            named: backup_path(path)?,
+            kept: false,
+        };
+        fs::copy(path, &staged.copy).ok()?;
+        Some(staged)
+    }
+
+    /// The file was replaced, or its replace was tried (the C# backs up before it replaces, so the backup is there
+    /// even when that failed): the copy takes its backup name, and the newest three backups are kept. When it can't
+    /// have that name, it is dropped, as a `File.Copy` that failed leaves no backup.
+    pub(crate) fn keep(mut self) {
+        if fs::rename(&self.copy, &self.named).is_ok() {
+            self.kept = true;
+            prune_backups(&self.path);
+        }
+    }
+}
+
+impl Drop for StagedBackup {
+    fn drop(&mut self) {
+        if !self.kept {
+            let _ = fs::remove_file(&self.copy);
+        }
+    }
+}
+
+/// The newest three of a file's backups kept, as `Backup` keeps them.
+fn prune_backups(path: &Path) {
     let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
         return;
     };
-    let mut copy = path.as_os_str().to_owned();
-    copy.push(format!(".aipet-{}.bak", local_stamp()));
-    if fs::copy(path, copy).is_err() {
-        return;
-    }
     // Directory.GetFiles(dir, "<file>.aipet-*.bak"): the name's case counts on Unix only
     let fold = |s: &str| if cfg!(windows) { upper(s) } else { s.to_owned() };
     let prefix = fold(&format!("{}.aipet-", name.to_string_lossy()));
