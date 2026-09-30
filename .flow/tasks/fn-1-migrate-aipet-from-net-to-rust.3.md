@@ -44,9 +44,45 @@ mode so the Rust output is checked byte for byte against the C#'s. Task 4 reuses
 - [ ] Refusals match the C#'s messages and exit codes: a wrong exe name, an unparsable `settings.json`.
 - [ ] The Claude subprocess cases in `RegistrationTests` pass against the Rust hook.
 ## Done summary
-TBD
+Ported `--install`/`--uninstall claude` and `--print-plugin-hooks` to the Rust hook (edd1371), and filled in the golden generator's `registration` mode, which Task 4 extends for Codex.
 
+The golden recorded 65 Claude fixtures (120 steps) through the hook's own Install.cs. Each step records the exit code, what was printed, and every file left in the case's folder, with backup names normalised. The fixtures cover:
+- an empty or missing file, other settings, other tools' hooks, legacy `hook.py`/ClaudePet entries, and older and current AiPet sets;
+- `"hooks": {}` and other odd shapes, unparsable files, and duplicate keys;
+- the plugin enabled with and without an install or cache, and without Git Bash;
+- backups, BOM, UTF-16 and invalid UTF-8 files, a leftover temp file, and a read-only file;
+- symlinks and modes: recorded only when the corpus is written on Unix.
+
+It also records System.Text.Json's behaviour as the registration uses it: the escape tables of both encoders, indented writes, `ToString`, `DeepEquals`, and ~150 `JsonNode.Parse` refusals.
+
+`tests/registration.rs` replays the golden through the built binary, and every fixture comes out byte-identical. The same file checks:
+- the refusals: a wrong exe name, run as a hard link under another name, and an unparsable settings.json, both with the C#'s messages and exit codes;
+- usage for each mode;
+- `--print-plugin-hooks claude|codex` against the committed plugin files.
+
+With `AIPET_GOLDEN` set, a live C# run on the current OS is replayed too. That is the only path that exercises the symlink and mode fixtures, on Linux CI. `json_out`'s unit tests replay json.json, including Utf8JsonReader's messages and positions.
+
+PluginHooksTests and RegistrationTests now go through `TestEnv.HookStartInfo`, so `AIPET_TEST_HOOK` reaches them. Under it, `Install_UnderDotnet_Refuses` copies the hook under another name. Against the Rust hook they pass (14 passed, 10 skipped as Unix-only), and they also pass without it. The full gates are green on the final tree: Rust test, clippy `-D warnings` and fmt; dotnet 160 passed, 42 skipped, the same as the baseline.
+
+For the conductor:
+- **Touches:** the widened set in ef8c67e covers the files changed outside the original list: `main.rs` (dispatch of the non-event modes), `json.rs` (`Object::iter`), `event.rs` (`decoded` made pub(crate)), and the three C# test files.
+- **Temporary stubs:** `--doctor <agent>` and `--install|--uninstall codex` print "isn't ported to this hook yet" and exit 1, until tasks 5 and 4. NOTES_DIR/task-3-registration.md has what those tasks can reuse.
+- **Git Bash on Windows:** Windows gives every process its own `ProgramFiles`, so a child process can't be kept from finding Git Bash. The os_specific no-Git-Bash fixture therefore runs in-process in a claude.rs unit test, and the subprocess replay skips it.
+- **Golden stability:** one early live run gave a spurious exit 1 that I couldn't reproduce, probably the antivirus holding a fresh file. Each golden case now runs until two runs agree, and the Rust replay retries a failing case twice before it fails.
+- **Deliberate deviations, not in any fixture:** plugin ids use an ordinal `StartsWith` where the C# compares by culture; backups are pruned in ordinal order where the C# sorts by culture; messages are written as UTF-8, where .NET's Console on Windows uses the console's code page (this only shows for a non-ASCII path).
+- **Follow-ups outside this task:**
+  - cross-runtime.yml doesn't yet run PluginHooksTests or `RegistrationTests.Install_UnderDotnet_Refuses`.
+  - rust/golden/Program.cs still says registration isn't written.
+  - claude.rs has its own local-time helper beside trace.rs's.
+- **Unverified here:** the Unix-only code was only linted, through a cross-target clippy for x86_64-unknown-linux-gnu. It hasn't run, since this box has no Linux.
+
+stage: impl-review - skipped(policy: parallel-wave - conductor owns the gate)
+
+Review fixes (9af86c4, 4a53d2d): the golden replay now fails a case at its first difference and reruns it only on a Windows sharing or lock violation, and the generator needs two clean runs to agree; on Unix, full_path makes a relative CLAUDE_CONFIG_DIR absolute before taking out `..`.
+
+stage: impl-review - ran (codex: NEEDS_WORK then SHIP; fixes 9af86c4, 4a53d2d)
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: edd13712ddc4df602f0ff1b7fc9e508298072fdc, 9af86c4, 4a53d2d
+- Tests: baseline: green (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: rc 0; dotnet test AiPet.slnx after dotnet build AiPet.slnx -p:UseAppHost=false: 160 passed, 42 skipped), cd rust && cargo test --workspace -- --skip credential_manager_tokens_are_the_apps && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check (rc 0, final tree), dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build (160 passed, 42 skipped, final tree), AIPET_GOLDEN=<abs>/rust/golden/bin/Release/net10.0/aipet-golden.dll cargo test -p aipet-hook --test registration (5 passed: committed golden replayed, and a live C# run on Windows replayed; json.json identical), AIPET_TEST_HOOK=<worktree>/rust/target/debug/aipet-hook.exe dotnet test tests/AiPet.Tests --no-build --filter PluginHooksTests|RegistrationTests (14 passed, 10 skipped as Unix-only; Install_UnderDotnet_Refuses and PrintPluginHooks_* ran the Rust hook, checked by a bogus AIPET_TEST_HOOK failing them), dotnet test tests/AiPet.Tests --no-build --filter PluginHooksTests|RegistrationTests without AIPET_TEST_HOOK (14 passed, 10 skipped), RUSTC_BOOTSTRAP=1 cargo clippy -p aipet-hook --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu -- -D warnings (clean: the Unix-only code and tests type-check and lint; not run), dotnet rust/golden/bin/Release/net10.0/aipet-golden.dll registration run twice: claude.json byte-identical (deterministic), mutation: keeping 2 backups instead of 3 fails claude_registration_is_the_csharps (hooks-empty step 2, files), integrated verify (Windows, work branch 434c23f with the review fixes merged): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green, clippy --workspace --all-targets -D warnings and fmt --check clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped; AIPET_GOLDEN=<golden dll> cargo test -p aipet-hook --test registration: 6 passed (live C# replay included); RUSTC_BOOTSTRAP=1 cargo clippy -p aipet-hook --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu -- -D warnings: clean (4a53d2d's Unix-only code is linted, not run), AIPET_TEST_HOOK=<rust hook> dotnet test --filter PluginHooksTests|RegistrationTests: 14 passed in 4 of 4 runs. The 3 runs right after the rebuild each failed 1-2 in-process C# cases (ClaudeConfig.Install -> Install.Save -> File.Move: UnauthorizedAccessException) while the freshly built unsigned hook was new to the antivirus; RegistrationTests alone, the two failing cases alone, and the pair without AIPET_TEST_HOOK passed every time, and the same exe (sha256 639017c884ba4b76...) then passed 4 of 4
 - PRs:

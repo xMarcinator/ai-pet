@@ -46,7 +46,10 @@ file to port, so it has a task of its own.
 to this hook yet" and exit 1; replace that arm with `codex::install` / `codex::uninstall`. The exe-name check already
 runs before the agent split. Reuse `install::{save, read_text, …}`, `json_out` (JsonNode.Parse with .NET's messages,
 the indented writer) and `plugin_hooks::CODEX_EVENTS` instead of second copies, and add the Codex fixtures to
-`rust/golden/Registration.cs` beside `ClaudeCorpus` with its `Step`, `Settled` and `Tree` helpers.
+`rust/golden/Registration.cs` beside `ClaudeCorpus` with its `Step`, `Settled` and `Tree` helpers. Since task 3's review
+the harness is strict: the Rust replay fails a case at its first difference and reruns it only when the hook or the
+harness hit a Windows sharing or lock violation (`a_held_file_is_known_from_what_the_hook_says`), and the generator
+needs two clean runs to agree, stopping when they differ. Keep the Codex cases under the same rules.
 ## Acceptance
 - [ ] Every Codex fixture's install and uninstall output (`config.toml`, `hooks.json`, and stderr warnings) is
       byte-identical to the C#'s, on Linux and Windows.
