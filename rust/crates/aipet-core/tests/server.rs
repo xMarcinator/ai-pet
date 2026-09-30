@@ -911,6 +911,7 @@ fn the_answers_are_the_csharps() {
         ("1".into(), Dropped),
         ("{} x".into(), Dropped),
         (r#"  {"v":1,"type":"dance"}  "#.into(), unknown),
+        (r#"{ "v" : 1 , "type" : "ping" }"#.into(), Ping),
         ("\u{feff}{\"v\":1,\"type\":\"dance\"}".into(), Dropped),
         (r#"{"v":1,"type":"dance",}"#.into(), Dropped),
         (r#"{"v":1,/*c*/"type":"dance"}"#.into(), Dropped),
