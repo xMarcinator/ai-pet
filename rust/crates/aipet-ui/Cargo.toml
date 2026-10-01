@@ -17,3 +17,5 @@ demo = []
 aipet-core = { path = "../aipet-core" }
 aipet-sprite = { path = "../aipet-sprite" }
 iced.workspace = true
+# the file dialogs of Settings' Import defaults and Avatars (task 19)
+rfd.workspace = true

@@ -50,3 +50,6 @@ iced = { version = "0.14.0", default-features = false, features = [
 # to 200 ms.
 iced_exwlshell = { version = "0.20.1", default-features = false, features = ["macros"] }
 wayland-client = "0.31.15"
+# Settings' file dialogs (Import defaults, avatars). Its default features: the XDG portal on Linux, waited on with
+# pollster rather than an async runtime, and Wayland parents for the dialogs.
+rfd = "0.17.2"
