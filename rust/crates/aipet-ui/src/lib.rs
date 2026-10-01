@@ -176,8 +176,9 @@ impl Default for Prefs {
 }
 
 /// Where the pet was left, as `config.json` keeps it: the whole window's top-left corner in desktop pixels (`Left`,
-/// `Top`), and the height of the window it was saved with (`WindowHeight`, logical px). The shells place the window
-/// from it and say it after a drop or a reset.
+/// `Top`), and the height of the window it was saved with (`WindowHeight`, logical px; a file from before the toolbar
+/// under the pet went has `Toolbar`, whose row the app takes off it). The shells place the window from it and say it
+/// after a drop or a reset.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Place {
     pub left: i32,
@@ -725,6 +726,11 @@ impl PetUi {
     /// reset, and quit.
     pub fn host(&mut self) -> &mut dyn Host {
         &mut *self.host
+    }
+
+    /// Settings' state: its page, its services and each page's own.
+    pub fn settings(&self) -> &Settings {
+        &self.settings
     }
 
     /// The operating system's services.

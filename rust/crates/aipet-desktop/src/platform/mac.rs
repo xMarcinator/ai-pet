@@ -6,10 +6,10 @@ use std::path::Path;
 use aipet_ui::platform::{MediaPlayer, Platform};
 
 #[derive(Debug, Default)]
-pub(super) struct Mac {}
+pub struct Mac {}
 
 impl Mac {
-    pub(super) fn new() -> Mac {
+    pub fn new() -> Mac {
         Mac::default()
     }
 }

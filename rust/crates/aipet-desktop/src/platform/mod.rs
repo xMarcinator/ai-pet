@@ -7,14 +7,15 @@
 //!   through playerctl, else dbus-send;
 //! - macOS (`mac.rs`): a stub, as in the C#.
 //!
-//! Each is still a stub that does nothing and has no player. Elsewhere (the BSDs) [`NoPlatform`] stands in.
+//! Each is still a stub that does nothing and has no player. Elsewhere (the BSDs) `NoPlatform` stands in. The modules
+//! are public so the crate's own tests (`tests/`) can reach what they make public.
 
 #[cfg(target_os = "linux")]
-mod linux;
+pub mod linux;
 #[cfg(target_os = "macos")]
-mod mac;
+pub mod mac;
 #[cfg(windows)]
-mod windows;
+pub mod windows;
 
 use std::sync::Arc;
 

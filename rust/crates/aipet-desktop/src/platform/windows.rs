@@ -7,10 +7,10 @@ use std::path::Path;
 use aipet_ui::platform::{MediaPlayer, Platform};
 
 #[derive(Debug, Default)]
-pub(super) struct Windows {}
+pub struct Windows {}
 
 impl Windows {
-    pub(super) fn new() -> Windows {
+    pub fn new() -> Windows {
         Windows::default()
     }
 }

@@ -7,10 +7,10 @@ use std::path::Path;
 use aipet_ui::platform::{MediaPlayer, Platform};
 
 #[derive(Debug, Default)]
-pub(super) struct Linux {}
+pub struct Linux {}
 
 impl Linux {
-    pub(super) fn new() -> Linux {
+    pub fn new() -> Linux {
         Linux::default()
     }
 }
