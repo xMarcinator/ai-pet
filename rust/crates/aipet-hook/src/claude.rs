@@ -545,4 +545,48 @@ mod tests {
         assert!(relative.is_relative());
         assert_eq!(real_path(&relative), real);
     }
+
+    /// A settings.json that is a link .NET can't follow is there for `File.Exists`, and reading it throws: --install and
+    /// --uninstall both fail with what was thrown (Install.Run prints it as "Couldn't update claude settings: ...",
+    /// exit 1), and write nothing: no target is made, no backup or temp file, and the link stays. The golden's
+    /// symlink-dangling and symlink-loop cases, which only Unix makes: CI's Linux replay holds them against the C#.
+    #[cfg(unix)]
+    #[test]
+    fn a_settings_link_that_cant_be_followed_fails_and_writes_nothing() {
+        use std::os::unix::fs::symlink;
+
+        let loop_words = std::io::Error::from_raw_os_error(libc::ELOOP).to_string();
+        let loop_words = loop_words
+            .rsplit_once(" (os error ")
+            .map_or(loop_words.as_str(), |(words, _)| words);
+        for (name, target) in [("dangling", "../dotfiles/none.json"), ("loop", "settings.json")] {
+            let root = Scratch::new(name);
+            let claude = root.0.join("claude");
+            fs::create_dir_all(&claude).unwrap();
+            fs::create_dir_all(root.0.join("dotfiles")).unwrap();
+            let settings = claude.join("settings.json");
+            symlink(target, &settings).unwrap();
+            let thrown = if name == "loop" {
+                format!("{loop_words} : '{}'", settings.display())
+            } else {
+                format!("Could not find file '{}'.", settings.display())
+            };
+            let vars = |var: &str| (var == "CLAUDE_CONFIG_DIR").then(|| claude.clone().into_os_string());
+            let mut said = Vec::new();
+            let mut say = |line: &str| said.push(line.to_owned());
+            assert_eq!(uninstall(&vars, &mut say), Err(thrown.clone()), "{name}");
+            let exe = Path::new("/opt/aipet/hooks/aipet-hook");
+            assert_eq!(install(exe, &vars, &mut say), Err(thrown), "{name}");
+            assert!(said.is_empty(), "{name}: {said:?}");
+            assert_eq!(fs::read_link(&settings).unwrap(), Path::new(target), "{name}");
+            let names = |dir: &Path| -> Vec<String> {
+                fs::read_dir(dir)
+                    .unwrap()
+                    .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+                    .collect()
+            };
+            assert_eq!(names(&claude), ["settings.json"], "{name}");
+            assert!(names(&root.0.join("dotfiles")).is_empty(), "{name}");
+        }
+    }
 }

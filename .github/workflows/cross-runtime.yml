@@ -63,16 +63,16 @@ jobs:
       # the tests and the pet (AiPet.Core) they run; the .NET hook is built too, for the modes that still run it
       - name: Build the tests
         run: dotnet build tests/AiPet.Tests -c Release --nologo
-      # The classes that run the hook: on its event path, and for its plugin hook files (PluginHooksTests). Those of the
-      # other system report as skipped. A filter that selects nothing, or a run where nothing passed, fails: a green
-      # run must have run the Rust hook. (RegistrationTests joins once the Rust hook has --doctor.)
+      # The classes that run the hook: on its event path, for its plugin hook files (PluginHooksTests), and for
+      # --install and --doctor (RegistrationTests). Those of the other system report as skipped. A filter that selects
+      # nothing, or a run where nothing passed, fails: a green run must have run the Rust hook.
       - name: The C#'s hook suites against the Rust hook
         shell: bash
         env:
           AIPET_TEST_HOOK: ${{ github.workspace }}/rust/target/release/${{ matrix.hook }}
         run: |
           classes=(HookContractTests HookSocketTests HookRequestSizeTests EndToEndTests HookServerTests NoPetTests
-                   HookServerUnixTests StarvedPoolTests PluginHooksTests)
+                   HookServerUnixTests StarvedPoolTests PluginHooksTests RegistrationTests)
           filter=$(printf 'FullyQualifiedName~AiPet.Tests.%s.|' "${classes[@]}")
           set -o pipefail
           dotnet test tests/AiPet.Tests -c Release --nologo --no-build --filter "${filter%|}" 2>&1 | tee test.log
@@ -92,6 +92,24 @@ jobs:
           sudo "$exe" trace:: --test-threads=1 --nocapture 2>&1 | tee trace.log
           grep -q 'a_file_another_user_owns_is_left_alone ... ok' trace.log
           ! grep -q 'skipped: only root' trace.log
+      # --doctor with the organisation's managed Claude settings, which only a runner may write: the golden generator
+      # runs those scenarios through the C# hook, and tests/doctor.rs through the Rust one, each writing the file and
+      # taking it away again (AIPET_TEST_MANAGED_SETTINGS). Linux keeps them in a folder of root's, which the runner's
+      # user gets for this. None of the managed scenarios may have been left out.
+      - name: The doctor with managed settings, against the C#
+        shell: bash
+        env:
+          AIPET_GOLDEN: ${{ github.workspace }}/rust/golden/bin/Release/net10.0/aipet-golden.dll
+          AIPET_TEST_MANAGED_SETTINGS: "1"
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then sudo install -d -o "$(id -u)" -g "$(id -g)" /etc/claude-code; fi
+          dotnet build rust/golden -c Release --nologo -p:UseAppHost=false
+          cd rust
+          set -o pipefail
+          cargo test -p aipet-hook --release --locked --test doctor the_csharp_on_this_os_is_replayed -- --nocapture \
+            2>&1 | tee doctor.log
+          grep -q '^test the_csharp_on_this_os_is_replayed ... ok' doctor.log
+          ! grep -E 'claude-managed-[a-z-]+: (left out|skipped)' doctor.log
 
   csharp-hook:
     name: .NET hook, Rust pet (${{ matrix.os }})

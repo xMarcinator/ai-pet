@@ -27,7 +27,7 @@ use aipet_ipc::protocol::{CONNECT, KIND, OK, PID, RECENT, V, VERSION};
 use crate::claude::{self, Vars};
 use crate::codex;
 use crate::event::decoded;
-use crate::install::{NEWLINE, is_file, say, thrown};
+use crate::install::{NEWLINE, file_not_found, is_file, say, thrown};
 use crate::json::{Node, Object};
 use crate::json_out::{self, member, read};
 use crate::plugin_hooks::CODEX_EVENTS;
@@ -404,7 +404,6 @@ impl<'a> Doctor<'a> {
             Some(listed) => self.codex_listed(&listed),
             None => self.codex_files(),
         }
-        self.recent_events("codex");
     }
 
     /// Without `hooks/list`: what the files say (trust can only be read from Codex itself).
@@ -449,9 +448,11 @@ impl<'a> Doctor<'a> {
                 "without hooks/list it isn't known which command and folder Codex runs the plugin's hook with",
             );
         }
+        self.recent_events("codex");
     }
 
-    /// With `hooks/list`: each hook Codex knows about, whether it trusts AiPet's, and where they come from.
+    /// With `hooks/list`: each hook Codex knows about, whether it trusts AiPet's, and where they come from. Without
+    /// any of AiPet's that is all: the pet isn't asked.
     fn codex_listed(&mut self, listed: &[Node]) {
         let ours: Vec<&Node> = listed
             .iter()
@@ -541,6 +542,7 @@ impl<'a> Doctor<'a> {
             let command = text(from_plugin[0], "command").unwrap_or_default();
             self.probe_codex(&command, running, &[("PLUGIN_ROOT", root.unwrap_or_default())]);
         }
+        self.recent_events("codex");
     }
 
     fn no_probe(&mut self, why: &str) {
@@ -1169,29 +1171,15 @@ impl ReadError {
     }
 }
 
-/// `File.ReadAllText`'s bytes, or what .NET throws when it can't read them: a missing file is
-/// `FileNotFoundException`, one whose folder is missing `DirectoryNotFoundException`, and a folder in its place
-/// `UnauthorizedAccessException`.
+/// `File.ReadAllText`'s bytes, or what .NET throws when it can't read them ([`thrown`]), with
+/// `FileNotFoundException` told apart.
 fn fs_read(path: &Path) -> Result<Vec<u8>, ReadError> {
-    let e = match std::fs::read(path) {
-        Ok(bytes) => return Ok(bytes),
-        Err(e) => e,
-    };
-    let shown = path.display();
-    let folder_there = || match path.parent() {
-        Some(dir) if !dir.as_os_str().is_empty() => dir.is_dir(),
-        _ => true,
-    };
-    let no_folder = || ReadError::Other(format!("Could not find a part of the path '{shown}'."));
-    Err(match e.kind() {
-        io::ErrorKind::NotFound if cfg!(windows) && e.raw_os_error() == Some(3) => no_folder(),
-        io::ErrorKind::NotFound if !cfg!(windows) && !folder_there() => no_folder(),
-        io::ErrorKind::NotFound => ReadError::NotFound(format!("Could not find file '{shown}'.")),
-        io::ErrorKind::NotADirectory => no_folder(),
-        io::ErrorKind::IsADirectory | io::ErrorKind::PermissionDenied => {
-            ReadError::Other(format!("Access to the path '{shown}' is denied."))
+    std::fs::read(path).map_err(|e| {
+        if file_not_found(&e, path) {
+            ReadError::NotFound(thrown(&e, path))
+        } else {
+            ReadError::Other(thrown(&e, path))
         }
-        _ => ReadError::Other(thrown(&e, path)),
     })
 }
 

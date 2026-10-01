@@ -103,9 +103,28 @@ fn ordinal_upper(c: char) -> char {
 }
 
 // ------------------------------------------------------------------ files
-/// `File.Exists`: a file, or a symlink to one. A folder, a dangling link or what can't be looked at isn't.
+/// `File.Exists`: something that isn't a folder is at the path. That is a file or a symlink to one, and also a symlink
+/// that can't be followed (its target isn't there, or it loops), since .NET then looks at the link itself: reading
+/// through it then fails. A folder, a link to one, or a path that can't be looked at at all isn't.
 pub(crate) fn is_file(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|m| !m.is_dir())
+    match fs::metadata(path) {
+        Ok(m) => !m.is_dir(),
+        Err(_) => fs::symlink_metadata(path).is_ok_and(|link| !folder(&link)),
+    }
+}
+
+/// Whether a symlink's own metadata is a folder's: on Windows a link to a folder is one (it has the folder
+/// attribute); on Unix a link never is.
+fn folder(link: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        link.file_attributes() & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY != 0
+    }
+    #[cfg(not(windows))]
+    {
+        link.is_dir()
+    }
 }
 
 /// `File.ReadAllText`: the text as a `StreamReader` decodes it (see [`crate::event::decoded`]).
@@ -202,13 +221,31 @@ fn write_new(path: &Path, text: &str, mode: u32) -> Result<(), String> {
     Ok(())
 }
 
-/// The message .NET's file API throws for an error on `path`: `UnauthorizedAccessException` for a denied access,
-/// else the system's own text with the path.
+/// The message .NET's file API throws for an error on `path`: `UnauthorizedAccessException` for a denied access (and
+/// for a folder read as a file), `FileNotFoundException` for a missing file, `DirectoryNotFoundException` when its
+/// folder is missing too, and else the system's own text with the path.
 pub(crate) fn thrown(e: &io::Error, path: &Path) -> String {
+    let shown = path.display();
     match e.kind() {
-        io::ErrorKind::PermissionDenied => format!("Access to the path '{}' is denied.", path.display()),
-        _ => format!("{} : '{}'", system_text(e), path.display()),
+        io::ErrorKind::PermissionDenied | io::ErrorKind::IsADirectory => {
+            format!("Access to the path '{shown}' is denied.")
+        }
+        io::ErrorKind::NotFound if file_not_found(e, path) => format!("Could not find file '{shown}'."),
+        io::ErrorKind::NotFound => format!("Could not find a part of the path '{shown}'."),
+        _ => format!("{} : '{shown}'", system_text(e)),
     }
+}
+
+/// Whether a missing `path` is `FileNotFoundException` rather than `DirectoryNotFoundException`: Windows tells the
+/// two apart (`ERROR_FILE_NOT_FOUND`, `ERROR_PATH_NOT_FOUND`); on Unix .NET blames the file when its folder is there.
+pub(crate) fn file_not_found(e: &io::Error, path: &Path) -> bool {
+    e.kind() == io::ErrorKind::NotFound
+        && if cfg!(windows) {
+            e.raw_os_error() != Some(3)
+        } else {
+            path.parent()
+                .is_none_or(|dir| dir.as_os_str().is_empty() || dir.is_dir())
+        }
 }
 
 /// What `File.Move` throws: on Windows a denied move names no path.
@@ -235,7 +272,6 @@ fn system_text(e: &io::Error) -> String {
 /// `RealPath`: the file a symlink ends at (`File.ResolveLinkTarget(path, returnFinalTarget: true)`), each link's
 /// relative target taken from where that link is, as a full path (`FileSystemInfo.FullName`). Not a link, a chain
 /// past .NET's 40 links, or no full path to be had (`FullName` throws, and `RealPath` catches): the path itself.
-/// (Codex's registration; claude.rs has its own copy.)
 pub(crate) fn real_path(path: &Path) -> PathBuf {
     const MAX_FOLLOWED_LINKS: usize = 40;
     let Ok(mut target) = fs::read_link(path) else {
@@ -280,7 +316,7 @@ fn full_path(path: &Path) -> Option<PathBuf> {
 }
 
 /// `Backup`: `<file>.aipet-<local time>.bak` before each change, and the newest three of them kept. It never fails
-/// the change. (Codex's registration; claude.rs has its own copy.)
+/// the change.
 pub(crate) fn backup(path: &Path) {
     let Some(named) = backup_path(path) else {
         return;
@@ -405,4 +441,98 @@ fn local_stamp() -> String {
         "{:04}{:02}{:02}-{:02}{:02}{:02}",
         now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A scratch folder of the test's own, removed when dropped.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(test: &str) -> Scratch {
+            let dir = std::env::temp_dir().join(format!("aipet-hook-install-{test}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// `File.Exists` as .NET answers it: a file, a link to one, and a link it can't follow (to nothing, or looping) are
+    /// there; a folder, a link to one, and nothing at all aren't.
+    #[test]
+    fn is_file_answers_as_file_exists() {
+        let scratch = Scratch::new("exists");
+        let file = scratch.0.join("file");
+        fs::write(&file, "").unwrap();
+        assert!(is_file(&file));
+        assert!(!is_file(&scratch.0));
+        assert!(!is_file(&scratch.0.join("missing")));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            for (link, target, there) in [
+                ("to-file", "file", true),
+                ("to-nothing", "missing", true),
+                ("loop", "loop", true),
+                ("to-folder", ".", false),
+            ] {
+                symlink(target, scratch.0.join(link)).unwrap();
+                assert_eq!(is_file(&scratch.0.join(link)), there, "{link}");
+            }
+        }
+    }
+
+    /// What .NET throws for a file it can't read, by name: the file missing, its folder missing too, a folder in its
+    /// place; and on Unix, a link to nothing (the file it names is missing) and one that loops (the system's words).
+    #[test]
+    fn a_file_that_cant_be_read_is_said_as_dotnet_says_it() {
+        let scratch = Scratch::new("thrown");
+        let missing = scratch.0.join("settings.json");
+        assert_eq!(
+            read_text(&missing),
+            Err(format!("Could not find file '{}'.", missing.display()))
+        );
+        let deeper = scratch.0.join("claude").join("settings.json");
+        assert_eq!(
+            read_text(&deeper),
+            Err(format!("Could not find a part of the path '{}'.", deeper.display()))
+        );
+        assert_eq!(
+            read_text(&scratch.0),
+            Err(format!("Access to the path '{}' is denied.", scratch.0.display()))
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let dangling = scratch.0.join("dangling.json");
+            symlink("none.json", &dangling).unwrap();
+            assert_eq!(
+                read_text(&dangling),
+                Err(format!("Could not find file '{}'.", dangling.display()))
+            );
+            let looping = scratch.0.join("loop.json");
+            symlink("loop.json", &looping).unwrap();
+            let words = system_text(&io::Error::from_raw_os_error(libc::ELOOP));
+            assert_eq!(read_text(&looping), Err(format!("{words} : '{}'", looping.display())));
+        }
+    }
+
+    /// `Path.GetFullPath` takes a relative path from the working folder before `..` comes out: none is lost where it
+    /// climbs above the path's first folder.
+    #[test]
+    fn full_path_takes_a_relative_path_from_the_working_folder() {
+        let here = std::env::current_dir().unwrap();
+        assert_eq!(
+            full_path(Path::new("claude/../../dotfiles/settings.json")),
+            Some(here.parent().unwrap().join("dotfiles").join("settings.json"))
+        );
+    }
 }
