@@ -1,7 +1,7 @@
 //! The desktop shell: an iced daemon with the pet in a transparent, undecorated, always-on-top window.
 //!
 //! The window is [`SURFACE`] (380 × 600). It opens hidden, so the native setup (utility window, keep above, out of
-//! the taskbar) is in place before the window manager sees it, and shows near the primary monitor's bottom-right
+//! the taskbar) is in place before the window manager sees it, and shows in the primary monitor's bottom-right
 //! corner. Its input region is [`PetUi::hit_rects`] in physical pixels, so everything else clicks through; where the
 //! platform also clips drawing to a region, that one is [`PetUi::drawn_rects`]. What is drawn is sent as soon as it
 //! changes, and the input region with it; a change to the input region alone waits 100 ms since the last (as
@@ -9,24 +9,29 @@
 //! every frame; a press that doesn't move pokes the pet. A right press on the sprite opens the menu above it, inside
 //! the window and its input region. Settings is an ordinary window.
 //!
+//! The core's news is picked up every frame and handed to the pet. The app's hooks ([`aipet_ui::Host`]) hear where
+//! the window was left after a drop and after Reset position, and the quit.
+//!
 //! The pet moves on every [`PetUi::frame_interval`] (60 or 30 times a second). iced's winit shell redraws every open
 //! window after each message, so an open Settings window is drawn at that rate too.
 
+use std::sync::Mutex;
+use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-use aipet_ui::{Effect, INLINE_MENU, PetUi, SURFACE};
+use aipet_ui::{Effect, INLINE_MENU, Launch, News, PetUi, Place, SURFACE};
 use iced::widget::Space;
 use iced::{Color, Element, Event, Point, Size, Subscription, Task, Theme, event, mouse, theme, time, window};
 
 use crate::native::{self, NativeError, PxRect};
 
-/// The pet window's title, and the WM_CLASS of the spike's windows: not the real pet's, so that its window rules
-/// and scripts leave these alone.
-const TITLE: &str = "AiPet spike";
+/// The pet window's title (Settings' is "AiPet · Settings"), and the WM_CLASS of both, as the .NET pet's: the
+/// packaged window rules and the desktop entry's StartupWMClass match them.
+const TITLE: &str = "AiPet";
 #[cfg(target_os = "linux")]
-const APP_ID: &str = "aipet-spike";
-/// Where the window starts: this far left of the monitor's bottom-right corner (the real pet lives in the corner).
-const START_RIGHT: f32 = 420.0;
+const APP_ID: &str = "AiPet";
+/// Where the window starts: this far left of the monitor's bottom-right corner (PlaceWindow's default).
+const START_RIGHT: f32 = 24.0;
 /// Settings' size (SettingsWindow.axaml).
 const SETTINGS: Size = Size::new(800.0, 640.0);
 /// How long a change to the input region alone waits since the last update (MainWindow.OnFrame's 0.1 s).
@@ -53,6 +58,10 @@ enum Message {
     Shown(f32),
     /// Where the pet window was when the drag began (`None` where the window system doesn't say).
     DragOrigin(Option<Point>),
+    /// Where the pet window is, now that a drag left it there (`None` where the window system doesn't say).
+    Dropped(Option<Point>),
+    /// Reset position: the size of the pet window's monitor, to put it back in its corner.
+    Reset(Option<Size>),
     /// A native call failed: what it was doing, and why.
     Native(&'static str, NativeError),
     /// AIPET_DEBUG: the lines [`describe_gpu`] wrote.
@@ -61,6 +70,8 @@ enum Message {
 
 struct Shell {
     ui: PetUi,
+    /// The core's news, handed to the pet every frame.
+    news: Receiver<News>,
     pet: window::Id,
     /// The pet window's scale factor (physical px per logical px), once it is shown.
     scale: Option<f32>,
@@ -118,8 +129,14 @@ struct Region {
 }
 
 /// Runs the pet until it quits.
-pub fn run() -> Result<(), String> {
-    iced::daemon(Shell::boot, Shell::update, Shell::view)
+pub fn run(launch: Launch) -> Result<(), String> {
+    // iced boots the daemon once
+    let launch = Mutex::new(Some(launch));
+    let boot = move || {
+        let launch = launch.lock().ok().and_then(|mut launch| launch.take());
+        Shell::boot(launch.expect("the desktop shell boots once"))
+    };
+    iced::daemon(boot, Shell::update, Shell::view)
         .title(Shell::title)
         .theme(Theme::Dark)
         // one clear colour for every window: transparent (Settings paints its own background)
@@ -137,12 +154,13 @@ pub fn run() -> Result<(), String> {
 }
 
 impl Shell {
-    fn boot() -> (Self, Task<Message>) {
-        let ui = PetUi::new();
+    fn boot(launch: Launch) -> (Self, Task<Message>) {
+        let Launch { ui, news } = launch;
         let (pet, open) = window::open(pet_window(ui.on_top()));
         let now = Instant::now();
         let shell = Shell {
             ui,
+            news,
             pet,
             scale: None,
             region: None,
@@ -253,11 +271,48 @@ impl Shell {
                 }
                 Task::none()
             }
+            Message::Dropped(at) => {
+                self.log(|| format!("dropped with the window at {at:?}"));
+                self.save_place(at);
+                Task::none()
+            }
+            Message::Reset(monitor) => {
+                let Some(monitor) = monitor else {
+                    let e = NativeError::Unsupported("the window system doesn't say how big the monitor is");
+                    self.report("putting the pet back in its corner", &e);
+                    return Task::none();
+                };
+                let at = start_position(SURFACE, monitor);
+                self.log(|| format!("reset to {at:?}"));
+                self.save_place(Some(at));
+                window::move_to(self.pet, at)
+            }
             Message::Native(what, e) => {
                 self.report(what, &e);
                 Task::none()
             }
         }
+    }
+
+    /// Tells the host where the window is (`at`, logical px), as the whole window's top-left corner in desktop
+    /// pixels.
+    fn save_place(&mut self, at: Option<Point>) {
+        let (Some(at), Some(scale)) = (at, self.scale) else {
+            return;
+        };
+        let place = Place {
+            left: (at.x * scale).round() as i32,
+            top: (at.y * scale).round() as i32,
+            window_height: f64::from(self.ui.window_size().height),
+        };
+        self.ui.host().save_place(place);
+    }
+
+    /// Quits, once the host has heard.
+    fn quit(&mut self) -> Task<Message> {
+        self.log(|| "quitting".to_owned());
+        self.ui.host().quit();
+        iced::exit()
     }
 
     fn view(&self, id: window::Id) -> Element<'_, Message> {
@@ -270,8 +325,12 @@ impl Shell {
         }
     }
 
-    /// Moves the pet on to `now`, then does what is due: follow a drag, update the input region, keep on top.
+    /// Hands the pet the core's news, moves it on to `now`, then does what is due: follow a drag, update the input
+    /// region, keep on top.
     fn frame(&mut self, now: Instant) -> Task<Message> {
+        while let Ok(news) = self.news.try_recv() {
+            self.ui.update(news.into());
+        }
         self.ui.tick(now);
         let Some(scale) = self.scale else {
             return Task::none();
@@ -298,11 +357,12 @@ impl Shell {
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
                 if let Some(drag) = self.drag.take() {
                     let moved = self.ui.drag_moved();
-                    self.ui.update(aipet_ui::Message::DragEnded);
+                    let effect = self.ui.update(aipet_ui::Message::DragEnded);
                     self.log(|| match drag.pressed.zip(drag.last) {
                         Some((pressed, last)) if moved => format!("dropped {:?} from the press", last - pressed),
                         _ => "poked".to_owned(),
                     });
+                    return effect.map_or_else(Task::none, |e| self.apply(e));
                 }
             }
             Event::Mouse(mouse::Event::CursorEntered) => self.log(|| "pointer entered the pet window".to_owned()),
@@ -323,7 +383,7 @@ impl Shell {
                 return self.set_menu(false);
             }
             // it has no title bar, but Alt+F4 and the like quit
-            Event::Window(window::Event::CloseRequested | window::Event::Closed) => return iced::exit(),
+            Event::Window(window::Event::CloseRequested | window::Event::Closed) => return self.quit(),
             _ => {}
         }
         Task::none()
@@ -447,7 +507,12 @@ impl Shell {
         match effect {
             Effect::OnTop(on) => window::set_level(self.pet, level(on)),
             Effect::OpenSettings => self.open_settings(),
-            Effect::Quit => iced::exit(),
+            Effect::Quit => self.quit(),
+            Effect::Dropped => window::position(self.pet).map(Message::Dropped),
+            Effect::ResetPosition => {
+                self.ui.host().reset_place();
+                window::monitor_size(self.pet).map(Message::Reset)
+            }
         }
     }
 
@@ -683,19 +748,132 @@ fn describe(rects: &[PxRect]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::mpsc::{self, Sender};
+    use std::sync::{Arc, Mutex};
+
+    use aipet_ui::{Host, Prefs, Setup, settings};
+
     use super::*;
 
     #[test]
-    fn the_window_starts_at_the_bottom_left_of_the_monitors_corner() {
+    fn the_window_starts_in_the_monitors_bottom_right_corner() {
         let at = start_position(SURFACE, Size::new(1920.0, 1080.0));
-        assert_eq!(at, Point::new(1920.0 - 380.0 - 420.0, 1080.0 - 600.0));
+        assert_eq!(at, Point::new(1920.0 - 380.0 - 24.0, 1080.0 - 600.0));
+    }
+
+    /// What the shell told the host.
+    #[derive(Clone, Default)]
+    struct Heard(Arc<Mutex<Vec<String>>>);
+
+    impl Heard {
+        fn lines(&self) -> Vec<String> {
+            self.0.lock().unwrap().clone()
+        }
+
+        fn note(&self, line: String) {
+            self.0.lock().unwrap().push(line);
+        }
+    }
+
+    impl Host for Heard {
+        fn prefs(&mut self, _prefs: &Prefs) {}
+
+        fn dismiss(&mut self, _id: &str) {}
+
+        fn settings(&mut self, _action: settings::Action) -> bool {
+            false
+        }
+
+        fn saved_place(&mut self) -> Option<Place> {
+            None
+        }
+
+        fn save_place(&mut self, place: Place) {
+            self.note(format!("save {} {} {}", place.left, place.top, place.window_height));
+        }
+
+        fn reset_place(&mut self) {
+            self.note("reset".into());
+        }
+
+        fn quit(&mut self) {
+            self.note("quit".into());
+        }
+    }
+
+    /// A shell playing the demo's script, whose pet window is shown at `scale`; what its host heard, and the core's
+    /// end of its news.
+    fn shown_at(scale: f32) -> (Shell, Heard, Sender<News>) {
+        let heard = Heard::default();
+        let (news, receiver) = mpsc::channel();
+        let ui = PetUi::demo(Setup {
+            host: Box::new(heard.clone()),
+            ..Setup::detached()
+        });
+        let (mut shell, _) = Shell::boot(Launch { ui, news: receiver });
+        shell.scale = Some(scale);
+        (shell, heard, news)
     }
 
     /// A shell whose pet window is shown at scale 1.
     fn shown() -> Shell {
-        let (mut shell, _) = Shell::boot();
+        shown_at(1.0).0
+    }
+
+    #[test]
+    fn the_cores_news_reaches_the_pet_on_the_next_frame() {
+        let heard = Heard::default();
+        let (news, receiver) = mpsc::channel();
+        let ui = PetUi::new(Setup {
+            host: Box::new(heard),
+            ..Setup::detached()
+        });
+        let (mut shell, _) = Shell::boot(Launch { ui, news: receiver });
         shell.scale = Some(1.0);
+        let start = Instant::now();
+        let _ = shell.frame(start);
+        assert_eq!(
+            shell.ui.drawn_rects().len(),
+            2,
+            "the pet alone: its halo and its shadow"
+        );
+        // a Board with a chat in it: its bubble is drawn from the next frame on
+        let mut demo = aipet_ui::demo::Demo::new();
+        news.send(News::Board(demo.board(3.0))).unwrap();
+        let _ = shell.frame(start + Duration::from_millis(33));
+        assert!(shell.ui.drawn_rects().len() > 2, "{:?}", shell.ui.drawn_rects());
+        // the core gone: frames go on
+        drop(news);
+        let _ = shell.frame(start + Duration::from_millis(66));
+    }
+
+    #[test]
+    fn a_drop_and_a_reset_save_the_place_and_a_quit_is_heard() {
+        let (mut shell, heard, _news) = shown_at(1.5);
+        // a drag that moved, let go with the window at (100, 200) logical px
+        shell.ui.update(aipet_ui::Message::DragStarted);
         shell
+            .ui
+            .update(aipet_ui::Message::DragMoved(iced::Vector::new(40.0, 0.0)));
+        let _ = shell.apply(Effect::Dropped);
+        let _ = shell.update(Message::Dropped(Some(Point::new(100.0, 200.0))));
+        // Reset position: back to the corner of a 1280 × 720 (logical) monitor
+        let _ = shell.apply(Effect::ResetPosition);
+        let _ = shell.update(Message::Reset(Some(Size::new(1280.0, 720.0))));
+        let _ = shell.apply(Effect::Quit);
+        let corner = start_position(SURFACE, Size::new(1280.0, 720.0));
+        assert_eq!(
+            heard.lines(),
+            [
+                "save 150 300 600".to_owned(),
+                "reset".to_owned(),
+                format!("save {} {} 600", corner.x * 1.5, corner.y * 1.5),
+                "quit".to_owned(),
+            ]
+        );
+        // a window system that doesn't say: nothing is saved
+        let _ = shell.update(Message::Dropped(None));
+        assert_eq!(heard.lines().len(), 4);
     }
 
     #[test]

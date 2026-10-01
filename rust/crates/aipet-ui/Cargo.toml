@@ -1,12 +1,19 @@
 [package]
 name = "aipet-ui"
-description = "The pet's front end shared by the Wayland and desktop shells: sprite, bubbles, menu, Settings, and the geometry that drives both the view and the input region."
+description = "The pet's front end shared by the Wayland and desktop shells: sprite, bubbles from the core's Board, menu, Settings, and the geometry that drives both the view and the input region."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[features]
+# The scripted demo day (src/demo.rs) in place of the core's Board: for development, screenshots and tests
+# (`cargo run -p aipet --features demo`). Off by default, and never in a release build.
+demo = []
+
 [dependencies]
+# the Board's bubbles, the Settings pages' watchers, presets and update status
+aipet-core = { path = "../aipet-core" }
 aipet-sprite = { path = "../aipet-sprite" }
 iced.workspace = true
