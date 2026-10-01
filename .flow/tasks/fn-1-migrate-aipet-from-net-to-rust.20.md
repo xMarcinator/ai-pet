@@ -33,6 +33,9 @@ which gives `Ok(message)` or `Err(message)`. `save(settings, new_token)` (an emp
 drops a leading BOM), `apply_to_jira`, `apply_to_github`, `moves_jira`, `moves_github` and `describe`. Mock-server tests
 use `Http::local(timeout)`, plain HTTP to this computer only (point the site or host at `127.0.0.1:port`), and the
 doc-hidden `watcher.poll()` for one synchronous poll.
+**From task 15 (2026-10-01):** your files are `aipet-ui/src/settings/{jira,github}.rs`: empty `Message` enums and page
+states, `Services { jira, github, secrets, http }`, `field(.., secret)`, `status` with a `Tone`, and `PetUi::settings()`
+for tests.
 ## Acceptance
 - [ ] With a mock server, Test success and failure show the C#'s texts. Save persists and restarts the watcher. Forget
       removes the token.

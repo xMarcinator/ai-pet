@@ -35,6 +35,12 @@ Windows updates in the Rust pet, following task 14's proof:
 **From task 14's proof (2026-09-29):** `vpk pack` checks that `VelopackApp.Run` comes first only in .NET exes, so the
 Rust pet needs its own test that Velopack's `run()` runs before anything else in `main` ([rust/proofs/velopack.md](../../rust/proofs/velopack.md)).
 
+**From task 15 (2026-10-01):** your files are `aipet/src/updates.rs` and `aipet-ui/src/settings/updates.rs`. main.rs calls
+`startup()` first, then `start()` after the single instance (false means exit). Settings calls `check()`; `restart()`
+returning true quits the pet; `install_on_quit()` runs at quit, but not after a restart. `Services { version,
+update_status: fn() -> UpdateStatus }`. `velopack = "=1.2.158"` is a dependency of aipet (resolved offline from cargo's
+cache; its Unix-only crates, wait-timeout and waitpid-any, aren't on this machine, so CI fetches them). The section's
+view, with its button for anything but Off, is there.
 ## Acceptance
 - [ ] On the Windows CI, a local-feed test downloads an update and applies it on quit. The status texts match the C#.
 - [ ] Uninstalling a test install runs the hook cleanup (the proof workflow extended).

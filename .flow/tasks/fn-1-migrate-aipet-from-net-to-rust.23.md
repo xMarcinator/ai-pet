@@ -47,7 +47,8 @@ order, at the same moment, and with different or unset `XDG_RUNTIME_DIR` values,
       registrations.
 - [ ] Rolling back to the milestone 1 release keeps the data (R17).
 - [ ] cross-runtime.yml holds the .NET pet's and the Rust pet's Linux locks against each other: either start order,
-      the same moment, and different or unset `XDG_RUNTIME_DIR` values give one pet (R7).
+      the same moment, different or unset `XDG_RUNTIME_DIR` values, and an `AIPET_PIPE` ending in `.sock` (the lock is
+      `<AIPET_PIPE>.lock` on both sides) give one pet (R7).
 - [ ] CHANGELOG entry. The milestone 2 release is cut (the user starts it).
 ## Done summary
 TBD

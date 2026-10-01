@@ -31,6 +31,10 @@ adds the file to this task's Touches while task 27 isn't running.
 - `packaging/linux/hyprland/aipet.lua`, `packaging/linux/hyprland/aipet.conf`
 **Optional:**
 - `rust/notes/exwlshell.md` — the popup and layer quirks on Hyprland
+**From task 15 (2026-10-01):** the layer-shell namespace is now `aipet` (was `aipet-spike`), so the spike's Hyprland rule
+no longer matches; Settings is `AiPet · Settings` at 800 × 640. Task 15's manual checks 3 and 6 are this pass's: the
+two pets never together on Linux in each start order and at the same moment (once task 6's .NET lock is in), and
+`AIPET_BACKEND=wayland` and `AIPET_BACKEND=desktop` runs.
 ## Acceptance
 - [ ] Every check passes on each listed desktop, recorded in `rust/proofs/linux-hands-on.md`. No failure is left open.
 - [ ] The Hyprland rule files match the layer namespace and the Settings title. The installer's include line still

@@ -16,7 +16,8 @@ alongside it. This is milestone 1: the Rust hook ships with the .NET pet.
 - The shared Linux lock, part of the spec's single-instance contract (R7):
   - Before its mutex and socket probes, `Program.Main` (`src/AiPet.UI/Program.cs:18-37`) takes an exclusive,
     non-blocking `flock` on the spec's lock file: the socket path (`Ipc.Endpoint`) with `.lock` in place of `.sock`,
-    so it follows the socket's own location rule, including `AIPET_PIPE`. Losing it quits quietly, as losing the mutex does.
+    so it follows the socket's own location rule; under the `AIPET_PIPE` override it is `<AIPET_PIPE>.lock`, as the spec
+    says. Losing it quits quietly, as losing the mutex does.
   - The lock is held for the whole run and released by the kernel when the process exits.
   - Use a P/Invoke to `flock`, with the file opened 0600 and `O_NOFOLLOW`.
   - `SingleInstanceTests` runs two contenders at once and expects exactly one winner, also when they run with different

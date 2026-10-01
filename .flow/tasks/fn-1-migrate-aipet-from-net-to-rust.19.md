@@ -31,6 +31,11 @@ spike's page has switches and an avatar picker only.
 - `rust/crates/aipet-ui/src/settings.rs`
 **Optional:**
 - `src/AiPet.Core/Presets.cs` — `MovesJira`/`MovesGitHub`
+**From task 15 (2026-10-01):** your files are `aipet-ui/src/settings/{general,avatars}.rs`. `general::import(pet)` gets
+`Action::ImportDefaults`, and `tick(pet)` runs every frame, to pick up a dialog's file. `Services` has the watchers,
+`data_dir` and the platform. The mood picker is already demo-only. `rfd` isn't a dependency yet: downloading it waits
+for the user's go-ahead, and the conductor adds it to aipet-ui's Cargo.toml before this task starts. Then
+`general::import` opens the dialog on a thread, and `general::tick` picks the file up.
 ## Acceptance
 - [ ] Tests: importing a preset that moves the Jira or GitHub site forgets that token; one that doesn't keeps it; a bad
       file shows the C#'s message.

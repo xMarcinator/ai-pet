@@ -36,6 +36,13 @@ window's top-left corner in desktop pixels, and both shells must read it the sam
 - `rust/notes/exwlshell.md` §7 (output info)
 **Optional:**
 - `rust/SPIKE.md` — the 1.5 vs 1 scale observed between the shells
+**From task 15 (2026-10-01):** your files are the stubs `aipet/src/placement.rs` and `aipet/src/config.rs`, plus both
+`shell.rs` files. `App` (main.rs) calls `placement::{load, save, reset, quit}` from `Host::{saved_place, save_place,
+reset_place, quit}`. `config::Store { load, get, change, flush }` keeps a dirty flag and writes at once; `Place { left,
+top, window_height }` is config.json's position. `PetUi::window_size()` gives the size, and `Effect::Dropped` is a
+finished drag. The desktop shell already calls `save_place` after a drop and after Reset position but doesn't read
+`saved_place` at boot; it starts 24 px from the right at the monitor's bottom (move it to the work area). The layer
+shell only logs a drop, and its Reset position only calls `reset_place`.
 ## Acceptance
 - [ ] Round-trip unit tests from the desktop rectangle to margins and back, at scales 1, 1.25 and 1.5.
 - [ ] Manual: after switching `AIPET_BACKEND` between `wayland` and `desktop`, the pet opens in the same place.

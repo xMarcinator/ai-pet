@@ -32,6 +32,8 @@ Rewrite the docs for the Rust code: the architecture, the README's build section
 - `THIRD-PARTY-NOTICES.md`, `plugins/aipet/README.md`, `packaging/windows/README.md`
 **Optional:**
 - `rust/SPIKE.md`, `rust/notes/*.md`
+**From task 15 (2026-10-01):** rust/SPIKE.md and rust/proofs/windows.md still say `aipet-spike` (run commands, class and
+namespace); the binary is now `AiPet` in the `aipet` crate.
 ## Acceptance
 - [ ] No doc cites a removed `.cs` path or a `dotnet` build command as the way to build.
 - [ ] The notices list every crate in the release builds with its licence text (`cargo about` check in CI).

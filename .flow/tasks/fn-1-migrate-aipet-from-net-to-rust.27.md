@@ -49,6 +49,10 @@ this task's Touches while task 22 isn't running. This task can't be completed wh
 - **Line height:** `style::LINE_HEIGHT` stays 1.362 (Noto Sans) on Windows, where Segoe UI's is 1.330. `view.rs`
   hard-codes 1.362 in `TITLE_Y` and `DETAIL_Y`; derive both from `style` to make Windows exact.
 
+**From task 15 (2026-10-01):** task 15's manual checks 1, 2, 4, 5 and 7 are this pass's, unless the user has done them by
+then: real Claude and Codex chats in the Rust pet, the .NET and Rust pets never together in either order or at the same
+moment, the demo, the groundwork run, and the release build opening no console window (the exact commands are in task
+15's done summary). The desktop shell's title and X11 class are `AiPet`, and Settings is `AiPet · Settings`.
 ## Acceptance
 - [ ] Every check passes on Windows 10 and 11, recorded in `rust/proofs/windows-hands-on.md`. No failure is left open.
 - [ ] Antivirus results are recorded, and any detections are reported to their vendors.

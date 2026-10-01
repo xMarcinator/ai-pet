@@ -38,6 +38,11 @@ another app.
 **From task 12 (2026-10-01):** `aipet_core::board::Media { name, song: Option<_>, artist, playing, track_since }` is
 what the Board reads of IMediaPlayer. The players can fill it each second, as MainWindow polls media every 1 s; it
 goes into `Sources::read(..., media, music_on)`.
+**From task 15 (2026-10-01):** `aipet-desktop/src/platform/{windows,linux,mac}.rs` each have `pub struct
+Windows/Linux/Mac` with `new()` and a no-op `impl Platform`; `platform::new()` picks one. Windows features added:
+`Win32_System_Threading` (AttachThreadInput, OpenProcess, QueryFullProcessImageNameW) and
+`Win32_System_SystemServices` (APPCOMMAND_*); EnumWindows, SetForegroundWindow, ShellExecuteW and WM_APPCOMMAND were
+already there. aipet-core is a dependency, for aipet.log. The core thread polls the player every 1 s while Music is on.
 ## Acceptance
 - [ ] Unit tests parse Spotify titles (`Artist - Song`, paused) and `playerctl`/`dbus-send` output.
 - [ ] Manual checklist on Linux (X11 and XWayland apps) and Windows: focus, opening links and folders, and media

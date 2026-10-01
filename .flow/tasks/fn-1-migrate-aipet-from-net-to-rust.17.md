@@ -34,6 +34,12 @@ and its recording fake come from task 15's groundwork (`aipet-ui/src/platform.rs
 **From task 12 (2026-10-01):** a bubble's actions find their chat with `Board::find(id)`, and `Board::dismiss(id, now)`
 hides a bubble until it does something new (`now` from `aipet_ipc::protocol::unix_time`). `board::app_of(&Session)`
 gives the app label and colour; `pr_label`, `agent_label` and `status_color` are the C#'s tables.
+**From task 15 (2026-10-01):** your extension points are `aipet-ui/src/{cards,view,lib}.rs`: `PetUi::platform()`, the
+Board in `PetUi.board` (`find`), and `Effect::OpenSettings` with `settings.page` set first. lib.rs interns each Board id
+once for the pet's life, because cards.rs types bubble ids as `&'static str`. Parity gaps task 15 found in your files:
+there is no music stack (the C# keeps the music bubble in a stack of its own just above the pet, always the front of
+its stack; the Rust puts it in the chats stack, behind the chats); cards.rs adds the thinking dots after "+N more"; and
+view.rs gives a GitHub review's dot the review blue, where the C# uses purple.
 ## Acceptance
 - [ ] Unit tests with a fake platform cover visibility and routing for every kind.
 - [ ] No bubble has a Stop button: a working or thinking chat in the desktop app shows Open, which opens the chat or
