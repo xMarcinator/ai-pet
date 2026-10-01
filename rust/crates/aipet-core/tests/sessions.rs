@@ -239,12 +239,23 @@ fn replay_in(case: &Value, lines: &CaseLines, name: &str, dir: &Path) -> Result<
     let sessions = AgentSessions::with_codex_home(dir);
     for (n, (step, line)) in array(case, "steps").iter().zip(&lines.steps).enumerate() {
         let at = format!("{name}, step {n}");
+        let no_device = |file: &str| {
+            if is_dos_device_name(file) {
+                return Err(format!(
+                    "{at}: the fixture {file:?} is named as a DOS device, which Windows before 11 (CI's windows-2022) \
+                     opens instead of a file: rename its case in rust/golden/Sessions.cs"
+                ));
+            }
+            Ok(())
+        };
         if let Some(file) = step["write"].as_str() {
+            no_device(file)?;
             let bytes = file_bytes(array(step, "parts"));
             retry(|| fs::write(dir.join(file), &bytes));
             continue;
         }
         if let Some(file) = step["delete"].as_str() {
+            no_device(file)?;
             retry(|| fs::remove_file(dir.join(file)));
             continue;
         }
@@ -256,6 +267,7 @@ fn replay_in(case: &Value, lines: &CaseLines, name: &str, dir: &Path) -> Result<
             .and_then(|p| p.get_mut("transcript_path"))
             && let Some(rest) = path.as_str().and_then(|p| p.strip_prefix(FILES))
         {
+            no_device(rest)?;
             *path = Value::String(format!("{}{rest}", dir.display()));
         }
         let now = step["now"].as_f64().expect("a step has its now");
@@ -277,6 +289,53 @@ fn replay_in(case: &Value, lines: &CaseLines, name: &str, dir: &Path) -> Result<
         }
     }
     Ok(())
+}
+
+/// Whether Windows before 11 takes a file of this name for a device: CON, PRN, AUX, NUL, COM0-9 or LPT0-9 (the
+/// digit may be a superscript ¹, ² or ³), in any case, with any extension (from the first `.` or `:`), even with
+/// spaces before the extension. There `nul.jsonl` is the NUL device: what is written to it goes nowhere, and a read
+/// finds nothing. On Windows 11 and Linux it is a plain file, so a fixture of such a name replays there and fails
+/// only on the older Windows of CI's runner; refused everywhere, it fails on every OS.
+fn is_dos_device_name(file: &str) -> bool {
+    let name = file.rsplit(['/', '\\']).next().unwrap_or(file);
+    let stem = name.split(['.', ':']).next().unwrap_or(name).trim_end_matches(' ');
+    let stem = stem.to_ascii_uppercase();
+    let port = |prefix: &str| {
+        stem.strip_prefix(prefix).is_some_and(|digit| {
+            let mut chars = digit.chars();
+            matches!(
+                (chars.next(), chars.next()),
+                (Some('0'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None)
+            )
+        })
+    };
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL") || port("COM") || port("LPT")
+}
+
+#[test]
+fn fixtures_named_as_dos_devices_are_refused() {
+    for device in [
+        "NUL",
+        "nul.jsonl",
+        "COM1.txt",
+        "LPT\u{b9}",
+        "Aux.tar.gz",
+        "nul .jsonl",
+        "{files}/con.jsonl",
+    ] {
+        assert!(is_dos_device_name(device), "{device}");
+    }
+    for file in [
+        "null.jsonl",
+        "nul-char.jsonl",
+        "con2",
+        "COM10",
+        "LPT",
+        "a\u{0}b.jsonl",
+        "",
+    ] {
+        assert!(!is_dos_device_name(file), "{file}");
+    }
 }
 
 /// A file as the golden data describes it: UTF-8 text or hex bytes, each part repeated.
