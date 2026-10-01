@@ -10,9 +10,11 @@
 //! and [`INLINE_MENU`] say where the sprite and the menu are.
 //!
 //! The bubbles and the mood are the core's [`Board`]'s, as `MainWindow`'s Refresh and SyncCards make them
-//! (`src/AiPet.UI/MainWindow.axaml.cs:303-314, 486-564`). What the pet asks of the app (saving its preferences,
-//! dismissing a bubble, Settings' actions, its place, quitting) goes to the app's [`Host`]; what it asks of the
-//! operating system goes to the [`platform::Platform`]. With the `demo` feature, [`PetUi::demo`] plays a scripted day
+//! (`src/AiPet.UI/MainWindow.axaml.cs:303-314, 486-564`). A bubble the pointer is on shows its round [`Button`]s and
+//! its dismiss button, and a click on it opens its item, as MakeCard, UpdateChrome and OpenItem have it (`:352-485`).
+//! What the pet asks of the app (saving its preferences, dismissing a bubble, Settings' actions, its place, quitting)
+//! goes to the app's [`Host`]; what it asks of the operating system (opening links, bringing an agent's app forward,
+//! the music player) goes to the [`platform::Platform`]. With the `demo` feature, [`PetUi::demo`] plays a scripted day
 //! through a Board of its own instead (`demo`).
 
 mod cards;
@@ -39,8 +41,9 @@ use aipet_sprite::{Avatar, Pet, PetFrame, PetInput};
 use iced::widget::image::Handle;
 use iced::{Point, Rectangle, Size, Vector};
 
-use cards::{Bubble, Fitted, Section, Stacks};
-use geometry::{CARD_RADIUS, CLOSE_SIZE, HALO, HEADER_H, HEADER_RADIUS, MENU_RADIUS, Motion};
+pub use cards::Button;
+use cards::{Bubble, Buttons, Card, Fitted, Section, Stacks};
+use geometry::{CARD_RADIUS, CLOSE_SIZE, CardFrame, HALO, HEADER_H, HEADER_RADIUS, MENU_RADIUS, Motion};
 pub use geometry::{INLINE_MENU, MENU, Rect, SPRITE, SURFACE};
 use platform::Platform;
 use settings::{Page, Settings};
@@ -48,10 +51,27 @@ use sprite::Sprite;
 
 /// The bubble an empty pet shows while you point at it.
 const GHOST: &str = "_ghost";
-/// The widest a bubble's title or detail gets (TextBlock.MaxWidth).
+/// The widest a bubble's title or detail gets (TextBlock.MaxWidth): at rest, and beside the bubble's buttons while the
+/// pointer is on it (UpdateChrome).
 const TEXT_MAX: f32 = 250.0;
+const TEXT_BESIDE: f32 = 190.0;
+/// The narrowest and widest a bubble gets (its Border's MinWidth and MaxWidth).
+const CARD_MIN: f32 = 240.0;
+const CARD_MAX: f32 = 350.0;
 /// How long a new review calls for attention (the C#'s NewReviews: `AlertUntil = Now + 6`).
 const ALERT: f64 = 6.0;
+/// A tooltip (Avalonia 12's ToolTip in the Fluent dark theme) opens 0.4 s after the pointer comes onto what has one, or
+/// at once within 0.1 s of the last one closing (ShowDelay, BetweenShowDelay); 20 px below where the pointer then is
+/// (Placement Pointer, VerticalOffset 20); and fades in over 0.15 s.
+const TIP_DELAY: f64 = 0.4;
+const TIP_BETWEEN: f64 = 0.1;
+const TIP_BELOW: f32 = 20.0;
+const TIP_FADE: f64 = 0.15;
+/// A tooltip's text size, and its widest (MaxWidth, its 1 px border and 8, 5, 8, 7 padding included).
+const TIP_TEXT: f32 = 12.0;
+const TIP_MAX: f32 = 320.0;
+/// What a tooltip's border and padding add to its text's size.
+const TIP_FRAME: Size = Size::new(2.0 + 8.0 + 8.0, 2.0 + 5.0 + 7.0);
 
 /// [`PetUi::frame_interval`] while something moves fast: the C# draws at the display rate, 60 Hz on most screens.
 pub const SMOOTH_FRAME: Duration = Duration::from_nanos(16_666_667);
@@ -87,8 +107,11 @@ pub enum Message {
     /// The drag was lost without a release (the surface went away, or the release never came): the pet is let go,
     /// neither poked nor landing. A shell that knows the button went up after all sends [`Message::DragEnded`].
     DragCancelled,
-    /// A bubble was clicked: a folded stack spreads out.
+    /// A bubble was clicked: a folded stack of more than one spreads out, else its item opens (an error bubble's
+    /// Settings page, a review's page, the player, or a chat).
     CardPressed(Arc<str>),
+    /// One of a bubble's round buttons was clicked.
+    Button(Arc<str>, Button),
     /// A bubble's dismiss button was clicked.
     Dismiss(Arc<str>),
     /// A menu item was chosen. The shell closes the menu.
@@ -322,6 +345,9 @@ pub struct PetUi {
     left_at: Option<f64>,
     hover: bool,
     hovered_card: Option<Arc<str>>,
+    /// The tooltip of what the pointer is on, and when the last one that showed went.
+    tip: Option<Tip>,
+    tip_gone_at: Option<f64>,
     /// Where the pointer was at the last drag move that counted, from the press.
     drag_last: Vector,
     bubbles: bool,
@@ -379,6 +405,8 @@ impl PetUi {
             left_at: None,
             hover: false,
             hovered_card: None,
+            tip: None,
+            tip_gone_at: None,
             drag_last: Vector::ZERO,
             bubbles: setup.prefs.bubbles,
             on_top: setup.prefs.on_top,
@@ -477,15 +505,18 @@ impl PetUi {
                 self.fill(&board);
             }
             if self.show.is_empty() && self.hover && !self.input.dragging {
-                // an empty pet you point at says how it is, as the C#'s ghost bubble
+                // an empty pet you point at says how it is, as the C#'s ghost bubble (a chat card without a chat)
                 let asleep = self.input.state == "sleep";
                 self.show.push(Bubble {
                     id: GHOST.into(),
                     section: Section::Chats,
+                    kind: "chat",
                     state: if asleep { "sleep" } else { "idle" },
                     title: "Claude Code".into(),
                     detail: if asleep { "Napping" } else { "All caught up" }.into(),
-                    app_colour: None,
+                    more: 0,
+                    app: None,
+                    buttons: Buttons::default(),
                 });
             }
         }
@@ -510,8 +541,9 @@ impl PetUi {
         };
     }
 
-    /// The Board's bubbles, in its order: each chat with its app's colour, and its app's name before the detail
-    /// unless every chat is in the Claude app (or Claude Code); the last of a stack says how many more there are.
+    /// The Board's bubbles, in its order: each chat with its app, whose name comes before the detail unless every chat
+    /// is in the Claude app (or Claude Code); the last of a stack says how many more there are; and each with the
+    /// buttons it shows while the pointer is on it.
     fn fill(&mut self, board: &Board) {
         let cards = board.cards();
         let apps: HashSet<&str> = cards
@@ -521,34 +553,31 @@ impl PetUi {
             .collect();
         let several_apps = apps.len() > 1;
         for (i, s) in cards.iter().enumerate() {
-            let mut detail = s.detail.clone();
-            let mut app_colour = None;
-            if s.kind == "chat" {
-                let (label, colour) = board::app_of(s);
-                app_colour = Some(colour);
-                if several_apps || !matches!(label, "Claude app" | "Claude") {
-                    detail = format!("{label} · {detail}");
+            let app = (s.kind == "chat").then(|| board::app_of(s));
+            let detail = match app {
+                Some((label, _)) if several_apps || !matches!(label, "Claude app" | "Claude") => {
+                    format!("{label} · {}", s.detail)
                 }
-            }
+                _ => s.detail.clone(),
+            };
             let last = !cards[i + 1..].iter().any(|x| x.section() == s.section());
-            let more = board.extra(s.section());
-            if last && more > 0 {
-                detail.push_str(&format!("  ·  +{more} more"));
-            }
             self.show.push(Bubble {
                 id: s.id.as_str().into(),
                 section: section_of(s),
+                kind: s.kind,
                 state: s.eff,
                 title: Cow::Owned(s.name.clone()),
                 detail: Cow::Owned(detail),
-                app_colour,
+                more: if last { board.extra(s.section()) } else { 0 },
+                app,
+                buttons: buttons(s),
             });
         }
         self.waiting = cards.iter().filter(|s| matches!(s.kind, "jira" | "github")).count() + board.extra("reviews");
     }
 
-    /// Works out what the pointer is over: the sprite (a wave when the pointer arrives, the eyes follow it) and the
-    /// bubble whose dismiss button shows.
+    /// Works out what the pointer is over: the sprite (a wave when the pointer arrives, the eyes follow it), the bubble
+    /// that shows its buttons and dismiss button, and the part of it whose tooltip opens.
     fn track_pointer(&mut self) {
         let over_sprite = self.pointer.is_some_and(|p| self.sprite_hit(p));
         if over_sprite && !self.hover {
@@ -573,9 +602,63 @@ impl PetUi {
             let front_to_back = self.stacks.frames().rev();
             front_to_back
                 .filter(|(c, _)| c.content && !c.removing)
-                .find(|(c, f)| f.body().contains(p) || (hovered.as_ref() == Some(&c.id) && f.close().contains(p)))
+                .find(|(c, f)| {
+                    let held = hovered.as_ref() == Some(&c.id);
+                    reach(c, f).body().contains(p) || (held && f.close().contains(p))
+                })
                 .map(|(c, _)| Arc::clone(&c.id))
         });
+        self.stacks.hover(self.hovered_card.clone(), fit_card);
+        let on = self.hovered_card.clone().zip(self.pointer).and_then(|(id, p)| {
+            let (card, frame) = self.stacks.frames().find(|(c, _)| c.id == id && !c.removing)?;
+            Some((id, part_at(card, &frame, p)))
+        });
+        self.follow_tip(on);
+    }
+
+    /// Follows what the pointer is on (`on`) with its tooltip, and opens the tooltip once it is due.
+    fn follow_tip(&mut self, on: Option<(Arc<str>, Part)>) {
+        if self.tip.as_ref().map(|tip| &tip.on) != on.as_ref() {
+            if self.tip.take().is_some_and(|tip| tip.shown.is_some()) {
+                self.tip_gone_at = Some(self.t);
+            }
+            self.tip = on.map(|on| Tip {
+                on,
+                since: self.t,
+                shown: None,
+            });
+        }
+        let Some(tip) = &self.tip else {
+            return;
+        };
+        let soon = self.tip_gone_at.is_some_and(|gone| tip.since - gone <= TIP_BETWEEN);
+        let due = self.t - tip.since >= if soon { 0.0 } else { TIP_DELAY };
+        if tip.shown.is_some() || !due {
+            return;
+        }
+        let (Some(text), Some(p)) = (self.tip_text(&tip.on), self.pointer) else {
+            return;
+        };
+        let rect = tip_rect(&text, p);
+        let at = self.t;
+        if let Some(tip) = &mut self.tip {
+            tip.shown = Some(OpenTip { text, rect, at });
+        }
+    }
+
+    /// The tooltip of a bubble's part: a round button's, the dismiss button's, or the bubble's own (its whole title,
+    /// and for a chat the app it runs in).
+    fn tip_text(&self, (id, part): &(Arc<str>, Part)) -> Option<String> {
+        let card = self.stacks.card(id)?;
+        let app = card.app.map(|(name, _)| name);
+        Some(match part {
+            Part::Button(button) => button.tip(app),
+            Part::Close => "Dismiss".to_owned(),
+            Part::Body => match app {
+                Some(app) => format!("{}\nIn the {app}", card.title()),
+                None => card.title().to_owned(),
+            },
+        })
     }
 
     /// Handles a message from the pet's views, the shell or the core, and says what the shell should do, if anything.
@@ -635,11 +718,13 @@ impl PetUi {
                 return dropped.then_some(Effect::Dropped);
             }
             Message::CardPressed(id) => {
-                // a folded stack spreads out; a spread one opens its item (still to come)
-                if let Some(bubble) = self.show.iter().find(|b| b.id == id) {
-                    self.stacks.expand(bubble.section, &self.show);
+                // a folded stack of more than one spreads out on the first click; after that a click opens the item
+                let section = self.stacks.section(&id)?;
+                if !self.stacks.expand(section, &self.show, fit_card) {
+                    return self.open_item(&id);
                 }
             }
+            Message::Button(id, button) => return self.press(&id, button),
             Message::Dismiss(id) => self.dismiss(&id),
             Message::Menu(item) => match item {
                 MenuItem::Bubbles => {
@@ -691,6 +776,64 @@ impl PetUi {
             return;
         }
         self.host.dismiss(id);
+    }
+
+    /// Opens a bubble's item (OpenItem): an error bubble's Settings page, the player, a review's page, or a chat: its
+    /// deep link opens it in its app, else its agent's app is brought forward. A bubble the Board doesn't have (the
+    /// ghost) brings Claude forward.
+    fn open_item(&mut self, id: &str) -> Option<Effect> {
+        let s = self.board.as_deref().and_then(|board| board.find(id));
+        match s.map(|s| (s.kind, s.url.as_deref())) {
+            Some(("jira-error", _)) => return Some(self.open_settings(Page::Jira)),
+            Some(("github-error", _)) => return Some(self.open_settings(Page::GitHub)),
+            Some(("music", _)) => {
+                if let Some(player) = self.platform.media() {
+                    player.focus();
+                }
+            }
+            Some(("jira" | "github", Some(url))) => self.platform.open_url(url),
+            _ => match s.and_then(|s| s.link.as_deref()) {
+                Some(link) => self.platform.open_url(link),
+                None => self.platform.focus_agent(s.map_or("claude", |s| s.agent), None),
+            },
+        }
+        None
+    }
+
+    /// Does what a bubble's round button is for (MakeCard's clicks): opens its ticket or its pull request, or works the
+    /// player; a chat's Open opens the chat as a click on the bubble does.
+    fn press(&mut self, id: &str, button: Button) -> Option<Effect> {
+        let s = self.board.as_deref().and_then(|board| board.find(id));
+        let player = self.platform.media();
+        match button {
+            Button::Ticket => {
+                if let Some(url) = s.and_then(|s| s.ticket_url.as_deref()) {
+                    self.platform.open_url(url);
+                }
+            }
+            Button::PullRequest => {
+                if let Some(url) = s.and_then(|s| s.pr_url.as_deref()) {
+                    self.platform.open_url(url);
+                }
+            }
+            Button::Previous => {
+                if let Some(player) = player {
+                    player.previous();
+                }
+            }
+            Button::PlayPause => {
+                if let Some(player) = player {
+                    player.play_pause();
+                }
+            }
+            Button::Next => {
+                if let Some(player) = player {
+                    player.next();
+                }
+            }
+            Button::Open => return self.open_item(id),
+        }
+        None
     }
 
     fn set_on_top(&mut self, on: bool) -> Option<Effect> {
@@ -746,9 +889,9 @@ impl PetUi {
     }
 
     /// Where the pet's surface takes the mouse, in whole logical px: the sprite (its hit ellipse's box and its body),
-    /// every bubble that is visible (with its dismiss button while that shows), the reviews header, and the menu
-    /// while it is open inline. Everything else clicks through. It changes as things move; hand it to the surface
-    /// whenever it does.
+    /// every bubble that is visible (its round buttons are inside it; with its dismiss button while that shows), the
+    /// reviews header, and the menu while it is open inline. Everything else clicks through, tooltips too. It changes
+    /// as things move; hand it to the surface whenever it does.
     pub fn hit_rects(&self) -> Vec<Rect> {
         let mut rects = Vec::with_capacity(64);
         rects.extend_from_slice(&self.sprite_rects);
@@ -756,8 +899,8 @@ impl PetUi {
             if card.o <= 0.05 {
                 continue;
             }
-            geometry::rounded(frame.body(), CARD_RADIUS * frame.scale, &mut rects);
-            if self.close_visible(card) {
+            geometry::rounded(reach(card, &frame).body(), CARD_RADIUS * frame.scale, &mut rects);
+            if card.interactive() {
                 geometry::rounded(frame.close(), CLOSE_SIZE / 2.0 * frame.scale, &mut rects);
             }
         }
@@ -772,9 +915,10 @@ impl PetUi {
 
     /// Where the pet's surface is drawn on, in whole logical px like [`PetUi::hit_rects`] (every one of which lies
     /// in one of these): the sprite with its glow's halo, its ground shadow where its lift puts it, every bubble
-    /// drawn with its shadow or glow (and its dismiss button while that shows), the reviews header and the menu
-    /// while it is open inline. The rest of the surface is transparent, so a region that clips drawing as well
-    /// (X11's bounding shape, a Windows window region) can be exactly this. It changes as things move.
+    /// drawn with its shadow or glow (and its dismiss button while that shows, and as far as it takes the pointer),
+    /// the reviews header, the menu while it is open inline, and a tooltip while one shows. The rest of the surface
+    /// is transparent, so a region that clips drawing as well (X11's bounding shape, a Windows window region) can be
+    /// exactly this. It changes as things move.
     pub fn drawn_rects(&self) -> Vec<Rect> {
         let mut rects = Vec::with_capacity(16);
         let mut add = |r: Rectangle| rects.extend(Rect::covering(r));
@@ -785,7 +929,10 @@ impl PetUi {
                 continue;
             }
             add(geometry::shadowed(frame.body(), &self.card_shadow(card, frame.scale)));
-            if self.close_visible(card) {
+            if card.reach() > card.width() {
+                add(reach(card, &frame).body());
+            }
+            if card.interactive() {
                 add(frame.close());
             }
         }
@@ -795,7 +942,33 @@ impl PetUi {
         if self.inline_menu {
             add(INLINE_MENU);
         }
+        if let Some(tip) = self.open_tip() {
+            add(tip.rect);
+        }
         rects
+    }
+
+    /// For tests: a bubble that is staying, as it is now: where its body is, and the dismiss button and round buttons
+    /// it shows (none unless the pointer is on it).
+    #[doc(hidden)]
+    pub fn shown(&self, id: &str) -> Option<Shown> {
+        let (card, frame) = self.stacks.frames().find(|(c, _)| *c.id == *id && !c.removing)?;
+        Some(Shown {
+            body: frame.body(),
+            close: card.interactive().then(|| frame.close()),
+            buttons: card.button_rects(&frame).collect(),
+        })
+    }
+
+    /// For tests: the tooltip that shows, its text and where it is.
+    #[doc(hidden)]
+    pub fn tooltip(&self) -> Option<(&str, Rectangle)> {
+        self.open_tip().map(|tip| (tip.text.as_str(), tip.rect))
+    }
+
+    /// The tooltip, once it has opened.
+    fn open_tip(&self) -> Option<&OpenTip> {
+        self.tip.as_ref()?.shown.as_ref()
     }
 
     /// How long the shell may wait before the next [`PetUi::tick`], and so before drawing again: [`SMOOTH_FRAME`]
@@ -839,10 +1012,6 @@ impl PetUi {
         self.track_pointer();
     }
 
-    fn close_visible(&self, card: &cards::Card) -> bool {
-        self.hovered_card.as_ref() == Some(&card.id) && card.content && !card.removing
-    }
-
     fn header_rect(&self) -> Option<Rectangle> {
         let (_, _, width) = self.header.as_ref().filter(|_| self.bubbles)?;
         let bottom = self.stacks.header_bottom();
@@ -858,13 +1027,115 @@ impl PetUi {
     }
 }
 
-/// The stack a Board bubble goes in: reviews, and everything else with the chats (the C#'s music stack has none of
-/// its own here yet: the player's bubble goes behind the chats).
+/// What a test sees of a bubble ([`PetUi::shown`]).
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shown {
+    pub body: Rectangle,
+    pub close: Option<Rectangle>,
+    pub buttons: Vec<(Button, Rectangle)>,
+}
+
+/// What of a bubble the pointer is on, for the tooltip: its body, its dismiss button, or one of its round buttons.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Part {
+    Body,
+    Close,
+    Button(Button),
+}
+
+/// The tooltip of what the pointer is on: since when it has been on it, and the tooltip once it opened.
+struct Tip {
+    on: (Arc<str>, Part),
+    since: f64,
+    shown: Option<OpenTip>,
+}
+
+/// A tooltip that shows: its text, where it is, and when it opened (it fades in from then).
+struct OpenTip {
+    text: String,
+    rect: Rectangle,
+    at: f64,
+}
+
+/// The stack a Board bubble goes in: the music player's, the chats' or the reviews'.
 fn section_of(s: &Session) -> Section {
     match s.section() {
         "reviews" => Section::Reviews,
+        "music" => Section::Music,
         _ => Section::Chats,
     }
+}
+
+/// The round buttons a bubble shows while the pointer is on it (UpdateChrome): Open in Jira where it has a ticket,
+/// the pull request's where it has one, the player's three on the player's, and Open on a working or thinking chat in
+/// its agent's desktop app, where the C#'s Stop stood.
+fn buttons(s: &Session) -> Buttons {
+    let music = s.kind == "music";
+    let busy_in_app =
+        s.kind == "chat" && matches!(s.eff, "working" | "thinking") && s.r#where.as_deref() == Some("desktop");
+    Buttons::default()
+        .with(Button::Ticket, s.ticket_url.is_some())
+        .with(Button::PullRequest, s.pr_url.is_some())
+        .with(Button::Previous, music)
+        .with(Button::PlayPause, music)
+        .with(Button::Next, music)
+        .with(Button::Open, busy_in_app)
+}
+
+/// Where a bubble takes the pointer: its frame as wide as its reach ([`Card::reach`]).
+fn reach(card: &Card, frame: &CardFrame) -> CardFrame {
+    CardFrame {
+        width: card.reach(),
+        ..*frame
+    }
+}
+
+/// What of a bubble the pointer at `p` is on: its dismiss button or a round button while they show, else the bubble.
+fn part_at(card: &Card, frame: &CardFrame, p: Point) -> Part {
+    if card.interactive() && frame.close().contains(p) {
+        return Part::Close;
+    }
+    card.button_rects(frame)
+        .find(|(_, r)| r.contains(p))
+        .map_or(Part::Body, |(button, _)| Part::Button(button))
+}
+
+/// Where a tooltip with `text` opens for the pointer at `p`: 20 px below it, moved back in where it would reach past
+/// the surface's side, and above the pointer where there is no room below.
+fn tip_rect(text: &str, p: Point) -> Rectangle {
+    let size = tip_size(text);
+    let x = p.x.min(SURFACE.width - size.width).max(0.0);
+    let below = p.y + TIP_BELOW;
+    let y = if below + size.height <= SURFACE.height {
+        below
+    } else {
+        (p.y - size.height).max(0.0)
+    };
+    Rectangle::new(Point::new(x, y), size)
+}
+
+/// A tooltip's size: its text wrapped to its widest, and its border and padding around it.
+fn tip_size(text: &str) -> Size {
+    use iced::advanced::graphics::text::Paragraph;
+    use iced::advanced::text::{Alignment, Paragraph as _, Shaping, Text, Wrapping};
+
+    let bounds = Paragraph::with_text(Text {
+        content: text,
+        bounds: Size::new(TIP_MAX - TIP_FRAME.width, f32::INFINITY),
+        size: iced::Pixels(TIP_TEXT),
+        line_height: style::LINE_HEIGHT,
+        font: style::UI,
+        align_x: Alignment::Left,
+        align_y: iced::alignment::Vertical::Top,
+        shaping: Shaping::Advanced,
+        wrapping: Wrapping::Word,
+    })
+    .min_bounds();
+    Size::new(
+        bounds.width.ceil() + TIP_FRAME.width,
+        bounds.height.ceil() + TIP_FRAME.height,
+    )
 }
 
 /// A frame's motion, in the view's f32.
@@ -893,12 +1164,18 @@ fn parse_fps(n: &str) -> Option<Duration> {
     Some(Duration::from_secs(1) / n)
 }
 
-/// A bubble's title and detail cut to [`TEXT_MAX`], and its width: MakeCard's padding (14 + 9), 1 px borders, the
-/// dot's 18 + 8 and the longer text, 240 at least.
-fn fit_card(title: &str, detail: &str) -> Fitted {
-    let (title, title_w) = style::fit(title, 13.5, style::UI_SEMIBOLD, TEXT_MAX);
-    let (detail, detail_w) = style::fit(detail, 12.0, style::UI, TEXT_MAX);
-    let width = (14.0 + 9.0 + 2.0 + 26.0 + title_w.max(detail_w).ceil()).clamp(240.0, 350.0);
+/// A bubble's title and detail cut to fit, and its width (MakeCard's layout): its padding (14 + 9), 1 px borders, the
+/// dot's 18 + 8 and the longer text, from 240 to 350. At rest (`row` none) the text gets up to [`TEXT_MAX`]. Beside a
+/// row of buttons `row` px wide it gets up to [`TEXT_BESIDE`], or less where the bubble would be wider than 350.
+fn fit_card(title: &str, detail: &str, row: Option<f32>) -> Fitted {
+    const FRAME: f32 = 14.0 + 9.0 + 2.0 + 18.0 + 8.0;
+    let (max, row) = match row {
+        None => (TEXT_MAX, 0.0),
+        Some(row) => (TEXT_BESIDE.min(CARD_MAX - FRAME - row), row),
+    };
+    let (title, title_w) = style::fit(title, 13.5, style::UI_SEMIBOLD, max);
+    let (detail, detail_w) = style::fit(detail, 12.0, style::UI, max);
+    let width = (FRAME + title_w.max(detail_w).ceil() + row).clamp(CARD_MIN, CARD_MAX);
     Fitted { title, detail, width }
 }
 
@@ -1056,8 +1333,8 @@ pub(crate) mod tests {
         let (ui, _) = shown(board(&alone));
         let a = bubble(&ui, "claude:a");
         assert_eq!(
-            (a.section, a.state, a.app_colour),
-            (Section::Chats, "working", Some(0xFFD97757))
+            (a.section, a.state, a.app),
+            (Section::Chats, "working", Some(("Claude app", 0xFFD97757)))
         );
         assert_eq!((a.title.as_ref(), a.detail.as_ref()), ("Fix the bug", "Running tests"));
 
@@ -1090,7 +1367,7 @@ pub(crate) mod tests {
         );
         assert_eq!(bubble(&ui, "claude:a").detail, "Claude app · Needs your permission");
         let b = bubble(&ui, "codex:b");
-        assert_eq!((b.state, b.app_colour), ("thinking", Some(0xFFA3A3AD)));
+        assert_eq!((b.state, b.app), ("thinking", Some(("Codex CLI", 0xFFA3A3AD))));
         assert_eq!(b.detail, "Codex CLI · Thinking");
     }
 
@@ -1155,11 +1432,16 @@ pub(crate) mod tests {
                 ("gh:https://github.com/me/repo/pull/7", Section::Reviews),
                 ("jira:AP-2", Section::Reviews),
                 ("jira:AP-1", Section::Reviews),
-                ("music", Section::Chats),
+                ("music", Section::Music),
             ]
         );
-        assert_eq!(bubble(&ui, "claude:3").detail, "Working  ·  +1 more");
-        assert_eq!(bubble(&ui, "claude:2").detail, "Working");
+        // the stack's last says how many more there are (after its thinking dots, if it has them)
+        let last = bubble(&ui, "claude:3");
+        assert_eq!((last.detail.as_ref(), last.more), ("Working", 1));
+        assert_eq!(bubble(&ui, "claude:2").more, 0);
+        let shown = |id| ui.stacks.card(id).unwrap().fitted().detail.clone();
+        assert_eq!(shown("claude:3"), "Working  ·  +1 more");
+        assert_eq!(shown("claude:2"), "Working");
         let error = bubble(&ui, "jira:_error");
         assert_eq!(
             (error.state, error.detail.as_ref()),
@@ -1170,7 +1452,7 @@ pub(crate) mod tests {
             (review.state, review.title.as_ref()),
             ("review", "AP-2 · Summary of AP-2")
         );
-        assert_eq!(review.app_colour, None);
+        assert_eq!(review.app, None);
         let music = bubble(&ui, "music");
         assert_eq!(
             (music.state, music.title.as_ref(), music.detail.as_ref()),
