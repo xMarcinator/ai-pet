@@ -145,13 +145,12 @@ impl<Message> canvas::Program<Message> for Glyph {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod tests {
     use super::*;
 
     /// Each UI font names a face Windows has, at its own weight: for a family that isn't there, or a weight its
     /// family lacks, the text stack would substitute another face.
-    #[cfg(windows)]
     #[test]
     fn the_ui_fonts_are_faces_windows_has() {
         use iced::advanced::graphics::text::cosmic_text::fontdb::{Family, Query, Weight};

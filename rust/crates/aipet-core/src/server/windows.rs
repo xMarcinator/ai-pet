@@ -406,14 +406,13 @@ mod tests {
     fn the_pipe_is_the_users_alone() {
         let name = OsString::from(format!("aipet-core-server-test-{}-acl", std::process::id()));
         let pipe = instance(&name, &Security::only_me().unwrap(), true).unwrap();
-        let (mut descriptor, mut text) = (std::ptr::null_mut(), std::ptr::null_mut());
-        let what = OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
+        let mut descriptor = std::ptr::null_mut();
         // SAFETY: an open pipe; descriptor is written only
         let rc = unsafe {
             GetSecurityInfo(
                 pipe.as_raw_handle() as HANDLE,
                 SE_KERNEL_OBJECT,
-                what,
+                OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
@@ -422,12 +421,31 @@ mod tests {
             )
         };
         assert_eq!(rc, 0);
-        // SAFETY: the descriptor just read; text is written only
+        let sddl = sddl_of(descriptor);
+        // SAFETY: GetSecurityInfo's allocation, freed once
+        unsafe { LocalFree(descriptor) };
+        let me = user_sid().unwrap();
+        assert_eq!(
+            sddl,
+            as_windows_writes(&format!("O:{me}D:(D;;0x1f019f;;;NU)(A;;0x1f019f;;;{me})")),
+            "the C#'s O:<me>D:(D;;0x1f019f;;;NU)(A;;0x1f019f;;;<me>), with <me> = {me}"
+        );
+        // and the name is taken now: a first instance fails, a further one doesn't
+        let security = Security::only_me().unwrap();
+        let taken = instance(&name, &security, true).unwrap_err();
+        assert_eq!(taken.raw_os_error(), Some(5), "{taken}");
+        instance(&name, &security, false).unwrap();
+    }
+
+    /// `descriptor`'s owner and DACL as SDDL text.
+    fn sddl_of(descriptor: PSECURITY_DESCRIPTOR) -> String {
+        let mut text = std::ptr::null_mut();
+        // SAFETY: a valid descriptor; text is written only
         let ok = unsafe {
             ConvertSecurityDescriptorToStringSecurityDescriptorW(
                 descriptor,
                 SDDL_REVISION_1,
-                what,
+                OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
                 &mut text,
                 std::ptr::null_mut(),
             )
@@ -437,21 +455,31 @@ mod tests {
         let len = (0..).take_while(|&i| unsafe { *text.add(i) } != 0).count();
         // SAFETY: the `len` units before the NUL
         let sddl = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(text, len) });
-        // SAFETY: the two allocations above
-        unsafe {
-            LocalFree(text.cast());
-            LocalFree(descriptor);
-        }
-        let me = user_sid().unwrap();
-        assert_eq!(
-            sddl.replace(&me, "<me>"),
-            "O:<me>D:(D;;0x1f019f;;;NU)(A;;0x1f019f;;;<me>)"
-        );
-        // and the name is taken now: a first instance fails, a further one doesn't
-        let security = Security::only_me().unwrap();
-        let taken = instance(&name, &security, true).unwrap_err();
-        assert_eq!(taken.raw_os_error(), Some(5), "{taken}");
-        instance(&name, &security, false).unwrap();
+        // SAFETY: the allocation above, freed once
+        unsafe { LocalFree(text.cast()) };
+        sddl
+    }
+
+    /// `sddl` as Windows writes it back. Windows writes a well-known account by its short name (the built-in
+    /// Administrator, which GitHub's runners use, is `LA`), so expected text goes through the same conversion as the
+    /// pipe's.
+    fn as_windows_writes(sddl: &str) -> String {
+        let wide: Vec<u16> = OsStr::new(sddl).encode_wide().chain(Some(0)).collect();
+        let mut descriptor = std::ptr::null_mut();
+        // SAFETY: wide is NUL-terminated; descriptor is written only
+        let made = unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                wide.as_ptr(),
+                SDDL_REVISION_1,
+                &mut descriptor,
+                std::ptr::null_mut(),
+            )
+        };
+        assert_ne!(made, 0, "{sddl}");
+        let back = sddl_of(descriptor);
+        // SAFETY: the allocation above, freed once
+        unsafe { LocalFree(descriptor) };
+        back
     }
 
     /// A server at a pipe of its own, not started, and the lines it logs. Only pings come to it: it writes nothing.
