@@ -1,16 +1,19 @@
 //! The desktop shell: an iced daemon with the pet in a transparent, undecorated, always-on-top window.
 //!
-//! The window is [`SURFACE`] (380 × 600). It opens hidden, so the native setup (utility window, keep above, out of
-//! the taskbar) is in place before the window manager sees it, and shows in the primary monitor's bottom-right
-//! corner. Its input region is [`PetUi::hit_rects`] in physical pixels, so everything else clicks through; where the
-//! platform also clips drawing to a region, that one is [`PetUi::drawn_rects`]. What is drawn is sent as soon as it
-//! changes, and the input region with it; a change to the input region alone waits 100 ms since the last (as
-//! MainWindow.OnFrame does). A left press on the sprite drags the window after the pointer, read from the desktop
-//! every frame; a press that doesn't move pokes the pet. A right press on the sprite opens the menu above it, inside
-//! the window and its input region. Settings is an ordinary window.
+//! The window is [`SURFACE`] (380 × 600). It opens hidden on the primary monitor, so the native setup (utility
+//! window, keep above, out of the taskbar) is in place before the window manager sees it, then goes where the pet was
+//! left and shows (MainWindow's PlaceWindow, [`Located::start`]). Its input region is [`PetUi::hit_rects`] in
+//! physical pixels, so everything else clicks through; where the platform also clips drawing to a region, that one is
+//! [`PetUi::drawn_rects`]. What is drawn is sent as soon as it changes, and the input region with it; a change to the
+//! input region alone waits 100 ms since the last (as MainWindow.OnFrame does). A left press on the sprite drags the
+//! window after the pointer, read from the desktop every frame; a press that doesn't move pokes the pet. A right press
+//! on the sprite opens the menu above it, inside the window and its input region. Settings is an ordinary window.
 //!
-//! The core's news is picked up every frame and handed to the pet. The app's hooks ([`aipet_ui::Host`]) hear where
-//! the window was left after a drop and after Reset position, and the quit.
+//! The core's news is picked up every frame and handed to the pet. The app's hooks ([`aipet_ui::Host`]) give the place
+//! the pet was left at start, and hear where the window was left after a drop and after Reset position (which puts it
+//! back in its corner: ResetPosition, [`Located::corner`]), and the quit. A place is the whole window's top-left
+//! corner in desktop pixels: the physical pixels winit places windows in (Windows' virtual screen, X11's root
+//! window), as the C#'s screens have them ([`Screen`]).
 //!
 //! The pet moves on every [`PetUi::frame_interval`] (60 or 30 times a second). iced's winit shell redraws every open
 //! window after each message, so an open Settings window is drawn at that rate too.
@@ -30,8 +33,17 @@ use crate::native::{self, NativeError, PxRect};
 const TITLE: &str = "AiPet";
 #[cfg(target_os = "linux")]
 const APP_ID: &str = "AiPet";
-/// Where the window starts: this far left of the monitor's bottom-right corner (PlaceWindow's default).
-const START_RIGHT: f32 = 24.0;
+/// Where the window goes with no place saved, and after Reset position: this far (px) left of the bottom-right corner
+/// of its screen's work area (PlaceWindow's and ResetPosition's 24). The hidden window opens as far left of the
+/// primary monitor's corner (logical px).
+const CORNER_RIGHT: i32 = 24;
+/// The work area when not one screen is known (MainWindow.WorkArea's last resort).
+const NO_SCREEN: Area = Area {
+    x: 0,
+    y: 0,
+    width: 1920,
+    height: 1080,
+};
 /// Settings' size (SettingsWindow.axaml).
 const SETTINGS: Size = Size::new(800.0, 640.0);
 /// How long a change to the input region alone waits since the last update (MainWindow.OnFrame's 0.1 s).
@@ -54,14 +66,16 @@ enum Message {
     Input(window::Id, Event, event::Status),
     /// The pet window exists, hidden.
     PetOpened,
+    /// Where the hidden pet window is, and the screens: it goes where the pet was left, then shows.
+    Placed(Located),
     /// The pet window is set up and shown, at this scale factor.
     Shown(f32),
     /// Where the pet window was when the drag began (`None` where the window system doesn't say).
     DragOrigin(Option<Point>),
     /// Where the pet window is, now that a drag left it there (`None` where the window system doesn't say).
     Dropped(Option<Point>),
-    /// Reset position: the size of the pet window's monitor, to put it back in its corner.
-    Reset(Option<Size>),
+    /// Reset position: where the pet window is, and the screens, to put it back in its corner.
+    Reset(Located),
     /// A native call failed: what it was doing, and why.
     Native(&'static str, NativeError),
     /// AIPET_DEBUG: the lines [`describe_gpu`] wrote.
@@ -73,6 +87,8 @@ struct Shell {
     /// The core's news, handed to the pet every frame.
     news: Receiver<News>,
     pet: window::Id,
+    /// Where the pet was left (the host's), until the window is placed at start.
+    saved: Option<Place>,
     /// The pet window's scale factor (physical px per logical px), once it is shown.
     scale: Option<f32>,
     /// The regions the window has, and when they were set.
@@ -155,13 +171,15 @@ pub fn run(launch: Launch) -> Result<(), String> {
 
 impl Shell {
     fn boot(launch: Launch) -> (Self, Task<Message>) {
-        let Launch { ui, news } = launch;
+        let Launch { mut ui, news } = launch;
+        let saved = ui.host().saved_place();
         let (pet, open) = window::open(pet_window(ui.on_top()));
         let now = Instant::now();
         let shell = Shell {
             ui,
             news,
             pet,
+            saved,
             scale: None,
             region: None,
             region_at: now,
@@ -221,9 +239,16 @@ impl Shell {
                 } else {
                     Task::none()
                 };
-                // then, whatever came of it, show it, and say "above" again now that it is mapped (winit said it
-                // while it was not)
-                setup.chain(gpu).chain(Task::batch([
+                // then, whatever came of it, it is placed (and shown)
+                setup.chain(gpu).chain(locate(pet).map(Message::Placed))
+            }
+            Message::Placed(located) => {
+                self.note_screens(&located);
+                let to = located.start(self.saved.take());
+                self.log(|| format!("placed at {to:?} px"));
+                // shown there, and "above" said again now that it is mapped (winit said it while it was not)
+                let (pet, on_top) = (self.pet, self.ui.on_top());
+                window::move_to(pet, located.logical(to)).chain(Task::batch([
                     window::set_mode(pet, window::Mode::Windowed),
                     window::set_level(pet, level(on_top)),
                     window::scale_factor(pet).map(Message::Shown),
@@ -273,19 +298,18 @@ impl Shell {
             }
             Message::Dropped(at) => {
                 self.log(|| format!("dropped with the window at {at:?}"));
-                self.save_place(at);
+                if let (Some(at), Some(scale)) = (at, self.scale) {
+                    let px = |logical: f32| (f64::from(logical) * f64::from(scale)).round() as i32;
+                    self.save_place((px(at.x), px(at.y)));
+                }
                 Task::none()
             }
-            Message::Reset(monitor) => {
-                let Some(monitor) = monitor else {
-                    let e = NativeError::Unsupported("the window system doesn't say how big the monitor is");
-                    self.report("putting the pet back in its corner", &e);
-                    return Task::none();
-                };
-                let at = start_position(SURFACE, monitor);
-                self.log(|| format!("reset to {at:?}"));
-                self.save_place(Some(at));
-                window::move_to(self.pet, at)
+            Message::Reset(located) => {
+                self.note_screens(&located);
+                let corner = located.corner();
+                self.log(|| format!("reset to {corner:?} px"));
+                self.save_place(corner);
+                window::move_to(self.pet, located.logical(corner))
             }
             Message::Native(what, e) => {
                 self.report(what, &e);
@@ -294,18 +318,22 @@ impl Shell {
         }
     }
 
-    /// Tells the host where the window is (`at`, logical px), as the whole window's top-left corner in desktop
-    /// pixels.
-    fn save_place(&mut self, at: Option<Point>) {
-        let (Some(at), Some(scale)) = (at, self.scale) else {
-            return;
-        };
+    /// Tells the host where the window is: the whole window's top-left corner in desktop px, and its height (SaveConfig).
+    fn save_place(&mut self, (left, top): (i32, i32)) {
         let place = Place {
-            left: (at.x * scale).round() as i32,
-            top: (at.y * scale).round() as i32,
+            left,
+            top,
             window_height: f64::from(self.ui.window_size().height),
         };
         self.ui.host().save_place(place);
+    }
+
+    /// Says on stderr why the window system's screens couldn't be had, once (the window's monitor stood in for them).
+    fn note_screens(&mut self, located: &Located) {
+        self.log(|| format!("{located:?}"));
+        if let Some(e) = &located.failed {
+            self.report("listing the screens", &NativeError::Os(e.clone()));
+        }
     }
 
     /// Quits, once the host has heard.
@@ -511,7 +539,7 @@ impl Shell {
             Effect::Dropped => window::position(self.pet).map(Message::Dropped),
             Effect::ResetPosition => {
                 self.ui.host().reset_place();
-                window::monitor_size(self.pet).map(Message::Reset)
+                locate(self.pet).map(Message::Reset)
             }
         }
     }
@@ -583,12 +611,353 @@ fn settings_window() -> window::Settings {
     }
 }
 
-/// The pet window's top-left corner on the (primary) monitor: at its bottom, [`START_RIGHT`] from its right edge.
+/// Where the hidden window opens, on the primary monitor (iced gives its logical size, and puts the point on it): at
+/// its bottom, [`CORNER_RIGHT`] from its right edge. It is placed from there ([`Located::start`]).
 fn start_position(window: Size, monitor: Size) -> Point {
     Point::new(
-        monitor.width - window.width - START_RIGHT,
+        monitor.width - window.width - CORNER_RIGHT as f32,
         monitor.height - window.height,
     )
+}
+
+/// A rectangle in desktop px (Avalonia's PixelRect).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Area {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+}
+
+impl Area {
+    fn left(self) -> i64 {
+        self.x.into()
+    }
+
+    fn top(self) -> i64 {
+        self.y.into()
+    }
+
+    fn right(self) -> i64 {
+        self.left() + i64::from(self.width)
+    }
+
+    fn bottom(self) -> i64 {
+        self.top() + i64::from(self.height)
+    }
+
+    /// How much of it `other` covers (px²).
+    fn overlap(self, other: Area) -> i64 {
+        let width = self.right().min(other.right()) - self.left().max(other.left());
+        let height = self.bottom().min(other.bottom()) - self.top().max(other.top());
+        width.max(0) * height.max(0)
+    }
+}
+
+/// A screen (MainWindow's `Screens`): all of it, the work area windows go in (without the taskbar, docks and
+/// panels), and whether it is the primary one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Screen {
+    bounds: Area,
+    work: Area,
+    primary: bool,
+}
+
+impl Screen {
+    /// The window's monitor, where the window system's list of screens can't be had: at the desktop's origin, all of
+    /// it work area (iced gives its size in logical px at the window's scale).
+    fn monitor(size: Size, scale: f32) -> Screen {
+        let px = |logical: f32| (f64::from(logical) * f64::from(scale)).round() as i32;
+        let all = Area {
+            x: 0,
+            y: 0,
+            width: px(size.width),
+            height: px(size.height),
+        };
+        Screen {
+            bounds: all,
+            work: all,
+            primary: true,
+        }
+    }
+}
+
+/// Where the pet window is and what screens there are: what placing it takes.
+#[derive(Clone, Debug)]
+struct Located {
+    /// The window's scale factor (physical px per logical px).
+    scale: f32,
+    /// Its top-left, in logical px, where the window system says.
+    at: Option<Point>,
+    /// The screens, in desktop px.
+    screens: Vec<Screen>,
+    /// Why the window system's screens couldn't be had (the window's monitor alone stood in for them).
+    failed: Option<String>,
+}
+
+impl Located {
+    fn scale(&self) -> f64 {
+        f64::from(self.scale)
+    }
+
+    /// The window's rectangle in desktop px, where its position is known.
+    fn window(&self) -> Option<Area> {
+        let at = self.at?;
+        let px = |logical: f32| (f64::from(logical) * self.scale()).round() as i32;
+        Some(Area {
+            x: px(at.x),
+            y: px(at.y),
+            width: px(SURFACE.width),
+            height: px(SURFACE.height),
+        })
+    }
+
+    /// MainWindow.WorkArea: the work area of the screen the window is on (the one it overlaps most), else of the
+    /// primary one (the first, if none is), else 1920 × 1080 at the origin.
+    fn work_area(&self) -> Area {
+        let on = self.window().and_then(|window| {
+            let mut most: Option<(i64, &Screen)> = None;
+            for screen in &self.screens {
+                let overlap = screen.bounds.overlap(window);
+                if overlap > most.map_or(0, |(o, _)| o) {
+                    most = Some((overlap, screen));
+                }
+            }
+            most.map(|(_, screen)| screen)
+        });
+        on.or_else(|| self.screens.iter().find(|s| s.primary))
+            .or(self.screens.first())
+            .map_or(NO_SCREEN, |screen| screen.work)
+    }
+
+    /// PlaceWindow (MainWindow.axaml.cs:160-173): where the window goes at start, in desktop px. It goes where the pet
+    /// was left, moved up by however much taller the window is than the one saved (the pet sits at its bottom),
+    /// unless the pet then shows on no screen; then, as with nothing saved, at the bottom of its screen's work area,
+    /// 24 px from its right edge. The window's size is the C#'s `(int)(Width * Scale)`, truncated.
+    fn start(&self, saved: Option<Place>) -> (i32, i32) {
+        let scale = self.scale();
+        let (width, height) = (f64::from(SURFACE.width), f64::from(SURFACE.height));
+        let (w, h) = ((width * scale) as i64, (height * scale) as i64);
+        let work = self.work_area();
+        let corner = (work.right() - w - i64::from(CORNER_RIGHT), work.bottom() - h);
+        // the C#'s int cast of the move up, which a height that isn't finite saturates
+        let saved = saved.map(|p| {
+            (
+                p.left.into(),
+                i64::from(p.top) - i64::from(((height - p.window_height) * scale) as i32),
+            )
+        });
+        // the pet's part of the window (its bottom 120 px) shows on some screen, 80 px of it across at least
+        let shows = |(x, y): (i64, i64)| {
+            self.screens.iter().map(|s| s.bounds).any(|b| {
+                x + w - 80 > b.left() && x + 80 < b.right() && y + h - 120 > b.top() && y + h - 60 < b.bottom()
+            })
+        };
+        whole_px(saved.filter(|&at| shows(at)).unwrap_or(corner))
+    }
+
+    /// ResetPosition (MainWindow.axaml.cs:175-181): the window at the bottom of its screen's work area, 24 px from its
+    /// right edge. The window's size is rounded as .NET's Math.Round does (half to even).
+    fn corner(&self) -> (i32, i32) {
+        let scale = self.scale();
+        let w = (f64::from(SURFACE.width) * scale).round_ties_even() as i64;
+        let h = (f64::from(SURFACE.height) * scale).round_ties_even() as i64;
+        let work = self.work_area();
+        whole_px((work.right() - w - i64::from(CORNER_RIGHT), work.bottom() - h))
+    }
+
+    /// A point in desktop px, in the logical px `window::move_to` takes for this window: winit multiplies them back
+    /// by its scale factor.
+    fn logical(&self, (x, y): (i32, i32)) -> Point {
+        Point::new(x as f32 / self.scale, y as f32 / self.scale)
+    }
+}
+
+/// A point within what a window position can be.
+fn whole_px((x, y): (i64, i64)) -> (i32, i32) {
+    let px = |v: i64| v.clamp(i32::MIN.into(), i32::MAX.into()) as i32;
+    (px(x), px(y))
+}
+
+/// Reads what placing the pet window takes: its scale factor, where it is, and the screens, from the window system
+/// ([`screens::all`]), or else the window's monitor alone ([`Screen::monitor`]).
+fn locate(pet: window::Id) -> Task<Located> {
+    window::scale_factor(pet).then(move |scale| {
+        window::position(pet).then(move |at| {
+            window::run(pet, |_| screens::all()).then(move |screens| match screens {
+                Ok(screens) if !screens.is_empty() => Task::done(Located {
+                    scale,
+                    at,
+                    screens,
+                    failed: None,
+                }),
+                listed => {
+                    let failed = listed.err();
+                    window::monitor_size(pet).map(move |monitor| Located {
+                        scale,
+                        at,
+                        screens: monitor.map(|size| Screen::monitor(size, scale)).into_iter().collect(),
+                        failed: failed.clone(),
+                    })
+                }
+            })
+        })
+    })
+}
+
+/// The screens, as the window system lists them (Avalonia's `Screens.All`): their bounds and work areas in desktop
+/// px, and which is the primary one.
+#[cfg(windows)]
+mod screens {
+    use windows_sys::Win32::Foundation::{BOOL, LPARAM, RECT, TRUE};
+    use windows_sys::Win32::Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO};
+    use windows_sys::Win32::UI::WindowsAndMessaging::MONITORINFOF_PRIMARY;
+
+    use super::{Area, Screen};
+
+    /// Each monitor's rectangle and work area (without the taskbar), in physical px: winit makes the process per
+    /// monitor DPI aware.
+    pub fn all() -> Result<Vec<Screen>, String> {
+        let mut screens: Vec<Screen> = Vec::new();
+        // SAFETY: the callback runs only during the call, and gets the pointer to `screens`, which outlives it
+        let listed = unsafe { EnumDisplayMonitors(0, std::ptr::null(), Some(each), &raw mut screens as LPARAM) };
+        if listed == 0 {
+            return Err("EnumDisplayMonitors failed".into());
+        }
+        Ok(screens)
+    }
+
+    unsafe extern "system" fn each(monitor: HMONITOR, _: HDC, _: *mut RECT, screens: LPARAM) -> BOOL {
+        let none = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        let mut info = MONITORINFO {
+            cbSize: size_of::<MONITORINFO>() as u32,
+            rcMonitor: none,
+            rcWork: none,
+            dwFlags: 0,
+        };
+        // SAFETY: a monitor EnumDisplayMonitors handed over, and a MONITORINFO that says its size
+        if unsafe { GetMonitorInfoW(monitor, &mut info) } != 0 {
+            // SAFETY: `all` handed over its Vec, which nothing else touches during the enumeration
+            let screens = unsafe { &mut *(screens as *mut Vec<Screen>) };
+            screens.push(Screen {
+                bounds: area(info.rcMonitor),
+                work: area(info.rcWork),
+                primary: info.dwFlags & MONITORINFOF_PRIMARY != 0,
+            });
+        }
+        TRUE
+    }
+
+    fn area(r: RECT) -> Area {
+        Area {
+            x: r.left,
+            y: r.top,
+            width: r.right - r.left,
+            height: r.bottom - r.top,
+        }
+    }
+}
+
+/// X11 and XWayland: RandR's monitors, as winit and Avalonia read them, each with the part of the window manager's
+/// work area on it (`_NET_WORKAREA` for the current desktop, without panels and docks), as GTK reads it. The root
+/// window's coordinates are the screen's physical px. Through a connection of its own, open for the call only.
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))]
+mod screens {
+    use x11rb::connection::Connection;
+    // the randr feature comes with winit's x11rb, the version and features this crate's x11rb shares
+    use x11rb::protocol::randr::ConnectionExt as _;
+    use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _, Window};
+    use x11rb::rust_connection::RustConnection;
+
+    use super::{Area, Screen};
+
+    pub fn all() -> Result<Vec<Screen>, String> {
+        let x11 = |e: &dyn std::fmt::Display| format!("X11: {e}");
+        let (conn, screen) = x11rb::connect(None).map_err(|e| format!("cannot open the X display: {e}"))?;
+        let root = conn.setup().roots[screen].root;
+        // RandR 1.5 lists the monitors; a client says first which version it speaks
+        conn.randr_query_version(1, 5)
+            .map_err(|e| x11(&e))?
+            .reply()
+            .map_err(|e| x11(&e))?;
+        let monitors = conn
+            .randr_get_monitors(root, true)
+            .map_err(|e| x11(&e))?
+            .reply()
+            .map_err(|e| x11(&e))?
+            .monitors;
+        let work = work_area(&conn, root);
+        Ok(monitors
+            .iter()
+            .map(|m| {
+                let bounds = Area {
+                    x: m.x.into(),
+                    y: m.y.into(),
+                    width: m.width.into(),
+                    height: m.height.into(),
+                };
+                Screen {
+                    bounds,
+                    work: work.and_then(|work| within(work, bounds)).unwrap_or(bounds),
+                    primary: m.primary,
+                }
+            })
+            .collect())
+    }
+
+    /// `_NET_WORKAREA` for the current desktop (`_NET_CURRENT_DESKTOP`, else the first), where the window manager
+    /// sets it.
+    fn work_area(conn: &RustConnection, root: Window) -> Option<Area> {
+        let cardinals = |name: &[u8], count: u32| -> Option<Vec<u32>> {
+            let atom = conn.intern_atom(true, name).ok()?.reply().ok()?.atom;
+            let property = conn
+                .get_property(false, root, atom, AtomEnum::CARDINAL, 0, count)
+                .ok()?
+                .reply()
+                .ok()?;
+            Some(property.value32()?.collect())
+        };
+        let desktop = cardinals(b"_NET_CURRENT_DESKTOP", 1).and_then(|d| d.first().copied());
+        // four cardinals a desktop: x, y, width, height
+        let areas = cardinals(b"_NET_WORKAREA", 4 * 64)?;
+        let (areas, _) = areas.as_chunks::<4>();
+        let [x, y, width, height] = *desktop.and_then(|d| areas.get(d as usize)).or(areas.first())?;
+        let field = |v: u32| i32::try_from(v).ok();
+        Some(Area {
+            x: field(x)?,
+            y: field(y)?,
+            width: field(width)?,
+            height: field(height)?,
+        })
+    }
+
+    /// The part of `area` in `bounds`, unless they don't meet.
+    fn within(area: Area, bounds: Area) -> Option<Area> {
+        let (left, top) = (area.left().max(bounds.left()), area.top().max(bounds.top()));
+        let (right, bottom) = (area.right().min(bounds.right()), area.bottom().min(bounds.bottom()));
+        (right > left && bottom > top).then(|| Area {
+            x: left as i32,
+            y: top as i32,
+            width: (right - left) as i32,
+            height: (bottom - top) as i32,
+        })
+    }
+}
+
+/// macOS (not released) lists no screens here: the window's monitor alone stands in for them.
+#[cfg(not(any(
+    windows,
+    all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android")))
+)))]
+mod screens {
+    pub fn all() -> Result<Vec<super::Screen>, String> {
+        Ok(Vec::new())
+    }
 }
 
 fn level(on_top: bool) -> window::Level {
@@ -761,17 +1130,20 @@ mod tests {
         assert_eq!(at, Point::new(1920.0 - 380.0 - 24.0, 1080.0 - 600.0));
     }
 
-    /// What the shell told the host.
+    /// What the shell told the host, which has the pet left at `saved`.
     #[derive(Clone, Default)]
-    struct Heard(Arc<Mutex<Vec<String>>>);
+    struct Heard {
+        lines: Arc<Mutex<Vec<String>>>,
+        saved: Option<Place>,
+    }
 
     impl Heard {
         fn lines(&self) -> Vec<String> {
-            self.0.lock().unwrap().clone()
+            self.lines.lock().unwrap().clone()
         }
 
         fn note(&self, line: String) {
-            self.0.lock().unwrap().push(line);
+            self.lines.lock().unwrap().push(line);
         }
     }
 
@@ -785,7 +1157,7 @@ mod tests {
         }
 
         fn saved_place(&mut self) -> Option<Place> {
-            None
+            self.saved
         }
 
         fn save_place(&mut self, place: Place) {
@@ -847,6 +1219,82 @@ mod tests {
         let _ = shell.frame(start + Duration::from_millis(66));
     }
 
+    /// Screens in desktop px at `scale`, each 1920 × 1080 logical px: the primary one with a 48 px taskbar at its
+    /// bottom, and one to its left without.
+    fn screens(scale: f64) -> Vec<Screen> {
+        let px = |logical: i32| (f64::from(logical) * scale) as i32;
+        let area = |x, height| Area {
+            x: px(x),
+            y: 0,
+            width: px(1920),
+            height: px(height),
+        };
+        vec![
+            Screen {
+                bounds: area(0, 1080),
+                work: area(0, 1080 - 48),
+                primary: true,
+            },
+            Screen {
+                bounds: area(-1920, 1080),
+                work: area(-1920, 1080),
+                primary: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn the_window_goes_where_the_pet_was_left_as_placewindow_puts_it() {
+        // the hidden window opens in the primary monitor's corner, so that is the screen whose work area counts
+        let opened = start_position(SURFACE, Size::new(1920.0, 1080.0));
+        let place = |left, top, window_height| {
+            Some(Place {
+                left,
+                top,
+                window_height,
+            })
+        };
+        // per scale: the work area's corner, and how far up a window saved 420 high goes, and one saved with the
+        // old toolbar showing (378): (int)(180 × scale) and (int)(222 × scale), 1.25 × 222 = 277.5 truncated
+        for (scale, corner, up_420, up_toolbar) in [
+            (1.0, (1920 - 380 - 24, 1032 - 600), 180, 222),
+            (1.25, (2400 - 475 - 24, 1290 - 750), 225, 277),
+            (1.5, (2880 - 570 - 24, 1548 - 900), 270, 333),
+        ] {
+            let located = Located {
+                scale: scale as f32,
+                at: Some(opened),
+                screens: screens(scale),
+                failed: None,
+            };
+            let start = |saved| located.start(saved);
+            assert_eq!(start(None), corner, "nothing saved, at {scale}");
+            assert_eq!(start(place(100, 200, 600.0)), (100, 200), "at {scale}");
+            assert_eq!(start(place(100, 200, 420.0)), (100, 200 - up_420), "at {scale}");
+            assert_eq!(start(place(100, 200, 378.0)), (100, 200 - up_toolbar), "at {scale}");
+            assert_eq!(
+                start(place(-1500, 300, 600.0)),
+                (-1500, 300),
+                "the other screen, at {scale}"
+            );
+            assert_eq!(start(place(5000, 300, 600.0)), corner, "off every screen, at {scale}");
+            // a height too big for a double reads as infinity: the C#'s cast saturates, and the pet shows nowhere
+            assert_eq!(start(place(100, 200, f64::INFINITY)), corner, "at {scale}");
+        }
+        // PlaceWindow's own edges: 80 px of the window across, and the pet's bottom 60 px on the screen
+        let located = Located {
+            scale: 1.0,
+            at: None,
+            screens: screens(1.0),
+            failed: None,
+        };
+        let corner = located.start(None);
+        assert_eq!(located.start(place(1839, 300, 600.0)), (1839, 300));
+        assert_eq!(located.start(place(1840, 300, 600.0)), corner);
+        assert_eq!(located.start(place(300, 539, 600.0)), (300, 539));
+        assert_eq!(located.start(place(300, 540, 600.0)), corner);
+    }
+
     #[test]
     fn a_drop_and_a_reset_save_the_place_and_a_quit_is_heard() {
         let (mut shell, heard, _news) = shown_at(1.5);
@@ -857,23 +1305,65 @@ mod tests {
             .update(aipet_ui::Message::DragMoved(iced::Vector::new(40.0, 0.0)));
         let _ = shell.apply(Effect::Dropped);
         let _ = shell.update(Message::Dropped(Some(Point::new(100.0, 200.0))));
-        // Reset position: back to the corner of a 1280 × 720 (logical) monitor
+        // Reset position on the screen left of the primary: back in its work area's corner (ResetPosition)
         let _ = shell.apply(Effect::ResetPosition);
-        let _ = shell.update(Message::Reset(Some(Size::new(1280.0, 720.0))));
+        let on_the_left = Located {
+            scale: 1.5,
+            at: Some(Point::new(-1000.0, 100.0)),
+            screens: screens(1.5),
+            failed: None,
+        };
+        let _ = shell.update(Message::Reset(on_the_left.clone()));
         let _ = shell.apply(Effect::Quit);
-        let corner = start_position(SURFACE, Size::new(1280.0, 720.0));
         assert_eq!(
             heard.lines(),
             [
-                "save 150 300 600".to_owned(),
-                "reset".to_owned(),
-                format!("save {} {} 600", corner.x * 1.5, corner.y * 1.5),
-                "quit".to_owned(),
+                "save 150 300 600",
+                "reset",
+                // its right edge (0) less 570 and 24 px, its bottom less 900
+                "save -594 720 600",
+                "quit",
             ]
         );
         // a window system that doesn't say: nothing is saved
         let _ = shell.update(Message::Dropped(None));
         assert_eq!(heard.lines().len(), 4);
+        // where the window isn't known, the primary screen's corner, the size rounded as .NET rounds (522.5 is 522)
+        let nowhere = Located {
+            scale: 1.375,
+            at: None,
+            ..on_the_left
+        };
+        assert_eq!(nowhere.corner(), (2880 - 522 - 24, 1548 - 825));
+    }
+
+    #[test]
+    fn the_place_the_pet_was_left_is_read_at_start_and_used_once() {
+        let saved = Place {
+            left: -1500,
+            top: 300,
+            window_height: 600.0,
+        };
+        let heard = Heard {
+            saved: Some(saved),
+            ..Heard::default()
+        };
+        let ui = PetUi::new(Setup {
+            host: Box::new(heard),
+            ..Setup::detached()
+        });
+        let (mut shell, _) = Shell::boot(Launch {
+            ui,
+            news: mpsc::channel().1,
+        });
+        assert_eq!(shell.saved, Some(saved));
+        let _ = shell.update(Message::Placed(Located {
+            scale: 1.0,
+            at: None,
+            screens: screens(1.0),
+            failed: None,
+        }));
+        assert_eq!(shell.saved, None);
     }
 
     #[test]

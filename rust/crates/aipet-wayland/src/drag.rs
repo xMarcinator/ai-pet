@@ -11,10 +11,12 @@
 //! place of the surface at once, but with its `layers` animation on, every change of the surface's position (by its
 //! margins, or by a resize that moves its top-left corner) slides there over the animation's time. A resize that
 //! keeps the top-left corner shows the old frame, unscaled, until the new one comes.
+//!
+//! Where the pet was left ([`Place`], which either shell saves) is a home on an output, and back ([`Screen`]).
 
 use std::time::{Duration, Instant};
 
-use aipet_ui::{Message as Pet, SPRITE, SURFACE};
+use aipet_ui::{Message as Pet, Place, SPRITE, SURFACE};
 use iced::{Point, Size, Vector};
 
 /// How far (|dx| + |dy|, px) the pointer gets from the press before it is a drag, as in the C#'s Sprite_Moved
@@ -249,6 +251,25 @@ impl Drag {
     pub fn placed(&self) -> Option<(Point, Output)> {
         let output = self.output.filter(|_| !self.active())?;
         Some((origin(self.home, output), output))
+    }
+
+    /// Where the surface is at rest, or comes to rest once the drag that just ended has put it there: the place a drop
+    /// leaves the pet at.
+    pub fn destination(&self) -> Home {
+        match self.phase {
+            Phase::Returning { home, .. } => home,
+            _ => self.home,
+        }
+    }
+
+    /// Moves the surface to `home` (kept on the output, if known), unless a drag is on: what it takes of the surface.
+    pub fn place(&mut self, home: Home) -> Vec<Action> {
+        let home = clamp(home, self.output);
+        if self.active() || home == self.home {
+            return Vec::new();
+        }
+        self.home = home;
+        vec![move_to(home, self.output)]
     }
 
     /// The surface is gone, or made anew at home: whatever drag was on is over. A pet still held is let go, with
@@ -661,6 +682,78 @@ fn place(top_left: Point, output: Output) -> Point {
     origin(clamp(home_at(rounded, output), Some(output)), output)
 }
 
+/// An output as placement sees it (one of the C#'s screens): where it is in the compositor's layout and how big, in
+/// logical px, and its scale. Desktop px, which a [`Place`] is in whichever shell saved it, are the physical px the
+/// desktop shell's windows are placed in: an output's logical rectangle times its scale, so a desktop px is a
+/// physical one of the output it is on.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Screen {
+    pub position: (i32, i32),
+    pub size: Output,
+    pub scale: f64,
+}
+
+impl Screen {
+    /// Where the surface goes on this output for `place`, as PlaceWindow puts the C#'s window: at the place's
+    /// top-left, moved up by however much taller the surface is than the window it was saved with (the pet sits at
+    /// its bottom), with the sprite kept on the output as a drag keeps it. None when the pet wouldn't show on this
+    /// output (PlaceWindow's test of each screen, in desktop px).
+    pub fn home_for(&self, place: Place) -> Option<Home> {
+        let s = self.scale;
+        let height = f64::from(SURFACE.height);
+        // the window as the C# sizes it, (int)(Width * Scale), and its move up, cast as the C# casts it
+        let (w, h) = ((f64::from(SURFACE.width) * s) as i64, (height * s) as i64);
+        let (x, y) = (
+            i64::from(place.left),
+            i64::from(place.top) - i64::from(((height - place.window_height) * s) as i32),
+        );
+        let (left, top, right, bottom) = self.bounds();
+        if !(x + w - 80 > left && x + 80 < right && y + h - 120 > top && y + h - 60 < bottom) {
+            return None;
+        }
+        // the top-left on the output, in its logical px
+        let logical = |px: i64, at: i32| (px as f64 / s - f64::from(at)).round() as i32;
+        let (x, y) = (logical(x, self.position.0), logical(y, self.position.1));
+        let home = Home {
+            right: self.size.0 - SURFACE.width as i32 - x,
+            bottom: self.size.1 - SURFACE.height as i32 - y,
+        };
+        Some(clamp(home, Some(self.size)))
+    }
+
+    /// The place of the surface at `home` on this output: its top-left in desktop px, and its height.
+    pub fn place_at(&self, home: Home) -> Place {
+        let o = origin(home, self.size);
+        let px = |logical: f32, at: i32| ((f64::from(at) + f64::from(logical)) * self.scale).round() as i32;
+        Place {
+            left: px(o.x, self.position.0),
+            top: px(o.y, self.position.1),
+            window_height: f64::from(SURFACE.height),
+        }
+    }
+
+    /// Its rectangle in desktop px: left, top, right, bottom.
+    fn bounds(&self) -> (i64, i64, i64, i64) {
+        let px = |logical: i32| (f64::from(logical) * self.scale).round() as i64;
+        let (x, y) = self.position;
+        let (w, h) = self.size;
+        (px(x), px(y), px(x + w), px(y + h))
+    }
+}
+
+/// An output's scale, from its current mode's size (physical px) and its logical size: the ratio of their longer
+/// sides (a rotated output's mode isn't rotated), to the 120ths fractional scales come in. None for a size that says
+/// nothing.
+pub fn scale_of(mode: (i32, i32), logical: Output) -> Option<f64> {
+    let physical = mode.0.max(mode.1);
+    let logical = logical.0.max(logical.1);
+    if physical <= 0 || logical <= 0 {
+        return None;
+    }
+    let scale = (f64::from(physical) / f64::from(logical) * 120.0).round() / 120.0;
+    (scale > 0.0).then_some(scale)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -740,6 +833,7 @@ mod tests {
         let t2 = t1 + 3 * FRAME;
         assert!(matches!(d.handle(Input::Release, t2).pet, Some(Pet::DragEnded)));
         assert_eq!(d.home, Home { right: 407, bottom: 20 });
+        assert_eq!(d.destination(), d.home);
         d.handle(Input::Committed, t2);
         assert!(d.handle(Input::Press(GRAB), t2).pet.is_none());
         d.handle(Input::Redraw(t2 + FRAME), t2 + FRAME);
@@ -887,6 +981,14 @@ mod tests {
         let t2 = t1 + 4 * FRAME;
         assert!(matches!(d.handle(Input::Release, t2).pet, Some(Pet::DragEnded)));
         assert_eq!(d.offset(), Vector::ZERO);
+        // where the drop leaves it is known at the release, before the surface gets there
+        assert_eq!(
+            d.destination(),
+            Home {
+                right: 1029,
+                bottom: 830
+            }
+        );
         assert!(d.handle(Input::Redraw(t2 - FRAME), t2).actions.is_empty());
         let step = d.handle(Input::Redraw(t2 + FRAME), t2 + FRAME);
         assert_eq!(step.actions, vec![Action::Margins(-230, 1029, 830, 511), Action::Home]);
@@ -1034,5 +1136,131 @@ mod tests {
         d.handle(Input::Press(GRAB), t);
         let step = d.handle(Input::Motion(GRAB + Vector::new(-10.0, 0.0)), t);
         assert_eq!(step.actions, vec![Action::Margins(0, 430, 0, 0)]);
+    }
+
+    #[test]
+    fn a_place_moves_the_surface_at_rest_kept_on_the_output() {
+        let mut d = drag(Strategy::Margin);
+        assert_eq!(
+            d.place(Home { right: 24, bottom: 0 }),
+            vec![Action::Margins(600, 24, 0, 1516)]
+        );
+        assert!(d.place(Home { right: 24, bottom: 0 }).is_empty(), "already there");
+        // past the left edge: the sprite stops at it
+        assert_eq!(
+            d.place(Home { right: 9000, bottom: 0 }),
+            vec![Action::Margins(600, 1665, 0, -125)]
+        );
+        // not during a drag
+        d.handle(Input::Press(GRAB), Instant::now());
+        assert!(d.place(HOME).is_empty());
+    }
+
+    /// An output 2560 × 1600 px at `scale` (its logical size rounded, as compositors round it), `x` logical px right
+    /// of the layout's origin.
+    fn screen(scale: f64, x: i32) -> Screen {
+        let logical = |px: i32| (f64::from(px) / scale).round() as i32;
+        Screen {
+            position: (x, 0),
+            size: (logical(2560), logical(1600)),
+            scale,
+        }
+    }
+
+    #[test]
+    fn a_place_goes_to_margins_and_back_at_scales_1_1_25_and_1_5() {
+        for scale in [1.0, 1.25, 1.5] {
+            let first = screen(scale, 0);
+            for s in [first, screen(scale, first.size.0)] {
+                // margins, to desktop px and back: the same margins
+                for home in [
+                    HOME,
+                    Home { right: 24, bottom: 0 },
+                    Home {
+                        right: 700,
+                        bottom: 333,
+                    },
+                    Home {
+                        right: -100,
+                        bottom: 50,
+                    },
+                ] {
+                    let margins = move_to(home, Some(s.size));
+                    let back = s.home_for(s.place_at(home)).map(|home| move_to(home, Some(s.size)));
+                    assert_eq!(back, Some(margins), "{home:?} at {scale} on {s:?}");
+                }
+                // desktop px, to margins and back: the same px, or the nearest a logical px has (within one) where
+                // they fall between two
+                let (x0, ..) = s.bounds();
+                for (dx, top) in [(0, 0), (1001, 333), (1517, 601), (37, 700)] {
+                    let place = Place {
+                        left: (x0 + dx) as i32,
+                        top,
+                        window_height: 600.0,
+                    };
+                    let back = s.place_at(s.home_for(place).unwrap());
+                    let off = ((back.left - place.left).abs(), (back.top - place.top).abs());
+                    let most = if scale == 1.0 { 0 } else { 1 };
+                    assert!(
+                        off.0 <= most && off.1 <= most,
+                        "{place:?} came back {back:?} at {scale}"
+                    );
+                }
+            }
+        }
+        // worked out: at 1.5 on the 1707 × 1067 output, (1500, 600) px is (1000, 400) logical
+        let s = screen(1.5, 0);
+        let place = Place {
+            left: 1500,
+            top: 600,
+            window_height: 600.0,
+        };
+        let home = s.home_for(place).unwrap();
+        assert_eq!(move_to(home, Some(s.size)), Action::Margins(400, 327, 67, 1000));
+        // and on the output right of it, whose desktop px start at 1707 × 1.5 = 2560.5, rounded
+        let right = screen(1.5, 1707);
+        let home = right
+            .home_for(Place {
+                left: 2561 + 1500,
+                ..place
+            })
+            .unwrap();
+        assert_eq!(move_to(home, Some(right.size)), Action::Margins(400, 327, 67, 1000));
+    }
+
+    #[test]
+    fn an_old_toolbar_place_moves_up_as_placewindow_has_it_and_one_off_the_output_has_no_home() {
+        let s = screen(1.25, 0);
+        let at = |left, top, window_height| {
+            let home = s.home_for(Place {
+                left,
+                top,
+                window_height,
+            });
+            home.map(|home| origin(home, s.size))
+        };
+        assert_eq!(at(1000, 800, 600.0), Some(Point::new(800.0, 640.0)));
+        // saved with the old toolbar showing (a window 378 high): (int)(222 × 1.25) = 277 px up, and 523 px is 418.4
+        assert_eq!(at(1000, 800, 378.0), Some(Point::new(800.0, 418.0)));
+        // off the output, by PlaceWindow's measure: the window's bottom 60 px below it, or 80 px of it across not on it
+        assert_eq!(at(1000, 910, 600.0), None);
+        assert_eq!(at(2480, 800, 600.0), None);
+        assert!(at(1000, 909, 600.0).is_some() && at(2479, 800, 600.0).is_some());
+        // on it by that measure, with the sprite partly off it: the sprite is put back on it, as a drag keeps it
+        assert_eq!(at(-300, 800, 600.0), Some(Point::new(-SPRITE.x, 640.0)));
+    }
+
+    #[test]
+    fn an_outputs_scale_is_its_modes_px_over_its_logical_size_in_120ths() {
+        assert_eq!(scale_of((2560, 1600), (2560, 1600)), Some(1.0));
+        assert_eq!(scale_of((2560, 1600), (2048, 1280)), Some(1.25));
+        // a logical size the compositor rounded (1706.67): still 1.5
+        assert_eq!(scale_of((2560, 1600), (1707, 1067)), Some(1.5));
+        // turned a quarter: its mode isn't, its logical size is
+        assert_eq!(scale_of((2560, 1600), (1067, 1707)), Some(1.5));
+        assert_eq!(scale_of((2560, 1440), (1920, 1080)), Some(160.0 / 120.0));
+        // a size that says nothing: no scale, and so the default place
+        assert_eq!(scale_of((0, 0), (1920, 1080)), None);
+        assert_eq!(scale_of((2560, 1600), (0, 0)), None);
     }
 }

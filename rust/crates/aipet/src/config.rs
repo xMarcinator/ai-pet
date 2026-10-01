@@ -1,9 +1,11 @@
-//! The pet's `config.json` in memory: read once at start, changed through [`Store::change`], which notes whether
-//! anything changed (the dirty flag) and for now writes the change at once.
+//! The pet's `config.json` in memory: read once at start, then changed in one of two ways, each of which notes
+//! whether anything changed (the dirty flag):
+//! - [`Store::change`], for the settings (`Pills`, `OnTop`, `Avatar`, `Music`): written at once;
+//! - [`Store::keep`], for the window's place: kept until the next [`Store::flush`], which a drop asks for at once and
+//!   the quit at the end (`placement`).
 //!
-//! Starting and quitting never write it, so a missing or corrupt file stays as it is until the user changes something
-//! (the spec's config-write rule, R10). Still to come: the position is kept here after a drop and written on the
-//! next drop or on quit, while the settings go on being written at once.
+//! Only a real change is ever written: starting and quitting without one write nothing, so a missing or corrupt file
+//! stays as it is until the user changes something (the spec's config-write rule, R10).
 
 use std::io;
 use std::path::PathBuf;
@@ -35,18 +37,23 @@ impl Store {
         &self.config
     }
 
-    /// Changes the config. A change that changes nothing leaves it as it is; a real one makes it dirty, and is
-    /// written now.
+    /// Changes a setting, and writes the config now if that changed anything.
     pub fn change(&mut self, change: impl FnOnce(&mut Config)) -> io::Result<()> {
+        self.keep(change);
+        self.flush()
+    }
+
+    /// Changes the config without writing it: a change that changes nothing leaves it as it is, and a real one makes
+    /// it dirty, for the next [`Store::flush`] to write.
+    pub fn keep(&mut self, change: impl FnOnce(&mut Config)) {
         let before = self.config.clone();
         change(&mut self.config);
         if self.config != before {
             self.dirty = true;
         }
-        self.flush()
     }
 
-    /// Writes the config if it is dirty.
+    /// Writes the config if it is dirty. It stays dirty when the write fails, so the next flush tries again.
     pub fn flush(&mut self) -> io::Result<()> {
         if !self.dirty {
             return Ok(());
@@ -58,23 +65,23 @@ impl Store {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use aipet_core::config::LoadStatus;
 
     use super::*;
 
     /// A folder of the test's own, removed with it.
-    struct Scratch(PathBuf);
+    pub(crate) struct Scratch(PathBuf);
 
     impl Scratch {
-        fn new(test: &str) -> Scratch {
+        pub(crate) fn new(test: &str) -> Scratch {
             let dir = std::env::temp_dir().join(format!("aipet-config-{}-{test}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).unwrap();
             Scratch(dir)
         }
 
-        fn file(&self) -> PathBuf {
+        pub(crate) fn file(&self) -> PathBuf {
             self.0.join("config.json")
         }
     }
@@ -86,20 +93,13 @@ mod tests {
     }
 
     #[test]
-    fn reading_and_flushing_without_a_change_write_nothing() {
-        let scratch = Scratch::new("untouched");
-        // missing: the defaults, and still no file
+    fn a_change_that_changes_nothing_writes_nothing() {
+        let scratch = Scratch::new("no-change");
         let mut store = Store::load(scratch.file());
-        assert_eq!(store.get(), &Config::default());
-        store.flush().unwrap();
         store.change(|c| c.pills = true).unwrap();
-        assert!(!scratch.file().exists(), "the default again is no change");
-        // corrupt: the defaults, and the file stays as it is
-        std::fs::write(scratch.file(), "{not json").unwrap();
-        let mut store = Store::load(scratch.file());
-        assert_eq!(store.get(), &Config::default());
+        store.keep(|c| c.window_height = 420.0);
         store.flush().unwrap();
-        assert_eq!(std::fs::read_to_string(scratch.file()).unwrap(), "{not json");
+        assert!(!scratch.file().exists(), "the defaults again are no change");
     }
 
     #[test]
@@ -116,5 +116,19 @@ mod tests {
                 ..Config::default()
             }
         );
+    }
+
+    #[test]
+    fn a_kept_change_waits_for_the_next_flush() {
+        let scratch = Scratch::new("kept");
+        let mut store = Store::load(scratch.file());
+        store.keep(|c| c.left = Some(100));
+        assert!(!scratch.file().exists(), "kept, not written yet");
+        store.flush().unwrap();
+        assert_eq!(Config::load_from(&scratch.file()).0.left, Some(100));
+        // written, so the next flush has nothing to write
+        std::fs::remove_file(scratch.file()).unwrap();
+        store.flush().unwrap();
+        assert!(!scratch.file().exists());
     }
 }
