@@ -127,7 +127,7 @@ impl PetUi {
         });
         let plate: Element<'a, Message> = if card.content {
             mouse_area(plate)
-                .on_press(Message::CardPressed(card.id))
+                .on_press(Message::CardPressed(card.id.clone()))
                 .interaction(mouse::Interaction::Pointer)
                 .into()
         } else {
@@ -174,7 +174,7 @@ impl PetUi {
                 .width(r.width)
                 .height(r.height)
                 .padding(0)
-                .on_press(Message::Dismiss(card.id))
+                .on_press(Message::Dismiss(card.id.clone()))
                 .style(move |_, status| button::Style {
                     background: Some(
                         argb(match status {

@@ -2,11 +2,12 @@
 //!
 //! It starts in this order:
 //! 1. Velopack's startup ([`updates::startup`]), before anything else;
-//! 2. the GPU's and the shell's environment, while no other thread runs;
-//! 3. the single instance ([`single`]): when another pet runs, .NET or Rust, this one quits quietly;
+//! 2. the single instance ([`single`]), before anything but Velopack's startup, as the .NET pet takes it: when
+//!    another pet runs, .NET or Rust, this one quits quietly;
+//! 3. the GPU's and the shell's environment, while no other thread reads or writes it;
 //! 4. the update checks ([`updates::start`]);
 //! 5. the core ([`core_thread`]), with `config.json` read ([`config`]) and the platform's services;
-//! 6. the shell, until the pet quits; then the core stops.
+//! 6. the shell, until the pet quits; then the core stops, and the single instance is let go.
 //!
 //! The app's side of the pet ([`App`], the pet's [`Host`]) keeps `config.json`, tells the core of dismissed bubbles and
 //! of music, places the window ([`placement`]) and does Settings' actions.
@@ -52,6 +53,16 @@ const X11: bool = cfg!(all(
 
 fn main() -> ExitCode {
     updates::startup();
+    #[cfg(not(feature = "demo"))]
+    let instance = match only_pet() {
+        Ok(Some(instance)) => instance,
+        // another pet runs: quietly
+        Ok(None) => return ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("aipet: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
     set_gpu_defaults();
     let (wayland, why) = match choose_shell() {
         Ok(choice) => choice,
@@ -69,12 +80,16 @@ fn main() -> ExitCode {
     if !wayland && X11 {
         // X11, even in a Wayland session (see aipet_desktop): winit takes an empty WAYLAND_DISPLAY as none, and
         // libwayland, which would try wayland-0 without one, can't connect
-        // SAFETY: nothing else runs yet: no other thread reads or writes the environment (the probe starts none)
+        // SAFETY: no other thread reads or writes the environment: the Wayland probe starts none, and the single
+        // instance leaves none that does (`only_pet`)
         unsafe {
             env::set_var("WAYLAND_DISPLAY", "");
             env::remove_var("WAYLAND_SOCKET");
         }
     }
+    #[cfg(not(feature = "demo"))]
+    let result = pet(wayland, instance);
+    #[cfg(feature = "demo")]
     let result = pet(wayland);
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -91,7 +106,8 @@ fn set_gpu_defaults() {
         // a desktop pet has no business waking a discrete GPU (iced asks wgpu for the fastest one). It also dodges
         // an NVIDIA quirk: its Wayland surfaces offer an fp16 format first, which iced (with web colours) picks and
         // then fills with sRGB values the compositor takes for linear ones, washing every colour out.
-        // SAFETY: nothing else runs yet: no other thread reads or writes the environment
+        // SAFETY: no other thread reads or writes the environment: the single instance leaves none that does
+        // (`only_pet`)
         unsafe { env::set_var("WGPU_POWER_PREF", "low") };
     }
     if (cfg!(target_os = "linux") || cfg!(windows)) && env::var_os("WGPU_BACKEND").is_none() {
@@ -102,7 +118,8 @@ fn set_gpu_defaults() {
         // later. On Windows GL is transparent too, shows the pet in 0.9 s where Vulkan takes 4.5 to 7.3 s, doesn't
         // load the NVIDIA driver, and never falls back to DX12, whose window iced 0.14 can't make transparent
         // (rust/proofs/windows.md).
-        // SAFETY: nothing else runs yet: no other thread reads or writes the environment
+        // SAFETY: no other thread reads or writes the environment: the single instance leaves none that does
+        // (`only_pet`)
         unsafe { env::set_var("WGPU_BACKEND", "gl") };
     }
 }
@@ -122,25 +139,29 @@ fn choose_shell() -> Result<(bool, &'static str), String> {
     })
 }
 
-/// The pet: the single instance, the update checks, the core, and the shell until the pet quits.
+/// The single instance ([`single`]): the proof while this is the only pet, none when another pet runs, .NET or Rust.
+/// A lock that can't be taken for another reason is an error, logged too.
+///
+/// It leaves no thread that reads or writes the environment, which `main` sets after it: on Windows it starts none,
+/// and on Unix the only one, the probe's connect thread, may still be ending, but only connects a socket.
 #[cfg(not(feature = "demo"))]
-fn pet(wayland: bool) -> Result<(), String> {
+fn only_pet() -> Result<Option<single::Instance>, String> {
+    single::take(&single::Names::app()).map_err(|e| {
+        let e = format!("can't tell whether another pet runs, so this one doesn't: {e}");
+        aipet_core::log::write(&e);
+        e
+    })
+}
+
+/// The pet, the only one while `instance` is held: the update checks, the core, and the shell until the pet quits.
+#[cfg(not(feature = "demo"))]
+fn pet(wayland: bool, instance: single::Instance) -> Result<(), String> {
     use std::sync::Arc;
 
     use aipet_sprite::Avatar;
     use aipet_ui::Prefs;
     use aipet_ui::settings::Services;
 
-    let instance = match single::take(&single::Names::app()) {
-        Ok(Some(instance)) => instance,
-        // another pet runs: quietly
-        Ok(None) => return Ok(()),
-        Err(e) => {
-            let e = format!("can't tell whether another pet runs, so this one doesn't: {e}");
-            aipet_core::log::write(&e);
-            return Err(e);
-        }
-    };
     // an update downloaded earlier installs first, and the updater starts the pet again
     if !updates::start() {
         return Ok(());

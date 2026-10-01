@@ -88,9 +88,9 @@ pub enum Message {
     /// neither poked nor landing. A shell that knows the button went up after all sends [`Message::DragEnded`].
     DragCancelled,
     /// A bubble was clicked: a folded stack spreads out.
-    CardPressed(&'static str),
+    CardPressed(Arc<str>),
     /// A bubble's dismiss button was clicked.
-    Dismiss(&'static str),
+    Dismiss(Arc<str>),
     /// A menu item was chosen. The shell closes the menu.
     Menu(MenuItem),
     SelectAvatar(usize),
@@ -313,8 +313,6 @@ pub struct PetUi {
     board: Option<Arc<Board>>,
     /// The bubbles shown, in stack order (each tick refills it from the Board).
     show: Vec<Bubble>,
-    /// The Board's bubble ids, each kept once for the bubbles' `&'static str` ids.
-    ids: HashSet<&'static str>,
     /// How many reviews wait: the review bubbles shown, and those the stack leaves out.
     waiting: usize,
     /// The reviews header while it shows: how many reviews wait, its text and its width.
@@ -323,7 +321,7 @@ pub struct PetUi {
     /// When the pointer left the surface.
     left_at: Option<f64>,
     hover: bool,
-    hovered_card: Option<&'static str>,
+    hovered_card: Option<Arc<str>>,
     /// Where the pointer was at the last drag move that counted, from the press.
     drag_last: Vector,
     bubbles: bool,
@@ -375,7 +373,6 @@ impl PetUi {
             stacks: Stacks::default(),
             board: None,
             show: Vec::new(),
-            ids: HashSet::new(),
             waiting: 0,
             header: None,
             pointer: None,
@@ -483,7 +480,7 @@ impl PetUi {
                 // an empty pet you point at says how it is, as the C#'s ghost bubble
                 let asleep = self.input.state == "sleep";
                 self.show.push(Bubble {
-                    id: GHOST,
+                    id: GHOST.into(),
                     section: Section::Chats,
                     state: if asleep { "sleep" } else { "idle" },
                     title: "Claude Code".into(),
@@ -539,7 +536,7 @@ impl PetUi {
                 detail.push_str(&format!("  ·  +{more} more"));
             }
             self.show.push(Bubble {
-                id: intern(&mut self.ids, &s.id),
+                id: s.id.as_str().into(),
                 section: section_of(s),
                 state: s.eff,
                 title: Cow::Owned(s.name.clone()),
@@ -569,15 +566,15 @@ impl PetUi {
             }
             _ => None,
         };
-        let hovered = self.hovered_card;
+        let hovered = self.hovered_card.take();
         // the menu drawn inline covers the bubbles under it
         let on_menu = |p: &Point| self.inline_menu && INLINE_MENU.contains(*p);
         self.hovered_card = self.pointer.filter(|p| !on_menu(p)).and_then(|p| {
             let front_to_back = self.stacks.frames().rev();
             front_to_back
                 .filter(|(c, _)| c.content && !c.removing)
-                .find(|(c, f)| f.body().contains(p) || (hovered == Some(c.id) && f.close().contains(p)))
-                .map(|(c, _)| c.id)
+                .find(|(c, f)| f.body().contains(p) || (hovered.as_ref() == Some(&c.id) && f.close().contains(p)))
+                .map(|(c, _)| Arc::clone(&c.id))
         });
     }
 
@@ -643,7 +640,7 @@ impl PetUi {
                     self.stacks.expand(bubble.section, &self.show);
                 }
             }
-            Message::Dismiss(id) => self.dismiss(id),
+            Message::Dismiss(id) => self.dismiss(&id),
             Message::Menu(item) => match item {
                 MenuItem::Bubbles => {
                     self.bubbles = !self.bubbles;
@@ -843,7 +840,7 @@ impl PetUi {
     }
 
     fn close_visible(&self, card: &cards::Card) -> bool {
-        self.hovered_card == Some(card.id) && card.content && !card.removing
+        self.hovered_card.as_ref() == Some(&card.id) && card.content && !card.removing
     }
 
     fn header_rect(&self) -> Option<Rectangle> {
@@ -868,17 +865,6 @@ fn section_of(s: &Session) -> Section {
         "reviews" => Section::Reviews,
         _ => Section::Chats,
     }
-}
-
-/// `id` as a `&'static str`, the bubbles' id type: each id is kept once for the pet's life, a few dozen bytes for
-/// every chat, review and player the pet has shown.
-fn intern(ids: &mut HashSet<&'static str>, id: &str) -> &'static str {
-    if let Some(&kept) = ids.get(id) {
-        return kept;
-    }
-    let kept: &'static str = Box::leak(id.into());
-    ids.insert(kept);
-    kept
 }
 
 /// A frame's motion, in the view's f32.
@@ -1011,7 +997,7 @@ pub(crate) mod tests {
     }
 
     fn shows(ui: &PetUi, id: &str) -> bool {
-        ui.show.iter().any(|b| b.id == id)
+        ui.show.iter().any(|b| *b.id == *id)
     }
 
     // ------------------------------------------------------------------ the Board's bubbles and mood
@@ -1049,7 +1035,7 @@ pub(crate) mod tests {
     fn bubble<'a>(ui: &'a PetUi, id: &str) -> &'a Bubble {
         ui.show
             .iter()
-            .find(|b| b.id == id)
+            .find(|b| *b.id == *id)
             .unwrap_or_else(|| panic!("no {id}: {:?}", ui.show))
     }
 
@@ -1099,7 +1085,7 @@ pub(crate) mod tests {
         let (ui, _) = shown(board(&two));
         // the Board's order: the one that needs you first
         assert_eq!(
-            ui.show.iter().map(|b| b.id).collect::<Vec<_>>(),
+            ui.show.iter().map(|b| &*b.id).collect::<Vec<_>>(),
             ["claude:a", "codex:b"]
         );
         assert_eq!(bubble(&ui, "claude:a").detail, "Claude app · Needs your permission");
@@ -1156,7 +1142,7 @@ pub(crate) mod tests {
             ..Sources::default()
         };
         let (ui, _) = shown(board(&sources));
-        let sections: Vec<(&str, Section)> = ui.show.iter().map(|b| (b.id, b.section)).collect();
+        let sections: Vec<(&str, Section)> = ui.show.iter().map(|b| (&*b.id, b.section)).collect();
         // four chats, the last saying there's one more; the error first in the reviews, then the newest reviews
         assert_eq!(
             sections,
@@ -1268,26 +1254,17 @@ pub(crate) mod tests {
             ..Sources::default()
         };
         let (mut ui, host) = shown(board(&sources));
-        ui.update(Message::Dismiss(bubble(&ui, "claude:a").id));
+        ui.update(Message::Dismiss(bubble(&ui, "claude:a").id.clone()));
         assert_eq!(host.dismissed(), ["claude:a"]);
         // the bubble goes with the core's next Board, not before
         ui.tick(Instant::now());
         assert!(shows(&ui, "claude:a"));
-        ui.update(Message::Dismiss(GHOST));
+        ui.update(Message::Dismiss(GHOST.into()));
         assert_eq!(host.dismissed(), ["claude:a"], "the ghost isn't the core's");
 
         ui.update(Message::SetBubbles(false));
         ui.tick(Instant::now());
         assert!(ui.show.is_empty() && ui.header.is_none());
-    }
-
-    #[test]
-    fn a_bubble_id_is_kept_once() {
-        let mut ids = HashSet::new();
-        let a = intern(&mut ids, "claude:a");
-        let again = intern(&mut ids, &String::from("claude:a"));
-        assert!(std::ptr::eq(a, again));
-        assert_eq!((intern(&mut ids, "codex:b"), ids.len()), ("codex:b", 2));
     }
 
     // ------------------------------------------------------------------ preferences and the shell's part
@@ -1433,7 +1410,7 @@ pub(crate) mod tests {
         let start = Instant::now();
         run(&mut ui, start, 0.0, 3.0);
         assert!(shows(&ui, CLAUDE));
-        ui.update(Message::Dismiss(bubble(&ui, CLAUDE).id));
+        ui.update(Message::Dismiss(bubble(&ui, CLAUDE).id.clone()));
         // still thinking: it stays away (though its thinking dots count on)
         run(&mut ui, start, 3.0, 2.5);
         assert!(!shows(&ui, CLAUDE));
@@ -1443,7 +1420,7 @@ pub(crate) mod tests {
 
         // the review doesn't change: it stays away until it goes, and is back when it comes again
         run(&mut ui, start, 6.5, 8.0);
-        ui.update(Message::Dismiss(bubble(&ui, REVIEW).id));
+        ui.update(Message::Dismiss(bubble(&ui, REVIEW).id.clone()));
         run(&mut ui, start, 14.5, 16.0);
         assert!(!shows(&ui, REVIEW));
         run(&mut ui, start, 30.5, 1.0);
@@ -1457,14 +1434,14 @@ pub(crate) mod tests {
         let mut ui = demo();
         let start = Instant::now();
         run(&mut ui, start, 0.0, 3.2);
-        ui.update(Message::Dismiss(bubble(&ui, CLAUDE).id));
+        ui.update(Message::Dismiss(bubble(&ui, CLAUDE).id.clone()));
         run(&mut ui, start, 3.2, 1.3);
         ui.update(Message::PointerMoved(Point::new(190.0, 530.0)));
         run(&mut ui, start, 4.5, 1.0);
         assert!(ui.sprite_hit(Point::new(190.0, 530.0)));
-        assert_eq!(ui.show.iter().map(|b| b.id).collect::<Vec<_>>(), [GHOST]);
+        assert_eq!(ui.show.iter().map(|b| &*b.id).collect::<Vec<_>>(), [GHOST]);
         // dismissing the ghost doesn't keep it away (as in the C#, whose board never has it)
-        ui.update(Message::Dismiss(GHOST));
+        ui.update(Message::Dismiss(GHOST.into()));
         run(&mut ui, start, 5.5, 0.1);
         assert!(shows(&ui, GHOST));
     }
@@ -1502,7 +1479,7 @@ pub(crate) mod tests {
         let p = Point::new(190.0, 440.0);
         assert!(INLINE_MENU.contains(p));
         ui.update(Message::PointerMoved(p));
-        assert_eq!(ui.hovered_card, Some(CLAUDE));
+        assert_eq!(ui.hovered_card.as_deref(), Some(CLAUDE));
         let with_badge = ui.hit_rects().len();
         ui.set_inline_menu(true);
         assert_eq!(ui.hovered_card, None, "no dismiss button beside the menu");

@@ -840,7 +840,7 @@ mod tests {
             position: SPRITE_MIDDLE,
         };
         assert_eq!(scope(pet(Event::Mouse(moved))), Scope::Window(id));
-        assert_eq!(scope(Message::Ui(Ui::Dismiss("claude"))), Scope::Window(id));
+        assert_eq!(scope(Message::Ui(Ui::Dismiss("claude".into()))), Scope::Window(id));
         assert_eq!(scope(Message::Ui(Ui::Menu(MenuItem::Bubbles))), Scope::All);
         assert_eq!(scope(Message::Ui(Ui::SetMusic(true))), Scope::All);
     }
