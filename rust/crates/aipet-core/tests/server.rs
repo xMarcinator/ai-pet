@@ -476,7 +476,10 @@ fn close_time(closed: &mpsc::Receiver<Duration>) -> Option<Duration> {
     closed.recv_timeout(TIMEOUT + Duration::from_secs(10)).ok()
 }
 
-/// Every CPU busy, twice over, until dropped: threads spinning at normal priority.
+/// Every CPU busy, twice over, until dropped: threads spinning below normal priority. They take every cycle nothing
+/// else wants, so the pet's threads, at normal priority, are what is being held to the hooks' 2 s. At normal priority,
+/// on a 2-CPU CI runner, they timed the OS's scheduling of 20 new processes against 4 spinners rather than the pet:
+/// the C# test this ports starves .NET's thread pool, not the CPUs.
 struct Busy {
     stop: Arc<AtomicBool>,
     spinning: Arc<AtomicUsize>,
@@ -491,6 +494,7 @@ impl Busy {
             .map(|_| {
                 let (stop, spinning) = (Arc::clone(&stop), Arc::clone(&spinning));
                 thread::spawn(move || {
+                    below_normal_priority();
                     spinning.fetch_add(1, Ordering::SeqCst);
                     while !stop.load(Ordering::Relaxed) {
                         std::hint::spin_loop();
@@ -517,6 +521,28 @@ impl Busy {
 
     fn all_spinning(&self) -> bool {
         self.spinning.load(Ordering::SeqCst) == self.threads.len()
+    }
+}
+
+/// The calling thread below normal priority. On Linux a nice value is per thread; elsewhere on Unix it would be the
+/// whole test process's, so there the thread is left as it is.
+fn below_normal_priority() {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Threading::{
+            GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL,
+        };
+        // SAFETY: the calling thread's pseudo handle
+        let ok = unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL) };
+        assert_ne!(ok, 0, "{}", std::io::Error::last_os_error());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: gettid has no preconditions
+        let tid = unsafe { libc::syscall(libc::SYS_gettid) } as libc::id_t;
+        // SAFETY: this thread's own id
+        let rc = unsafe { libc::setpriority(libc::PRIO_PROCESS, tid, 10) };
+        assert_eq!(rc, 0, "{}", std::io::Error::last_os_error());
     }
 }
 

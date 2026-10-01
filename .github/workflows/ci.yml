@@ -93,6 +93,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # a fresh unsigned exe gets scanned on every start, which the tests' time budgets would feel; best effort, as in
+      # cross-runtime.yml
+      - name: Leave rust/target to Defender's exclusions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          try { Add-MpPreference -ExclusionPath (Join-Path $env:GITHUB_WORKSPACE 'rust\target') -ErrorAction Stop }
+          catch { Write-Output "No Defender exclusion: $($_.Exception.Message)" }
       # aipet-wayland links libxkbcommon
       - name: Linux build dependencies
         if: runner.os == 'Linux'
@@ -117,8 +125,9 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # every test binary runs even when one fails, so a run shows every failure at once
       - name: Test
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
         env:
           AIPET_GOLDEN: ${{ github.workspace }}/rust/golden/bin/Release/net10.0/aipet-golden.dll
           # aipet-core's Credential Manager test writes a throwaway entry, which only a CI runner should get
