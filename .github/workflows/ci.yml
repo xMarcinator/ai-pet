@@ -1,7 +1,8 @@
 # CI: builds the solution and runs its tests on Windows and Linux, checks that the plugin's hook files are what the
-# hook code makes of its event tables, and that the install and build scripts at least parse and stay executable. The
-# Rust workspace (rust/) gets its format, lints and tests on Windows and Linux, and a compile check on macOS.
-# Nothing is published here: see release.yml.
+# hook that ships (the Rust one) makes of its event tables, and that the install and build scripts at least parse and
+# stay executable. The Rust workspace (rust/) gets its format, lints and tests on Windows and Linux, and a compile check
+# on macOS. The Rust hook's start-up is timed against the NativeAOT hook's it replaces. Nothing is published here: see
+# release.yml.
 name: CI
 
 on:
@@ -36,19 +37,42 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
+      # the workspace's rust-version, as in the rust job: the hook that ships is the Rust one
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
       - name: Build
         run: dotnet build AiPet.slnx -c Release --nologo
-      # The tests run the hook just built (dotnet aipet-hook.dll) against a HookServer on a temp pipe or socket, with
-      # temp data and temp folders, so nothing of the runner's user is touched. Windows is where the pet's cut-off of
-      # a silent client (CancelIoEx) is tried out.
+      - name: Build the Rust hook
+        working-directory: rust
+        run: cargo build -p aipet-hook --release --locked
+      # The tests run the .NET hook just built (dotnet aipet-hook.dll) against a HookServer on a temp pipe or socket,
+      # with temp data and temp folders, so nothing of the runner's user is touched. Windows is where the pet's cut-off
+      # of a silent client (CancelIoEx) is tried out. (cross-runtime.yml runs them against the Rust hook.)
       - name: Test
         run: dotnet test AiPet.slnx -c Release --nologo --no-build
+      # The Rust hook carries the .NET hook's Windows resources byte for byte: the icon, the manifest and the version
+      # resource that names aipet-hook.exe, from its build script. The test must have run, not been skipped.
+      - name: The Rust hook's resources, against the .NET hook's
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          AIPET_TEST_HOOK: ${{ github.workspace }}/rust/target/release/aipet-hook.exe
+        run: |
+          set -o pipefail
+          dotnet test AiPet.slnx -c Release --nologo --no-build --filter "FullyQualifiedName~AiPet.Tests.ResourceTests.RustHook" \
+            2>&1 | tee resources.log
+          passed=$(sed -nE 's/.*Passed: *([0-9]+),.*/\1/p' resources.log | tail -n 1)
+          [ "${passed:-0}" -eq 1 ]
       # Manifests, hook files and marketplaces: valid JSON, the name aipet and one version, and the hook files exactly
-      # what the hook just built prints for them (aipet-hook --print-plugin-hooks), so the plugin can't drift from the
-      # code. On both OSes, since each builds its own hook; the release checks its Linux one again.
+      # what the Rust hook just built prints for them (aipet-hook --print-plugin-hooks), so the plugin can't drift from
+      # the code. On both OSes, since each builds its own hook; the release checks its Linux one again.
       - name: Check the plugin and marketplace files
         shell: bash
-        run: bash scripts/check-plugin.sh --marketplaces . plugins/aipet --hook dotnet src/AiPet.Hook/bin/Release/net10.0/aipet-hook.dll
+        run: bash scripts/check-plugin.sh --marketplaces . plugins/aipet --hook rust/target/release/aipet-hook
 
       # The PowerShell scripts can't be tried out here, but they must at least parse, in Windows PowerShell 5.1 too:
       # that's what `irm ... | iex` usually runs in.
@@ -159,6 +183,97 @@ jobs:
           workspaces: rust
       - name: Check
         run: cargo check --workspace --all-targets --locked
+
+  # The hook runs on every agent event, so it must start fast: the Rust hook's median start-to-exit time on the event
+  # path, with no pet, may be at most 10 % over that of the NativeAOT hook it replaces, on the same runner. bash runs
+  # each 200 times, as an agent's shell would, the two in turns so that a busy moment on the runner slows both.
+  hook-startup:
+    name: Hook start-up (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2022, rid: win-x64 }
+          - { os: ubuntu-22.04, rid: linux-x64 }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      RID: ${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # a fresh unsigned exe gets scanned when it starts, which would be timed too; best effort, as in the rust job
+      - name: Leave the hooks to Defender's exclusions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($dir in 'rust\target', 'out') {
+            try { Add-MpPreference -ExclusionPath (Join-Path $env:GITHUB_WORKSPACE $dir) -ErrorAction Stop }
+            catch { Write-Output "No Defender exclusion for ${dir}: $($_.Exception.Message)" }
+          }
+      # NativeAOT links with clang on Linux
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      # as the release builds it: on Windows with the C runtime linked in
+      - name: Build the Rust hook
+        working-directory: rust
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then export RUSTFLAGS="-C target-feature=+crt-static"; fi
+          cargo build -p aipet-hook --release --locked --target-dir target/startup
+      - name: Publish the NativeAOT hook
+        run: |
+          # NativeAOT finds the MSVC linker through vswhere
+          if [ "$RUNNER_OS" = Windows ]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
+          dotnet publish src/AiPet.Hook/AiPet.Hook.csproj -c Release -r "$RID" -o out/aot -p:PublishAot=true -p:DebugType=none --nologo
+          # a managed (non-AOT) publish would leave aipet-hook.dll next to the exe
+          if [ -f out/aot/aipet-hook.dll ]; then echo "::error::The hook wasn't compiled natively"; ls -la out/aot; exit 1; fi
+      - name: Time both hooks
+        run: |
+          exe=; if [ "$RUNNER_OS" = Windows ]; then exe=.exe; fi
+          rust="rust/target/startup/release/aipet-hook$exe" aot="out/aot/aipet-hook$exe" runs=200
+          # no pet: an endpoint nothing listens on (a pipe name on Windows, a socket path on Linux), and folders of the
+          # runner's temp folder
+          if [ "$RUNNER_OS" = Windows ]; then export AIPET_PIPE="AiPet-startup-$GITHUB_RUN_ID-$RANDOM"
+          else export AIPET_PIPE="$RUNNER_TEMP/aipet-startup.sock"; fi
+          export AIPET_DATA_DIR="$RUNNER_TEMP/aipet-data" TMPDIR="$RUNNER_TEMP" TMP="$RUNNER_TEMP" TEMP="$RUNNER_TEMP"
+          printf '%s' '{"hook_event_name":"PreToolUse","session_id":"startup","tool_name":"Bash","tool_input":{"command":"ls"}}' > event.json
+          for i in 1 2 3 4 5; do "$rust" < event.json; "$aot" < event.json; done  # the file cache, and the first scans
+          : > rust.times; : > aot.times
+          for i in $(seq "$runs"); do
+            if [ $((i % 2)) = 0 ]; then order="rust aot"; else order="aot rust"; fi
+            for hook in $order; do
+              # EPOCHREALTIME: microseconds, and no process started to read them
+              t0=$EPOCHREALTIME
+              "${!hook}" --agent claude < event.json
+              t1=$EPOCHREALTIME
+              echo "${t0//[!0-9]/} ${t1//[!0-9]/}" >> "$hook.times"
+            done
+          done
+          median() { awk '{ print $2 - $1 }' "$1" | sort -n | awk '{ v[NR] = $1 } END { print (NR % 2) ? v[(NR + 1) / 2] : (v[NR / 2] + v[NR / 2 + 1]) / 2 }'; }
+          r=$(median rust.times) a=$(median aot.times)
+          ms() { awk -v us="$1" 'BEGIN { printf "%.2f ms", us / 1000 }'; }
+          {
+            echo "Hook start-up on $RUNNER_OS, the median of $runs runs each, with no pet:"
+            echo "- Rust: $(ms "$r")"
+            echo "- NativeAOT: $(ms "$a")"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          if ! awk -v r="$r" -v a="$a" 'BEGIN { exit !(r <= a * 1.1) }'; then
+            echo "::error::The Rust hook takes $(ms "$r") to start and exit, over 10 % more than the NativeAOT hook's $(ms "$a")"
+            exit 1
+          fi
 
   scripts:
     name: Shell scripts
