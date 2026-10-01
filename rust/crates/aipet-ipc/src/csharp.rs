@@ -1,7 +1,8 @@
 //! The Rust held against the C# itself, while the C# is in the repository:
 //! - every constant of `src/AiPet.Core/Ipc.cs`, read from its source;
 //! - the endpoint, the data paths and the user's folders the C# finds in the same environments. The golden
-//!   generator's `ipc` mode (`rust/golden/IpcMode.cs`) prints them; this runs it when `AIPET_GOLDEN` names its dll.
+//!   generator's `ipc` mode (`rust/golden/IpcMode.cs`) prints them, and this test's own binary prints the Rust's,
+//!   each a process started in the scenario's environment; this runs both when `AIPET_GOLDEN` names the dll.
 //!   CI does; locally: `dotnet build rust/golden -c Release`, then
 //!   `AIPET_GOLDEN=$PWD/rust/golden/bin/Release/net10.0/aipet-golden.dll cargo test -p aipet-ipc` from the
 //!   repository root.
@@ -11,9 +12,8 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::endpoint::endpoint_in;
-use crate::paths::{Folders, codex_home_in, data_dir_in};
 use crate::protocol::*;
+use crate::{endpoint, paths};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("..")
@@ -174,7 +174,9 @@ fn scenarios(scratch: &Path) -> Vec<Scenario> {
                 set("CODEX_HOME", format!("{forward}/codex")),
             ],
             vec![set("AIPET_DATA_DIR", r"..\data")],
-            // the known folders don't follow the variables
+            // the profile stays, as the profile list gives it. LocalAppData is the registry's
+            // %USERPROFILE%\AppData\Local, expanded with the asking process's USERPROFILE; C:\nowhere\AppData\Local
+            // doesn't exist, so the shell gives none and LOCALAPPDATA stands in, for the C# and the Rust alike
             [
                 no_overrides(),
                 vec![set("LOCALAPPDATA", r"C:\nowhere"), set("USERPROFILE", r"C:\nowhere")],
@@ -209,33 +211,62 @@ fn scenarios(scratch: &Path) -> Vec<Scenario> {
     all
 }
 
-/// What the golden generator's ipc mode prints, and the Rust's own values under the same names.
-fn rust_paths(vars: &dyn Fn(&str) -> Option<OsString>) -> BTreeMap<String, Option<String>> {
-    let folders = Folders::of(vars);
-    let data_dir = data_dir_in(vars, &folders);
+/// The command, to be started in the scenario's environment: the test's own, with the scenario's variables set or
+/// removed.
+fn in_scenario<'a>(command: &'a mut Command, scenario: &Scenario) -> &'a mut Command {
+    for (name, value) in scenario {
+        match value {
+            Some(value) => command.env(name, value),
+            None => command.env_remove(name),
+        };
+    }
+    command
+}
+
+/// Set only for the child [`paths_equal_the_csharps_in_the_same_environment`] starts: without it,
+/// [`print_this_process_paths`] does nothing.
+const CHILD: &str = "AIPET_IPC_TEST_PATHS_CHILD";
+/// What the child writes before its values, so the test harness's own output can be told apart.
+const MARK: &str = "aipet-ipc paths: ";
+
+/// What the golden generator's ipc mode prints, under the same names: the values the hook and the pet read in this
+/// process's environment, through the same calls and caches.
+fn rust_paths() -> BTreeMap<String, Option<String>> {
     let text = |p: &Path| Some(p.to_str().expect("a UTF-8 path").to_owned());
     #[cfg(unix)]
-    let effective_uid = crate::endpoint::effective_uid();
+    let effective_uid = endpoint::effective_uid();
     // the C#'s reads /proc/self/status
     #[cfg(windows)]
     let effective_uid = None;
     [
         (
             "endpoint",
-            Some(endpoint_in(vars).into_string().expect("a UTF-8 endpoint")),
+            Some(endpoint::endpoint().to_str().expect("a UTF-8 endpoint").to_owned()),
         ),
-        ("data_dir", text(&data_dir)),
-        ("config", text(&data_dir.join("config.json"))),
-        ("log", text(&data_dir.join("aipet.log"))),
-        ("hook_events_log", text(&data_dir.join("hook-events.log"))),
-        ("codex_home", text(&codex_home_in(vars, &folders.home))),
-        ("home", text(&folders.home)),
-        ("local_app_data", text(&folders.local_app_data)),
+        ("data_dir", text(paths::data_dir())),
+        ("config", text(&paths::config())),
+        ("log", text(&paths::log())),
+        ("hook_events_log", text(&paths::hook_events_log())),
+        ("codex_home", text(&paths::codex_home())),
+        ("home", text(paths::home())),
+        ("local_app_data", text(paths::local_app_data())),
         ("effective_uid", effective_uid),
     ]
     .into_iter()
     .map(|(name, value)| (name.to_owned(), value))
     .collect()
+}
+
+/// The Rust's half of [`paths_equal_the_csharps_in_the_same_environment`]: in the child it starts in the scenario's
+/// environment, [`rust_paths`] as one JSON line after [`MARK`]. A process of its own, as the C#'s half is, because
+/// the shell gives the known folders from the environment of the process that asks (see `paths::Folders::of`).
+#[test]
+#[ignore = "run by paths_equal_the_csharps_in_the_same_environment, in each scenario's environment"]
+fn print_this_process_paths() {
+    if std::env::var_os(CHILD).is_none() {
+        return;
+    }
+    println!("{MARK}{}", serde_json::to_string(&rust_paths()).unwrap());
 }
 
 #[test]
@@ -249,17 +280,14 @@ fn paths_equal_the_csharps_in_the_same_environment() {
         std::fs::create_dir_all(scratch.0.join(dir)).unwrap();
     }
     std::fs::create_dir_all(scratch.0.join("l".repeat(104))).unwrap();
+    // the helper's name as the test harness knows it: its path in the crate
+    let (_, module) = module_path!().split_once("::").expect("a module of the crate");
+    let helper = format!("{module}::print_this_process_paths");
 
     for scenario in scenarios(&scratch.0) {
-        let mut csharp = Command::new("dotnet");
-        csharp.arg(&golden).arg("ipc");
-        for (name, value) in &scenario {
-            match value {
-                Some(value) => csharp.env(name, value),
-                None => csharp.env_remove(name),
-            };
-        }
-        let out = csharp.output().expect("dotnet runs the golden generator");
+        let out = in_scenario(Command::new("dotnet").arg(&golden).arg("ipc"), &scenario)
+            .output()
+            .expect("dotnet runs the golden generator");
         assert!(
             out.status.success(),
             "{scenario:?}: {}",
@@ -267,10 +295,23 @@ fn paths_equal_the_csharps_in_the_same_environment() {
         );
         let csharp: BTreeMap<String, Option<String>> = serde_json::from_slice(&out.stdout).expect("one JSON object");
 
-        let vars = |name: &str| match scenario.iter().find(|(set, _)| *set == name) {
-            Some((_, value)) => value.clone(),
-            None => std::env::var_os(name),
+        let mut child = Command::new(std::env::current_exe().expect("this test's binary"));
+        child
+            .args([helper.as_str(), "--exact", "--ignored", "--nocapture"])
+            .env(CHILD, "1");
+        let out = in_scenario(&mut child, &scenario)
+            .output()
+            .expect("this test's binary runs");
+        let said = String::from_utf8_lossy(&out.stdout);
+        // the harness may have written the test's name before it, on the same line
+        let values = said.split_once(MARK).and_then(|(_, rest)| rest.lines().next());
+        let rust: BTreeMap<String, Option<String>> = match values {
+            Some(line) if out.status.success() => serde_json::from_str(line).expect("one JSON object"),
+            _ => panic!(
+                "{scenario:?}: the child printed no values:\n{said}{}",
+                String::from_utf8_lossy(&out.stderr)
+            ),
         };
-        assert_eq!(rust_paths(&vars), csharp, "{scenario:?}");
+        assert_eq!(rust, csharp, "{scenario:?}");
     }
 }

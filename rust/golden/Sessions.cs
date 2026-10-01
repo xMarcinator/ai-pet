@@ -704,7 +704,7 @@ static class SessionsMode
             ("mention-only", new[] { Part.T(TitleLine("fallback") + UserLine("rename it with \"custom-title\" please")) }),
             ("nested", new[] { Part.T(TitleLine("fallback") + "{\"type\":\"custom-title\",\"data\":{\"customTitle\":\"nested\"}}\n") }),
             ("key-case", new[] { Part.T(TitleLine("fallback") + "{\"type\":\"custom-title\",\"customtitle\":\"lower\"}\n") }),
-            ("nul", new[] { Part.T(TitleLine("a\u0000b")) }),
+            ("nul-char", new[] { Part.T(TitleLine("a\u0000b")) }),
             ("surrogate-cut", new[] { Part.T(TitleLine(new string('a', 42) + "😀 and more")) }),
             ("big-number", new[] { Part.T("{\"type\":\"custom-title\",\"customTitle\":\"big number\",\"n\":1e400,\"m\":-0,\"k\":1.50}\n") }),
             ("trailing-garbage", new[] { Part.T(TitleLine("fallback") + "{\"type\":\"custom-title\",\"customTitle\":\"garbage\"} x\n") }),

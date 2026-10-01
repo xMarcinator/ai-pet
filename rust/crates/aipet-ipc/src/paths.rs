@@ -102,8 +102,11 @@ impl Folders {
         }
     }
 
-    /// Windows (`Environment.Win32.cs`): the known folders, which the variables don't change; `LOCALAPPDATA` and
-    /// `USERPROFILE` only stand in when the shell can't give one.
+    /// Windows (`Environment.Win32.cs`): the known folders, as the shell gives them to the process that asks, and
+    /// `LOCALAPPDATA` and `USERPROFILE` only stand in when it gives none. The profile comes from the profile list,
+    /// which no variable moves. LocalAppData is the registry's path for it (by default `%USERPROFILE%\AppData\Local`)
+    /// expanded with this process's `USERPROFILE`, and the shell gives it only when that folder exists: so it follows
+    /// `USERPROFILE`, and `LOCALAPPDATA` stands in where `<USERPROFILE>\AppData\Local` doesn't exist.
     #[cfg(windows)]
     pub(crate) fn of(vars: Vars) -> Folders {
         use windows_sys::Win32::UI::Shell::{FOLDERID_LocalAppData, FOLDERID_Profile};
