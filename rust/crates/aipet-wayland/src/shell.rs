@@ -10,7 +10,10 @@
 //! else. Settings opens in a window of its own, one at a time (`AIPET_OPEN_SETTINGS=1` opens it at start).
 //!
 //! The pet moves on every [`PetUi::frame_interval`] (30 or 60 times a second), and only its surface is drawn for
-//! that: its own frames and the pointer's news draw nothing, so it doesn't draw at the display's rate.
+//! that: its own frames and the pointer's news draw nothing, so it doesn't draw at the display's rate. The core's news
+//! is picked up on each of those frames and handed to the pet. The app's hooks ([`aipet_ui::Host`]) hear of a drop,
+//! a reset and the quit; where a drop or a reset leaves the surface, in desktop pixels, isn't worked out yet, nor is
+//! the place the pet was left read at start.
 //!
 //! The runtime knows a surface by its id only once it exists, and an action for an id that never appears waits
 //! forever: windows are closed only once they have appeared, and a popup or Settings that doesn't appear in time is
@@ -18,9 +21,11 @@
 //! pet's, which is made again when its output goes away.
 
 use std::collections::BTreeSet;
+use std::sync::Mutex;
+use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-use aipet_ui::{Effect, INLINE_MENU, MENU, PetUi, Rect, SPRITE, SURFACE};
+use aipet_ui::{Effect, INLINE_MENU, Launch, MENU, News, PetUi, Rect, SPRITE, SURFACE};
 use iced::widget::{Space, container, pin};
 use iced::{Color, Element, Event, Point, Rectangle, Subscription, Task, Theme, event, mouse, theme, time, window};
 use iced_exwlshell::actions::{ActionCallback, IcedNewPopupSettings, IcedXdgWindowSettings};
@@ -36,12 +41,13 @@ use wayland_client::Connection;
 
 use crate::drag::{Action, Drag, Home, Input, Strategy};
 
-/// The layer-shell namespace: compositor rules can match it (and it is not the real pet's).
-const NAMESPACE: &str = "aipet-spike";
-/// Where the surface starts: this far left of the output's bottom-right corner (the real pet lives in the corner).
-const START: Home = Home { right: 420, bottom: 0 };
-const SETTINGS_TITLE: &str = "AiPet Settings";
-const SETTINGS_SIZE: (u32, u32) = (560, 640);
+/// The layer-shell namespace, which compositor rules match.
+const NAMESPACE: &str = "aipet";
+/// Where the surface starts: this far left of the output's bottom-right corner (PlaceWindow's default).
+const START: Home = Home { right: 24, bottom: 0 };
+/// Settings' title and size, as the .NET pet's (SettingsWindow.axaml): the packaged window rules match the title.
+const SETTINGS_TITLE: &str = "AiPet · Settings";
+const SETTINGS_SIZE: (u32, u32) = (800, 640);
 /// How long the menu's popup and Settings may take to appear before they are given up on (Settings is the first
 /// surface when it opens at start, and waits for the renderer).
 const POPUP_PATIENCE: Duration = Duration::from_millis(500);
@@ -125,6 +131,8 @@ impl Region {
 
 struct Shell {
     ui: PetUi,
+    /// The core's news, handed to the pet every frame.
+    news: Receiver<News>,
     pet: window::Id,
     surface: Surface,
     drag: Drag,
@@ -142,8 +150,10 @@ struct Shell {
     debug: Option<Instant>,
 }
 
-/// Runs the pet on `connection`, which must offer layer-shell (see `probe`).
+/// Runs the pet the app handed over ([`Launch::hand_over`]) on `connection`, which must offer layer-shell (see
+/// `probe`).
 pub fn run(connection: Connection) -> Result<(), String> {
+    let launch = Launch::take().ok_or("no pet was handed over to the Wayland shell")?;
     let strategy = Strategy::from_env()?;
     let open_settings = std::env::var_os("AIPET_OPEN_SETTINGS").is_some_and(|v| v == "1");
     // nothing to type anywhere (Settings has switches and buttons): spare the clipboard's worker thread
@@ -151,8 +161,14 @@ pub fn run(connection: Connection) -> Result<(), String> {
     // known before the daemon starts, so the 'static redraw scope can name it
     let pet = window::Id::unique();
     let (shell_tx, shell_rx) = iced_exwlshell::shell::channel();
+    // the daemon boots once
+    let launch = Mutex::new(Some(launch));
     iced_exwlshell::daemon(
-        move || Shell::boot(pet, strategy, shell_rx.clone(), open_settings),
+        move || {
+            let launch = launch.lock().ok().and_then(|mut launch| launch.take());
+            let launch = launch.expect("the Wayland shell boots once");
+            Shell::boot(pet, strategy, shell_rx.clone(), open_settings, launch)
+        },
         NAMESPACE,
         Shell::update,
         Shell::view,
@@ -181,12 +197,19 @@ pub fn run(connection: Connection) -> Result<(), String> {
 }
 
 impl Shell {
-    fn boot(pet: window::Id, strategy: Strategy, shell: ShellReceiver, open_settings: bool) -> (Self, Task<Message>) {
+    fn boot(
+        pet: window::Id,
+        strategy: Strategy,
+        shell: ShellReceiver,
+        open_settings: bool,
+        launch: Launch,
+    ) -> (Self, Task<Message>) {
         let debug = std::env::var_os("AIPET_DEBUG")
             .is_some_and(|v| v == "1")
             .then(Instant::now);
         let mut me = Shell {
-            ui: PetUi::new(),
+            ui: launch.ui,
+            news: launch.news,
             pet,
             surface: Surface::Gone,
             drag: Drag::new(strategy, START),
@@ -231,6 +254,9 @@ impl Shell {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Frame(now) => {
+                while let Ok(news) = self.news.try_recv() {
+                    self.ui.update(news.into());
+                }
                 self.ui.tick(now);
                 self.expire(now);
                 // `now` is when the tick was due, and a tick can come late: the region's wait is counted from when
@@ -351,13 +377,12 @@ impl Shell {
         if was != self.drag.describe() {
             self.log(|| format!("drag: {was} -> {}", self.drag.describe()));
         }
-        if let Some(message) = step.pet {
-            // the drag's news never asks anything of the shell
-            self.ui.update(message);
-        }
+        // a drop asks for the pet's place to be saved
+        let effect = step.pet.and_then(|message| self.ui.update(message));
         Task::batch([
             self.change_surface(step.actions, step.confirm),
             self.sync_region(Instant::now()),
+            effect.map_or_else(Task::none, |e| self.apply(e)),
         ])
     }
 
@@ -414,7 +439,20 @@ impl Shell {
             // a surface on its way gets the layer when it is made
             Effect::OnTop(_) => Task::none(),
             Effect::OpenSettings => self.open_settings(Instant::now()),
-            Effect::Quit => iced::exit(),
+            Effect::Quit => {
+                self.log(|| "quitting".to_owned());
+                self.ui.host().quit();
+                iced::exit()
+            }
+            Effect::Dropped => {
+                self.log(|| format!("dropped, margins {:?}", self.drag.margins()));
+                Task::none()
+            }
+            Effect::ResetPosition => {
+                self.log(|| "reset position".to_owned());
+                self.ui.host().reset_place();
+                Task::none()
+            }
         }
     }
 
@@ -713,17 +751,27 @@ fn describe(rects: &[Rect]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use aipet_ui::{MenuItem, SMOOTH_FRAME};
+    use aipet_ui::{MenuItem, SMOOTH_FRAME, Setup};
     use iced_exwlshell::shell::{ShellInfo, ShellType};
 
     use super::*;
 
+    /// A shell that has booted with a pet that touches nothing and no news, not yet on a surface.
+    fn booted() -> Shell {
+        let (_, receiver) = iced_exwlshell::shell::channel();
+        let (_, news) = std::sync::mpsc::channel();
+        let launch = Launch {
+            ui: PetUi::new(Setup::detached()),
+            news,
+        };
+        Shell::boot(window::Id::unique(), Strategy::Margin, receiver, false, launch).0
+    }
+
     const SPRITE_MIDDLE: Point = Point::new(SPRITE.x + SPRITE.width / 2.0, SPRITE.y + SPRITE.height / 2.0);
 
-    /// A shell whose pet's surface is up, a second into the demo, with the pointer on the sprite; and that second.
+    /// A shell whose pet's surface is up, a second after it started, with the pointer on the sprite; and that second.
     fn live_shell() -> (Shell, Instant) {
-        let (_, receiver) = iced_exwlshell::shell::channel();
-        let (mut shell, _) = Shell::boot(window::Id::unique(), Strategy::Margin, receiver, false);
+        let mut shell = booted();
         let _ = shell.shell_event(ShellEvent::NewShell(ShellInfo {
             window: shell.pet,
             shell: ShellType::LayerShell,
@@ -812,8 +860,7 @@ mod tests {
 
     #[test]
     fn a_pet_surface_closed_before_it_appeared_is_made_again() {
-        let (_, receiver) = iced_exwlshell::shell::channel();
-        let (mut shell, _) = Shell::boot(window::Id::unique(), Strategy::Margin, receiver, false);
+        let mut shell = booted();
         assert_eq!(shell.surface, Surface::Opening);
         let _ = shell.update(pet(Event::Window(window::Event::Closed)));
         assert_eq!(shell.surface, Surface::Gone);

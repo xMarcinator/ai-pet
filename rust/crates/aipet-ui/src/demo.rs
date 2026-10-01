@@ -1,119 +1,152 @@
-//! A scripted day in the pet's life, so the spike shows every state and animation without real chats: a Claude
-//! chat that thinks, works, needs you and finishes, a Codex chat, and a Jira review. It loops every [`PERIOD`] s.
+//! A scripted day in the pet's life, so the pet shows every state and animation without real chats: a Claude chat
+//! that thinks, works, needs you and finishes, a Codex chat, and a Jira issue to review. It loops every [`PERIOD`] s.
+//!
+//! The script goes through the core's own [`Board`], as the hooks and the Jira watcher would report it, so the demo
+//! shows the bubbles, labels and moods the pet shows for real data. It is for development, screenshots and tests:
+//! compiled with the `demo` feature (`cargo run -p aipet --features demo`) and in this crate's tests, never in a
+//! release build.
 
-use crate::cards::{Bubble, Section};
+use std::sync::Arc;
+
+use aipet_core::board::{Board, Sources};
+use aipet_core::jira::{Issue, JiraSettings};
+use aipet_core::sessions::Entry;
 
 /// The script's length; it starts over after that.
 pub const PERIOD: f64 = 40.0;
+/// The bubbles' ids: the Claude and Codex chats, and the Jira issue.
+pub const CLAUDE: &str = "claude:demo";
+pub const CODEX: &str = "codex:demo";
+pub const REVIEW: &str = "jira:AIPET-42";
+/// The Unix time the pet clock's start stands for, so the Board's times are a day's.
+const EPOCH: f64 = 1_790_000_000.0;
 
-/// One bubble in one state for a while.
+/// A chat in one state for a while.
 struct Step {
     from: f64,
     until: f64,
     id: &'static str,
-    section: Section,
     state: &'static str,
-    title: &'static str,
     detail: &'static str,
-    app: Option<u32>,
 }
 
-/// The apps' border colours (Board.AppOf).
-const CLAUDE_APP: u32 = 0xFFD97757;
-const CHATGPT_APP: u32 = 0xFF10A37F;
+/// The chats: each one's states, a line each.
+#[rustfmt::skip]
+const CHATS: &[Step] = &[
+    Step { from: 2.0, until: 6.0, id: CLAUDE, state: "thinking", detail: "Reading MainWindow.axaml" },
+    Step { from: 6.0, until: 16.0, id: CLAUDE, state: "working", detail: "Editing crates/aipet-ui/src/cards.rs" },
+    Step { from: 16.0, until: 22.0, id: CLAUDE, state: "attention", detail: "Allow cargo build?" },
+    Step { from: 22.0, until: 34.0, id: CLAUDE, state: "done", detail: "Finished · 5 files changed" },
+    Step { from: 9.0, until: 25.0, id: CODEX, state: "working", detail: "Running cargo test" },
+    Step { from: 25.0, until: 29.0, id: CODEX, state: "done", detail: "All 42 tests passed" },
+];
 
-const fn chat(
-    from: f64,
-    until: f64,
-    id: &'static str,
-    state: &'static str,
-    title: &'static str,
-    detail: &'static str,
-    app: u32,
-) -> Step {
-    Step {
-        from,
-        until,
-        id,
-        section: Section::Chats,
-        state,
-        title,
-        detail,
-        app: Some(app),
+/// When the issue waits on you.
+const REVIEW_FROM: f64 = 13.0;
+const REVIEW_UNTIL: f64 = 31.0;
+
+/// The script's Board, refreshed as the pet's clock goes on.
+pub struct Demo {
+    board: Board,
+}
+
+impl Default for Demo {
+    fn default() -> Self {
+        Demo::new()
     }
 }
 
-/// The script: each bubble's states, one line each.
-#[rustfmt::skip]
-const SCRIPT: &[Step] = &[
-    chat(2.0, 6.0, "claude", "thinking", "Claude · ai-pet", "Reading MainWindow.axaml", CLAUDE_APP),
-    chat(6.0, 16.0, "claude", "working", "Claude · ai-pet", "Editing crates/aipet-ui/src/cards.rs", CLAUDE_APP),
-    chat(16.0, 22.0, "claude", "attention", "Claude · ai-pet", "Needs you · Allow cargo build?", CLAUDE_APP),
-    chat(22.0, 34.0, "claude", "done", "Claude · ai-pet", "Finished · 5 files changed", CLAUDE_APP),
-    chat(9.0, 25.0, "codex", "working", "Codex · spike-notes", "Running cargo test", CHATGPT_APP),
-    chat(25.0, 29.0, "codex", "done", "Codex · spike-notes", "All 42 tests passed", CHATGPT_APP),
-    Step {
-        from: 13.0, until: 31.0, id: "jira", section: Section::Reviews, state: "review",
-        title: "AIPET-42 · Port the pet to Rust", detail: "In review · waiting on you", app: None,
-    },
-];
+impl Demo {
+    pub fn new() -> Demo {
+        Demo { board: Board::new() }
+    }
 
-/// The scene at `t` seconds since the start: sets `bubbles` to its bubbles, in stack order (the first of a section
-/// is at the front), and gives the pet's mood (a `PetInput::state`).
-pub fn scene(t: f64, bubbles: &mut Vec<Bubble>) -> &'static str {
-    let at = t.rem_euclid(PERIOD);
-    bubbles.clear();
-    bubbles.extend(
-        SCRIPT
-            .iter()
-            .filter(|s| (s.from..s.until).contains(&at))
-            .map(|s| Bubble {
-                id: s.id,
-                section: s.section,
-                state: s.state,
-                title: s.title.into(),
-                detail: s.detail.into(),
-                app_colour: s.app,
-            }),
-    );
-    // the loudest chat sets the mood; with nothing going on the pet naps, until the script starts over
-    let chats = |state: &str| bubbles.iter().any(|b| b.section == Section::Chats && b.state == state);
-    ["attention", "working", "thinking", "done"]
-        .into_iter()
-        .find(|&m| chats(m))
-        .unwrap_or(if (2.0..36.0).contains(&at) { "idle" } else { "sleep" })
+    /// The Board at `t` seconds since the start.
+    pub fn board(&mut self, t: f64) -> Arc<Board> {
+        self.board.refresh(&sources(t), EPOCH + t);
+        Arc::new(self.board.clone())
+    }
+
+    /// Hides a bubble until it does something new, as the core's Board does.
+    pub fn dismiss(&mut self, id: &str, t: f64) {
+        self.board.dismiss(id, EPOCH + t);
+    }
 }
 
-/// Whether a review turns up after `from` and by `to` (seconds since the start), which the C#'s watchers report as
+/// What the hooks and the Jira watcher report at `t` seconds since the start.
+pub fn sources(t: f64) -> Sources {
+    let at = t.rem_euclid(PERIOD);
+    // the Unix time of this pass's start
+    let pass = EPOCH + t - at;
+    let chats = CHATS
+        .iter()
+        .filter(|s| (s.from..s.until).contains(&at))
+        .map(|s| {
+            let mut chat = Entry::default();
+            chat.id = s.id.into();
+            chat.state = Some(s.state);
+            chat.detail = Some(s.detail.into());
+            chat.r#where = Some("desktop".into());
+            chat.ts = pass + s.from;
+            if s.id == CLAUDE {
+                chat.agent = Some("claude");
+                chat.title = Some("Make the spike a real pet".into());
+                chat.cwd = Some("/home/me/ai-pet".into());
+                chat.prop = Some("laptop");
+            } else {
+                chat.agent = Some("codex");
+                chat.chat_title = Some("Spike notes".into());
+                chat.cwd = Some("/home/me/spike-notes".into());
+                chat.has_transcript = true;
+            }
+            chat
+        })
+        .collect();
+    let issues = (REVIEW_FROM..REVIEW_UNTIL)
+        .contains(&at)
+        .then(|| Issue {
+            key: "AIPET-42".into(),
+            summary: "Port the pet to Rust".into(),
+            status: "In review".into(),
+            updated: pass + REVIEW_FROM,
+            url: "https://example.atlassian.net/browse/AIPET-42".into(),
+        })
+        .into_iter()
+        .collect();
+    Sources {
+        chats,
+        jira: JiraSettings {
+            enabled: true,
+            site: Some("example.atlassian.net".into()),
+            ..JiraSettings::default()
+        },
+        issues,
+        ..Sources::default()
+    }
+}
+
+/// Whether the issue turns up after `from` and by `to` (seconds since the start), which the C#'s watchers report as
 /// NewReviews.
 pub fn review_arrived(from: f64, to: f64) -> bool {
-    SCRIPT.iter().filter(|s| s.section == Section::Reviews).any(|s| {
-        let next = s.from + (((from - s.from) / PERIOD).floor() + 1.0) * PERIOD;
-        next <= to
-    })
+    let next = REVIEW_FROM + (((from - REVIEW_FROM) / PERIOD).floor() + 1.0) * PERIOD;
+    next <= to
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn bubbles(t: f64) -> Vec<Bubble> {
-        let mut bubbles = Vec::new();
-        scene(t, &mut bubbles);
-        bubbles
+    fn board(t: f64) -> Arc<Board> {
+        Demo::new().board(t)
     }
 
-    fn mood(t: f64) -> &'static str {
-        scene(t, &mut Vec::new())
-    }
-
-    fn ids(t: f64) -> Vec<&'static str> {
-        bubbles(t).iter().map(|b| b.id).collect()
+    fn ids(t: f64) -> Vec<String> {
+        board(t).cards().iter().map(|s| s.id.clone()).collect()
     }
 
     #[test]
     fn the_script_walks_claude_through_its_states() {
-        let claude = |t: f64| bubbles(t).into_iter().find(|b| b.id == "claude").map(|b| b.state);
+        let claude = |t: f64| board(t).find(CLAUDE).map(|s| s.eff);
         assert_eq!(claude(1.0), None);
         assert_eq!(claude(3.0), Some("thinking"));
         assert_eq!(claude(10.0), Some("working"));
@@ -124,6 +157,7 @@ mod tests {
 
     #[test]
     fn the_mood_follows_the_loudest_chat() {
+        let mood = |t: f64| board(t).state();
         assert_eq!(mood(0.5), "sleep");
         assert_eq!(mood(3.0), "thinking");
         assert_eq!(mood(12.0), "working");
@@ -131,22 +165,21 @@ mod tests {
         // Claude is done but Codex still works
         assert_eq!(mood(23.0), "working");
         assert_eq!(mood(26.0), "done");
-        assert_eq!(mood(35.0), "idle");
         assert_eq!(mood(38.0), "sleep");
+        // the chat in front holds its prop: Claude's laptop, while Codex's newer chat (no prop) isn't in front
+        assert_eq!(board(10.0).prop(), None);
+        assert_eq!(board(17.0).prop(), Some("laptop"));
     }
 
     #[test]
     fn bubbles_come_and_go_and_the_script_loops() {
-        assert_eq!(ids(14.0), vec!["claude", "codex", "jira"]);
-        assert_eq!(ids(30.0), vec!["claude", "jira"]);
+        assert_eq!(ids(14.0), [CODEX, CLAUDE, REVIEW]);
+        assert_eq!(ids(30.0), [CLAUDE, REVIEW]);
         assert!(ids(38.0).is_empty());
-        assert_eq!(bubbles(14.0 + 3.0 * PERIOD), bubbles(14.0));
-        let jira = bubbles(14.0).into_iter().find(|b| b.id == "jira").unwrap();
-        assert_eq!((jira.section, jira.app_colour), (Section::Reviews, None));
-        // the buffer is refilled, not added to
-        let mut reused = bubbles(14.0);
-        scene(30.0, &mut reused);
-        assert_eq!(reused, bubbles(30.0));
+        assert_eq!(ids(14.0 + 3.0 * PERIOD), ids(14.0));
+        let board = board(14.0);
+        let review = board.find(REVIEW).unwrap();
+        assert_eq!((review.kind, review.eff), ("jira", "review"));
     }
 
     #[test]
