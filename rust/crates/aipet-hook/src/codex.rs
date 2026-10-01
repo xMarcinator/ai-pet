@@ -531,10 +531,14 @@ pub(crate) struct Handler {
 
 /// `CodexConfig.AllHandlers`: every command hook in the user's config.toml and then in hooks.json, for the doctor
 /// when Codex itself can't be asked. A handler whose command isn't a string is left out, and so is a hooks.json that
-/// isn't there, isn't JSON or has no `hooks` object. What reading hooks.json's nodes throws (a name given twice) is
-/// the error.
-pub(crate) fn all_handlers() -> Result<Vec<Handler>, String> {
-    let home = Home::at(aipet_ipc::paths::codex_home());
+/// isn't there, isn't JSON or has no `hooks` object. Where the C# throws instead (a hooks.json whose nodes name a
+/// member twice), that hooks.json is left out whole, as one that isn't JSON is, and config.toml's hooks are still
+/// listed.
+pub(crate) fn all_handlers() -> Vec<Handler> {
+    handlers_in(&Home::at(aipet_ipc::paths::codex_home()))
+}
+
+fn handlers_in(home: &Home) -> Vec<Handler> {
     let text = read_text(&home.config).unwrap_or_default();
     let segs = toml_text::parse(&text);
     let mut all: Vec<Handler> = positions(&segs.iter().collect::<Vec<_>>())
@@ -549,18 +553,22 @@ pub(crate) fn all_handlers() -> Result<Vec<Handler>, String> {
         .collect();
     let root = read_text(&home.hooks).and_then(|text| json_out::parse(&text));
     if let Ok(Ok(Some(Node::Object(hooks)))) = root.as_ref().map(|root| member(root, "hooks")) {
-        json_positions(hooks, |event, _, _, hook| {
+        let mut listed = Vec::new();
+        let read_through = json_positions(hooks, |event, _, _, hook| {
             if let Some(command) = command_of(hook)? {
-                all.push(Handler {
+                listed.push(Handler {
                     event: event.to_owned(),
                     command: command.to_owned(),
                     file: home.hooks.clone(),
                 });
             }
             Ok(false)
-        })?;
+        });
+        if read_through.is_ok() {
+            all.append(&mut listed);
+        }
     }
-    Ok(all)
+    all
 }
 
 // ------------------------------------------------------------------ config.toml as text
@@ -1485,5 +1493,47 @@ mod tests {
         // the last change is there as it was made, and nothing else was written: no backup, no temp file
         assert_eq!(fs::read_to_string(&config).unwrap(), format!("{changed}# change 3\n"));
         assert_eq!(names(config.parent().unwrap()), ["config.toml"]);
+    }
+
+    /// What the doctor lists from the files when Codex can't be asked (`AllHandlers`): config.toml's hooks, then
+    /// hooks.json's, those whose command is a string. A hooks.json the C# throws on (a member named twice, in the
+    /// file, its hooks, a group or a handler) is left out whole, as one that isn't JSON is: config.toml's still count.
+    #[test]
+    fn the_files_hooks_are_listed_past_a_hooks_json_that_cant_be_read() {
+        let scratch = Scratch::new("all-handlers");
+        let home = Home::at(scratch.0.join("codex"));
+        fs::create_dir_all(&home.dir).unwrap();
+        fs::write(
+            &home.config,
+            "[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"aipet-hook --agent codex\"\n",
+        )
+        .unwrap();
+        let listed = || -> Vec<String> {
+            handlers_in(&home)
+                .into_iter()
+                .map(|h| {
+                    let file = h.file.file_name().unwrap().to_string_lossy().into_owned();
+                    format!("{} {} ({file})", h.event, h.command)
+                })
+                .collect()
+        };
+        let toml = "Stop aipet-hook --agent codex (config.toml)";
+        assert_eq!(listed(), [toml]);
+        fs::write(
+            &home.hooks,
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"other"},{"command":7}]}]}}"#,
+        )
+        .unwrap();
+        assert_eq!(listed(), [toml, "PreToolUse other (hooks.json)"]);
+        for unreadable in [
+            r#"{"hooks":{},"hooks":{}}"#,
+            r#"{"hooks":{"Stop":[],"Stop":[]}}"#,
+            r#"{"hooks":{"PreToolUse":[{"hooks":[],"hooks":[]}]}}"#,
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"command":"other"},{"command":"x","command":"y"}]}]}}"#,
+            "not JSON",
+        ] {
+            fs::write(&home.hooks, unreadable).unwrap();
+            assert_eq!(listed(), [toml], "{unreadable}");
+        }
     }
 }
