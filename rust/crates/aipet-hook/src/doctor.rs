@@ -8,8 +8,9 @@
 //! `doctor` mode wrote through the built C# hook. Where the C# stops with an unhandled exception instead (a
 //! settings.json or hooks.json that names a member twice, a `hooks/list` entry whose fields aren't strings, a
 //! config.toml or plugin cache it may not read), the port carries on: the settings.json is reported as unreadable,
-//! and the rest is read as if the odd part weren't there. Writing the test event to a program that already quit isn't
-//! a failure either (the C# reports the broken pipe as a start failure, depending on timing).
+//! the hooks.json is left out as one that isn't JSON is (config.toml's hooks still count), and the rest is read as if
+//! the odd part weren't there. Writing the test event to a program that already quit isn't a failure either (the C#
+//! reports the broken pipe as a start failure, depending on timing).
 
 use std::collections::hash_map::RandomState;
 use std::ffi::{OsStr, OsString};
@@ -409,7 +410,7 @@ impl<'a> Doctor<'a> {
     /// Without `hooks/list`: what the files say (trust can only be read from Codex itself).
     fn codex_files(&mut self) {
         self.warn("couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown");
-        let files = codex::all_handlers().unwrap_or_default();
+        let files = codex::all_handlers();
         let mine_in_files: Vec<&codex::Handler> = files.iter().filter(|h| codex::is_ours(Some(&h.command))).collect();
         for h in &files {
             let mine = codex::is_ours(Some(&h.command));
