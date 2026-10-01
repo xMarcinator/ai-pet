@@ -34,9 +34,16 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
         ),
     ]
     .spacing(14);
-    if let Some(player) = pet.player() {
+    let listen = match pet.player() {
+        Some(player) => Some(format!("Listen along with {player}")),
+        // the demo has no player: there the switch makes the pet bop along all the same
+        #[cfg(any(test, feature = "demo"))]
+        None if pet.demo.is_some() => Some("Listen along".to_owned()),
+        None => None,
+    };
+    if let Some(listen) = listen {
         switches = switches.push(switch_row(
-            format!("Listen along with {player}"),
+            listen,
             "Show what's playing in a bubble, and the pet bops along.",
             pet.music,
             accent,
