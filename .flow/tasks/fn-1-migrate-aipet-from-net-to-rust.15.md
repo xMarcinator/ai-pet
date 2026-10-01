@@ -75,13 +75,28 @@ then `start() -> io::Result<()>` and `stop()`; dropping it stops it too. `start`
 "hooks: can't listen on …: …" to aipet.log as the C# does, and also returns the error; the pet runs on either way.
 `changed` runs on the hook's own handler thread before the hook gets its answer, so it must not block: post to the
 core thread, never wait for the UI. `Options { endpoint, events_log, log }` keeps tests off the user's endpoint and data.
+**From task 12 (2026-10-01):** the Board is `aipet_core::board::Board::new()`, then `refresh(&Sources, now)` every
+250 ms and on Changed, with `now = aipet_ipc::protocol::unix_time(SystemTime::now())` (Board.Unix to the bit) and
+`Sources::read(&hooks, &jira, &github, Some(&codex), media, music_on)`. Read it with `cards()`, `all()`,
+`extra("chats"|"reviews"|"music")`, `state()`, `prop()` and `find(id)`; `dismiss(id, now)` hides a bubble until it does
+something new. `Session.eff` is a `&'static str` that maps straight onto aipet-ui's `Bubble.state`. The Codex log
+watcher is `aipet_core::codex_watcher::CodexWatcher::new()` (reads `$CODEX_HOME` on each poll), `start()` polls now
+and then every 2 s, `stop()` or dropping it ends the loop, and `sessions()` never waits on a poll.
+**From the conductor (2026-10-01), the Linux lock:** task 6 adds the C# side of the shared Linux lock and runs in
+parallel with this task, so it is not in your base. Write the Rust side to the contract (R7 and task 6's description:
+the socket path with `.lock` for `.sock`, a non-blocking exclusive `flock`, the file opened 0600 with `O_NOFOLLOW`,
+held for the whole run), and test the contention against a lock your test takes exactly that way (on Windows: the
+`Local\AiPetApp` mutex, made by the test as the C# makes it). The test against the C#'s own lock moves to task 23's
+cross-runtime CI. Starting either pet, and the manual checks with real chats and with both apps, wait for the user:
+list them in the handover, don't run them.
 ## Acceptance
 - [ ] Unit tests map Board snapshots to bubbles and mood (states, props, alerts).
 - [ ] With real Claude and Codex hooks on the developer's machine, the Rust pet shows real chats (manual check, noted in
       the task).
 - [ ] A .NET pet and a Rust pet never run together: in either start order, and when started at the same moment (a test
-      where the Rust lock and task 6's C# lock contend on one file, including with different or unset
-      `XDG_RUNTIME_DIR` values, plus a manual check with both apps).
+      where the Rust lock contends on one file with a lock taken as task 6's C# takes it, including with different or
+      unset `XDG_RUNTIME_DIR` values; on Windows, with the `Local\AiPetApp` mutex made as the C# makes it). The test
+      against task 6's real C# lock is task 23's, and the manual check with both apps is listed for the user.
 - [ ] `cargo run -p aipet --features demo` still runs the demo. A release build contains no demo code.
 - [ ] Groundwork: the stubs build, and the app runs with them (a no-op platform, placeholder Settings pages, the
       default placement, no update check). The handover lists each extension point and the task that fills it. None of

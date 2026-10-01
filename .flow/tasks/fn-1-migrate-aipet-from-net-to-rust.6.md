@@ -49,6 +49,12 @@ alongside it. This is milestone 1: the Rust hook ships with the .NET pet.
 - `cargo-zigbuild` can't statically link glibc (`+crt-static`) on a `.2.27` target. Link it dynamically; the gate checks
   the symbol versions.
 - Release 0.1.0 used a deploy key and a pinned host key for the plugin repository. Those steps don't change.
+**From the conductor (2026-10-01):** CI's windows-2022 job fails `aipet-ipc`'s
+`paths_equal_the_csharps_in_the_same_environment` and `aipet-core`'s `every_claude_case_matches_the_csharp` (the
+`title-nul` case) until task 30 lands; both are test setup, not this task's. Task 15 writes the Rust side of the Linux
+lock in parallel with this task, so test the C# lock against a lock taken the contract's way; task 23 tests the two
+against each other. From task 5: the Windows Codex `--probe` scenarios start PowerShell and run only where `CI` is
+set, and the managed-settings scenarios only with `AIPET_TEST_MANAGED_SETTINGS=1`; never set either on this machine.
 ## Acceptance
 - [ ] A release dry run (workflow_dispatch on a test version, publish skipped) builds all three hook binaries. They pass
       the glibc gate and the resource check.

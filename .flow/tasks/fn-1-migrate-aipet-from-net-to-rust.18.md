@@ -35,6 +35,9 @@ another app.
 - `src/AiPet.UI/Platform/WindowsPlatform.cs:1-130, 231-303`
 **Optional:**
 - `src/AiPet.UI/Platform/MacPlatform.cs` — the stub to mirror
+**From task 12 (2026-10-01):** `aipet_core::board::Media { name, song: Option<_>, artist, playing, track_since }` is
+what the Board reads of IMediaPlayer. The players can fill it each second, as MainWindow polls media every 1 s; it
+goes into `Sources::read(..., media, music_on)`.
 ## Acceptance
 - [ ] Unit tests parse Spotify titles (`Artist - Song`, paused) and `playerctl`/`dbus-send` output.
 - [ ] Manual checklist on Linux (X11 and XWayland apps) and Windows: focus, opening links and folders, and media

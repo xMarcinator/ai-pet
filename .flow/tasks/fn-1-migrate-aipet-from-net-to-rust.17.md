@@ -31,6 +31,9 @@ and its recording fake come from task 15's groundwork (`aipet-ui/src/platform.rs
 - `rust/crates/aipet-ui/src/cards.rs`, `rust/crates/aipet-ui/src/view.rs`
 **Optional:**
 - `src/AiPet.UI/App.axaml` — button styles
+**From task 12 (2026-10-01):** a bubble's actions find their chat with `Board::find(id)`, and `Board::dismiss(id, now)`
+hides a bubble until it does something new (`now` from `aipet_ipc::protocol::unix_time`). `board::app_of(&Session)`
+gives the app label and colour; `pr_label`, `agent_label` and `status_color` are the C#'s tables.
 ## Acceptance
 - [ ] Unit tests with a fake platform cover visibility and routing for every kind.
 - [ ] No bubble has a Stop button: a working or thinking chat in the desktop app shows Open, which opens the chat or

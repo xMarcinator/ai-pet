@@ -36,12 +36,18 @@ remediation task they add.
 makes point at `%LOCALAPPDATA%\AiPetApp\current\aipet-hook.exe`, so the Rust package must ship `aipet-hook.exe` in
 `current\` ([rust/proofs/velopack.md](../../rust/proofs/velopack.md)).
 
+**From the conductor (2026-10-01), the Linux lock:** tasks 6 (the C# side) and 15 (the Rust side) write the shared
+Linux single-instance lock in parallel, each tested against a lock taken the contract's way. Add the test of the two
+real implementations against each other to cross-runtime.yml on Linux: a .NET pet and a Rust pet in either start
+order, at the same moment, and with different or unset `XDG_RUNTIME_DIR` values, never both running.
 ## Acceptance
 - [ ] A release dry run produces every artifact in R15, and every gate passes. `InstallerTests` and
       `ReleaseWorkflowTests` pass.
 - [ ] A clean Linux and Windows install works. An update from the milestone 1 release keeps the config, tokens and hook
       registrations.
 - [ ] Rolling back to the milestone 1 release keeps the data (R17).
+- [ ] cross-runtime.yml holds the .NET pet's and the Rust pet's Linux locks against each other: either start order,
+      the same moment, and different or unset `XDG_RUNTIME_DIR` values give one pet (R7).
 - [ ] CHANGELOG entry. The milestone 2 release is cut (the user starts it).
 ## Done summary
 TBD
