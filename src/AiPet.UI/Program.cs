@@ -43,8 +43,10 @@ public static class Program
     /// run at once, whatever XDG_RUNTIME_DIR each got: an exclusive, non-blocking flock on LockFile. The file is
     /// opened 0600 without following a symlink, and the programs the pet starts don't inherit it. The lock is held
     /// until the pet ends: the file is never closed, and the kernel lets the lock go when the process ends, a crash
-    /// included. False when another pet holds it: this one quits quietly, as it does for the mutex. A lock file that
-    /// can't be opened or locked is logged, and the pet goes on to the mutex and the socket probe, as before the lock.
+    /// included. False when another pet holds it: this one quits quietly, as it does for the mutex. False too when the
+    /// lock file can't be opened or locked (a symlink at its path, a folder that can't be written): without the lock,
+    /// nothing atomic keeps a pet of another session or a Rust pet from starting beside this one, so this pet doesn't
+    /// start rather than risk two, as the Rust pet does, and its log says why.
     static bool TakeLock()
     {
         var path = LockFile;
@@ -59,8 +61,8 @@ public static class Program
         int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC | NoFollow, 0x180);  // 0600
         if (fd < 0)
         {
-            Log.Write($"single instance: can't open {path}: {Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError())}");
-            return true;
+            Log.Write($"single instance: can't open {path}: {Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError())}; this pet doesn't start");
+            return false;
         }
         int locked, error;
         do
@@ -70,9 +72,9 @@ public static class Program
         } while (locked != 0 && error == EINTR);
         if (locked == 0) return true;
         close(fd);
-        if (error == EWOULDBLOCK) return false;
-        Log.Write($"single instance: can't lock {path}: {Marshal.GetPInvokeErrorMessage(error)}");
-        return true;
+        if (error != EWOULDBLOCK)
+            Log.Write($"single instance: can't lock {path}: {Marshal.GetPInvokeErrorMessage(error)}; this pet doesn't start");
+        return false;
     }
 
     /// The lock's file, next to the socket: the socket's path with .lock in place of .sock, so it follows the socket's
