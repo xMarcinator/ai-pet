@@ -304,4 +304,46 @@ public class ReleaseWorkflowTests
         Assert.Equal(box.Env["DEPLOY_KEY"] + "\n", File.ReadAllText(Path.Combine(box.Out, "ssh-key")));
         Assert.Equal("github.com ssh-ed25519 AAAA\n", File.ReadAllText(Path.Combine(temp, "plugin-known-hosts")));
     }
+
+    /// The plugin's push can't be undone, so the release's checksums are made before it, in the plugin job; the publish
+    /// job only checks the files against them.
+    [Fact]
+    public void Plugin_SumsTheReleaseBeforeItPushes()
+    {
+        var lines = File.ReadAllLines(Path.Combine(Scripts.Repo, ".github", "workflows", Workflow));
+        int Line(string text) => Array.FindIndex(lines, l => l.Trim() == text);
+        int plugin = Line("plugin:"), publish = Line("publish:");
+        int sums = Line("- name: Checksums"), push = Line("- name: Commit, tag and push"), check = Line("- name: Check the files against SHA256SUMS");
+        Assert.True(plugin >= 0 && publish > plugin, "release.yml has a plugin job and then a publish job");
+        Assert.True(plugin < sums && sums < push && push < publish, "the plugin job makes SHA256SUMS before it pushes");
+        Assert.True(check > publish, "the publish job checks the files against SHA256SUMS");
+        Assert.DoesNotContain(lines[publish..], l => l.Contains("sha256sum -- *"));
+    }
+
+    /// The publish job releases exactly the files the plugin job summed: a changed, missing or extra file stops it.
+    [UnixTheory]
+    [InlineData("none", true)]
+    [InlineData("changed", false)]
+    [InlineData("missing", false)]
+    [InlineData("extra", false)]
+    public void Publish_ReleasesOnlyTheSummedFiles(string tamper, bool ok)
+    {
+        var cwd = box.Dir("job");
+        var dist = Directory.CreateDirectory(Path.Combine(cwd, "dist")).FullName;
+        File.WriteAllText(Path.Combine(dist, "AiPet-0.2.0-linux-x64.tar.gz"), "linux\n");
+        File.WriteAllText(Path.Combine(dist, "AiPet-Setup-0.2.0-win-x64.exe"), "windows\n");
+        var sums = box.Step(Scripts.WorkflowStep(Workflow, "Checksums"), cwd);
+        Assert.True(sums.Exit == 0, sums.Output);
+        Assert.Equal(2, File.ReadAllLines(Path.Combine(dist, "SHA256SUMS")).Length);
+        switch (tamper)
+        {
+            case "changed": File.WriteAllText(Path.Combine(dist, "AiPet-0.2.0-linux-x64.tar.gz"), "other\n"); break;
+            case "missing": File.Delete(Path.Combine(dist, "AiPet-Setup-0.2.0-win-x64.exe")); break;
+            case "extra": File.WriteAllText(Path.Combine(dist, "AiPet-0.2.0-win-x64.zip"), "zip\n"); break;
+        }
+        box.Env["PLUGIN_SHA"] = Sha;
+
+        var r = box.Step(Scripts.WorkflowStep(Workflow, "Check the files against SHA256SUMS"), cwd);
+        Assert.True((r.Exit == 0) == ok, r.Output);
+    }
 }

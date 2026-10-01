@@ -8,8 +8,10 @@
 #   win         AiPet.exe (self-contained) and aipet-hook.exe (Rust): Velopack installer and update feed, portable zip
 #   linux-hook  per architecture, aipet-hook (Rust, for glibc 2.27 and newer)
 #   linux       per platform, AiPet (self-contained) and that hook: AiPet-<version>-<rid>.tar.gz
-#   plugin      plugins/aipet plus the hook binaries: a commit tagged v<version> in the plugin repository
-#   publish     the GitHub release with every package and SHA256SUMS, then the marketplace pins on main
+#   plugin      SHA256SUMS of every package, then plugins/aipet plus the hook binaries: a commit tagged v<version> in
+#               the plugin repository. The checksums come first, since that push can't be undone.
+#   publish     the GitHub release with every package (checked against SHA256SUMS) and SHA256SUMS, then the
+#               marketplace pins on main
 #
 # A prerelease (a version like 0.3.0-rc.1) gets its plugin tag and a GitHub prerelease, but the marketplaces on main
 # stay on the latest stable release, which is what every user's Claude Code and Codex install. To try a prerelease's
@@ -454,6 +456,24 @@ jobs:
           EOF
           # this release's Linux hook (the copy just installed, so executable) must print the hook files released with it
           bash source/scripts/check-plugin.sh --release "$dest" --hook "$dest/native/linux-x64/aipet-hook"
+      # The release's checksums are made before anything is pushed, so a failure here leaves the plugin repository as
+      # it was. The publish job releases exactly these files, checked against them.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Checksums
+        run: |
+          (cd dist && sha256sum -- *) > SHA256SUMS
+          mv SHA256SUMS dist/
+          cat dist/SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SHA256SUMS
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
       - name: Commit, tag and push
         id: push
         working-directory: plugin-repo
@@ -506,20 +526,24 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: dist
-      - name: Checksums
-        run: |
-          if [[ ! "$PLUGIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::The plugin job gave no commit sha"; exit 1; fi
-          (cd dist && sha256sum -- *) > SHA256SUMS
-          mv SHA256SUMS dist/
-          cat dist/SHA256SUMS
-      # a dry run's release would have had these checksums (its files are the release-* artifacts)
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: inputs.dry_run
+      # made by the plugin job before it pushed
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: SHA256SUMS
-          path: dist/SHA256SUMS
-          if-no-files-found: error
-          retention-days: 7
+          path: dist
+      - name: Check the files against SHA256SUMS
+        run: |
+          if [[ ! "$PLUGIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::The plugin job gave no commit sha"; exit 1; fi
+          cd dist
+          sha256sum --check --strict SHA256SUMS
+          # every file released is summed, and every file summed is released
+          listed=$(sed -E 's/^[0-9a-f]{64} [ *]//' SHA256SUMS | sort)
+          present=$(find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort)
+          if [ "$listed" != "$present" ]; then
+            echo "::error::The files to release aren't the ones SHA256SUMS lists"
+            diff <(echo "$listed") <(echo "$present") || true
+            exit 1
+          fi
       - name: Check whether this release is the latest
         id: latest
         run: |
