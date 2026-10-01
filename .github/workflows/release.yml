@@ -271,7 +271,8 @@ jobs:
       # zig links the hook against its own glibc 2.27 stubs, which cargo-zigbuild picks by the target's suffix.
       # Pinned like the actions; to update, change both and watch the glibc step.
       ZIG_VERSION: 0.13.0
-      ZIGBUILD_VERSION: 0.19.8
+      # 0.23.4 drops rustc's -Wl,--fix-cortex-a53-843419 for aarch64, which zig's linker refuses (0.19.8 passed it on)
+      ZIGBUILD_VERSION: 0.23.4
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
