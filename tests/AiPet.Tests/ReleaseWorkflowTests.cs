@@ -55,6 +55,111 @@ public class ReleaseWorkflowTests
         Assert.Contains("--latest=\"$LATEST\"", Scripts.WorkflowStep(Workflow, "Create the GitHub release"));
     }
 
+    /// A release comes from main; a dry run may come from any branch, since it publishes nothing.
+    [UnixTheory]
+    [InlineData("refs/heads/main", "false", null)]
+    [InlineData("refs/heads/fn-1-rust-hook", "false", "Release from main")]
+    [InlineData("refs/heads/fn-1-rust-hook", "true", null)]
+    public void Check_ReleasesFromMain_DryRunsFromAnyBranch(string gitRef, string dryRun, string error)
+    {
+        box.Stub("gh", "exit 1");  // the tag isn't there
+        var output = Path.Combine(box.Root, "output");
+        foreach (var (k, v) in new Dictionary<string, string>
+        {
+            ["VERSION"] = "0.2.0-dry.1", ["DRY_RUN"] = dryRun, ["GITHUB_REF"] = gitRef, ["GITHUB_REPOSITORY"] = "xMarcinator/ai-pet",
+            ["GITHUB_OUTPUT"] = output,
+        }) box.Env[k] = v;
+
+        Assert.Contains("DRY_RUN: ${{ inputs.dry_run }}", Scripts.WorkflowStepText(Workflow, "Check the version"));
+        var r = box.Step(Scripts.WorkflowStep(Workflow, "Check the version"), box.Root);
+        if (error == null)
+        {
+            Assert.True(r.Exit == 0, r.Output);
+            Assert.Equal("0.2.0-dry.1", Outputs(output)["version"]);
+        }
+        else
+        {
+            Assert.Equal(1, r.Exit);
+            Assert.Contains("::error::" + error, r.Output);
+        }
+    }
+
+    /// A dry run commits and tags the plugin, so the jobs after it have its commit, but pushes nothing; and it creates
+    /// no GitHub release and pins no marketplace.
+    [UnixTheory]
+    [InlineData("true")]
+    [InlineData("false")]
+    public void DryRun_PushesAndPublishesNothing(string dryRun)
+    {
+        var origin = Path.Combine(box.Dir("server"), "plugin.git");
+        box.Git(box.Root, "init", "-q", "--bare", origin);
+        var first = box.Dir("first");
+        box.Git(first, "init", "-q");
+        File.WriteAllText(Path.Combine(first, "README.md"), "plugin\n");
+        box.Git(first, "add", "-A");
+        box.Git(first, "commit", "-q", "-m", "first");
+        box.Git(first, "push", "-q", origin, "HEAD:refs/heads/main");
+        var repo = Path.Combine(box.Root, "plugin-repo");
+        box.Git(box.Root, "clone", "-q", origin, repo);
+        File.WriteAllText(Path.Combine(repo, "hook"), "the release's hook\n");
+        var output = Path.Combine(box.Root, "output");
+        foreach (var (k, v) in new Dictionary<string, string>
+        {
+            ["VERSION"] = "0.2.0-dry.1", ["DRY_RUN"] = dryRun, ["PLUGIN_REPO"] = "xMarcinator/ai-pet-plugin",
+            ["GITHUB_REPOSITORY"] = "xMarcinator/ai-pet", ["GITHUB_SHA"] = Sha, ["GITHUB_SERVER_URL"] = "https://github.com",
+            ["GITHUB_RUN_ID"] = "1", ["GITHUB_OUTPUT"] = output, ["GITHUB_STEP_SUMMARY"] = Path.Combine(box.Root, "summary"),
+        }) box.Env[k] = v;
+
+        Assert.Contains("DRY_RUN: ${{ inputs.dry_run }}", Scripts.WorkflowStepText(Workflow, "Commit, tag and push"));
+        var r = box.Step(Scripts.WorkflowStep(Workflow, "Commit, tag and push"), repo);
+        Assert.True(r.Exit == 0, r.Output);
+        var sha = box.Git(repo, "rev-parse", "HEAD");
+        Assert.Equal(sha, Outputs(output)["sha"]);
+        Assert.Equal(sha, box.Git(repo, "rev-parse", "v0.2.0-dry.1^{commit}"));
+        var pushed = box.Git(origin, "for-each-ref", "--format=%(refname)");
+        Assert.Equal(dryRun == "true" ? "refs/heads/main" : "refs/heads/main\nrefs/tags/v0.2.0-dry.1", pushed);
+        Assert.Equal(dryRun == "true" ? "first" : "AiPet plugin v0.2.0-dry.1", box.Git(origin, "log", "-1", "--format=%s", "main"));
+
+        Assert.Contains("if: ${{ !inputs.dry_run }}", Scripts.WorkflowStepText(Workflow, "Create the GitHub release"));
+        Assert.Contains("if: steps.latest.outputs.latest == 'true' && !inputs.dry_run",
+                        Scripts.WorkflowStepText(Workflow, "Pin the marketplaces to the plugin commit"));
+    }
+
+    /// The Linux hooks' gate: the newest GLIBC_ symbol version a hook needs is the oldest glibc it runs on, and it may
+    /// not be newer than 2.27. readelf is a stand-in that lists the versions given.
+    [UnixTheory]
+    [InlineData("2.2.5 2.3 2.17 2.27", null)]
+    [InlineData("2.2.5 2.17 2.28", "The hook needs GLIBC_2.28, newer than 2.27")]
+    [InlineData("2.2.5 2.34", "The hook needs GLIBC_2.34, newer than 2.27")]
+    [InlineData("", "readelf found no GLIBC_ versions")]
+    public void GlibcGate_RefusesAHookThatNeedsANewerGlibc(string versions, string error)
+    {
+        box.Stub("readelf", """
+            case "$2" in
+              -V) for v in $AIPET_TEST_GLIBC; do echo "  0x0010:   Name: GLIBC_$v  Flags: none  Version: 2"; done ;;
+              --dyn-syms) for v in $AIPET_TEST_GLIBC; do echo "     1: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND f@GLIBC_$v (2)"; done ;;
+            esac
+            """);
+        var summary = Path.Combine(box.Root, "summary");
+        Assert.Contains("GLIBC_FLOOR: \"2.27\"", File.ReadAllText(Path.Combine(Scripts.Repo, ".github", "workflows", Workflow)));
+        foreach (var (k, v) in new Dictionary<string, string>
+        {
+            ["AIPET_TEST_GLIBC"] = versions, ["GLIBC_FLOOR"] = "2.27", ["RID"] = "linux-x64", ["GITHUB_STEP_SUMMARY"] = summary,
+        }) box.Env[k] = v;
+
+        var r = box.Step(Scripts.WorkflowStep(Workflow, "Check the glibc the hook needs"), box.Root);
+        if (error == null)
+        {
+            Assert.True(r.Exit == 0, r.Output);
+            Assert.Equal("linux-x64 hook: needs glibc 2.27 (floor 2.27)\n", File.ReadAllText(summary));
+        }
+        else
+        {
+            Assert.Equal(1, r.Exit);
+            Assert.Contains("::error::" + error, r.Output);
+        }
+    }
+
     /// A repository whose codex.json is A at v0.2.0, B at v0.3.0-rc.1, and B at HEAD (one commit later).
     string HooksChangedInAPrerelease()
     {

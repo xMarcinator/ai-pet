@@ -302,24 +302,29 @@ Your settings and logs stay in the data folder: delete it to remove them too. Th
 
 ## Building from source
 
-Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+Needs:
+- the [.NET 10 SDK](https://dotnet.microsoft.com/download), for the app;
+- Rust, installed with [rustup](https://rustup.rs) (1.98 or newer), for the hook. On Windows that needs Visual Studio's
+  C++ build tools with a Windows SDK; on Linux, a C linker (gcc or clang).
 
 ```bash
 dotnet build AiPet.slnx
 dotnet test AiPet.slnx
 dotnet src/AiPet.UI/bin/Debug/net10.0/AiPet.dll     # runs the pet
+cd rust && cargo build -p aipet-hook                # the hook the releases ship: rust/target/debug/aipet-hook
+cargo test --workspace                              # the Rust tests
 ```
 
 **Windows developers:** antivirus reacts to PowerShell and to freshly built `.exe` files. Build and test with
 `-p:UseAppHost=false` (`dotnet build AiPet.slnx -p:UseAppHost=false`), so that no `.exe` is made, and run programs
-as `dotnet <dll>`. Leave publishing and NativeAOT to GitHub Actions: `build.ps1` and
-`scripts/install-from-source.ps1` publish `.exe` files, including a NativeAOT hook.
+as `dotnet <dll>`. Cargo can't do without `.exe` files: a freshly built hook may be held for a scan for a while. Leave
+publishing to GitHub Actions: `build.ps1` and `scripts/install-from-source.ps1` publish `.exe` files.
 
 The scripts:
 
 | Script | What |
 |---|---|
-| [build.sh](build.sh), [build.ps1](build.ps1) | Publish the app and the hook into `artifacts/<rid>/`, copy the hook into `plugins/aipet/native/<rid>/`, and make a local marketplace in `artifacts/marketplace/` for trying the plugin before a release. `build.sh` builds this machine's platform, or the ones named; `build.ps1` builds win-x64 and linux-x64, or `-Only <rid>`. |
+| [build.sh](build.sh), [build.ps1](build.ps1) | Publish the app, and build the hook with cargo, into `artifacts/<rid>/`; copy the hook into `plugins/aipet/native/<rid>/`, and make a local marketplace in `artifacts/marketplace/` for trying the plugin before a release. `build.sh` builds this machine's platform, or the ones named; `build.ps1` builds win-x64 and linux-x64, or `-Only <rid>`. A hook for another system needs [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) (Linux) or Windows (win-x64), and is left out without them. |
 | [scripts/install-from-source.sh](scripts/install-from-source.sh), [scripts/install-from-source.ps1](scripts/install-from-source.ps1) | Install that build: the app with a menu or Start menu entry, and the hook, registered directly with Claude Code and Codex (`--no-hooks` / `-NoHooks` skips that). They rebuild first when the build is missing or older than the source. |
 | [scripts/check-plugin.sh](scripts/check-plugin.sh) | Checks the plugin's manifests and the marketplaces, and with `--hook <command>` that the plugin's hook files are exactly what `aipet-hook --print-plugin-hooks` prints. |
 
@@ -355,7 +360,8 @@ the shell scripts run only on Linux.
 |---|---|
 | `src/AiPet.UI/` | The app (Avalonia, .NET 10). Platform code is in `Platform/` (Windows, Linux, a macOS stub). |
 | `src/AiPet.Core/` | The pet's animation, avatars, the chats and the hooks' listener, and the Jira, GitHub and Codex watchers. |
-| `src/AiPet.Hook/` | `aipet-hook`, which the agents run on each event, with `--install`, `--uninstall`, `--doctor` and `--print-plugin-hooks`. |
+| `rust/crates/aipet-hook/` | `aipet-hook`, which the agents run on each event, with `--install`, `--uninstall`, `--doctor` and `--print-plugin-hooks`. The rest of `rust/` is the pet's move to Rust, under way. |
+| `src/AiPet.Hook/` | The .NET `aipet-hook` that the Rust one replaced. The tests still run it until the move to Rust is done. |
 | `plugins/aipet/` | The plugin for Claude Code and Codex. |
 | `packaging/` | The Linux package's installer, menu entry, icons and Hyprland rules; notes on the Windows packages. |
 | `tests/AiPet.Tests/` | The tests. |
