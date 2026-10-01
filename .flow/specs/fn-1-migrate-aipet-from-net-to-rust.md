@@ -265,7 +265,10 @@ dotnet test AiPet.slnx   # the C# suite, until the cutover (with AIPET_TEST_HOOK
 - **R7:** Mixed runtimes work: a Rust hook with a .NET pet, and a .NET hook with a Rust pet, both tested in CI until the
   cutover.
   - A .NET pet and a Rust pet never run together, in either start order or started at the same moment. This holds
-    even when they were launched with different `XDG_RUNTIME_DIR` values, or with none (snap, SSH).
+    even when they were launched with different `XDG_RUNTIME_DIR` values, or with none (snap, SSH), wherever
+    `/run/user/<uid>` exists (systemd-logind and elogind create it), because the lock is taken there first. Where it
+    doesn't, the lock follows `XDG_RUNTIME_DIR` as the socket does, so two launches with different values there each
+    get a lock and a socket of their own (decided 2026-10-01, in task 15's review).
   - Both take the single-instance lock first: the `Local\AiPetApp` mutex on Windows, the per-user `flock` on Linux,
     which the milestone 1 .NET pet gains.
   - The live-server check and the other-session probe follow.
