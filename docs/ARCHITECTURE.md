@@ -20,7 +20,7 @@ graph LR
   CX -- "direct hooks: pwsh -NoProfile -Command (Windows) /<br/>sh -c (Linux), the exe with --agent codex" --> HOOK
   CX -- "aipet plugin (Linux):<br/>sh native/aipet-hook.sh --agent codex" --> LAUNCH
   CX -- "aipet plugin (Windows): PowerShell runs<br/>native/win-x64/aipet-hook.exe --agent codex" --> HOOK
-  LAUNCH["native/aipet-hook.sh<br/>(picks the binary for this OS and CPU)"] --> HOOK["aipet-hook<br/>(NativeAOT, one process per event)"]
+  LAUNCH["native/aipet-hook.sh<br/>(picks the binary for this OS and CPU)"] --> HOOK["aipet-hook<br/>(Rust, one process per event)"]
 
   HOOK -- "one JSON line each way, over a current-user<br/>named pipe (Windows) / Unix socket (Linux)" --> SRV
   HOOK -. "nothing listening: exit 0,<br/>nothing written, nothing started" .-> NOOP(("no-op"))
@@ -38,7 +38,7 @@ graph LR
 ```
 
 **Key design choices.**
-- The agent-facing part is a separate tiny process. `aipet-hook` is built with NativeAOT ([AiPet.Hook.csproj](../src/AiPet.Hook/AiPet.Hook.csproj):14-18), so a process spawned on every event starts quickly. Releases publish it that way for Windows and Linux (§7).
+- The agent-facing part is a separate tiny process. `aipet-hook` is a native Rust program ([rust/crates/aipet-hook/](../rust/crates/aipet-hook/)), so a process spawned on every event starts quickly. Releases build it with cargo for Windows and Linux (§7.9). It is a port of the .NET hook in [src/AiPet.Hook/](../src/AiPet.Hook/), which no longer ships but which the tests still run. For the hook's behaviour this document cites the C#; the Rust hook does the same.
 - The hook only observes. On the hook path it never writes to stdout, never fails, and always exits 0 ([Program.cs](../src/AiPet.Hook/Program.cs):13-17, 23-80), so it cannot inject text into a chat or disturb the agent.
 - The hook is a thin forwarder. Each run connects to the running pet over a local socket that only the current user can open, sends the event as one JSON line and waits for one line back ([Ipc.cs](../src/AiPet.Core/Ipc.cs)). All state logic lives in the pet ([AgentSessions.cs](../src/AiPet.Core/AgentSessions.cs)), so the chats exist only while it runs. When it isn't running, a hook does nothing at all: it writes nothing anywhere and starts nothing. Only the user, an installer, or the Windows updater after an update starts the pet. Both ends share the endpoint, limits and field names through a source-linked `Ipc.cs`, next to [Paths.cs](../src/AiPet.Core/Paths.cs).
 - Claude reaches the hook in one of two ways: hooks registered directly in its settings (exec form, no shell), or the `aipet` plugin, whose hooks run `sh` on a launcher script with `"shell": "bash"`. Codex likewise has direct hooks (through PowerShell on Windows, `sh -c` elsewhere) or the same plugin. §6 and §7 cover both.
@@ -56,10 +56,11 @@ graph LR
 |---|---|
 | [src/AiPet.Core/](../src/AiPet.Core/) | Platform-neutral logic: `Pet` (animation and renderer), `Avatar`, `Board` (data model), `AgentSessions` (the hooks' chats), `HookServer` (the pet's end of the socket), `Ipc` (the protocol, shared with the hook), `CodexWatcher`, `JiraWatcher`, `GitHubWatcher`, `Paths`, the `IPlatform` interfaces and `Log` (`Platform.cs`), `Preset` (Settings' "Import defaults…"), `UpdateStatus` and `HookCleanup` (for the Windows uninstaller). |
 | [src/AiPet.UI/](../src/AiPet.UI/) | The Avalonia 12 app (`AiPet.exe`, `AiPet` on Linux): `Program`, `App`, `MainWindow`, `SettingsWindow`, `Updates` (Velopack), `app.manifest`, and `Platform/` (Windows, Linux, macOS stub, `PlatformFactory`). |
-| [src/AiPet.Hook/](../src/AiPet.Hook/) | `aipet-hook`: `Program` (entry point, request line), `ClaudeHook`, `CodexHook` (each builds its envelope), `Install` and `ClaudeConfig` (`Install.cs`), `CodexConfig`, `Doctor`, `PluginHooks` (`--print-plugin-hooks`). Links `Paths.cs` and `Ipc.cs` from Core. |
+| [src/AiPet.Hook/](../src/AiPet.Hook/) | The .NET `aipet-hook` that the Rust one replaced: `Program` (entry point, request line), `ClaudeHook`, `CodexHook` (each builds its envelope), `Install` and `ClaudeConfig` (`Install.cs`), `CodexConfig`, `Doctor`, `PluginHooks` (`--print-plugin-hooks`). Links `Paths.cs` and `Ipc.cs` from Core. Nothing ships it; the tests still run it. |
+| [rust/](../rust/) | The Rust workspace. [crates/aipet-hook/](../rust/crates/aipet-hook/) is the `aipet-hook` that ships, a port of `src/AiPet.Hook`; it uses [crates/aipet-ipc/](../rust/crates/aipet-ipc/), the port of `Ipc.cs` and `Paths.cs`. The hook's `build.rs` gives the Windows exe its icon, manifest and version resource. The rest of `rust/` is the pet's move to Rust, under way. |
 | [tests/AiPet.Tests/](../tests/AiPet.Tests/) | xUnit tests. They run the hook as the agents do (`dotnet hook/aipet-hook.dll`) against a real `HookServer` on a temp endpoint, with temp data folders ([TestEnv.cs](../tests/AiPet.Tests/TestEnv.cs)), and cover ordering, the Board, the server (starved thread pool included), registration, the launcher, the installers, the plugin hook files, presets, Velopack, the release workflow and the exe resources. |
 | [AiPet.slnx](../AiPet.slnx), [Directory.Build.props](../Directory.Build.props) | The solution (three projects and the tests), and the version and metadata every project shares. Releases set the version from the tag (`-p:Version`). |
-| [build/](../build/) | `Win32Resources.targets`, which both exe projects import: it writes each exe's `.res` (icon, manifest, and a version resource that names the `.exe`, not the `.dll`) without `rc.exe`, on any OS. `default.win32manifest` is the manifest it uses when a project has none. |
+| [build/](../build/) | `Win32Resources.targets`, which both exe projects import: it writes each exe's `.res` (icon, manifest, and a version resource that names the `.exe`, not the `.dll`) without `rc.exe`, on any OS. `default.win32manifest` is the manifest it uses when a project has none, and the one the Rust hook's `build.rs` embeds. |
 | [assets/icon/](../assets/icon/), [tools/IconGen/](../tools/IconGen/) | The app icon (`aipet.ico` and PNGs). IconGen draws it with the pet's own renderer and also writes the plugin's icons and the Linux hicolor icons. Its output is committed; builds only use the committed files. |
 | [plugins/aipet/](../plugins/aipet/) | One plugin folder for both agents: `.claude-plugin/plugin.json` and `hooks/hooks.json` (Claude Code), `.codex-plugin/plugin.json` and `hooks/codex.json` (Codex), the launcher `native/aipet-hook.sh`, assets, README and LICENSE. The hook binaries (`native/<rid>/`) are gitignored: the release workflow adds them in the plugin repository. |
 | [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json), [.agents/plugins/marketplace.json](../.agents/plugins/marketplace.json) | The marketplaces `aipet` for Claude Code and for Codex. Both point at `plugins/aipet` in the separate repository `xMarcinator/ai-pet-plugin`, pinned to a tag and a commit. |
@@ -68,7 +69,7 @@ graph LR
 | [install.ps1](../install.ps1), [install.sh](../install.sh) | The end-user one-line installers: the latest release's app, then the plugin for each agent on `PATH`. |
 | [build.ps1](../build.ps1), [build.sh](../build.sh) | Builds per RID into `artifacts/`, bundles the hook into the plugin and makes a local marketplace to try it. |
 | [scripts/](../scripts/) | `install-from-source.sh` and `install-from-source.ps1` (install a build from a clone, with direct hooks), and `check-plugin.sh` (the plugin and marketplace files are consistent, and the hook files match the code). |
-| [.github/](../.github/) | `workflows/ci.yml` (build and tests on Windows and Linux, the plugin check, the scripts), `workflows/release.yml` (check, win, linux, plugin, publish) and `dependabot.yml` (updates for the pinned actions). |
+| [.github/](../.github/) | `workflows/ci.yml` (build and tests on Windows and Linux, the Rust workspace, the plugin check, the hook's start-up time, the scripts), `workflows/release.yml` (check, win, linux-hook, linux, plugin, publish) and `dependabot.yml` (updates for the pinned actions). |
 | [avatars/](../avatars/) | A sample custom avatar (`hood-green.json`). The app does not read this folder (see §3.7). |
 | `web/` | An earlier prototype. Not built or installed, and not covered here. |
 
@@ -614,7 +615,7 @@ The dispatch time `at` is the same for all four: `Program.launched`, taken as `M
 - **Output:** nothing, ever, on the hook path: not on stdout, and not on stderr. This matters because Codex parses stdout: text on SessionStart or UserPromptSubmit becomes model context, and output on Stop fails the hook (CodexHook.cs:6-13).
 - **Exit code:** always 0. The envelope and the request line are built before the pet is reached, so a failure there never takes an instance for nothing. Once the hook has reached the pet, every exception is caught in `Main` and traced; before that it writes nothing (Program.cs:40-79).
 - **Time budget** (Ipc.cs:28-37). Claude gives a hook 5 s. The hook's own budget is 4.5 s from `Main` (`HookBudgetMs`): stdin up to 2 s (`StdinMs`), then a free instance for what the budget has left once the reply's 2 s (`TimeoutMs`) is set aside, at most 2.5 s (`ConnectMs`) and about 500 ms when stdin took its full 2 s, then the reply. That leaves about 500 ms of Claude's 5 s for starting the hook (bash, sh and the launcher for the plugin, then the runtime). A hook that was slow to get its stdin waits for an instance that much less (Program.cs:57).
-- **Build:** NativeAOT (`PublishAot`) with `InvariantGlobalization`, `OptimizationPreference=Speed` and `ConcurrentGarbageCollection=false`: a run lasts well under a second, so a background GC thread gains nothing. It links `Paths.cs` and `Ipc.cs` from Core ([AiPet.Hook.csproj](../src/AiPet.Hook/AiPet.Hook.csproj):14-23). Nothing on the hook path uses `System.Diagnostics.Process`. Releases publish the NativeAOT build for every platform. From source, `build.sh` makes a NativeAOT hook where clang is installed and a trimmed single file otherwise, and `scripts/install-from-source.sh` builds the single file when it rebuilds (§7, §10).
+- **Build:** the hook that ships is the Rust crate [aipet-hook](../rust/crates/aipet-hook/), a native program built with cargo (`cargo build -p aipet-hook --release --locked`). It takes the endpoint, the limits and the field names from [aipet-ipc](../rust/crates/aipet-ipc/), the Rust port of `Ipc.cs` and `Paths.cs`. It must be built with `panic = "unwind"`, since the event path catches every panic and still exits 0 ([main.rs](../rust/crates/aipet-hook/src/main.rs):25-27, 62-68). Nothing on the hook path starts a process. Releases build it for Windows with the C runtime linked in, and for Linux with cargo-zigbuild for glibc 2.27 (§7.9). From source, `build.sh`, `build.ps1` and `scripts/install-from-source.sh` build it with cargo too (§7.7).
 
 **One run:**
 
@@ -787,8 +788,6 @@ Both ends share [Ipc.cs](../src/AiPet.Core/Ipc.cs): the endpoint, the limits, th
 ### 6.7 When the pet isn't running
 
 Nothing starts the pet but the user (the Start menu or app menu), the installers (unless told not to, §7) and Velopack's updater, which starts a pet it has just updated (§8). A hook that finds nothing listening reads its stdin as usual and returns from `Main` right after `Connect`: it has written nothing (no log, no temp file, no state) and started nothing (Program.cs:55-64). The events of that time are gone; each chat shows up again with its next event once the pet runs (§10). The doctor reports a closed pet as a warning (§7).
-
-The one exception is a Linux hook that isn't NativeAOT (the trimmed single file of a from-source build, §6.2): it runs on CoreCLR, which makes files of its own in `$TMPDIR` on every run (§10).
 
 ### 6.8 One Codex turn on Windows
 
@@ -982,7 +981,7 @@ At the end they list the running pet's last 8 events of that agent from the ping
 - **Marketplaces:** [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json) for Claude and [.agents/plugins/marketplace.json](../.agents/plugins/marketplace.json) for Codex. Both are named `aipet` and have one entry, `aipet`, with a `git-subdir` source: `https://github.com/xMarcinator/ai-pet-plugin.git`, path `plugins/aipet`, pinned by `ref` (the release tag) and `sha` (its commit). The release workflow updates the pins; the all-zero sha is the placeholder from before the first release. The plugin repository is separate and only the release workflow writes to it.
 - **Updating.** Claude keeps users on a plugin's version and Codex refreshes its copy only when the version changes, so each release stamps its version into both `plugin.json` files.
 
-`aipet-hook --print-plugin-hooks claude|codex` prints `hooks.json` or `codex.json` exactly as committed, made from the tables the direct hooks come from: `ClaudeConfig.Events` with `ClaudeConfig.Group`, and `CodexConfig.PluginEvents` with `CodexConfig.JsonHandler` and the fixed plugin values (async, 30 s). It writes the UTF-8 bytes with LF line endings, whatever the console's code page. It isn't a hook run, so it may print (PluginHooks.cs:8-33). `scripts/check-plugin.sh --hook <command>...` compares both files with its output byte for byte, ignoring CRs in the file (a Windows checkout), and shows a diff on a mismatch. Without `--hook` the hook files are only checked to be JSON, and the OK line says so. The script also checks that the manifests are named `aipet` and agree on the version, the Codex manifest's `hooks` path, that the launcher starts with `#!` and has LF line endings, the three binaries with `--release`, and the marketplace entries with `--marketplaces` ([check-plugin.sh](../scripts/check-plugin.sh):1-16).
+`aipet-hook --print-plugin-hooks claude|codex` prints `hooks.json` or `codex.json` exactly as committed, made from the tables the direct hooks come from: `ClaudeConfig.Events` with `ClaudeConfig.Group`, and `CodexConfig.PluginEvents` with `CodexConfig.JsonHandler` and the fixed plugin values (async, 30 s). It writes the UTF-8 bytes with LF line endings, whatever the console's code page. It isn't a hook run, so it may print (PluginHooks.cs:8-33). `scripts/check-plugin.sh --hook <command>...` runs a hook, in CI and the release the Rust one that ships, which has its own copy of those tables (`rust/crates/aipet-hook/src/claude.rs` and `plugin_hooks.rs`): `--hook rust/target/release/aipet-hook`, or `--hook cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook --` to build it first. It compares both files with the hook's output byte for byte, ignoring CRs in the file (a Windows checkout), and shows a diff on a mismatch. Without `--hook` the hook files are only checked to be JSON, and the OK line says so. The script also checks that the manifests are named `aipet` and agree on the version, the Codex manifest's `hooks` path, that the launcher starts with `#!` and has LF line endings, the three binaries with `--release`, and the marketplace entries with `--marketplaces` ([check-plugin.sh](../scripts/check-plugin.sh):1-17).
 
 ### 7.7 Installers and build scripts
 
@@ -1016,15 +1015,15 @@ At the end they list the running pet's last 8 events of that agent from the ping
 
 **From-source scripts**, for a clone of the repository. They register the hook directly and don't add the plugins, so they stand in for the plugins.
 - **`scripts/install-from-source.sh`** (Linux, bash):
-  - Uses `artifacts/<rid>` from `build.sh` or `build.ps1`. When those are missing or older than `src/`, or with `--rebuild`, it publishes the app and a trimmed self-contained single-file hook (`PublishAot=false`), which needs the .NET 10 SDK (scripts/install-from-source.sh:53-70).
+  - Uses `artifacts/<rid>` from `build.sh` or `build.ps1`. When those are missing or older than the source (`src/`, `rust/crates/`, `rust/Cargo.toml` and `rust/Cargo.lock`), or with `--rebuild`, it publishes the app and builds the hook with `cargo build -p aipet-hook --release --locked`, which needs the .NET 10 SDK and Rust (scripts/install-from-source.sh:56-75).
   - Creates a new data folder with mode 0700 (an existing one keeps its mode), installs the app to `$data/app`, the hook to `$data/hooks/aipet-hook` (copied next to it and renamed over it: the agents run the hook all the time, and a running program can't be written over), a menu entry, and the Hyprland rules with the hint (§7.8). Removes old leftovers: the sign-in entry, `inbox`, `app-path.txt`, and the files the hooks and the pet used to share (`state.json`, `state.json.*.tmp`, `state.lock`, `heartbeat`, `autostart-disabled`, `claude-hook.log`, `codex-hook.log`).
   - Runs `--install claude` and `--install codex` for each agent found (the command on PATH, or `~/.claude`/`~/.codex`), unless `--no-hooks`. It starts the pet with `setsid` unless `--no-start`.
   - `--uninstall` unregisters the hooks registered at `$data/hooks/aipet-hook` (with or without symlinks resolved), removes `$data/hooks`, then runs the package installer's `--uninstall` for the rest.
 - **`scripts/install-from-source.ps1`** (Windows): rebuilds with `build.ps1 -Only win-x64` when needed, stops the pet, mirrors the app into `%LOCALAPPDATA%\Programs\AiPet` with `robocopy /MIR`, copies the hook to `%LOCALAPPDATA%\AiPet\hooks`, makes a Start menu shortcut, removes the same leftovers and the `HKCU\…\Run` value `AiPet`, registers the agents unless `-NoHooks`, and starts the pet unless `-NoStart`. It has no uninstall.
 
 **Build scripts:**
-- **`build.sh`** (Linux): for each RID (this machine's by default), publishes the app self-contained to `artifacts/<rid>/app`. The hook is NativeAOT for this machine's RID when clang is installed (falling back to the single file if that fails), and a trimmed self-contained single file otherwise, since NativeAOT can't cross-compile. It copies the hook to `plugins/aipet/native/<rid>/` and writes a local marketplace in `artifacts/marketplace/` (build.sh:1-102).
-- **`build.ps1`** (Windows): the same for `win-x64` and `linux-x64` by default. The Windows hook is NativeAOT with a single-file fallback (for example, without the Visual Studio C++ tools); the Linux hook is always the single file (build.ps1:1-87).
+- **`build.sh`** (Linux): for each RID (this machine's by default), publishes the app self-contained to `artifacts/<rid>/app` and builds the hook with cargo into `artifacts/<rid>/hook`. For this machine's RID that is a plain `cargo build -p aipet-hook --release --locked`. The other Linux RID is built with `cargo zigbuild --target <triple>.2.27`, as the release builds it, when cargo-zigbuild and zig are installed; without them it gets no hook, and a warning. There is no win-x64 hook from Linux: `build.ps1` builds it on Windows. It copies each hook to `plugins/aipet/native/<rid>/` and writes a local marketplace in `artifacts/marketplace/` (build.sh:1-110).
+- **`build.ps1`** (Windows): the same for `win-x64` and `linux-x64` by default. The Windows hook is built for `x86_64-pc-windows-msvc` with the C runtime linked in (`+crt-static`), as the release builds it. A Linux hook needs cargo-zigbuild and zig (`--target <triple>.2.27`), and is left out, with a warning, without them (build.ps1:1-100).
 
 ### 7.8 Hyprland rules
 
@@ -1051,40 +1050,48 @@ The uninstall removes every line that names `AiPet/hyprland/aipet.lua` or `.conf
 
 ### 7.9 Release and CI
 
-**Release** ([release.yml](../.github/workflows/release.yml)) runs by hand from the Actions tab on main, with the version to release. Its jobs:
+**Release** ([release.yml](../.github/workflows/release.yml)) runs by hand from the Actions tab on main, with the version to release. A dry run (`dry_run`) runs every build and check, on any branch, and pushes and publishes nothing: the plugin commit stays in the runner, and the run keeps the release's files, the plugin folder and `SHA256SUMS` as artifacts. Its jobs:
 
-- **check** (release.yml:50-117):
-  - the run is on main, the version looks like `0.2.0` (or `0.3.0-rc.1`), and its tag is new;
+- **check** (release.yml:60-128):
+  - the run is on main (any branch for a dry run), the version looks like `0.2.0` (or `0.3.0-rc.1`), and its tag is new;
   - the plugin repository can be read with the deploy key `PLUGIN_DEPLOY_KEY` and has a branch. The key goes to a 0600 file in `$RUNNER_TEMP`, and ssh trusts only GitHub's published ed25519 host key. An empty secret, a missing branch or a failed read stop the release before the builds;
   - `check-plugin.sh --marketplaces` (hook files as JSON only), and the packaging files are there.
-- **win** (windows-2022; release.yml:119-230):
-  - publishes the app self-contained and the hook with NativeAOT, with no fallback: a managed `aipet-hook.dll` next to the exe fails the job;
-  - checks both exes' version resources as Windows reads them: `OriginalFilename` and `InternalName` are the exe's own name, `ProductName` is `AiPet`, `ProductVersion` is the version. [build/Win32Resources.targets](../build/Win32Resources.targets) makes each project's `.res` (icon, manifest, and a version resource that names the `.exe`, not the `.dll`) on every OS without rc.exe; the SDK copies it into the apphost and NativeAOT into the native exe. The version comes from `-p:Version` through [Directory.Build.props](../Directory.Build.props);
+- **win** (windows-2022; release.yml:130-249):
+  - publishes the app self-contained;
+  - builds the hook in `rust/` with `cargo build -p aipet-hook --release --locked --target x86_64-pc-windows-msvc`, with `AIPET_VERSION` set to the version and the C runtime linked in (`RUSTFLAGS=-C target-feature=+crt-static`). The hook then needs only Windows' own DLLs, not the Visual C++ runtime's, which a Windows install may lack; the step fails if the exe names one (`vcruntime*.dll`, `msvcp*.dll`, `api-ms-win-crt-*`);
+  - checks both exes' version resources as Windows reads them: `OriginalFilename` and `InternalName` are the exe's own name, `ProductName` is `AiPet`, `ProductVersion` is the version. For the app, [build/Win32Resources.targets](../build/Win32Resources.targets) makes the project's `.res` (icon, manifest, and a version resource that names the `.exe`, not the `.dll`) on every OS without rc.exe, the SDK copies it into the apphost, and the version comes from `-p:Version` through [Directory.Build.props](../Directory.Build.props). For the hook, its build script ([build.rs](../rust/crates/aipet-hook/build.rs)) embeds the icon, manifest and version resource the .NET hook had, byte for byte, at the version in `AIPET_VERSION` (`0.0.0-dev` without it); it needs the Windows SDK's rc.exe;
   - puts the hook next to `AiPet.exe` and deletes the `.pdb` files;
   - runs Velopack's `vpk` (`VPK_VERSION`): `download github` for the previous full package, so `pack` can make a delta, then `pack --packId AiPetApp --channel win --shortcuts StartMenuRoot --noPortable`. The packId is `AiPetApp`, never `AiPet`, which is the data folder;
   - collects `AiPet-Setup-<version>-win-x64.exe`, the full and delta `.nupkg`, `releases.win.json` cut to this version's packages, and a portable zip of the app folder made with 7z.
-- **linux** (linux-x64 and linux-arm64; release.yml:232-330):
-  - runs on ubuntu-24.04 inside Microsoft's `dotnet-buildtools/prereqs` Azure Linux cross images, pinned by digest. They hold clang, lld and the target's Ubuntu 18.04 root file system;
-  - publishes the app self-contained, and the hook with NativeAOT against that root file system (`-p:SysRoot=/crossrootfs/<arch> -p:LinkerFlavor=lld`); arm64 is cross-compiled;
-  - checks with `readelf` that the hook needs no `GLIBC_` version above 2.27 (`GLIBC_FLOOR`). Linked on the runner, it would need the runner's glibc, and older loaders would refuse it on every event;
+- **linux-hook** (linux-x64 and linux-arm64, on ubuntu-22.04; release.yml:251-321):
+  - builds the hook with `cargo zigbuild -p aipet-hook --release --locked --target <triple>.2.27`: zig links it against its own glibc 2.27 stubs, dynamically, since it can't link it statically (`+crt-static`) for such a target; arm64 is cross-compiled;
+  - checks with `readelf` that the hook needs no `GLIBC_` version above 2.27 (`GLIBC_FLOOR`). Linked on the runner, it would need the runner's glibc, and older loaders would refuse it on every event.
+- **linux** (linux-x64 and linux-arm64; release.yml:323-383):
+  - runs on ubuntu-24.04 inside Microsoft's `dotnet-buildtools/prereqs` Azure Linux cross images, pinned by digest, and publishes the app self-contained there;
+  - takes the hook from the linux-hook job;
   - makes `AiPet-<version>-<rid>.tar.gz`: `app/` with `aipet-hook` in it, `install.sh`, `aipet.desktop.in`, `icons/hicolor`, `hyprland/`, and the licence files.
-- **plugin** (release.yml:332-421):
+- **plugin** (release.yml:385-507):
   - checks out the plugin repository with the deploy key and checks that the tag is new there;
   - assembles `plugins/aipet` with this release's three hook binaries (mode 755), stamps the version into both `plugin.json` files, and adds `.gitattributes` with `* -text` at the root and in the plugin folder: Git for Windows would otherwise convert the launcher to CRLF, which sh can't run;
   - runs `check-plugin.sh --release --hook` with the release's own linux-x64 hook, so the hook files must be what the released hook prints;
+  - writes `SHA256SUMS` over every file of the release. That comes before the push, which can't be undone, so a failure up to here leaves the plugin repository as it was;
   - commits, tags `v<version>` and pushes both at once.
-- **publish** (release.yml:423-554):
-  - writes `SHA256SUMS` over every file;
+- **publish** (release.yml:509-653):
+  - checks the release's files against the plugin job's `SHA256SUMS`: each matches its checksum, and the files are exactly the ones it lists;
   - decides whether this is the latest release: not for a prerelease, nor when main's marketplaces pin a newer version;
-  - creates the GitHub release with install notes, the plugin commit, generated notes, `--latest` from that decision, and `--prerelease` for a version with `-`. A note tells Codex users to trust the hooks again when `codex.json` differs from the latest stable tag (and, for a prerelease, from the nearest tag);
+  - creates the GitHub release with those files and `SHA256SUMS`, install notes, the plugin commit, generated notes, `--latest` from that decision, and `--prerelease` for a version with `-`. A note tells Codex users to trust the hooks again when `codex.json` differs from the latest stable tag (and, for a prerelease, from the nearest tag);
   - only for the latest release: pins both marketplaces to the new tag and commit (only `ref` and `sha` change, in place) and pushes that to main, rebasing up to 3 times.
 
   So a prerelease gets its plugin tag and a GitHub prerelease, while every user's marketplace and the one-line installers' `releases/latest` stay on the latest stable release.
-- **Pins and permissions:** every action is pinned to a commit and the containers by digest. The workflow has no permissions by default, and each job gets only what it needs. `VPK_VERSION` must equal the app's Velopack package version (a test checks it). A version's plugin tag can be pushed only once, so a failed later job is re-run with "Re-run failed jobs".
+- **Pins and permissions:** every action is pinned to a commit, the containers by digest, and Rust, zig and cargo-zigbuild by version. The workflow has no permissions by default, and each job gets only what it needs. `VPK_VERSION` must equal the app's Velopack package version (a test checks it). A version's plugin tag can be pushed only once, so a failed later job is re-run with "Re-run failed jobs".
 
 **CI** ([ci.yml](../.github/workflows/ci.yml)) runs on pushes to main and on pull requests:
-- on windows-2022 and ubuntu-22.04: build, `dotnet test`, and `check-plugin.sh --marketplaces . plugins/aipet --hook dotnet src/AiPet.Hook/bin/Release/net10.0/aipet-hook.dll`. On Windows it also parses the PowerShell scripts in PowerShell 7 and in Windows PowerShell 5.1 (ci.yml:24-79);
-- a shell job: `dash -n` for the POSIX scripts (the one-liner, the package installer, the launcher), `bash -n` for the rest, ShellCheck at warning level, and a check that `build.sh`, `install.sh`, `packaging/linux/install.sh` and `scripts/*.sh` are in git with mode 100755 (ci.yml:81-110).
+- on windows-2022 and ubuntu-22.04: build the solution and the Rust hook (`cargo build -p aipet-hook --release --locked`), `dotnet test`, and `check-plugin.sh --marketplaces . plugins/aipet --hook rust/target/release/aipet-hook`, so the hook files are checked against the hook that ships. On Windows it also runs `ResourceTests.RustHook_CarriesTheDotnetHooksResources` against that hook (`AIPET_TEST_HOOK`), which must pass, not be skipped (the Rust hook's icon, manifest and version resource are the .NET hook's, byte for byte), and parses the PowerShell scripts in PowerShell 7 and in Windows PowerShell 5.1 (ci.yml:26-104);
+- the Rust workspace: format, clippy with `-D warnings`, and `cargo test --workspace`, the hook's own tests among them, on windows-2022 and ubuntu-22.04, and `cargo check` on macos-14 (ci.yml:106-185);
+- the hook's start-up, on windows-2022 and ubuntu-22.04: the Rust hook (with `+crt-static` on Windows, as the release builds it) and the NativeAOT hook published from `src/AiPet.Hook` each run 200 times from bash on the event path with no pet, the two in turns. The job writes both medians to its summary and fails when the Rust hook's is more than 10 % over the NativeAOT hook's (ci.yml:187-276);
+- a shell job: `dash -n` for the POSIX scripts (the one-liner, the package installer, the launcher), `bash -n` for the rest, ShellCheck at warning level, and a check that `build.sh`, `install.sh`, `packaging/linux/install.sh` and `scripts/*.sh` are in git with mode 100755 (ci.yml:278-307).
+
+[cross-runtime.yml](../.github/workflows/cross-runtime.yml) runs the C#'s hook test suites (the event path, the plugin hook files, `--install` and `--doctor`) against the Rust hook on both OSes, and the Rust pet's server tests against the .NET hook.
 
 ---
 
@@ -1214,14 +1221,14 @@ On Linux, `Sh.Which` caches tool lookups for the process lifetime, misses includ
 
 **Hooks start nothing.** A hook connects to the current user's pipe or socket and nothing else; when nothing listens it exits without writing anything. The pet is started only by the user (Start menu, app menu), by the installers (unless told not to), and by Velopack's `Update.exe` after an update the pet handed it. Nothing starts at sign-in: the installers remove older sign-in entries (install.ps1:170-179; packaging/linux/install.sh:58-68).
 
-**Local builds.** Windows antivirus reacts to PowerShell and to freshly built `.exe` files. Local development builds therefore use `dotnet build -p:UseAppHost=false` and run programs as `dotnet <dll>`, as CI's plugin check does. Publishing and NativeAOT are left to the release workflow. `--install` refuses to register `dotnet` itself (§7.1).
+**Local builds.** Windows antivirus reacts to PowerShell and to freshly built `.exe` files. Local development builds therefore use `dotnet build -p:UseAppHost=false` and run programs as `dotnet <dll>`. Cargo can't build the hook without an `.exe`, so a freshly built one may be held for a scan for a while. Publishing is left to the release workflow. `--install` refuses to register `dotnet` itself (§7.1).
 
 **Behaviour that security tooling may look at.** The code doesn't mention antivirus. The notes below describe what the code does in areas such tools commonly inspect:
 - The hook opens one local pipe or socket per event and writes one line to it. Only the current user can open it: on Windows an ACL for the user alone with network clients denied, and an owner check by the hook; on Linux a 0600 socket in the user's runtime folder and the peer's uid checked with `SO_PEERCRED` (§6.5).
 - The hook starts no process. With the pet closed it writes no file.
 - Keystroke synthesis is limited to Escape, behind a focus check. No Alt-key foreground trick is used (WindowsPlatform.cs:61-62).
 - The installers use no Run key and no autostart entry.
-- The released hooks are NativeAOT on both OSes. Both released exes carry the app icon and a version resource that names the `.exe`; the release fails without it (§7.9).
+- The released hooks are native Rust programs on both OSes. The Windows one has the C runtime linked in, and the release fails if it names a C runtime DLL. Both released exes carry the app icon and a version resource that names the `.exe`; the release fails without it (§7.9).
 - The pet's network use: Jira and GitHub when the user turns them on, and, in the installed Windows app only, one GitHub API call per update check (§8.5).
 
 **State lives only in the running pet.** Nothing is saved, so a pet that starts (or restarts) knows no chats until they send their next events, and while it's closed the events are lost. Concretely:
@@ -1246,7 +1253,7 @@ On Linux, `Sh.Which` caches tool lookups for the process lifetime, misses includ
 - **Plugin timing:** the plugin runs the hook through bash, sh and the launcher, so Claude events that Claude starts within a few ms of each other (tens of ms on Git Bash) aren't ordered by `at`.
 - **Codex chat names** come from the pet's `CODEX_HOME`, so a chat started with a `CODEX_HOME` of its own shows its prompt or folder instead.
 - **Large events:** the hook cuts every string to 256 Ki characters, and a request still over 4 MiB keeps only the `tool_input` keys the pet reads; one still over after that is dropped (the hook logs the broken pipe).
-- **Linux hook builds:** the released Linux hook is NativeAOT, linked for glibc 2.27 and newer. On musl or a 32-bit userland the plugin's launcher does nothing, so the pet sees no events. The single-file hook that `build.ps1` builds for Linux, `build.sh` builds without clang, and `install-from-source.sh` builds when it rebuilds runs on CoreCLR instead. CoreCLR creates its diagnostics socket and debugger pipes (`dotnet-diagnostic-<pid>-…-socket`, `clr-debug-pipe-<pid>-…`) in `$TMPDIR` on every run, the closed-pet run included. They go away when the hook exits normally but stay behind when an agent kills it (the 3 s sync hooks). This is the one exception to "writes nothing"; `DOTNET_EnableDiagnostics=0` in the hook's environment would avoid it.
+- **Linux hook builds:** the released Linux hook is built with cargo-zigbuild for glibc 2.27 and newer, linked dynamically. On musl or a 32-bit userland the plugin's launcher does nothing, so the pet sees no events. A hook built from source with plain cargo (`build.sh` for this machine's platform, `install-from-source.sh`) is linked against the build machine's glibc, so it may not run on an older one.
 - **Windows PowerShell cost:** every Codex hook on Windows, direct or from the plugin (`commandWindows`), pays a 1-4 s PowerShell start and runs async.
 - **Claude on Windows** runs the plugin's hooks in Git Bash. Without Git Bash, `install.ps1` registers the direct hooks at the installed exe instead, and the uninstaller removes them.
 - **Linux and Hyprland:**
