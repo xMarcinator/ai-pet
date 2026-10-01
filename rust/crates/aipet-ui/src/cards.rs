@@ -2,6 +2,7 @@
 //! MainWindow's SyncCards, LayoutCards and the card part of OnFrame.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use iced::Point;
 
@@ -33,7 +34,7 @@ impl Section {
 /// A bubble as the pet's data (here the demo script) describes it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bubble {
-    pub id: &'static str,
+    pub id: Arc<str>,
     pub section: Section,
     /// The chat's state, for the dot's colour and the style: thinking, working, attention, done, idle, review…
     pub state: &'static str,
@@ -60,7 +61,7 @@ const LEAVE: f64 = 0.25;
 /// A bubble on screen, easing towards where its stack wants it.
 #[derive(Clone, Debug)]
 pub struct Card {
-    pub id: &'static str,
+    pub id: Arc<str>,
     pub section: Section,
     pub state: &'static str,
     pub app_colour: Option<u32>,
@@ -140,7 +141,7 @@ impl Stacks {
                 Some(card) => card,
                 None => {
                     self.cards.push(Card {
-                        id: bubble.id,
+                        id: Arc::clone(&bubble.id),
                         section: bubble.section,
                         state: bubble.state,
                         app_colour: bubble.app_colour,
@@ -179,7 +180,7 @@ impl Stacks {
     /// Sets where each stack wants its bubbles: spread out one above the other, or folded behind the front one
     /// (smaller, fainter, only their tops showing).
     fn layout(&mut self, show: &[Bubble]) {
-        let order = |id: &str| show.iter().position(|b| b.id == id).unwrap_or(usize::MAX);
+        let order = |id: &str| show.iter().position(|b| *b.id == *id).unwrap_or(usize::MAX);
         for section in Section::ALL {
             let open = self.expanded[section.index()];
             let active = |c: &Card| !c.removing && c.section == section;
@@ -189,8 +190,8 @@ impl Stacks {
                     continue;
                 }
                 // its place in the stack, from the front: how many of the stack's bubbles come before it in `show`
-                let at = order(self.cards[k].id);
-                let i = self.cards.iter().filter(|c| active(c) && order(c.id) < at).count();
+                let at = order(&self.cards[k].id);
+                let i = self.cards.iter().filter(|c| active(c) && order(&c.id) < at).count();
                 let card = &mut self.cards[k];
                 let f = i as f32;
                 card.target = if open {
@@ -302,7 +303,7 @@ mod tests {
 
     fn bubble(id: &'static str, section: Section, state: &'static str) -> Bubble {
         Bubble {
-            id,
+            id: id.into(),
             section,
             state,
             title: id.into(),
@@ -328,7 +329,7 @@ mod tests {
     }
 
     fn card<'a>(stacks: &'a Stacks, id: &str) -> Option<&'a Card> {
-        stacks.cards.iter().find(|c| c.id == id)
+        stacks.cards.iter().find(|c| *c.id == *id)
     }
 
     #[test]
@@ -375,7 +376,7 @@ mod tests {
         assert!(card(&stacks, "a").unwrap().content && !b.content);
         assert!((stacks.height[0] - (14.0 + 50.0 + 9.0)).abs() < 0.1);
         // the front bubble is drawn last
-        assert_eq!(stacks.frames().map(|(c, _)| c.id).collect::<Vec<_>>(), ["b", "a"]);
+        assert_eq!(stacks.frames().map(|(c, _)| &*c.id).collect::<Vec<_>>(), ["b", "a"]);
 
         assert!(stacks.expand(Section::Chats, &show));
         run(&mut stacks, &mut t, 2.0);
@@ -412,7 +413,7 @@ mod tests {
         ];
         stacks.sync(&show, t, false, fit);
         run(&mut stacks, &mut t, 2.0);
-        let r = stacks.frames().find(|(c, _)| c.id == "r").unwrap().1;
+        let r = stacks.frames().find(|(c, _)| &*c.id == "r").unwrap().1;
         assert!((r.bottom_center.y - (460.0 - 64.0)).abs() < 0.1, "{r:?}");
         assert!((stacks.header_bottom() - (460.0 - 64.0 - 50.0 - 8.0)).abs() < 0.1);
         assert!(stacks.has_reviews());
