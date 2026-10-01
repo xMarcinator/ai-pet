@@ -16,88 +16,31 @@
 //! When the C# changes: `dotnet run --project rust/golden -c Release -- registration` from the repository root, then
 //! fix the port until this passes. Never edit the golden files by hand.
 
+mod common;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value, json};
 
-const HOOK: &str = env!("CARGO_BIN_EXE_aipet-hook");
-const NEWLINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
-/// The fixtures' "only": what this OS can make.
-const FAMILY: &str = if cfg!(windows) { "windows" } else { "unix" };
-const THIS_OS: &str = if cfg!(windows) {
-    "windows"
-} else if cfg!(target_os = "macos") {
-    "macos"
-} else {
-    "linux"
+use common::{
+    FAMILY, Failure, HOOK, NEWLINE, Scratch, THIS_OS, from_hex, harness, hook_held, repo, set_env, text, to_hex,
 };
-
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("..")
-}
 
 fn golden_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/registration")
 }
 
 fn load(path: &Path) -> Value {
-    let text = fs::read_to_string(path).unwrap_or_else(|e| {
-        panic!(
-            "{}: {e} (write it with: dotnet run --project rust/golden -c Release -- registration)",
-            path.display()
-        )
-    });
-    serde_json::from_str(&text).unwrap()
+    common::load(path, "registration")
 }
 
-fn text(v: &Value) -> &str {
-    v.as_str().unwrap_or_else(|| panic!("not a string: {v}"))
-}
-
-/// A folder of the test's own, removed when dropped. Under cargo's target folder, where a hard link to the hook can
-/// be made.
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new(test: &str) -> Scratch {
-        let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("registration-{test}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        Scratch(dir)
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        // the read-only fixture's files
-        clear_read_only(&self.0);
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
-fn clear_read_only(dir: &Path) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
-    for entry in entries.filter_map(Result::ok) {
-        let path = entry.path();
-        match entry.file_type() {
-            Ok(t) if t.is_dir() => clear_read_only(&path),
-            Ok(t) if t.is_file() => {
-                if let Ok(m) = fs::metadata(&path)
-                    && m.permissions().readonly()
-                {
-                    let mut p = m.permissions();
-                    #[allow(clippy::permissions_set_readonly_false)]
-                    p.set_readonly(false);
-                    let _ = fs::set_permissions(&path, p);
-                }
-            }
-            _ => {}
-        }
-    }
+fn new_scratch(test: &str) -> Scratch {
+    Scratch::new("registration", test)
 }
 
 /// The hook as it registers itself: its path with `/`, as the C# writes `Environment.ProcessPath` (on Unix the
@@ -156,30 +99,6 @@ fn set_up(case: &Value, root: &Path, exe: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn from_hex(hex: &str) -> Vec<u8> {
-    (0..hex.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
-        .collect()
-}
-
-fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-/// Sets a variable for the child, in place of the one it would inherit in any case: a Windows name keeps the case
-/// it came with (Git Bash gives `PROGRAMFILES`), and a second spelling wouldn't replace it.
-fn set_env(command: &mut Command, name: &str, value: Option<&Path>) {
-    for (inherited, _) in std::env::vars_os() {
-        if inherited.to_string_lossy().eq_ignore_ascii_case(name) {
-            command.env_remove(inherited);
-        }
-    }
-    if let Some(value) = value {
-        command.env(name, value);
-    }
-}
-
 /// The hook's `--install|--uninstall claude` in a case's folder, with Git Bash found or not, as the C# ran it.
 fn step(root: &Path, action: &str, git_bash: bool) -> Output {
     let harness = root.join("harness");
@@ -199,7 +118,7 @@ fn step(root: &Path, action: &str, git_bash: bool) -> Output {
         ("TMP", Some(&harness)),
         ("TEMP", Some(&harness)),
     ] {
-        set_env(&mut hook, name, value);
+        set_env(&mut hook, name, value.map(Path::as_os_str));
     }
     hook.output().unwrap()
 }
@@ -309,41 +228,6 @@ impl Adapt {
             })
             .collect()
     }
-}
-
-/// Why a run of a case didn't come out as the C#'s.
-enum Failure {
-    /// Another process kept a file from the hook, or from the harness around it: a sharing or lock violation. A virus
-    /// scanner can hold a file just written for a moment (Windows), and such a run says nothing of the port.
-    Held(String),
-    /// The hook's answer isn't the C#'s.
-    Differs(String),
-}
-
-/// A sharing and a lock violation, the errors of a file another process has: Windows' ERROR_SHARING_VIOLATION and
-/// ERROR_LOCK_VIOLATION (Unix has neither).
-const HELD: [i32; 2] = [32, 33];
-
-/// Whether another process has the file.
-fn held(e: &io::Error) -> bool {
-    cfg!(windows) && e.raw_os_error().is_some_and(|code| HELD.contains(&code))
-}
-
-/// The harness's own work on the case's files failed: a held file sets the run aside, anything else is a bug here.
-fn harness(what: &str, e: io::Error) -> Failure {
-    assert!(held(&e), "{what}: {e}");
-    Failure::Held(format!("{what}: {e}"))
-}
-
-/// Whether the hook said it was kept from a file: the system's text for a sharing or lock violation, which
-/// install.rs's `thrown` and `moved` pass on. The golden never has one, since its generator sets such runs aside.
-fn hook_held(said: &str) -> bool {
-    cfg!(windows)
-        && HELD.into_iter().any(|code| {
-            let error = io::Error::from_raw_os_error(code).to_string();
-            let (text, _) = error.rsplit_once(" (os error ").unwrap_or((error.as_str(), ""));
-            said.contains(text)
-        })
 }
 
 /// Every case of a corpus this OS can make, through the built hook. Every run of a case must come out as the C#'s,
@@ -456,7 +340,7 @@ fn replay_case(case: &Value, root: &Path, exe: &str, adapt: &Adapt, git_bash: bo
 /// Every Claude fixture's --install and --uninstall gives what the C#'s gave.
 #[test]
 fn claude_registration_is_the_csharps() {
-    let scratch = Scratch::new("claude");
+    let scratch = new_scratch("claude");
     replay(&load(&golden_dir().join("claude.json")), &scratch);
 }
 
@@ -467,7 +351,7 @@ fn claude_registration_is_the_csharps() {
 fn a_held_file_is_known_from_what_the_hook_says() {
     use std::os::windows::fs::OpenOptionsExt;
 
-    let scratch = Scratch::new("held");
+    let scratch = new_scratch("held");
     let case = json!({ "setup": { "files": { "claude/settings.json": "{}" } } });
     set_up(&case, &scratch.0, &hook_written()).unwrap();
     let settings = scratch.0.join("claude").join("settings.json");
@@ -490,7 +374,7 @@ fn the_csharp_on_this_os_is_replayed() {
         eprintln!("skipped: AIPET_GOLDEN doesn't name the golden generator's dll (see this file's doc)");
         return;
     };
-    let scratch = Scratch::new("live");
+    let scratch = new_scratch("live");
     let written = scratch.0.join("golden");
     let out = Command::new("dotnet")
         .arg(dll)
@@ -506,7 +390,7 @@ fn the_csharp_on_this_os_is_replayed() {
     );
     let corpus = load(&written.join("claude.json"));
     assert_eq!(text(&corpus["os"]), THIS_OS);
-    let replays = Scratch::new("live-replay");
+    let replays = new_scratch("live-replay");
     replay(&corpus, &replays);
 }
 
@@ -526,7 +410,7 @@ fn renamed_hook(scratch: &Scratch) -> PathBuf {
 fn install_answers_as_install_run() {
     let corpus = load(&golden_dir().join("claude.json"));
     let adapt = Adapt::of(&corpus);
-    let scratch = Scratch::new("run");
+    let scratch = new_scratch("run");
     let config = scratch.0.join("claude");
     fs::create_dir_all(&config).unwrap();
     let renamed = renamed_hook(&scratch);
@@ -561,8 +445,12 @@ fn install_answers_as_install_run() {
     }
 }
 
-/// Program.Main: a mode without an agent is a usage error at once, never a hook run waiting on stdin (left open
-/// here). The usage lines are the C#'s own.
+/// Program.Main: a mode without an agent is a usage error, never a hook run waiting on stdin (left open here). The
+/// usage lines are the C#'s own.
+///
+/// A hook run would wait for stdin and then exit 0 without a word, so the exit code and the usage tell the two apart
+/// without a clock: a fresh exe the antivirus scans can take seconds to start on a loaded machine. The bound only
+/// keeps a hook that waited for ever from hanging the test.
 #[test]
 fn a_mode_without_an_agent_is_a_usage_error() {
     let source = |file: &str| fs::read_to_string(repo().join("src").join("AiPet.Hook").join(file)).unwrap();
@@ -586,7 +474,6 @@ fn a_mode_without_an_agent_is_a_usage_error() {
             from.contains(&format!("\"{usage}\"")),
             "the C# no longer says {usage:?}"
         );
-        let started = std::time::Instant::now();
         let mut child = Command::new(HOOK)
             .arg(mode)
             .stdin(Stdio::piped())
@@ -595,8 +482,15 @@ fn a_mode_without_an_agent_is_a_usage_error() {
             .spawn()
             .unwrap();
         let _stdin = child.stdin.take();
+        let until = Instant::now() + Duration::from_secs(60);
+        while child.try_wait().unwrap().is_none() {
+            if Instant::now() > until {
+                let _ = child.kill();
+                panic!("{mode} waited on stdin for a minute");
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
         let out = child.wait_with_output().unwrap();
-        assert!(started.elapsed().as_secs() < 2, "{mode} waited on stdin");
         assert_eq!(out.status.code(), Some(2), "{mode}");
         assert_eq!(String::from_utf8_lossy(&out.stdout), "", "{mode}");
         assert_eq!(
@@ -617,7 +511,7 @@ fn print_plugin_hooks_is_the_plugin_files() {
         ("codex", "codex.json"),
         ("CODEX", "codex.json"),
     ] {
-        let scratch = Scratch::new(&format!("print-{agent}"));
+        let scratch = new_scratch(&format!("print-{agent}"));
         let out = print(&["--print-plugin-hooks", agent], &scratch);
         let committed: Vec<u8> = fs::read(repo().join("plugins").join("aipet").join("hooks").join(file))
             .unwrap()
@@ -637,7 +531,7 @@ fn print_plugin_hooks_is_the_plugin_files() {
         );
     }
     for rest in [&["gemini"][..], &["--agent", "claude"]] {
-        let scratch = Scratch::new("print-usage");
+        let scratch = new_scratch("print-usage");
         let args: Vec<&str> = ["--print-plugin-hooks"].iter().chain(rest).copied().collect();
         let out = print(&args, &scratch);
         assert_eq!(out.status.code(), Some(2), "{args:?}");

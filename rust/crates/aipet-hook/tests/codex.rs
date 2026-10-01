@@ -16,6 +16,8 @@
 //! When the C# changes: `dotnet run --project rust/golden -c Release -- registration` from the repository root, then
 //! fix the port until this passes. Never edit the golden files by hand.
 
+mod common;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
@@ -24,74 +26,18 @@ use std::process::{Command, Output, Stdio};
 
 use serde_json::{Map, Value, json};
 
-const HOOK: &str = env!("CARGO_BIN_EXE_aipet-hook");
-/// The fixtures' "only": what this OS can make.
-const FAMILY: &str = if cfg!(windows) { "windows" } else { "unix" };
-const THIS_OS: &str = if cfg!(windows) {
-    "windows"
-} else if cfg!(target_os = "macos") {
-    "macos"
-} else {
-    "linux"
-};
+use common::{FAMILY, Failure, HOOK, Scratch, THIS_OS, from_hex, harness, hook_held, set_env, text, to_hex};
 
 fn golden() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/codex/codex.json")
 }
 
 fn load(path: &Path) -> Value {
-    let text = fs::read_to_string(path).unwrap_or_else(|e| {
-        panic!(
-            "{}: {e} (write it with: dotnet run --project rust/golden -c Release -- registration)",
-            path.display()
-        )
-    });
-    serde_json::from_str(&text).unwrap()
+    common::load(path, "registration")
 }
 
-fn text(v: &Value) -> &str {
-    v.as_str().unwrap_or_else(|| panic!("not a string: {v}"))
-}
-
-/// A folder of the test's own under cargo's target folder, removed when dropped.
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new(test: &str) -> Scratch {
-        let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("codex-{test}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        Scratch(dir)
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        // the read-only fixture's files
-        clear_read_only(&self.0);
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
-fn clear_read_only(dir: &Path) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
-    for entry in entries.filter_map(Result::ok) {
-        let path = entry.path();
-        match entry.file_type() {
-            Ok(t) if t.is_dir() => clear_read_only(&path),
-            Ok(t) if t.is_file() => {
-                if let Ok(m) = fs::metadata(&path)
-                    && m.permissions().readonly()
-                {
-                    let mut p = m.permissions();
-                    #[allow(clippy::permissions_set_readonly_false)]
-                    p.set_readonly(false);
-                    let _ = fs::set_permissions(&path, p);
-                }
-            }
-            _ => {}
-        }
-    }
+fn new_scratch(test: &str) -> Scratch {
+    Scratch::new("codex", test)
 }
 
 /// The command the built hook registers: its own path (on Unix the kernel's, symlinks resolved), which needs no
@@ -187,28 +133,6 @@ fn set_up(case: &Value, root: &Path, tokens: &[(&str, String)]) -> io::Result<()
     Ok(())
 }
 
-fn from_hex(hex: &str) -> Vec<u8> {
-    (0..hex.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
-        .collect()
-}
-
-fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-/// Sets a variable for the child, in place of the one it would inherit in any case: a Windows name keeps the case
-/// it came with, and a second spelling wouldn't replace it.
-fn set_env(command: &mut Command, name: &str, value: &Path) {
-    for (inherited, _) in std::env::vars_os() {
-        if inherited.to_string_lossy().eq_ignore_ascii_case(name) {
-            command.env_remove(inherited);
-        }
-    }
-    command.env(name, value);
-}
-
 /// The hook's `--install|--uninstall codex` with the case's codex/ as CODEX_HOME.
 fn step(root: &Path, action: &str) -> Output {
     let mut hook = Command::new(HOOK);
@@ -221,7 +145,7 @@ fn step(root: &Path, action: &str) -> Output {
         ("TMP", harness.clone()),
         ("TEMP", harness),
     ] {
-        set_env(&mut hook, name, &value);
+        set_env(&mut hook, name, Some(value.as_os_str()));
     }
     hook.output().unwrap()
 }
@@ -297,39 +221,6 @@ fn tree(root: &Path, tokens: &[(&str, String)]) -> io::Result<BTreeMap<String, V
     let mut entries = BTreeMap::new();
     walk(root, root, tokens, &mut entries)?;
     Ok(entries)
-}
-
-/// Why a run of a case didn't come out as the C#'s.
-enum Failure {
-    /// Another process kept a file from the hook, or from the harness around it: a sharing or lock violation. A virus
-    /// scanner can hold a file just written for a moment (Windows), and such a run says nothing of the port.
-    Held(String),
-    /// The hook's answer isn't the C#'s.
-    Differs(String),
-}
-
-/// A sharing and a lock violation, the errors of a file another process has: Windows' ERROR_SHARING_VIOLATION and
-/// ERROR_LOCK_VIOLATION (Unix has neither).
-const HELD: [i32; 2] = [32, 33];
-
-fn held(e: &io::Error) -> bool {
-    cfg!(windows) && e.raw_os_error().is_some_and(|code| HELD.contains(&code))
-}
-
-/// The harness's own work on the case's files failed: a held file sets the run aside, anything else is a bug here.
-fn harness(what: &str, e: io::Error) -> Failure {
-    assert!(held(&e), "{what}: {e}");
-    Failure::Held(format!("{what}: {e}"))
-}
-
-/// Whether the hook said it was kept from a file: the system's text for a sharing or lock violation.
-fn hook_held(said: &str) -> bool {
-    cfg!(windows)
-        && HELD.into_iter().any(|code| {
-            let error = io::Error::from_raw_os_error(code).to_string();
-            let (text, _) = error.rsplit_once(" (os error ").unwrap_or((error.as_str(), ""));
-            said.contains(text)
-        })
 }
 
 /// Every case of a corpus written on this OS that this OS can make, through the built hook. Every run of a case must
@@ -428,7 +319,7 @@ fn codex_registration_is_the_csharps() {
         );
         return;
     }
-    replay(&corpus, &Scratch::new("golden"));
+    replay(&corpus, &new_scratch("golden"));
 }
 
 /// With `AIPET_GOLDEN`, the C# writes the corpus on this OS, and that is replayed too.
@@ -438,7 +329,7 @@ fn the_csharp_on_this_os_is_replayed() {
         eprintln!("skipped: AIPET_GOLDEN doesn't name the golden generator's dll (see this file's doc)");
         return;
     };
-    let scratch = Scratch::new("live");
+    let scratch = new_scratch("live");
     let written = scratch.0.join("golden");
     let out = Command::new("dotnet")
         .arg(dll)
@@ -448,6 +339,6 @@ fn the_csharp_on_this_os_is_replayed() {
         .output()
         .unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    let replays = Scratch::new("live-replay");
+    let replays = new_scratch("live-replay");
     replay(&load(&written.join("codex.json")), &replays);
 }
