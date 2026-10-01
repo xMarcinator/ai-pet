@@ -453,13 +453,21 @@ fn replace(text: &str, with: &str, matches: impl Fn(&[char], usize) -> Option<us
     out
 }
 
-/// What is in the sandbox but tmp/ (where the hook may leave a trace log): each file's bytes, and the folders.
+/// The startup caches PowerShell 7 and Windows PowerShell write under their LocalApplicationData, which the --probe
+/// scenarios' USERPROFILE puts in the sandbox's home: the shell's own files, not the doctor's.
+const POWERSHELL_CACHES: [&str; 2] = [
+    "home/AppData/Local/Microsoft/PowerShell",
+    "home/AppData/Local/Microsoft/Windows/PowerShell",
+];
+
+/// What is in the sandbox but tmp/ (where the hook may leave a trace log) and PowerShell's caches: each file's bytes,
+/// and the folders.
 fn tree(root: &Path) -> io::Result<BTreeMap<String, Option<Vec<u8>>>> {
     fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, Option<Vec<u8>>>) -> io::Result<()> {
         for entry in fs::read_dir(dir)? {
             let path = entry?.path();
             let rel = path.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
-            if rel == "tmp" {
+            if rel == "tmp" || POWERSHELL_CACHES.contains(&rel.as_str()) {
                 continue;
             }
             if path.is_dir() {
@@ -473,6 +481,18 @@ fn tree(root: &Path) -> io::Result<BTreeMap<String, Option<Vec<u8>>>> {
     }
     let mut out = BTreeMap::new();
     walk(root, root, &mut out)?;
+    // and the folders PowerShell made only for its caches, deepest first
+    for dir in [
+        "home/AppData/Local/Microsoft/Windows",
+        "home/AppData/Local/Microsoft",
+        "home/AppData/Local",
+        "home/AppData",
+    ] {
+        let inside = format!("{dir}/");
+        if out.get(dir) == Some(&None) && !out.keys().any(|rel| rel.starts_with(&inside)) {
+            out.remove(dir);
+        }
+    }
     Ok(out)
 }
 
