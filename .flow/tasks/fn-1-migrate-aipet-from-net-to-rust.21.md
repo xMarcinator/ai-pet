@@ -42,8 +42,12 @@ update_status: fn() -> UpdateStatus }`. `velopack = "=1.2.158"` is a dependency 
 cache; its Unix-only crates, wait-timeout and waitpid-any, aren't on this machine, so CI fetches them). The section's
 view, with its button for anything but Off, is there.
 ## Acceptance
-- [ ] On the Windows CI, a local-feed test downloads an update and applies it on quit. The status texts match the C#.
-- [ ] Uninstalling a test install runs the hook cleanup (the proof workflow extended).
+- [ ] The update decisions (check, download, restart to update, install on quit, a pending update at start, offline)
+      are tested against a fake update manager, with no network, and the status texts match the C#.
+- [ ] Velopack's real startup with `--veloapp-uninstall` runs the hook cleanup, tested in a child process against
+      temporary Claude, Codex and data folders.
+- [ ] The CI-level checks moved to task 23 (the conductor, 2026-10-02: they need workflow files this task doesn't
+      own): a local-feed update on the Windows CI, and the extended proof workflow's uninstall.
 ## Done summary
 TBD
 
