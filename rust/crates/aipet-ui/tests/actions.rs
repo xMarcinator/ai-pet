@@ -481,9 +481,8 @@ fn a_tooltip_opens_below_the_pointer_after_a_moment_and_the_next_one_at_once() {
     pet.point(pet.shown("jira:AP-1").body.center());
     assert_eq!(pet.ui.tooltip().map(|(text, _)| text), Some("AP-1 · Port the pet"));
 
-    // Windows' window region is what is drawn, so there a tooltip takes the pointer: the pointer coming onto it
-    // where it reaches past what it belongs to has left that, which closes it and takes it out of what is drawn,
-    // so the next click there goes through to what is under it
+    // the pointer coming onto a tooltip where it reaches past what it belongs to has left that, which closes it and
+    // takes it out of what is drawn (and the input region never had it)
     let (_, r) = pet.ui.tooltip().unwrap();
     let region = pet.ui.hit_rects();
     let bodies = [pet.shown("jira:AP-1").body, pet.shown("claude:a").body];

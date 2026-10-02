@@ -890,9 +890,9 @@ impl PetUi {
 
     /// Where the pet's surface takes the mouse, in whole logical px: the sprite (its hit ellipse's box and its body),
     /// every bubble that is visible (its round buttons are inside it; with its dismiss button while that shows), the
-    /// reviews header, and the menu while it is open inline. Everything else clicks through where the platform has an
-    /// input region of its own; tooltips are not in it. It changes as things move; hand it to the surface whenever it
-    /// does.
+    /// reviews header, and the menu while it is open inline. Everything else clicks through, shadows, glows and tooltips
+    /// too (on Windows, whose window region takes the mouse wherever it draws, the shell lets the mouse through while
+    /// the pointer is outside this). It changes as things move; hand it to the surface whenever it does.
     pub fn hit_rects(&self) -> Vec<Rect> {
         let mut rects = Vec::with_capacity(64);
         rects.extend_from_slice(&self.sprite_rects);
@@ -919,9 +919,7 @@ impl PetUi {
     /// drawn with its shadow or glow (and its dismiss button while that shows, and as far as it takes the pointer),
     /// the reviews header, the menu while it is open inline, and a tooltip while one shows. The rest of the surface
     /// is transparent, so a region that clips drawing as well (X11's bounding shape, a Windows window region) can be
-    /// exactly this. Where that region also takes the mouse (Windows), a tooltip does too while it shows; but the
-    /// pointer reaches the part of it past what it belongs to only by leaving that, which
-    /// closes it and takes it out of here, so the next click there goes through. It changes as things move.
+    /// exactly this. It changes as things move.
     pub fn drawn_rects(&self) -> Vec<Rect> {
         let mut rects = Vec::with_capacity(16);
         let mut add = |r: Rectangle| rects.extend(Rect::covering(r));
