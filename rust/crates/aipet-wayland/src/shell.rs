@@ -11,21 +11,25 @@
 //!
 //! The pet moves on every [`PetUi::frame_interval`] (30 or 60 times a second), and only its surface is drawn for
 //! that: its own frames and the pointer's news draw nothing, so it doesn't draw at the display's rate. The core's news
-//! is picked up on each of those frames and handed to the pet. The app's hooks ([`aipet_ui::Host`]) hear of a drop,
-//! a reset and the quit; where a drop or a reset leaves the surface, in desktop pixels, isn't worked out yet, nor is
-//! the place the pet was left read at start.
+//! is picked up on each of those frames and handed to the pet.
+//!
+//! The app's hooks ([`aipet_ui::Host`]) give the place the pet was left at start, and hear where a drop or Reset
+//! position (back home) leaves the surface, and the quit. A place is the whole window's top-left corner in desktop
+//! pixels, as the desktop shell saves it too, and goes through the output's place, size and scale ([`Screen`]): the
+//! pet's surface is first made on the output the place is on, as soon as the compositor has said where its outputs
+//! are, and at home on the output it picks when the place is on none of them.
 //!
 //! The runtime knows a surface by its id only once it exists, and an action for an id that never appears waits
 //! forever: windows are closed only once they have appeared, and a popup or Settings that doesn't appear in time is
 //! given up on (and closed if it turns up after all). The daemon starts with no surface of its own and outlives the
 //! pet's, which is made again when its output goes away.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-use aipet_ui::{Effect, INLINE_MENU, Launch, MENU, News, PetUi, Rect, SPRITE, SURFACE};
+use aipet_ui::{Effect, INLINE_MENU, Launch, MENU, News, PetUi, Place, Rect, SPRITE, SURFACE};
 use iced::widget::{Space, container, pin};
 use iced::{Color, Element, Event, Point, Rectangle, Subscription, Task, Theme, event, mouse, theme, time, window};
 use iced_exwlshell::actions::{ActionCallback, IcedNewPopupSettings, IcedXdgWindowSettings};
@@ -35,11 +39,11 @@ use iced_exwlshell::reexport::{
     PopupConstraintAdjustment, PopupGravity,
 };
 use iced_exwlshell::settings::{LayerShellSettings, Settings, StartMode};
-use iced_exwlshell::shell::{ShellEvent, ShellReceiver};
+use iced_exwlshell::shell::{OutputInfo, ShellEvent, ShellReceiver};
 use iced_exwlshell::to_layer_message;
 use wayland_client::Connection;
 
-use crate::drag::{Action, Drag, Home, Input, Strategy};
+use crate::drag::{self, Action, Drag, Home, Input, Screen, Strategy};
 
 /// The layer-shell namespace, which compositor rules match.
 const NAMESPACE: &str = "aipet";
@@ -139,10 +143,13 @@ struct Shell {
     /// The input region the surface has, to send a new one only when it differs.
     region: Option<Region>,
     shell: ShellReceiver,
-    /// The outputs connected, by registry name.
-    outputs: BTreeSet<u32>,
+    /// The outputs connected, by registry name, and where each is (none for one that doesn't say its place, size and
+    /// scale).
+    outputs: BTreeMap<u32, Option<Screen>>,
     /// The output the pet's surface is on.
     output: Option<u32>,
+    /// Where the pet was left (the host's), while its surface waits for the output that shows it there.
+    saved: Option<Place>,
     menu: Option<Menu>,
     settings: Option<Window>,
     /// AIPET_DEBUG=1: log what happens to the surfaces, the pointer's presses and the drags to stderr, stamped with
@@ -215,14 +222,22 @@ impl Shell {
             drag: Drag::new(strategy, START),
             region: None,
             shell,
-            outputs: BTreeSet::new(),
+            outputs: BTreeMap::new(),
             output: None,
+            saved: None,
             menu: None,
             settings: None,
             debug,
         };
         me.log(|| format!("dragging by {strategy:?}"));
-        let mut tasks = vec![me.open_pet()];
+        me.saved = me.ui.host().saved_place();
+        let mut tasks = Vec::new();
+        match me.saved {
+            // made as soon as the output that shows it there is known (`place_saved`), or at home at the first
+            // retry
+            Some(saved) => me.log(|| format!("left at {saved:?}: waiting for the outputs")),
+            None => tasks.push(me.open_pet(None)),
+        }
         if open_settings {
             tasks.push(me.open_settings(Instant::now()));
         }
@@ -275,7 +290,13 @@ impl Shell {
             Message::Pet(event, status) => self.pet_event(event, status),
             Message::Committed => self.drag_input(Input::Committed),
             Message::Shell(event) => self.shell_event(*event),
-            Message::Retry if self.surface == Surface::Gone && !self.outputs.is_empty() => self.open_pet(),
+            Message::Retry if self.surface == Surface::Gone && !self.outputs.is_empty() => {
+                // the place the pet was left is on none of the outputs: at home, then (an unknown output or scale)
+                if let Some(saved) = self.saved.take() {
+                    self.log(|| format!("{saved:?} is on no output: the pet goes home"));
+                }
+                self.open_pet(None)
+            }
             // the layer-shell actions the macro adds are taken by the runtime and never get here
             _ => Task::none(),
         }
@@ -300,13 +321,14 @@ impl Shell {
         Space::new().into()
     }
 
-    /// Makes the pet's surface, at home: click-through until the first input region arrives.
-    fn open_pet(&mut self) -> Task<Message> {
+    /// Makes the pet's surface, at home, on `output` (or the one the compositor picks): click-through until the first
+    /// input region arrives.
+    fn open_pet(&mut self, output: Option<u32>) -> Task<Message> {
         self.surface = Surface::Opening;
         self.region = None;
         self.end_drag();
         let margin = self.drag.margins();
-        self.log(|| format!("opening the pet's surface, margins {margin:?}"));
+        self.log(|| format!("opening the pet's surface on {output:?}, margins {margin:?}"));
         Task::done(Message::NewLayerShell {
             settings: NewLayerShellSettings {
                 size: LayerSize::px(SURFACE.width as u32, SURFACE.height as u32),
@@ -316,7 +338,7 @@ impl Shell {
                 exclusive_zone: Some(-1),
                 margin: Some(margin),
                 keyboard_interactivity: KeyboardInteractivity::None,
-                output_option: OutputOption::Active,
+                output_option: output.map_or(OutputOption::Active, OutputOption::GlobalName),
                 events_transparent: true,
                 namespace: Some(NAMESPACE.to_owned()),
                 ..NewLayerShellSettings::default()
@@ -445,13 +467,24 @@ impl Shell {
                 iced::exit()
             }
             Effect::Dropped => {
-                self.log(|| format!("dropped, margins {:?}", self.drag.margins()));
+                let home = self.drag.destination();
+                self.log(|| format!("dropped at {home:?}"));
+                self.save_place(home);
                 Task::none()
             }
             Effect::ResetPosition => {
-                self.log(|| "reset position".to_owned());
+                // only at rest: a drag holds the surface, and a surface on its way was asked for with its margins
+                if self.drag.active() || self.surface == Surface::Opening {
+                    self.log(|| "reset position while the pet moves or is being made: ignored".to_owned());
+                    return Task::none();
+                }
                 self.ui.host().reset_place();
-                Task::none()
+                // a surface still waiting for the output the pet was left on is made at home instead
+                self.saved = None;
+                let actions = self.drag.place(START);
+                self.log(|| "reset position: home".to_owned());
+                self.save_place(self.drag.destination());
+                self.change_surface(actions, false)
             }
         }
     }
@@ -554,14 +587,19 @@ impl Shell {
             ShellEvent::WindowOutputChanged { window, output } if window == self.pet => {
                 self.log(|| format!("the pet is on {:?}", output.as_ref().map(|o| (&o.name, o.logical_size))));
                 self.output = output.as_ref().map(|o| o.id);
+                if let Some(info) = &output {
+                    self.outputs.insert(info.id, screen_of(info));
+                }
                 self.set_output(output.and_then(|o| o.logical_size))
             }
             ShellEvent::OutputAdded(info) | ShellEvent::OutputUpdated(info) => {
-                self.outputs.insert(info.id);
+                let screen = screen_of(&info);
+                self.log(|| format!("output {} {:?}: {screen:?}", info.id, info.name));
+                self.outputs.insert(info.id, screen);
                 if Some(info.id) == self.output {
                     return self.set_output(info.logical_size);
                 }
-                Task::none()
+                self.place_saved(info.id, screen)
             }
             ShellEvent::OutputRemoved(info) => {
                 self.outputs.remove(&info.id);
@@ -575,6 +613,35 @@ impl Shell {
     fn set_output(&mut self, size: Option<(i32, i32)>) -> Task<Message> {
         let actions = self.drag.set_output(size);
         self.change_surface(actions, false)
+    }
+
+    /// While the pet's surface waits for the output it was left on: makes it on `output` (`screen`), where it was
+    /// left, if that output shows it there.
+    fn place_saved(&mut self, output: u32, screen: Option<Screen>) -> Task<Message> {
+        let (Some(saved), Some(screen), Surface::Gone) = (self.saved, screen, self.surface) else {
+            return Task::none();
+        };
+        let Some(home) = screen.home_for(saved) else {
+            return Task::none();
+        };
+        self.saved = None;
+        // no surface to change yet: it is made there
+        let _ = self.drag.set_output(Some(screen.size));
+        let _ = self.drag.place(home);
+        self.log(|| format!("{saved:?} is on output {output}, at {home:?}"));
+        self.open_pet(Some(output))
+    }
+
+    /// Tells the host where the pet's surface is at `home`, in desktop px through its output's place and scale, which
+    /// an output that doesn't say them can't tell (the place saved before stays).
+    fn save_place(&mut self, home: Home) {
+        let Some(screen) = self.output.and_then(|id| self.outputs.get(&id).copied().flatten()) else {
+            self.log(|| "the pet's output doesn't say where it is: its place isn't saved".to_owned());
+            return;
+        };
+        let place = screen.place_at(home);
+        self.log(|| format!("the pet's place: {place:?}"));
+        self.ui.host().save_place(place);
     }
 
     /// A surface appeared. One this shell has given up on is closed.
@@ -666,6 +733,18 @@ impl Shell {
     }
 }
 
+/// Where an output is, as placement takes it ([`Screen`]), if it says: its logical place and size, and its current
+/// mode's size in px, which with that size gives its scale.
+fn screen_of(info: &OutputInfo) -> Option<Screen> {
+    let size = info.logical_size?;
+    let mode = info.modes.iter().find(|mode| mode.current)?.dimensions;
+    Some(Screen {
+        position: info.logical_position?,
+        size,
+        scale: drag::scale_of(mode, size)?,
+    })
+}
+
 /// What a message draws anew. The pet's ticks draw its surface, and so do its bubbles' clicks and its surface's own
 /// events (during a drag the pet may be drawn elsewhere on it). Its frames draw nothing, or each would draw the next,
 /// and neither does the pointer's news: the next tick shows it, a [`aipet_ui::SMOOTH_FRAME`] later while the pointer
@@ -751,27 +830,70 @@ fn describe(rects: &[Rect]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use aipet_ui::{MenuItem, SMOOTH_FRAME, Setup};
     use iced_exwlshell::shell::{ShellInfo, ShellType};
 
     use super::*;
 
-    /// A shell that has booted with a pet that touches nothing and no news, not yet on a surface.
-    fn booted() -> Shell {
+    /// A host that has the pet left at `saved`, and notes the places it is told.
+    #[derive(Clone, Default)]
+    struct Left {
+        saved: Option<Place>,
+        told: Arc<Mutex<Vec<Place>>>,
+    }
+
+    impl aipet_ui::Host for Left {
+        fn prefs(&mut self, _: &aipet_ui::Prefs) {}
+
+        fn dismiss(&mut self, _: &str) {}
+
+        fn settings(&mut self, _: aipet_ui::settings::Action) -> bool {
+            false
+        }
+
+        fn saved_place(&mut self) -> Option<Place> {
+            self.saved
+        }
+
+        fn save_place(&mut self, place: Place) {
+            self.told.lock().unwrap().push(place);
+        }
+
+        fn reset_place(&mut self) {}
+
+        fn quit(&mut self) {}
+    }
+
+    /// A shell that has booted with a pet that touches nothing but `host`, and no news.
+    fn booted_with(host: Left) -> Shell {
         let (_, receiver) = iced_exwlshell::shell::channel();
         let (_, news) = std::sync::mpsc::channel();
         let launch = Launch {
-            ui: PetUi::new(Setup::detached()),
+            ui: PetUi::new(Setup {
+                host: Box::new(host),
+                ..Setup::detached()
+            }),
             news,
         };
         Shell::boot(window::Id::unique(), Strategy::Margin, receiver, false, launch).0
+    }
+
+    /// A shell that has booted with a pet left nowhere, not yet on a surface.
+    fn booted() -> Shell {
+        booted_with(Left::default())
     }
 
     const SPRITE_MIDDLE: Point = Point::new(SPRITE.x + SPRITE.width / 2.0, SPRITE.y + SPRITE.height / 2.0);
 
     /// A shell whose pet's surface is up, a second after it started, with the pointer on the sprite; and that second.
     fn live_shell() -> (Shell, Instant) {
-        let mut shell = booted();
+        live_shell_with(Left::default())
+    }
+
+    fn live_shell_with(host: Left) -> (Shell, Instant) {
+        let mut shell = booted_with(host);
         let _ = shell.shell_event(ShellEvent::NewShell(ShellInfo {
             window: shell.pet,
             shell: ShellType::LayerShell,
@@ -925,5 +1047,112 @@ mod tests {
             let _ = shell.update(press(button));
             assert!(shell.menu.is_none() && !shell.drag.active());
         }
+    }
+
+    /// Two outputs side by side, 2560 × 1600 px at 1.5 (1707 × 1067 logical px), by registry name.
+    const LEFT_OUTPUT: (u32, Screen) = (
+        7,
+        Screen {
+            position: (0, 0),
+            size: (1707, 1067),
+            scale: 1.5,
+        },
+    );
+    const RIGHT_OUTPUT: (u32, Screen) = (
+        9,
+        Screen {
+            position: (1707, 0),
+            size: (1707, 1067),
+            scale: 1.5,
+        },
+    );
+
+    #[test]
+    fn a_pet_left_on_an_output_is_made_there_once_the_output_is_known() {
+        // 1500 px into the right output (whose px start at 1707 × 1.5 = 2560.5), 600 px down: (1000, 400) logical
+        let saved = Place {
+            left: 2561 + 1500,
+            top: 600,
+            window_height: 600.0,
+        };
+        let mut shell = booted_with(Left {
+            saved: Some(saved),
+            ..Left::default()
+        });
+        assert_eq!(shell.surface, Surface::Gone, "it waits for the outputs");
+        let _ = shell.place_saved(LEFT_OUTPUT.0, Some(LEFT_OUTPUT.1));
+        assert_eq!(shell.surface, Surface::Gone, "not on the left output");
+        let _ = shell.place_saved(RIGHT_OUTPUT.0, Some(RIGHT_OUTPUT.1));
+        assert_eq!(shell.surface, Surface::Opening);
+        assert_eq!(shell.drag.margins(), (400, 327, 67, 1000));
+        assert_eq!(shell.saved, None);
+    }
+
+    #[test]
+    fn a_pet_left_on_no_output_it_knows_goes_home_at_the_first_retry() {
+        let mut shell = booted_with(Left {
+            saved: Some(Place {
+                left: 9000,
+                top: 600,
+                window_height: 600.0,
+            }),
+            ..Left::default()
+        });
+        // an output it isn't on, and one that doesn't say its scale
+        for (id, screen) in [(LEFT_OUTPUT.0, Some(LEFT_OUTPUT.1)), (3, None)] {
+            shell.outputs.insert(id, screen);
+            let _ = shell.place_saved(id, screen);
+        }
+        assert_eq!(shell.surface, Surface::Gone);
+        let _ = shell.update(Message::Retry);
+        assert_eq!(shell.surface, Surface::Opening);
+        assert_eq!(shell.drag.margins(), (0, START.right, START.bottom, 0));
+        assert_eq!(shell.saved, None);
+    }
+
+    #[test]
+    fn a_reset_before_the_pet_shows_forgets_where_it_was_left() {
+        // left on the right output, and Settings' Reset position chosen before the outputs are known
+        let mut shell = booted_with(Left {
+            saved: Some(Place {
+                left: 2561 + 1500,
+                top: 600,
+                window_height: 600.0,
+            }),
+            ..Left::default()
+        });
+        let _ = shell.apply(Effect::ResetPosition);
+        shell.outputs.insert(RIGHT_OUTPUT.0, Some(RIGHT_OUTPUT.1));
+        let _ = shell.place_saved(RIGHT_OUTPUT.0, Some(RIGHT_OUTPUT.1));
+        assert_eq!(shell.surface, Surface::Gone, "not where it was left");
+        let _ = shell.update(Message::Retry);
+        assert_eq!(shell.surface, Surface::Opening);
+        assert_eq!(shell.drag.margins(), (0, START.right, START.bottom, 0));
+    }
+
+    #[test]
+    fn a_reset_and_a_drop_tell_the_host_where_the_pet_is_in_desktop_px() {
+        let host = Left::default();
+        let told = Arc::clone(&host.told);
+        let (mut shell, _) = live_shell_with(host);
+        // the compositor put it on the left output
+        shell.outputs.insert(LEFT_OUTPUT.0, Some(LEFT_OUTPUT.1));
+        shell.output = Some(LEFT_OUTPUT.0);
+        let _ = shell.set_output(Some(LEFT_OUTPUT.1.size));
+        // Reset position: home, (1303, 467) logical px on it
+        let _ = shell.apply(Effect::ResetPosition);
+        // a drag 30 px to the left: home 54 px from the right edge, (1273, 467); a reset meanwhile does nothing
+        let _ = shell.update(press(mouse::Button::Left));
+        let _ = shell.apply(Effect::ResetPosition);
+        let to = SPRITE_MIDDLE - iced::Vector::new(30.0, 0.0);
+        let _ = shell.update(pet(Event::Mouse(mouse::Event::CursorMoved { position: to })));
+        let _ = shell.update(pet(Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))));
+        let place = |left, top| Place {
+            left,
+            top,
+            window_height: 600.0,
+        };
+        // × 1.5, rounded: 1954.5, 1909.5 and 700.5 up
+        assert_eq!(*told.lock().unwrap(), [place(1955, 701), place(1910, 701)]);
     }
 }
