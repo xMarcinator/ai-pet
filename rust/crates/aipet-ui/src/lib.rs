@@ -870,6 +870,11 @@ impl PetUi {
         &self.settings
     }
 
+    /// The shell says the Settings window closed: the pages drop what was typed and not saved.
+    pub fn settings_closed(&mut self) {
+        settings::closed(self);
+    }
+
     /// The operating system's services.
     pub fn platform(&self) -> &dyn Platform {
         &*self.platform

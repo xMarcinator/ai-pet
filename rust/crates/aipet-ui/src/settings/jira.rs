@@ -354,3 +354,13 @@ pub(super) fn tick(pet: &mut PetUi) {
         }
     }
 }
+
+/// The Settings window closed (the C# makes a new window each time): what was typed and not saved goes, the token
+/// first, with the status line and any Test running, and the next frame fills the fields from the saved settings.
+pub(super) fn closed(pet: &mut PetUi) {
+    let page = &mut pet.settings.jira;
+    page.token.clear();
+    page.status = None;
+    page.testing = None;
+    page.loaded = None;
+}

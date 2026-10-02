@@ -281,6 +281,7 @@ impl Shell {
             Message::Input(id, Event::Window(window::Event::Closed), _) if Some(id) == self.settings => {
                 self.log(|| "Settings closed".to_owned());
                 self.settings = None;
+                self.ui.settings_closed();
                 Task::none()
             }
             Message::Input(..) => Task::none(),

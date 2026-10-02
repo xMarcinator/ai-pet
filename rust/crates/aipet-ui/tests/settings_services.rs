@@ -611,3 +611,43 @@ fn a_test_still_running_doesnt_hide_save_or_forget() {
     frames_after(&mut pet, &stub);
     assert_eq!(pet.github_status(), forgot_github);
 }
+
+#[test]
+fn closing_settings_drops_what_was_typed_and_not_saved() {
+    let stub = Stub::new(vec![(200, TWO_ISSUES)]);
+    let mut pet = Pet::new("closed", &[(JIRA, "saved-jira"), (GITHUB, "saved-github")]);
+    pet.jira(jira_page::Message::Site(stub.site()));
+    pet.jira(jira_page::Message::Token("typed-jira".into()));
+    pet.jira(jira_page::Message::Test);
+    pet.github(github_page::Message::Host("ghe.example.com".into()));
+    pet.github(github_page::Message::Token("typed-github".into()));
+    pet.github(github_page::Message::Forget);
+    // a frame with the window open keeps what is typed
+    pet.frame();
+    assert_eq!(pet.jira_page().token, "typed-jira");
+    assert_eq!(pet.github_page().token, "typed-github");
+
+    pet.ui.settings_closed();
+    pet.frame();
+    // the next window starts from the saved settings and tokens: nothing typed, no status, no Test's outcome
+    let page = pet.jira_page();
+    assert_eq!(
+        (page.site.as_str(), page.token.as_str(), page.has_token),
+        ("", "", true)
+    );
+    assert_eq!(page.status, None);
+    let page = pet.github_page();
+    assert_eq!(
+        (page.host.as_str(), page.token.as_str(), page.has_token),
+        ("github.com", "", false)
+    );
+    assert_eq!(page.status, None);
+    assert_eq!(pet.github_status(), muted("GitHub reviews are off."));
+    // the Test that was running doesn't come back
+    let until = Instant::now() + Duration::from_millis(300);
+    while Instant::now() < until {
+        thread::sleep(Duration::from_millis(5));
+        pet.frame();
+    }
+    assert_eq!(pet.jira_status(), None);
+}

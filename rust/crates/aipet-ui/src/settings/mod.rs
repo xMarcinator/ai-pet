@@ -179,6 +179,13 @@ pub(crate) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
     }
 }
 
+/// The Settings window closed: the Jira and GitHub pages drop what was typed and not saved, as the C#'s next window
+/// starts afresh. An open window brought forward again keeps it, as the C#'s does.
+pub(crate) fn closed(pet: &mut PetUi) {
+    jira::closed(pet);
+    github::closed(pet);
+}
+
 /// The pages' background work, every frame: picks up what their threads finished.
 pub(crate) fn tick(pet: &mut PetUi) {
     general::tick(pet);
