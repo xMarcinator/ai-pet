@@ -21,8 +21,9 @@ aipet-ui = { path = "../aipet-ui", features = ["demo"] }
 # it already enables, so they add nothing to compile.
 # where winit has its X11 backend: Linux and the BSDs
 [target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies]
-# a pure-Rust connection of our own to the X server winit uses
-x11rb = { version = "0.13", features = ["shape"] }
+# a pure-Rust connection of our own to the X server winit uses: shape for the input region, randr for the screens and
+# their work areas (winit's x11rb enables randr too, but this crate shouldn't depend on that)
+x11rb = { version = "0.13", features = ["shape", "randr"] }
 
 # The window calls (src/native), and the platform's (src/platform): the agents' windows found by their exe
 # (EnumWindows, OpenProcess, QueryFullProcessImageNameW) and brought forward (SetForegroundWindow, AttachThreadInput),
