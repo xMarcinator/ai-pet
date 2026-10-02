@@ -1,0 +1,2 @@
+# the C# side of the repository wraps at 120 columns too
+max_width = 120

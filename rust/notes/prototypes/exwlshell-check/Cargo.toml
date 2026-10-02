@@ -1,0 +1,15 @@
+[package]
+name = "exwlshell-check"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+
+# Compile-check of the recommended AiPet Wayland shell design (iced 0.14 + iced_exwlshell 0.20.1).
+# Not meant to be run as part of the spike notes; `cargo check --offline` only.
+
+[dependencies]
+iced = { version = "0.14", features = ["tokio", "image", "canvas"] }
+iced_exwlshell = "0.20.1"
+iced_wayland_subscriber = "0.20.1"
+wayland-client = "0.31.15"

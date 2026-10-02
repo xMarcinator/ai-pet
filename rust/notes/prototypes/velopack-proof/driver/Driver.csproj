@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Velopack proof's update driver: it updates an installed AiPet the way the installed .NET pet does
+       (Program.cs). Built by .github/workflows/velopack-proof.yml; not part of AiPet.slnx. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>velopack-proof-driver</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- the .NET pet's Velopack (src/AiPet.UI/AiPet.UI.csproj), which is release.yml's VPK_VERSION; the workflow
+         fails when they differ -->
+    <PackageReference Include="Velopack" Version="1.2.158" />
+  </ItemGroup>
+
+</Project>

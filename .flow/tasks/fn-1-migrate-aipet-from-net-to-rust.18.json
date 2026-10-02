@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.243030Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.15"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.18",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.18.md",
+  "status": "todo",
+  "title": "Platform services for Linux and Windows: focus, open, media",
+  "updated_at": "2026-09-30T13:02:03.581783Z"
+}

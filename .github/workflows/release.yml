@@ -3,17 +3,23 @@
 #
 # Run it from the Actions tab (Release > Run workflow) on main, with the version to release, e.g. 0.2.0.
 #
-#   check    the version is new and well formed, the plugin files are consistent, the deploy key reads the plugin
-#            repository and it has a branch
-#   win      AiPet.exe (self-contained) and aipet-hook.exe (NativeAOT): Velopack installer and update feed, portable zip
-#   linux    per platform, AiPet (self-contained) and aipet-hook (NativeAOT, for glibc 2.27 and newer):
-#            AiPet-<version>-<rid>.tar.gz
-#   plugin   plugins/aipet plus the hook binaries: a commit tagged v<version> in the plugin repository
-#   publish  the GitHub release with every package and SHA256SUMS, then the marketplace pins on main
+#   check       the version is new and well formed, the plugin files are consistent, the deploy key reads the plugin
+#               repository and it has a branch
+#   win         AiPet.exe (self-contained) and aipet-hook.exe (Rust): Velopack installer and update feed, portable zip
+#   linux-hook  per architecture, aipet-hook (Rust, for glibc 2.27 and newer)
+#   linux       per platform, AiPet (self-contained) and that hook: AiPet-<version>-<rid>.tar.gz
+#   plugin      SHA256SUMS of every package, then plugins/aipet plus the hook binaries: a commit tagged v<version> in
+#               the plugin repository. The checksums come first, since that push can't be undone.
+#   publish     the GitHub release with every package (checked against SHA256SUMS) and SHA256SUMS, then the
+#               marketplace pins on main
 #
 # A prerelease (a version like 0.3.0-rc.1) gets its plugin tag and a GitHub prerelease, but the marketplaces on main
 # stay on the latest stable release, which is what every user's Claude Code and Codex install. To try a prerelease's
 # plugin, point a local copy of the marketplace files at its tag and commit.
+#
+# A dry run (dry_run) runs every build and check, on any branch, and pushes and publishes nothing: the plugin commit
+# stays in the runner, and the run keeps the release's files, the plugin and SHA256SUMS as artifacts. Give it a
+# version that was never released, e.g. 0.2.0-dry.1.
 #
 # Needs the plugin repository with a first commit on its default branch (create it with a README: actions/checkout
 # can't check out an empty repository, and each release replaces the README anyway), and the secret
@@ -28,6 +34,10 @@ on:
         description: Version to release, without the v (e.g. 0.2.0)
         required: true
         type: string
+      dry_run:
+        description: "Dry run: build and check everything, on any branch, but push and publish nothing"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -62,10 +72,11 @@ jobs:
         id: version
         env:
           VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$GITHUB_REF" != refs/heads/main ]; then
-            echo "::error::Release from main (this run is on $GITHUB_REF)"; exit 1
+          if [ "$GITHUB_REF" != refs/heads/main ] && [ "$DRY_RUN" != true ]; then
+            echo "::error::Release from main (this run is on $GITHUB_REF), or make it a dry run"; exit 1
           fi
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::'$VERSION' isn't a version like 0.2.0"; exit 1
@@ -138,22 +149,30 @@ jobs:
         run: |
           dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r win-x64 --self-contained -o out/app \
             -p:Version="$VERSION" -p:DebugType=none --nologo
-      - name: Publish the hook (NativeAOT, no fallback)
+      # the workspace's rust-version, as in ci.yml
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      - name: Build the hook (Rust)
+        env:
+          # The C runtime linked in, as NativeAOT linked it into the .NET hook: the hook needs only Windows' own DLLs,
+          # not the Visual C++ runtime's, which a Windows install may lack (the hook then couldn't start, unseen).
+          RUSTFLAGS: -C target-feature=+crt-static
         run: |
-          # NativeAOT finds the MSVC linker through vswhere
-          export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"
-          dotnet publish src/AiPet.Hook/AiPet.Hook.csproj -c Release -r win-x64 -o out/hook \
-            -p:Version="$VERSION" -p:PublishAot=true -p:DebugType=none --nologo
-          # a managed (non-AOT) publish would leave aipet-hook.dll next to the exe
-          if [ ! -f out/hook/aipet-hook.exe ] || [ -f out/hook/aipet-hook.dll ]; then
-            echo "::error::The hook wasn't compiled natively"; ls -la out/hook; exit 1
+          # its build script embeds the icon and a version resource that names this release (AIPET_VERSION)
+          (cd rust && AIPET_VERSION="$VERSION" cargo build -p aipet-hook --release --locked --target x86_64-pc-windows-msvc)
+          mkdir -p out/hook
+          cp rust/target/x86_64-pc-windows-msvc/release/aipet-hook.exe out/hook/
+          if grep -qaiE 'vcruntime[0-9]+\.dll|msvcp[0-9]+\.dll|api-ms-win-crt-' out/hook/aipet-hook.exe; then
+            echo "::error::aipet-hook.exe needs the C runtime's DLLs, which a Windows install may lack"; exit 1
           fi
       - name: Check the exes' version resources
         shell: pwsh
         run: |
-          # AiPet.dll and aipet-hook.dll carry the icon and a version resource that names the exe
-          # (build/Win32Resources.targets); the SDK copies them into the apphost and NativeAOT into the native exe.
-          # Read them as Windows does: an exe that says it's a .dll, or has no version, upsets antivirus heuristics.
+          # AiPet.dll carries the icon and a version resource that names the exe (build/Win32Resources.targets), which
+          # the SDK copies into the apphost; aipet-hook.exe gets the same from its build script
+          # (rust/crates/aipet-hook/build.rs). Read them as Windows does: an exe that says it's a .dll, or has no
+          # version, upsets antivirus heuristics.
           $bad = $false
           foreach ($f in @('out/app/AiPet.exe', 'out/hook/aipet-hook.exe')) {
             $v = (Get-Item -LiteralPath $f).VersionInfo
@@ -229,54 +248,52 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  linux:
-    name: Linux (${{ matrix.rid }})
+  linux-hook:
+    name: Linux hook (${{ matrix.rid }})
     needs: check
     strategy:
       matrix:
         include:
-          # Microsoft's cross-build images (x64 Azure Linux with clang and lld, and the target's Ubuntu 18.04 file
-          # system in /crossrootfs/<arch>), as its docs on NativeAOT in containers show. The hook links against that
-          # glibc (2.27), so it runs where .NET 10 does. Linked on a runner, it would need the runner's glibc (2.34+
-          # on 22.04), and older distributions' loaders would refuse it on every event.
-          # Pinned by digest, like the actions (docker ignores the tag then): Microsoft rebuilds these tags. To update,
-          # read the tag's new digest (docker buildx imagetools inspect <image>:<tag>) and watch the glibc step.
-          - { rid: linux-x64, arch: x64, image: "mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-amd64@sha256:f67558f7b8fcf1a875f62d682a05aa6b0ea2e61656258112566665fbc14ce13f" }
-          - { rid: linux-arm64, arch: arm64, image: "mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-arm64@sha256:712167cf0280effdccca936264ec0b3d8789cef04fde3c2fa6e911494673b427" }
-    runs-on: ubuntu-24.04
-    container: ${{ matrix.image }}
+          - { rid: linux-x64, target: x86_64-unknown-linux-gnu }
+          - { rid: linux-arm64, target: aarch64-unknown-linux-gnu }
+    # 22.04: pip installs zig for the runner's user there (24.04's Python refuses it)
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
     defaults:
       run:
         shell: bash
     env:
-      VERSION: ${{ needs.check.outputs.version }}
       RID: ${{ matrix.rid }}
-      # the oldest glibc the hook may need: the cross root file system's
+      TARGET: ${{ matrix.target }}
+      # the oldest glibc the hook may need, as for the release before (Ubuntu 18.04's)
       GLIBC_FLOOR: "2.27"
+      # zig links the hook against its own glibc 2.27 stubs, which cargo-zigbuild picks by the target's suffix.
+      # Pinned like the actions; to update, change both and watch the glibc step.
+      ZIG_VERSION: 0.13.0
+      # 0.23.4 drops rustc's -Wl,--fix-cortex-a53-843419 for aarch64, which zig's linker refuses (0.19.8 passed it on)
+      ZIGBUILD_VERSION: 0.23.4
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      # the workspace's rust-version, as in ci.yml
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
-          dotnet-version: 10.0.x
-      - name: Publish the app (self-contained)
+          toolchain: 1.98.1
+          targets: ${{ matrix.target }}
+      - name: Install zig and cargo-zigbuild
         run: |
-          dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r "$RID" --self-contained -o out/app \
-            -p:Version="$VERSION" -p:DebugType=none --nologo
-      - name: Publish the hook (NativeAOT, no fallback)
-        env:
-          ARCH: ${{ matrix.arch }}
+          python3 -m pip install --user "ziglang==$ZIG_VERSION"
+          cargo install cargo-zigbuild --version "$ZIGBUILD_VERSION" --locked
+      - name: Build the hook (Rust, for glibc 2.27)
         run: |
-          # linked against the image's root file system, not the container's own libraries
-          dotnet publish src/AiPet.Hook/AiPet.Hook.csproj -c Release -r "$RID" -o out/hook \
-            -p:Version="$VERSION" -p:PublishAot=true -p:StripSymbols=true -p:DebugType=none --nologo \
-            -p:SysRoot="/crossrootfs/$ARCH" -p:LinkerFlavor=lld
-          if [ ! -f out/hook/aipet-hook ] || [ -f out/hook/aipet-hook.dll ]; then
-            echo "::error::The hook wasn't compiled natively"; ls -la out/hook; exit 1
-          fi
+          # Linked against glibc dynamically: zig can't link it statically (+crt-static) for a .2.27 target, and the
+          # next step checks the symbol versions the hook needs. A hook linked on the runner would need the runner's
+          # glibc (2.35 on 22.04), and older distributions' loaders would refuse it on every event.
+          (cd rust && cargo zigbuild -p aipet-hook --release --locked --target "$TARGET.$GLIBC_FLOOR")
+          mkdir -p out/hook
+          cp "rust/target/$TARGET/release/aipet-hook" out/hook/
           file out/hook/aipet-hook
           ls -la out/hook
       - name: Check the glibc the hook needs
@@ -297,6 +314,49 @@ jobs:
           done
           if [ "$bad" = 1 ]; then exit 1; fi
           echo "$RID hook: needs glibc $(echo "$need" | tail -n 1) (floor $GLIBC_FLOOR)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hook-${{ matrix.rid }}
+          path: out/hook/aipet-hook
+          if-no-files-found: error
+          retention-days: 7
+
+  linux:
+    name: Linux (${{ matrix.rid }})
+    needs: [check, linux-hook]
+    strategy:
+      matrix:
+        include:
+          # Microsoft's .NET cross-build images, which the app is published in as before (the hook comes from the
+          # linux-hook job). Pinned by digest, like the actions (docker ignores the tag then): Microsoft rebuilds these
+          # tags. To update, read the tag's new digest (docker buildx imagetools inspect <image>:<tag>).
+          - { rid: linux-x64, image: "mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-amd64@sha256:f67558f7b8fcf1a875f62d682a05aa6b0ea2e61656258112566665fbc14ce13f" }
+          - { rid: linux-arm64, image: "mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-arm64@sha256:712167cf0280effdccca936264ec0b3d8789cef04fde3c2fa6e911494673b427" }
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      RID: ${{ matrix.rid }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish the app (self-contained)
+        run: |
+          dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r "$RID" --self-contained -o out/app \
+            -p:Version="$VERSION" -p:DebugType=none --nologo
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: hook-${{ matrix.rid }}
+          path: out/hook
       - name: Make the tarball
         run: |
           name="AiPet-$VERSION-$RID"
@@ -322,16 +382,10 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
           retention-days: 7
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: hook-${{ matrix.rid }}
-          path: out/hook/aipet-hook
-          if-no-files-found: error
-          retention-days: 7
 
   plugin:
     name: Push the plugin
-    needs: [check, win, linux]
+    needs: [check, win, linux-hook, linux]
     runs-on: ubuntu-24.04
     permissions:
       contents: read   # this repository; the plugin repository is written with the deploy key
@@ -403,9 +457,29 @@ jobs:
           EOF
           # this release's Linux hook (the copy just installed, so executable) must print the hook files released with it
           bash source/scripts/check-plugin.sh --release "$dest" --hook "$dest/native/linux-x64/aipet-hook"
+      # The release's checksums are made before anything is pushed, so a failure here leaves the plugin repository as
+      # it was. The publish job releases exactly these files, checked against them.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Checksums
+        run: |
+          (cd dist && sha256sum -- *) > SHA256SUMS
+          mv SHA256SUMS dist/
+          cat dist/SHA256SUMS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SHA256SUMS
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
       - name: Commit, tag and push
         id: push
         working-directory: plugin-repo
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           tag="v$VERSION"
           branch=$(git symbolic-ref --short HEAD)
@@ -415,10 +489,23 @@ jobs:
           git commit -q -m "AiPet plugin $tag" \
             -m "Built from $GITHUB_REPOSITORY@$GITHUB_SHA by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           git tag -a "$tag" -m "AiPet plugin $tag"
-          git push --atomic origin "HEAD:refs/heads/$branch" "refs/tags/$tag"
           sha=$(git rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$DRY_RUN" = true ]; then
+            echo "Dry run: $PLUGIN_REPO@$sha as $tag stays in this runner (the plugin artifact has its files)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git push --atomic origin "HEAD:refs/heads/$branch" "refs/tags/$tag"
           echo "Pushed $PLUGIN_REPO@$sha as $tag" >> "$GITHUB_STEP_SUMMARY"
+      # what a dry run would have pushed, to compare with an earlier release's plugin
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: inputs.dry_run
+        with:
+          name: plugin
+          path: plugin-repo/${{ env.PLUGIN_PATH }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
   publish:
     name: Publish the release
@@ -440,12 +527,24 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: dist
-      - name: Checksums
+      # made by the plugin job before it pushed
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: SHA256SUMS
+          path: dist
+      - name: Check the files against SHA256SUMS
         run: |
           if [[ ! "$PLUGIN_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::The plugin job gave no commit sha"; exit 1; fi
-          (cd dist && sha256sum -- *) > SHA256SUMS
-          mv SHA256SUMS dist/
-          cat dist/SHA256SUMS
+          cd dist
+          sha256sum --check --strict SHA256SUMS
+          # every file released is summed, and every file summed is released
+          listed=$(sed -E 's/^[0-9a-f]{64} [ *]//' SHA256SUMS | sort)
+          present=$(find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' | sort)
+          if [ "$listed" != "$present" ]; then
+            echo "::error::The files to release aren't the ones SHA256SUMS lists"
+            diff <(echo "$listed") <(echo "$present") || true
+            exit 1
+          fi
       - name: Check whether this release is the latest
         id: latest
         run: |
@@ -471,6 +570,7 @@ jobs:
           done
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
       - name: Create the GitHub release
+        if: ${{ !inputs.dry_run }}
         env:
           LATEST: ${{ steps.latest.outputs.latest }}
         run: |
@@ -520,7 +620,7 @@ jobs:
           gh release create "$tag" dist/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "AiPet $VERSION" --notes-file notes.md --generate-notes --latest="$LATEST" "${prerelease[@]}"
       - name: Pin the marketplaces to the plugin commit
-        if: steps.latest.outputs.latest == 'true'
+        if: steps.latest.outputs.latest == 'true' && !inputs.dry_run
         run: |
           tag="v$VERSION"
           url="https://github.com/$PLUGIN_REPO.git"

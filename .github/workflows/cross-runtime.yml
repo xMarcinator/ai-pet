@@ -1,0 +1,174 @@
+# Mixed runtimes, until .NET is gone, on Windows and Linux:
+# - the Rust hook (rust/crates/aipet-hook) against the .NET pet. The C#'s own black-box hook suites run unchanged,
+#   with AIPET_TEST_HOOK pointing their hook runs (TestEnv.HookStartInfo) at the Rust hook instead of
+#   `dotnet hook/aipet-hook.dll`; the pet is the C#'s HookServer, as in CI.
+# - the .NET hook against the Rust pet: the Rust hook server's tests (rust/crates/aipet-core/tests/server.rs), with
+#   AIPET_TEST_HOOK naming the .NET hook's dll, which they run with `dotnet` instead of the Rust hook.
+# Nothing is published here.
+name: Cross-runtime
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  rust-hook:
+    name: Rust hook, .NET pet (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            hook: aipet-hook.exe
+          - os: ubuntu-22.04
+            hook: aipet-hook
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # a fresh unsigned exe gets scanned on every start, which the tests' time budgets would feel; best effort
+      - name: Leave rust/target to Defender's exclusions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          try { Add-MpPreference -ExclusionPath (Join-Path $env:GITHUB_WORKSPACE 'rust\target') -ErrorAction Stop }
+          catch { Write-Output "No Defender exclusion: $($_.Exception.Message)" }
+      # the workspace's rust-version, as in ci.yml
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Build the Rust hook
+        working-directory: rust
+        run: cargo build -p aipet-hook --release --locked
+      # the tests and the pet (AiPet.Core) they run; the .NET hook is built too, for the modes that still run it
+      - name: Build the tests
+        run: dotnet build tests/AiPet.Tests -c Release --nologo
+      # The classes that run the hook: on its event path, for its plugin hook files (PluginHooksTests), and for
+      # --install and --doctor (RegistrationTests). Those of the other system report as skipped. A filter that selects
+      # nothing, or a run where nothing passed, fails: a green run must have run the Rust hook.
+      - name: The C#'s hook suites against the Rust hook
+        shell: bash
+        env:
+          AIPET_TEST_HOOK: ${{ github.workspace }}/rust/target/release/${{ matrix.hook }}
+        run: |
+          classes=(HookContractTests HookSocketTests HookRequestSizeTests EndToEndTests HookServerTests NoPetTests
+                   HookServerUnixTests StarvedPoolTests PluginHooksTests RegistrationTests)
+          filter=$(printf 'FullyQualifiedName~AiPet.Tests.%s.|' "${classes[@]}")
+          set -o pipefail
+          dotnet test tests/AiPet.Tests -c Release --nologo --no-build --filter "${filter%|}" 2>&1 | tee test.log
+          passed=$(sed -nE 's/.*Passed: *([0-9]+),.*/\1/p' test.log | tail -n 1)
+          echo "passed: ${passed:-none}"
+          [ "${passed:-0}" -gt 0 ]
+      # The trace log's checks as root, where a file another user owns can still be opened, so the owner check is
+      # what refuses it (a_file_another_user_owns_is_left_alone skips for anyone else). The rest run as root too.
+      - name: The trace log's tests as root
+        if: runner.os == 'Linux'
+        working-directory: rust
+        run: |
+          set -o pipefail
+          exe=$(cargo test -p aipet-hook --release --locked --no-run --message-format=json \
+            | jq -r 'select(.reason == "compiler-artifact" and .target.kind == ["bin"] and .profile.test) | .executable')
+          [ -n "$exe" ] || { echo "no test executable for the hook"; exit 1; }
+          sudo "$exe" trace:: --test-threads=1 --nocapture 2>&1 | tee trace.log
+          grep -q 'a_file_another_user_owns_is_left_alone ... ok' trace.log
+          ! grep -q 'skipped: only root' trace.log
+      # --doctor with the organisation's managed Claude settings, which only a runner may write: the golden generator
+      # runs those scenarios through the C# hook, and tests/doctor.rs through the Rust one, each writing the file and
+      # taking it away again (AIPET_TEST_MANAGED_SETTINGS). Linux keeps them in a folder of root's, which the runner's
+      # user gets for this. None of the managed scenarios may have been left out.
+      - name: The doctor with managed settings, against the C#
+        shell: bash
+        env:
+          AIPET_GOLDEN: ${{ github.workspace }}/rust/golden/bin/Release/net10.0/aipet-golden.dll
+          AIPET_TEST_MANAGED_SETTINGS: "1"
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then sudo install -d -o "$(id -u)" -g "$(id -g)" /etc/claude-code; fi
+          dotnet build rust/golden -c Release --nologo -p:UseAppHost=false
+          cd rust
+          set -o pipefail
+          cargo test -p aipet-hook --release --locked --test doctor the_csharp_on_this_os_is_replayed -- --nocapture \
+            2>&1 | tee doctor.log
+          grep -q '^test the_csharp_on_this_os_is_replayed ... ok' doctor.log
+          ! grep -E 'claude-managed-[a-z-]+: (left out|skipped)' doctor.log
+
+  csharp-hook:
+    name: .NET hook, Rust pet (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # the tests' own exe is a fresh unsigned one too; best effort
+      - name: Leave rust/target to Defender's exclusions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          try { Add-MpPreference -ExclusionPath (Join-Path $env:GITHUB_WORKSPACE 'rust\target') -ErrorAction Stop }
+          catch { Write-Output "No Defender exclusion: $($_.Exception.Message)" }
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      # run as `dotnet aipet-hook.dll`, as the C#'s own tests run it
+      - name: Build the .NET hook
+        run: dotnet build src/AiPet.Hook -c Release --nologo -p:UseAppHost=false
+      # The server's tests run the hook that AIPET_TEST_HOOK names instead of the Rust one. Each test that runs a hook
+      # must have passed: a green run must have run the .NET hook.
+      - name: The Rust pet's server tests against the .NET hook
+        shell: bash
+        working-directory: rust
+        env:
+          AIPET_TEST_HOOK: ${{ github.workspace }}/src/AiPet.Hook/bin/Release/net10.0/aipet-hook.dll
+        run: |
+          set -o pipefail
+          cargo test -p aipet-core --test server --locked 2>&1 | tee server.log
+          hooked=(codex_scrambled_hooks_end_at_the_latest_turn claude_hook_forwards_the_event_and_its_environment_silently
+                  a_hook_with_garbage_on_stdin_exits_0_silently silent_clients_are_cut_off_while_the_pet_keeps_serving
+                  listeners_answer_hooks_while_every_cpu_is_busy)
+          if [ "$RUNNER_OS" = Linux ]; then
+            hooked+=(unix::a_flood_of_silent_connections_is_capped_and_the_pet_still_answers)
+          fi
+          for test in "${hooked[@]}"; do
+            grep -q "^test $test ... ok" server.log || { echo "$test didn't pass against the .NET hook"; exit 1; }
+          done
+      # Root gets past the socket's mode, so as a second user it meets the peer check itself; sudo needs no password
+      # here. The test skips where it can't be root, so it must not have skipped.
+      - name: The peer check against a second user
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: rust
+        run: |
+          set -o pipefail
+          cargo test -p aipet-core --test server --locked -- --exact unix::a_peer_running_as_another_user_is_refused \
+            --nocapture 2>&1 | tee peer.log
+          grep -q '^test unix::a_peer_running_as_another_user_is_refused ... ok' peer.log
+          ! grep -q 'skipped:' peer.log

@@ -1,0 +1,188 @@
+# Velopack proof: does an install of the .NET app update in place to a release whose AiPet.exe is Rust, and does the
+# Rust app's uninstall hook run? The results are in rust/proofs/velopack.md.
+#
+#   pack     the .NET app as FROM_VERSION, packed as release.yml packs a release; the Rust stand-in
+#            (rust/notes/prototypes/velopack-proof) as TO_VERSION with the same packId, a full package and a delta
+#            against FROM_VERSION; and the update driver, which updates the way the installed .NET pet does
+#   update   each on a fresh runner: install FROM_VERSION with its Setup, update it to TO_VERSION from a local feed,
+#            check what that left, start the app again, uninstall it (proof.ps1 has the steps and the checks)
+#              full    the feed has only the full package
+#              delta   the feed lists both, but only the delta's file is there: a delta the .NET client can't apply,
+#                      or won't take, fails the job instead of falling back to the full package
+#
+# Nothing is published and no release is read. Run it from the Actions tab, or push to the branch proof/velopack.
+name: Velopack proof
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [proof/velopack]
+
+permissions: {}
+
+concurrency:
+  group: velopack-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  FROM_VERSION: 0.1.98
+  TO_VERSION: 0.1.99
+
+jobs:
+  pack:
+    name: Pack the .NET and Rust releases
+    runs-on: windows-2022
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      # the workspace's toolchain (ci.yml)
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      - name: Read the pinned vpk, and check every Velopack here is its version
+        run: |
+          # (a Windows checkout has CRLF line ends)
+          vpk=$(tr -d '\r' < .github/workflows/release.yml | sed -n 's/^ *VPK_VERSION: *\([^ #]*\).*/\1/p')
+          if [ -z "$vpk" ]; then echo "::error::release.yml has no VPK_VERSION"; exit 1; fi
+          echo "VPK_VERSION=$vpk" >> "$GITHUB_ENV"
+          bad=0
+          check() {
+            if [ "$2" = "$vpk" ]; then echo "$1: Velopack $2"
+            else echo "::error file=$1::$1 has Velopack ${2:-(none)}, and release.yml's vpk is $vpk"; bad=1; fi
+          }
+          package() { tr -d '\r' < "$1" | sed -n 's/.*<PackageReference Include="Velopack" Version="\([^"]*\)".*/\1/p'; }
+          check src/AiPet.UI/AiPet.UI.csproj "$(package src/AiPet.UI/AiPet.UI.csproj)"
+          check rust/notes/prototypes/velopack-proof/driver/Driver.csproj "$(package rust/notes/prototypes/velopack-proof/driver/Driver.csproj)"
+          check rust/notes/prototypes/velopack-proof/Cargo.toml \
+            "$(tr -d '\r' < rust/notes/prototypes/velopack-proof/Cargo.toml | sed -n 's/^velopack = "=\([^"]*\)".*/\1/p')"
+          exit "$bad"
+
+      # FROM_VERSION: the app as release.yml's win job builds it
+      - name: Publish the .NET app and hook
+        run: |
+          dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r win-x64 --self-contained -o out/dotnet \
+            -p:Version="$FROM_VERSION" -p:DebugType=none --nologo
+          # NativeAOT finds the MSVC linker through vswhere
+          export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"
+          dotnet publish src/AiPet.Hook/AiPet.Hook.csproj -c Release -r win-x64 -o out/hook \
+            -p:Version="$FROM_VERSION" -p:PublishAot=true -p:DebugType=none --nologo
+          cp out/hook/aipet-hook.exe out/dotnet/
+          find out/dotnet -name '*.pdb' -delete
+      - name: Install vpk
+        env:
+          DOTNET_ROLL_FORWARD: Major   # vpk may target an older .NET than the one installed
+        run: dotnet tool install vpk --version "$VPK_VERSION" --tool-path out/tools
+      - name: Pack the .NET app
+        env:
+          DOTNET_ROLL_FORWARD: Major
+        run: |
+          mkdir -p out/proof/feed
+          # release.yml's vpk pack, with the proof's version and feed
+          out/tools/vpk pack --packId AiPetApp --packVersion "$FROM_VERSION" --packDir out/dotnet --mainExe AiPet.exe \
+            --packTitle AiPet --packAuthors xMarcinator --icon assets/icon/aipet.ico \
+            --channel win --shortcuts StartMenuRoot --noPortable --outputDir out/proof/feed
+          # the next pack writes its own Setup over this one
+          shopt -s nullglob
+          setups=(out/proof/feed/*-Setup.exe)
+          if [ ${#setups[@]} -ne 1 ]; then echo "::error::Expected one Setup.exe from vpk, found ${#setups[@]}"; exit 1; fi
+          cp "${setups[0]}" "out/proof/setup-$FROM_VERSION.exe"
+
+      # TO_VERSION: the Rust stand-in
+      - name: Build the Rust stand-in
+        working-directory: rust/notes/prototypes/velopack-proof
+        run: |
+          cargo build --release
+          mkdir -p ../../../../out/proof/rust
+          cp target/release/AiPet.exe Cargo.lock ../../../../out/proof/rust/
+          mkdir -p ../../../../out/rust
+          cp target/release/AiPet.exe ../../../../out/rust/
+      - name: Pack the Rust stand-in, with a delta against the .NET app
+        env:
+          DOTNET_ROLL_FORWARD: Major
+        run: |
+          # vpk makes the delta from the newest full package already in the output folder: FROM_VERSION's
+          out/tools/vpk pack --packId AiPetApp --packVersion "$TO_VERSION" --packDir out/rust --mainExe AiPet.exe \
+            --packTitle AiPet --packAuthors xMarcinator --icon assets/icon/aipet.ico \
+            --channel win --shortcuts StartMenuRoot --noPortable --outputDir out/proof/feed
+          ls -la out/proof/feed
+          cat out/proof/feed/releases.win.json
+          for f in "AiPetApp-$FROM_VERSION-full.nupkg" "AiPetApp-$TO_VERSION-full.nupkg" "AiPetApp-$TO_VERSION-delta.nupkg"; do
+            if [ ! -f "out/proof/feed/$f" ]; then echo "::error::vpk made no $f"; exit 1; fi
+          done
+          {
+            echo "| Package | Bytes |"
+            echo "|---|---|"
+            for f in out/proof/feed/*.nupkg out/proof/setup-*.exe out/proof/rust/AiPet.exe; do
+              echo "| $(basename "$f") | $(wc -c < "$f" | tr -d ' ') |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the update driver
+        run: dotnet publish rust/notes/prototypes/velopack-proof/driver/Driver.csproj -c Release -o out/proof/driver --nologo
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: velopack-proof
+          path: out/proof
+          if-no-files-found: error
+          retention-days: 7
+
+  update:
+    name: Update ${{ matrix.mode }}
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [full, delta]
+    runs-on: windows-2022
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      LOGS: ${{ github.workspace }}\logs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # the update driver's runtime
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: velopack-proof
+          path: proof
+      - name: Install ${{ env.FROM_VERSION }} (.NET)
+        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 install -Proof proof -Logs $env:LOGS
+      - name: Update to ${{ env.TO_VERSION }} (Rust, ${{ matrix.mode }})
+        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 update -Mode ${{ matrix.mode }} -Proof proof -Logs $env:LOGS
+      - name: Check the update
+        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 check -Proof proof -Logs $env:LOGS
+      - name: Start it again
+        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 restart -Proof proof -Logs $env:LOGS
+      - name: Uninstall
+        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 uninstall -Proof proof -Logs $env:LOGS
+      - name: Logs
+        if: always()
+        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 logs -Proof proof -Logs $env:LOGS
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: velopack-proof-logs-${{ matrix.mode }}
+          path: logs
+          if-no-files-found: warn
+          retention-days: 7
