@@ -1226,6 +1226,12 @@ mod tests {
             })
             .unwrap();
         assert_eq!(move_to(home, Some(right.size)), Action::Margins(400, 327, 67, 1000));
+        // its px rectangle starts there too: 80 px of the window (570 px wide) on it, or the place isn't its
+        assert_eq!(right.home_for(Place { left: 2071, ..place }), None);
+        assert!(right.home_for(Place { left: 2072, ..place }).is_some());
+        // a place is the px nearest the logical one: home on the first output is (1303, 467), 1954.5 and 700.5 up
+        let home = s.place_at(Home { right: 24, bottom: 0 });
+        assert_eq!((home.left, home.top), (1955, 701));
     }
 
     #[test]

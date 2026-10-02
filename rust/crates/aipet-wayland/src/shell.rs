@@ -473,12 +473,14 @@ impl Shell {
                 Task::none()
             }
             Effect::ResetPosition => {
-                self.ui.host().reset_place();
-                // a drag holds the surface, and the place stays forgotten (the pet starts at home next time)
-                if self.drag.active() {
-                    self.log(|| "reset position during a drag: the pet stays".to_owned());
+                // only at rest: a drag holds the surface, and a surface on its way was asked for with its margins
+                if self.drag.active() || self.surface == Surface::Opening {
+                    self.log(|| "reset position while the pet moves or is being made: ignored".to_owned());
                     return Task::none();
                 }
+                self.ui.host().reset_place();
+                // a surface still waiting for the output the pet was left on is made at home instead
+                self.saved = None;
                 let actions = self.drag.place(START);
                 self.log(|| "reset position: home".to_owned());
                 self.save_place(self.drag.destination());
@@ -1109,6 +1111,26 @@ mod tests {
     }
 
     #[test]
+    fn a_reset_before_the_pet_shows_forgets_where_it_was_left() {
+        // left on the right output, and Settings' Reset position chosen before the outputs are known
+        let mut shell = booted_with(Left {
+            saved: Some(Place {
+                left: 2561 + 1500,
+                top: 600,
+                window_height: 600.0,
+            }),
+            ..Left::default()
+        });
+        let _ = shell.apply(Effect::ResetPosition);
+        shell.outputs.insert(RIGHT_OUTPUT.0, Some(RIGHT_OUTPUT.1));
+        let _ = shell.place_saved(RIGHT_OUTPUT.0, Some(RIGHT_OUTPUT.1));
+        assert_eq!(shell.surface, Surface::Gone, "not where it was left");
+        let _ = shell.update(Message::Retry);
+        assert_eq!(shell.surface, Surface::Opening);
+        assert_eq!(shell.drag.margins(), (0, START.right, START.bottom, 0));
+    }
+
+    #[test]
     fn a_reset_and_a_drop_tell_the_host_where_the_pet_is_in_desktop_px() {
         let host = Left::default();
         let told = Arc::clone(&host.told);
@@ -1119,8 +1141,9 @@ mod tests {
         let _ = shell.set_output(Some(LEFT_OUTPUT.1.size));
         // Reset position: home, (1303, 467) logical px on it
         let _ = shell.apply(Effect::ResetPosition);
-        // a drag 30 px to the left: home 54 px from the right edge, (1273, 467)
+        // a drag 30 px to the left: home 54 px from the right edge, (1273, 467); a reset meanwhile does nothing
         let _ = shell.update(press(mouse::Button::Left));
+        let _ = shell.apply(Effect::ResetPosition);
         let to = SPRITE_MIDDLE - iced::Vector::new(30.0, 0.0);
         let _ = shell.update(pet(Event::Mouse(mouse::Event::CursorMoved { position: to })));
         let _ = shell.update(pet(Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))));
