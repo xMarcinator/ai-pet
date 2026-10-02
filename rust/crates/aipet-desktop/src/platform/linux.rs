@@ -156,10 +156,9 @@ struct Heard {
 }
 
 impl MediaPlayer for Mpris {
-    /// The player as Settings names it when the pet starts: Spotify, the C#'s first `Name`. The one heard since is in
-    /// what [`poll`](MediaPlayer::poll) gives.
-    fn name(&self) -> &str {
-        "Spotify"
+    /// The C#'s `Name`: Spotify until a poll names a player, then the last one named.
+    fn name(&self) -> String {
+        lock(&self.heard).player.clone()
     }
 
     /// `Poll`, waited for: playerctl when it is installed, else dbus-send.
