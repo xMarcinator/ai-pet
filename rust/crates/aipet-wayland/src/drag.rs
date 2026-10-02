@@ -238,7 +238,11 @@ impl Drag {
     /// The output the surface is on (its logical size), if known. At rest, a home the output no longer holds is
     /// moved onto it.
     pub fn set_output(&mut self, output: Option<Output>) -> Vec<Action> {
-        self.output = output.filter(|&(w, h)| w > 0 && h > 0);
+        let output = output.filter(|&(w, h)| w > 0 && h > 0);
+        // the same output said again: the surface stays where it is (a place it was left at need not be on it whole)
+        if std::mem::replace(&mut self.output, output) == output {
+            return Vec::new();
+        }
         let home = clamp(self.home, self.output);
         if !matches!(self.phase, Phase::Idle) || home == self.home {
             return Vec::new();
@@ -262,9 +266,9 @@ impl Drag {
         }
     }
 
-    /// Moves the surface to `home` (kept on the output, if known), unless a drag is on: what it takes of the surface.
+    /// Moves the surface to `home`, as it is (a place the pet was left at may have part of the sprite off the
+    /// output, as the C# leaves it), unless a drag is on: what it takes of the surface.
     pub fn place(&mut self, home: Home) -> Vec<Action> {
-        let home = clamp(home, self.output);
         if self.active() || home == self.home {
             return Vec::new();
         }
@@ -683,21 +687,39 @@ fn place(top_left: Point, output: Output) -> Point {
 }
 
 /// An output as placement sees it (one of the C#'s screens): where it is in the compositor's layout and how big, in
-/// logical px, and its scale. Desktop px, which a [`Place`] is in whichever shell saved it, are the physical px the
-/// desktop shell's windows are placed in: an output's logical rectangle times its scale, so a desktop px is a
-/// physical one of the output it is on.
+/// logical px, its scale, and where its desktop px start. Desktop px, which a [`Place`] is in whichever shell saved
+/// it, are the physical px the desktop shell's windows are placed in: on an output, a logical px is `scale` of them,
+/// and the outputs' px rectangles sit side by side as their logical ones do ([`arrange`]), so outputs of different
+/// scales neither overlap nor leave gaps the logical layout doesn't have.
+///
+/// That is the layout X11 sees through XWayland when the compositor hands it physical px (Hyprland's
+/// `xwayland:force_zero_scaling`). A compositor that scales XWayland itself gives X11 logical px instead, and there
+/// the two shells disagree by the scale: nothing on Wayland says which XWayland has.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Screen {
     pub position: (i32, i32),
     pub size: Output,
     pub scale: f64,
+    /// Its top-left in desktop px, unrounded: the logical one times the scale, until [`arrange`] places it among the
+    /// others.
+    pub origin: (f64, f64),
 }
 
 impl Screen {
+    /// An output on its own: its desktop px start at its logical top-left times its scale.
+    pub const fn new(position: (i32, i32), size: Output, scale: f64) -> Screen {
+        Screen {
+            position,
+            size,
+            scale,
+            origin: (position.0 as f64 * scale, position.1 as f64 * scale),
+        }
+    }
+
     /// Where the surface goes on this output for `place`, as PlaceWindow puts the C#'s window: at the place's
     /// top-left, moved up by however much taller the surface is than the window it was saved with (the pet sits at
-    /// its bottom), with the sprite kept on the output as a drag keeps it. None when the pet wouldn't show on this
-    /// output (PlaceWindow's test of each screen, in desktop px).
+    /// its bottom), and left there, as the C# leaves it, even with part of the sprite off the output. None when the
+    /// pet wouldn't show on this output (PlaceWindow's test of each screen, in desktop px).
     pub fn home_for(&self, place: Place) -> Option<Home> {
         let s = self.scale;
         let height = f64::from(SURFACE.height);
@@ -712,32 +734,78 @@ impl Screen {
             return None;
         }
         // the top-left on the output, in its logical px
-        let logical = |px: i64, at: i32| (px as f64 / s - f64::from(at)).round() as i32;
-        let (x, y) = (logical(x, self.position.0), logical(y, self.position.1));
-        let home = Home {
+        let logical = |px: i64, at: f64| ((px as f64 - at) / s).round() as i32;
+        let (x, y) = (logical(x, self.origin.0), logical(y, self.origin.1));
+        Some(Home {
             right: self.size.0 - SURFACE.width as i32 - x,
             bottom: self.size.1 - SURFACE.height as i32 - y,
-        };
-        Some(clamp(home, Some(self.size)))
+        })
     }
 
     /// The place of the surface at `home` on this output: its top-left in desktop px, and its height.
     pub fn place_at(&self, home: Home) -> Place {
         let o = origin(home, self.size);
-        let px = |logical: f32, at: i32| ((f64::from(at) + f64::from(logical)) * self.scale).round() as i32;
+        let px = |logical: f32, at: f64| (at + f64::from(logical) * self.scale).round() as i32;
         Place {
-            left: px(o.x, self.position.0),
-            top: px(o.y, self.position.1),
+            left: px(o.x, self.origin.0),
+            top: px(o.y, self.origin.1),
             window_height: f64::from(SURFACE.height),
         }
     }
 
     /// Its rectangle in desktop px: left, top, right, bottom.
     fn bounds(&self) -> (i64, i64, i64, i64) {
-        let px = |logical: i32| (f64::from(logical) * self.scale).round() as i64;
-        let (x, y) = self.position;
-        let (w, h) = self.size;
+        let (x, y) = self.origin;
+        let (w, h) = (f64::from(self.size.0) * self.scale, f64::from(self.size.1) * self.scale);
+        let px = |v: f64| v.round() as i64;
         (px(x), px(y), px(x + w), px(y + h))
+    }
+}
+
+/// Places the outputs' desktop px among each other, along each axis on its own. Along x, an output starts where the
+/// furthest of the outputs wholly left of it ends in desktop px, plus its logical gap to that one in its own px: of
+/// those beside it (sharing some of its rows), or, with none beside it, of any; with none left of it at all, at its
+/// logical place times its scale. Along y the same, above it. At one scale for all, that is each output's logical
+/// place times the scale; at mixed scales, outputs side by side in the logical layout stay side by side in px (a
+/// 1920 px wide output at 1, and one right of it at 1.5, whose px start at 1920, not 2880).
+pub fn arrange(screens: &mut [Screen]) {
+    for axis in [0, 1] {
+        let at = |s: &Screen| if axis == 0 { s.position.0 } else { s.position.1 };
+        let len = |s: &Screen| if axis == 0 { s.size.0 } else { s.size.1 };
+        let across = |s: &Screen| {
+            if axis == 0 {
+                (s.position.1, s.size.1)
+            } else {
+                (s.position.0, s.size.0)
+            }
+        };
+        let mut order: Vec<usize> = (0..screens.len()).collect();
+        // every output wholly before another is earlier in this order, and so placed first
+        order.sort_by_key(|&i| at(&screens[i]));
+        for &i in &order {
+            let o = screens[i];
+            let before: Vec<Screen> = screens.iter().copied().filter(|p| at(p) + len(p) <= at(&o)).collect();
+            let beside = |p: &&Screen| {
+                let ((a, al), (b, bl)) = (across(p), across(&o));
+                a < b + bl && b < a + al
+            };
+            let end = |p: &Screen| {
+                let start = if axis == 0 { p.origin.0 } else { p.origin.1 };
+                start + f64::from(len(p)) * p.scale + f64::from(at(&o) - at(p) - len(p)) * o.scale
+            };
+            let start = before
+                .iter()
+                .filter(beside)
+                .map(end)
+                .reduce(f64::max)
+                .or_else(|| before.iter().map(end).reduce(f64::max))
+                .unwrap_or(f64::from(at(&o)) * o.scale);
+            if axis == 0 {
+                screens[i].origin.0 = start;
+            } else {
+                screens[i].origin.1 = start;
+            }
+        }
     }
 }
 
@@ -1139,17 +1207,24 @@ mod tests {
     }
 
     #[test]
-    fn a_place_moves_the_surface_at_rest_kept_on_the_output() {
+    fn a_place_moves_the_surface_at_rest_as_it_is_until_the_output_changes() {
         let mut d = drag(Strategy::Margin);
         assert_eq!(
             d.place(Home { right: 24, bottom: 0 }),
             vec![Action::Margins(600, 24, 0, 1516)]
         );
         assert!(d.place(Home { right: 24, bottom: 0 }).is_empty(), "already there");
-        // past the left edge: the sprite stops at it
+        // part of the sprite past the left edge, as a place the pet was left at may have it: left so
         assert_eq!(
-            d.place(Home { right: 9000, bottom: 0 }),
-            vec![Action::Margins(600, 1665, 0, -125)]
+            d.place(Home { right: 1700, bottom: 0 }),
+            vec![Action::Margins(600, 1700, 0, -160)]
+        );
+        // the same output said again (as the compositor says it once the surface is up): still there
+        assert!(d.set_output(Some(OUTPUT)).is_empty());
+        // a new size: the sprite is put back on the output
+        assert_eq!(
+            d.set_output(Some((OUTPUT.0 - 10, OUTPUT.1))),
+            vec![Action::Margins(600, 1655, 0, -125)]
         );
         // not during a drag
         d.handle(Input::Press(GRAB), Instant::now());
@@ -1160,11 +1235,7 @@ mod tests {
     /// of the layout's origin.
     fn screen(scale: f64, x: i32) -> Screen {
         let logical = |px: i32| (f64::from(px) / scale).round() as i32;
-        Screen {
-            position: (x, 0),
-            size: (logical(2560), logical(1600)),
-            scale,
-        }
+        Screen::new((x, 0), (logical(2560), logical(1600)), scale)
     }
 
     #[test]
@@ -1252,8 +1323,17 @@ mod tests {
         assert_eq!(at(1000, 910, 600.0), None);
         assert_eq!(at(2480, 800, 600.0), None);
         assert!(at(1000, 909, 600.0).is_some() && at(2479, 800, 600.0).is_some());
-        // on it by that measure, with the sprite partly off it: the sprite is put back on it, as a drag keeps it
-        assert_eq!(at(-300, 800, 600.0), Some(Point::new(-SPRITE.x, 640.0)));
+        // on it by that measure, with the sprite partly off it: left there, as PlaceWindow leaves it (-300 / 1.25)
+        assert_eq!(at(-300, 800, 600.0), Some(Point::new(-240.0, 640.0)));
+        // and back where it was, to the px
+        let home = s
+            .home_for(Place {
+                left: -300,
+                top: 800,
+                window_height: 600.0,
+            })
+            .unwrap();
+        assert_eq!((s.place_at(home).left, s.place_at(home).top), (-300, 800));
     }
 
     #[test]
@@ -1268,5 +1348,43 @@ mod tests {
         // a size that says nothing: no scale, and so the default place
         assert_eq!(scale_of((0, 0), (1920, 1080)), None);
         assert_eq!(scale_of((2560, 1600), (0, 0)), None);
+    }
+
+    #[test]
+    fn outputs_of_mixed_scales_sit_side_by_side_in_desktop_px() {
+        // 1920 × 1200 at 1, then 2560 × 1600 px at 1.5 right of it (1707 × 1067 logical), then 1920 × 1080 at 1.25
+        // below the first (1536 × 864 logical)
+        let mut screens = [
+            Screen::new((0, 0), (1920, 1200), 1.0),
+            Screen::new((1920, 0), (1707, 1067), 1.5),
+            Screen::new((0, 1200), (1536, 864), 1.25),
+        ];
+        arrange(&mut screens);
+        assert_eq!(screens[0].bounds(), (0, 0, 1920, 1200));
+        // its px start where the first one's end, not at 1920 × 1.5
+        assert_eq!(screens[1].bounds(), (1920, 0, 4481, 1601));
+        assert_eq!(screens[2].bounds(), (0, 1200, 1920, 2280));
+        // a place 80 px into the second output, saved by the desktop shell: on it, and back to the same px
+        let place = Place {
+            left: 2000,
+            top: 600,
+            window_height: 600.0,
+        };
+        assert_eq!(screens[0].home_for(place), None);
+        let home = screens[1].home_for(place).unwrap();
+        assert_eq!(origin(home, screens[1].size), Point::new(53.0, 400.0));
+        let back = screens[1].place_at(home);
+        assert!((back.left - 2000).abs() <= 1 && back.top == 600, "{back:?}");
+        // at one scale for all, each output's px start at its logical place times the scale, gaps and all
+        let mut same = [
+            Screen::new((-1707, 0), (1707, 1067), 1.5),
+            Screen::new((0, 0), (1707, 1067), 1.5),
+            Screen::new((1800, 100), (1707, 1067), 1.5),
+        ];
+        let alone = same;
+        arrange(&mut same);
+        for (arranged, alone) in same.iter().zip(alone) {
+            assert_eq!(arranged.bounds(), alone.bounds());
+        }
     }
 }
