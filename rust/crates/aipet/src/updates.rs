@@ -166,13 +166,23 @@ trait Manager: Send + Sync {
 /// Velopack's own update manager.
 struct Velopack(velopack::UpdateManager);
 
+/// How long a check may go without an answer. Velopack's `GithubSource` sets no timeout on its requests (its
+/// `HttpOptions` default to none, where the C#'s HttpClient has one), so a stalled connection would leave Settings on
+/// "Checking…" for good.
+const CHECK_LIMIT: Duration = Duration::from_secs(5 * 60);
+
+/// How long a download may go without getting further: Velopack says how far it got every 5%, so a slow connection
+/// still finishes, and a stalled one fails.
+const DOWNLOAD_STALL: Duration = Duration::from_secs(10 * 60);
+
 impl Manager for Velopack {
     fn pending(&self) -> Option<VelopackAsset> {
         self.0.get_update_pending_restart()
     }
 
     fn check(&self) -> Result<Option<UpdateInfo>, String> {
-        match self.0.check_for_updates() {
+        let manager = self.0.clone();
+        match watched(CHECK_LIMIT, move |_| manager.check_for_updates(), &mut |_| {})? {
             Ok(UpdateCheck::UpdateAvailable(update)) => Ok(Some(*update)),
             Ok(UpdateCheck::NoUpdateAvailable | UpdateCheck::RemoteIsEmpty) => Ok(None),
             Err(e) => Err(e.to_string()),
@@ -180,18 +190,13 @@ impl Manager for Velopack {
     }
 
     fn download(&self, update: &UpdateInfo, progress: &mut dyn FnMut(i16)) -> Result<(), String> {
-        let (said, heard) = mpsc::channel();
-        thread::scope(|scope| {
-            let download = scope.spawn(move || self.0.download_updates(update, Some(said)));
-            // until the download ends, which drops its sender
-            for percent in heard {
-                progress(percent);
-            }
-            match download.join() {
-                Ok(done) => done.map_err(|e| e.to_string()),
-                Err(_) => Err("the download failed".to_owned()),
-            }
-        })
+        let (manager, update) = (self.0.clone(), update.clone());
+        watched(
+            DOWNLOAD_STALL,
+            move |said| manager.download_updates(&update, Some(said)),
+            progress,
+        )?
+        .map_err(|e| e.to_string())
     }
 
     fn apply(&self, update: &VelopackAsset, silent: bool, restart: bool) -> Result<(), String> {
@@ -367,6 +372,47 @@ fn with(kind: Kind, version: Option<String>, percent: i32, error: Option<String>
         version,
         percent,
         error,
+    }
+}
+
+/// Runs a request of Velopack's on a thread of its own and waits for it while it keeps going: it says how far it got
+/// through the sender it is given, and a request quiet for longer than `quiet` (no progress, or no answer once it
+/// stopped saying) has stalled, and is an error. The thread of a stalled request is left to end on its own, or with
+/// the pet: Velopack's lock keeps a second download from writing over it, and its partial file is never the update.
+fn watched<T: Send + 'static>(
+    quiet: Duration,
+    request: impl FnOnce(mpsc::Sender<i16>) -> T + Send + 'static,
+    progress: &mut dyn FnMut(i16),
+) -> Result<T, String> {
+    use mpsc::RecvTimeoutError::{Disconnected, Timeout};
+    let (said, heard) = mpsc::channel();
+    let (done, outcome) = mpsc::channel();
+    thread::Builder::new()
+        .name("update request".into())
+        .spawn(move || {
+            let _ = done.send(request(said));
+        })
+        .map_err(|e| e.to_string())?;
+    // until the request ends, which drops its sender
+    loop {
+        match heard.recv_timeout(quiet) {
+            Ok(percent) => progress(percent),
+            Err(Disconnected) => break,
+            Err(Timeout) => return Err(stalled(quiet)),
+        }
+    }
+    match outcome.recv_timeout(quiet) {
+        Ok(answer) => Ok(answer),
+        Err(Timeout) => Err(stalled(quiet)),
+        Err(Disconnected) => Err("the update request failed".to_owned()),
+    }
+}
+
+/// The error of a request quiet for `quiet`, as Settings shows it after "Couldn't check for updates: ".
+fn stalled(quiet: Duration) -> String {
+    match quiet.as_secs() {
+        s if s >= 60 => format!("no answer in {} minutes", s / 60),
+        s => format!("no answer in {s} seconds"),
     }
 }
 
@@ -554,6 +600,73 @@ mod tests {
         // and with nothing newer the ready one stays
         updater.check();
         assert_eq!(updater.status().text(), READY_120);
+    }
+
+    /// A request that keeps saying how far it got is waited for, however long it takes in all; its answer comes back.
+    #[test]
+    fn a_request_that_keeps_going_is_waited_for() {
+        let quiet = Duration::from_millis(400);
+        let mut heard = Vec::new();
+        let answer = watched(
+            quiet,
+            |said| {
+                for percent in [20, 40, 60, 80, 100] {
+                    thread::sleep(Duration::from_millis(150));
+                    let _ = said.send(percent);
+                }
+                "done"
+            },
+            &mut |percent| heard.push(percent),
+        );
+        assert_eq!(answer, Ok("done"));
+        assert_eq!(heard, [20, 40, 60, 80, 100]);
+    }
+
+    /// A stalled check or download (Velopack's requests have no timeout) is an error the status shows, not a check
+    /// that never ends: quiet too long before it said anything, between two steps, or before its answer.
+    #[test]
+    fn a_stalled_request_is_an_error() {
+        let quiet = Duration::from_millis(100);
+        let late = Duration::from_millis(600);
+        let silent = watched(quiet, move |_said| thread::sleep(late), &mut |_| {});
+        assert_eq!(silent, Err("no answer in 0 seconds".to_owned()));
+
+        let mut heard = Vec::new();
+        let stuck = watched(
+            quiet,
+            move |said| {
+                let _ = said.send(5);
+                thread::sleep(late);
+                let _ = said.send(10);
+            },
+            &mut |percent| heard.push(percent),
+        );
+        assert!(stuck.is_err());
+        assert_eq!(heard, [5]);
+
+        let gone_quiet = watched(
+            quiet,
+            move |said| {
+                drop(said);
+                thread::sleep(late);
+            },
+            &mut |_| {},
+        );
+        assert!(gone_quiet.is_err());
+
+        assert_eq!(stalled(CHECK_LIMIT), "no answer in 5 minutes");
+        assert_eq!(stalled(DOWNLOAD_STALL), "no answer in 10 minutes");
+    }
+
+    /// A request that panics is a failure too.
+    #[test]
+    fn a_request_that_panics_is_an_error() {
+        let answer: Result<(), String> = watched(
+            Duration::from_secs(5),
+            |_| panic!("a request that panics, as the test wants"),
+            &mut |_| {},
+        );
+        assert_eq!(answer, Err("the update request failed".to_owned()));
     }
 
     /// Offline, rate limited or any other failure is the status text, and the log says which step failed.
