@@ -277,6 +277,30 @@ fn a_bad_file_shows_the_csharps_message_and_changes_nothing() {
         assert_eq!(pet.tokens(), kept(), "{text}");
         assert_eq!(pet.saved(), before, "{text}");
     }
+    // a byte order mark picks the encoding, as a StreamReader's does
+    let preset = r#"{"version":1,"jira":{"site":"other.atlassian.net"}}"#;
+    let utf16 = |be: bool| -> Vec<u8> {
+        let units = std::iter::once(0xFEFF).chain(preset.encode_utf16());
+        units
+            .flat_map(|u| if be { u.to_be_bytes() } else { u.to_le_bytes() })
+            .collect()
+    };
+    let utf32 = |be: bool| -> Vec<u8> {
+        let chars = std::iter::once(0xFEFF).chain(preset.chars().map(u32::from));
+        chars
+            .flat_map(|c| if be { c.to_be_bytes() } else { c.to_le_bytes() })
+            .collect()
+    };
+    let utf8 = [&[0xEF, 0xBB, 0xBF][..], preset.as_bytes()].concat();
+    for bytes in [utf8, utf16(false), utf16(true), utf32(false), utf32(true)] {
+        let mut pet = Pet::new("encoded");
+        let file = pet.scratch.0.join("encoded.json");
+        std::fs::write(&file, &bytes).unwrap();
+        let (line, tone) = pet.import_file(&file);
+        assert!(line.starts_with("Imported Jira (site)."), "{:x?}: {line}", &bytes[..4]);
+        assert_eq!(tone, Tone::Muted);
+        assert_eq!(pet.saved().0.site.as_deref(), Some("other.atlassian.net"));
+    }
     // a file that can't be read
     let mut pet = Pet::new("unreadable");
     let missing = pet.scratch.0.join("gone.json");
@@ -378,13 +402,74 @@ fn reload_shows_new_avatars_and_open_folder_makes_the_folder_first() {
     ui.update(Message::SelectAvatar(2));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (green)"));
 
-    // the avatar worn stays on when its file goes, and the others are as the folder has them
+    // the avatar worn, edited under the same name, is worn as it is now once read again
+    let read = |name: &str| {
+        aipet_sprite::Avatar::all(&folder)
+            .into_iter()
+            .find(|a| a.name == name)
+            .unwrap()
+    };
+    assert_eq!(settings::avatars::worn(&ui), &read("Hood (green)"));
+    let edited = include_str!("../../../../avatars/hood-green.json").replace("#0F4422", "#FF0000");
+    assert_ne!(edited, include_str!("../../../../avatars/hood-green.json"));
+    std::fs::write(&custom, edited).unwrap();
+    assert_ne!(settings::avatars::worn(&ui), &read("Hood (green)"), "not before Reload");
+    ui.update(avatars(settings::avatars::Message::Reload));
+    assert_eq!(settings::avatars::worn(&ui), &read("Hood (green)"));
+    assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (green)"));
+
+    // the avatar worn stays on when its file goes, with no tile, and the others are as the folder has them
+    let worn = settings::avatars::worn(&ui).clone();
     std::fs::remove_file(&custom).unwrap();
     ui.update(avatars(settings::avatars::Message::Reload));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (green)"));
+    assert_eq!(settings::avatars::worn(&ui), &worn);
+    let tiles = settings::avatars::tiles(&ui);
+    assert!(
+        tiles.iter().all(|&(name, worn)| name != "Hood (green)" && !worn),
+        "{tiles:?}"
+    );
+    assert_eq!(
+        tiles.iter().map(|&(name, _)| name).collect::<Vec<_>>(),
+        aipet_sprite::Avatar::all(&folder)
+            .iter()
+            .map(|a| a.name.as_str())
+            .collect::<Vec<_>>()
+    );
     ui.update(Message::SelectAvatar(1));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood"));
+    assert!(settings::avatars::tiles(&ui)[1].1, "its tile is the one worn now");
     ui.update(avatars(settings::avatars::Message::Reload));
     ui.update(Message::SelectAvatar(2));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood"), "its tile went with it");
+}
+
+#[test]
+fn open_folder_opens_nothing_when_the_folder_cannot_be_made() {
+    let mut pet = Pet::new("avatars-blocked");
+    // a file where the avatars folder goes
+    let folder = aipet_sprite::Avatar::custom_dir(&pet.scratch.0);
+    pet.scratch.file("avatars", "not a folder");
+    pet.ui.update(Message::Settings(settings::Message::Avatars(
+        settings::avatars::Message::OpenFolder,
+    )));
+    assert_eq!(pet.platform.calls(), []);
+    let line = pet
+        .ui
+        .settings()
+        .avatars
+        .folder_error
+        .clone()
+        .expect("a line saying why");
+    assert!(
+        line.starts_with(&format!("Couldn't make the avatars folder {}: ", folder.display())),
+        "{line}"
+    );
+    // once it can be made, it opens, and the line goes
+    std::fs::remove_file(&folder).unwrap();
+    pet.ui.update(Message::Settings(settings::Message::Avatars(
+        settings::avatars::Message::OpenFolder,
+    )));
+    assert_eq!(pet.platform.calls(), [Call::OpenFolder(folder)]);
+    assert_eq!(pet.ui.settings().avatars.folder_error, None);
 }

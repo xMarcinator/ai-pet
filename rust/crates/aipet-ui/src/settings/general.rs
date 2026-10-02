@@ -10,7 +10,7 @@ use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
-use std::{fmt, fs, thread};
+use std::{fmt, thread};
 
 use aipet_core::presets::Preset;
 use iced::Element;
@@ -228,10 +228,10 @@ pub fn import_file(pet: &mut PetUi, file: &Path) {
 }
 
 fn import_preset(pet: &PetUi, file: &Path) -> (String, Tone) {
-    // as a StreamReader reads it: bytes that aren't UTF-8 become U+FFFD (the byte order mark is the preset reader's
-    // to drop)
-    let text = match fs::read(file) {
-        Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+    // as a StreamReader reads it: a byte order mark picks UTF-8, UTF-16 or UTF-32, and bytes that don't decode become
+    // U+FFFD
+    let text = match aipet_sprite::read_all_text(file) {
+        Ok(text) => text,
         Err(e) => return (format!("Couldn't read the file: {e}"), Tone::Bad),
     };
     let preset = match Preset::parse(&text) {

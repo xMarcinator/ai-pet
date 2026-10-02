@@ -9,13 +9,39 @@ use iced::widget::image::FilterMethod;
 use iced::widget::{Row, button, column, container, image, row, text, tooltip};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
 
-use super::{button_row, card, dot, pill};
+use super::{Tone, button_row, card, dot, pill, status};
 use crate::style::{self, argb};
 use crate::{Effect, PetUi};
 
 /// The Avatars page's own state.
 #[derive(Debug, Default)]
-pub struct Avatars {}
+pub struct Avatars {
+    /// The pet's list keeps the avatar worn when Reload found its file gone, so that the pet still wears it, but the
+    /// page draws no tile for it: `FillAvatars` shows only what `Avatar.All()` reads.
+    gone: Option<usize>,
+    /// Why Open folder couldn't make the avatars folder, under "Your own avatars".
+    pub folder_error: Option<String>,
+}
+
+/// The tiles the page draws, in order: each avatar's name, and whether it is the one worn. The worn avatar's tile is
+/// missing when its file has gone.
+#[doc(hidden)]
+pub fn tiles(pet: &PetUi) -> Vec<(&str, bool)> {
+    shown(pet)
+        .map(|(i, avatar)| (avatar.name.as_str(), i == pet.avatar))
+        .collect()
+}
+
+/// The avatar the pet wears, as drawn.
+#[doc(hidden)]
+pub fn worn(pet: &PetUi) -> &Avatar {
+    pet.pet.avatar()
+}
+
+fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &Avatar)> {
+    let gone = pet.settings.avatars.gone;
+    pet.avatars.iter().enumerate().filter(move |&(i, _)| Some(i) != gone)
+}
 
 /// What the Avatars page sends of its own (picking an avatar sends the pet's [`crate::Message::SelectAvatar`]).
 #[derive(Clone, Debug)]
@@ -28,12 +54,9 @@ pub enum Message {
 
 pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
     let accent = pet.accent();
-    let tiles = pet
-        .avatars
-        .iter()
-        .zip(&pet.stills)
-        .enumerate()
-        .map(|(i, (avatar, still))| {
+    let tiles = shown(pet)
+        .filter_map(|(i, avatar)| Some((i, avatar, pet.stills.get(i)?)))
+        .map(|(i, avatar, still)| {
             let selected = i == pet.avatar;
             let name = row![
                 dot(argb(avatar.accent | 0xFF000000), 9.0),
@@ -92,6 +115,10 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
          it shows up here.",
         buttons,
     );
+    let mut own = column![own].spacing(8);
+    if let Some(line) = &pet.settings.avatars.folder_error {
+        own = own.push(status(line.as_str(), Tone::Bad));
+    }
     column![grid, card(own)]
         .spacing(16)
         .padding(iced::Padding::ZERO.top(10).bottom(24))
@@ -118,29 +145,42 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
     let folder = Avatar::custom_dir(&pet.settings.services.data_dir);
     match message {
         Message::Reload => reload(pet, Avatar::all(&folder)),
-        Message::OpenFolder => {
-            // a folder that can't be made can't be opened either: the platform says so, if anything
-            let _ = fs::create_dir_all(&folder);
-            pet.platform.open_folder(&folder);
-        }
+        // the platform opens only a folder that is there: one that can't be made isn't opened, and the page says why
+        Message::OpenFolder => match fs::create_dir_all(&folder) {
+            Ok(()) => {
+                pet.settings.avatars.folder_error = None;
+                pet.platform.open_folder(&folder);
+            }
+            Err(e) => {
+                pet.settings.avatars.folder_error =
+                    Some(format!("Couldn't make the avatars folder {}: {e}", folder.display()))
+            }
+        },
     }
     None
 }
 
-/// The avatars as read again (`FillAvatars`). The pet keeps wearing its avatar as it was: its tile is the one with
-/// its name, or, when its file has gone, a tile of its own after the others, until it takes another.
+/// The avatars as read again (`FillAvatars`), one tile each. The worn avatar's tile is the one with its name, and
+/// when its file has changed the pet wears it as it is now (the C# reapplies a tile clicked again; here the one worn
+/// takes no click). When its file has gone, the pet keeps wearing it as it was, with no tile, until it takes another.
 fn reload(pet: &mut PetUi, mut avatars: Vec<Avatar>) {
-    let worn = pet.pet.avatar();
-    let index = match avatars.iter().position(|a| a.name == worn.name) {
-        Some(i) => i,
+    let worn = pet.pet.avatar().clone();
+    let (index, gone) = match avatars.iter().position(|a| a.name == worn.name) {
+        Some(i) => {
+            if avatars[i] != worn {
+                pet.pet.set_avatar(avatars[i].clone());
+            }
+            (i, None)
+        }
         None => {
-            avatars.push(worn.clone());
-            avatars.len() - 1
+            avatars.push(worn);
+            (avatars.len() - 1, Some(avatars.len() - 1))
         }
     };
     pet.stills = avatars.iter().map(crate::sprite::still).collect();
     pet.avatars = avatars;
     pet.avatar = index;
+    pet.settings.avatars.gone = gone;
 }
 
 pub(super) fn tick(_pet: &mut PetUi) {}
