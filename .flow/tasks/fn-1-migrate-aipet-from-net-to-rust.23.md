@@ -49,6 +49,10 @@ order, at the same moment, and with different or unset `XDG_RUNTIME_DIR` values,
 - [ ] cross-runtime.yml holds the .NET pet's and the Rust pet's Linux locks against each other: either start order,
       the same moment, different or unset `XDG_RUNTIME_DIR` values, and an `AIPET_PIPE` ending in `.sock` (the lock is
       `<AIPET_PIPE>.lock` on both sides) give one pet (R7).
+- [ ] From task 21 (moved 2026-10-02): on the Windows CI, a local-feed test downloads an update and applies it on
+      quit, with the status texts matching the C#; this needs a way to point the pet at a local feed (for example a
+      test-only `AIPET_TEST_UPDATE_FEED`), decided here. Uninstalling a test install runs the hook cleanup (the proof
+      workflow extended).
 - [ ] CHANGELOG entry. The milestone 2 release is cut (the user starts it).
 ## Done summary
 TBD
