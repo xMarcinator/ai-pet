@@ -887,8 +887,9 @@ impl PetUi {
 
     /// Where the pet's surface takes the mouse, in whole logical px: the sprite (its hit ellipse's box and its body),
     /// every bubble that is visible (its round buttons are inside it; with its dismiss button while that shows), the
-    /// reviews header, and the menu while it is open inline. Everything else clicks through, tooltips too. It changes
-    /// as things move; hand it to the surface whenever it does.
+    /// reviews header, and the menu while it is open inline. Everything else clicks through, shadows, glows and tooltips
+    /// too (on Windows, whose window region takes the mouse wherever it draws, the shell lets the mouse through while
+    /// the pointer is outside this). It changes as things move; hand it to the surface whenever it does.
     pub fn hit_rects(&self) -> Vec<Rect> {
         let mut rects = Vec::with_capacity(64);
         rects.extend_from_slice(&self.sprite_rects);

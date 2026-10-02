@@ -455,7 +455,7 @@ fn a_tooltip_opens_below_the_pointer_after_a_moment_and_the_next_one_at_once() {
         r.x + r.width <= SURFACE.width && r.x < at.x,
         "{r:?}: it reached past the side"
     );
-    // it is drawn on the surface, and takes no clicks
+    // it is drawn on the surface, and is not in the input region
     let drawn = pet.ui.drawn_rects();
     let covered = |p: Point| drawn.iter().any(|d| d.contains(p));
     assert!(covered(r.position()) && covered(Point::new(r.x + r.width - 1.0, r.y + r.height - 1.0)));
@@ -480,6 +480,22 @@ fn a_tooltip_opens_below_the_pointer_after_a_moment_and_the_next_one_at_once() {
     );
     pet.point(pet.shown("jira:AP-1").body.center());
     assert_eq!(pet.ui.tooltip().map(|(text, _)| text), Some("AP-1 · Port the pet"));
+
+    // the pointer coming onto a tooltip where it reaches past what it belongs to has left that, which closes it and
+    // takes it out of what is drawn (and the input region never had it)
+    let (_, r) = pet.ui.tooltip().unwrap();
+    let region = pet.ui.hit_rects();
+    let bodies = [pet.shown("jira:AP-1").body, pet.shown("claude:a").body];
+    let off = (0..r.height as i32)
+        .rev()
+        .flat_map(|y| (0..r.width as i32).map(move |x| Point::new(r.x + x as f32 + 0.5, r.y + y as f32 + 0.5)))
+        .find(|p| !bodies.iter().any(|b| b.expand(2.0).contains(*p)) && !region.iter().any(|h| h.contains(*p)))
+        .expect("a tooltip that reaches past the bubble");
+    pet.point(off);
+    assert_eq!(pet.ui.tooltip(), None);
+    assert!(!pet.ui.hit_rects().iter().any(|h| h.contains(off)));
+    pet.run(0.5);
+    assert_eq!(pet.ui.tooltip(), None, "it stays closed");
 }
 
 #[test]
