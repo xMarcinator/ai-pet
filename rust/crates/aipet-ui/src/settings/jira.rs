@@ -273,6 +273,8 @@ fn save(pet: &mut PetUi) {
         return;
     };
     let page = &mut pet.settings.jira;
+    // a Test still running speaks for what was there before: its outcome would hide Save's
+    page.testing = None;
     let settings = page.settings(jira.config().poll_seconds);
     // the page's own Save doesn't fill the fields again
     page.loaded = Some(settings.clone());
@@ -323,6 +325,8 @@ fn forget(pet: &mut PetUi) {
     };
     jira.forget_token();
     let page = &mut pet.settings.jira;
+    // as for Save: a Test still running would hide that the token went
+    page.testing = None;
     page.has_token = false;
     page.status = Some((
         "The saved token was removed. Jira stays off until you save a new one.".to_owned(),

@@ -205,6 +205,8 @@ fn save(pet: &mut PetUi) {
         return;
     };
     let page = &mut pet.settings.github;
+    // a Test still running speaks for what was there before: its outcome would hide Save's
+    page.testing = None;
     let settings = page.settings(github.config());
     // the page's own Save doesn't fill the fields again
     page.loaded = Some(settings.clone());
@@ -254,6 +256,8 @@ fn forget(pet: &mut PetUi) {
     };
     github.forget_token();
     let page = &mut pet.settings.github;
+    // as for Save: a Test still running would hide that the token went
+    page.testing = None;
     page.has_token = false;
     page.status = Some((
         "The saved token was removed. GitHub reviews are off until you save a new one.".to_owned(),

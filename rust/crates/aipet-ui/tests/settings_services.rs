@@ -562,3 +562,52 @@ fn settings_saved_elsewhere_fill_the_fields_and_leave_the_token_box_alone() {
     pet.frame();
     assert_eq!(pet.jira_page().site, "typed again");
 }
+
+/// Frames for half a second after the stub got a Test's request, long enough for its outcome to come back.
+fn frames_after(pet: &mut Pet, stub: &Stub) {
+    stub.request();
+    let until = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < until {
+        thread::sleep(Duration::from_millis(5));
+        pet.frame();
+    }
+}
+
+#[test]
+fn a_test_still_running_doesnt_hide_save_or_forget() {
+    let stub = Stub::new(vec![
+        (200, TWO_ISSUES),
+        (200, r#"{"data":{"viewer":{"login":"octo"},"search":{"issueCount":3}}}"#),
+    ]);
+    let mut pet = Pet::new("test-then-save", &[]);
+    let saved_jira = ok("Saved. The pet checks Jira every couple of minutes.");
+    let forgot_jira = muted("The saved token was removed. Jira stays off until you save a new one.");
+    pet.jira(jira_page::Message::Site(stub.site()));
+    pet.jira(jira_page::Message::Email("me@example.com".into()));
+    pet.jira(jira_page::Message::Token("t0k3n".into()));
+    pet.jira(jira_page::Message::Test);
+    pet.jira(jira_page::Message::Save);
+    frames_after(&mut pet, &stub);
+    assert_eq!(pet.jira_status(), Some(saved_jira));
+    // a Test with the saved token, then Forget
+    pet.jira(jira_page::Message::Test);
+    pet.jira(jira_page::Message::Forget);
+    frames_after(&mut pet, &stub);
+    assert_eq!(pet.jira_status(), Some(forgot_jira));
+
+    let saved_github = muted("Saved. The pet checks GitHub every couple of minutes.");
+    let forgot_github = muted("The saved token was removed. GitHub reviews are off until you save a new one.");
+    pet.github(github_page::Message::Host(stub.site()));
+    pet.github(github_page::Message::Token("ghp_typed".into()));
+    pet.github(github_page::Message::Test);
+    pet.github(github_page::Message::Save);
+    // the Jira watcher's polls come here too: wait out the GitHub Test's whatever the request
+    frames_after(&mut pet, &stub);
+    assert_eq!(pet.github_status(), saved_github);
+    // typed, as GitHub's Test reads the saved token on its thread, after Forget
+    pet.github(github_page::Message::Token("ghp_again".into()));
+    pet.github(github_page::Message::Test);
+    pet.github(github_page::Message::Forget);
+    frames_after(&mut pet, &stub);
+    assert_eq!(pet.github_status(), forgot_github);
+}
