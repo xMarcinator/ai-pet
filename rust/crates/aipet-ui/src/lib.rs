@@ -315,8 +315,6 @@ impl Launch {
 pub struct PetUi {
     host: Box<dyn Host>,
     platform: Arc<dyn Platform>,
-    /// The music player's name, where the platform has one.
-    player: Option<String>,
     pet: Pet,
     input: PetInput,
     /// When the pet's clock started (the first tick), and its time now in seconds.
@@ -383,7 +381,6 @@ impl PetUi {
         pet.set_avatar(avatars[avatar].clone());
         PetUi {
             host: setup.host,
-            player: setup.platform.media().map(|player| player.name().to_owned()),
             platform: setup.platform,
             pet,
             input: PetInput::default(),
@@ -878,9 +875,9 @@ impl PetUi {
         &*self.platform
     }
 
-    /// The music player's name, where the platform has one.
-    pub fn player(&self) -> Option<&str> {
-        self.player.as_deref()
+    /// The music player's name, where the platform has one: the one its last poll heard, read anew each time.
+    pub fn player(&self) -> Option<String> {
+        self.platform.media().map(|player| player.name())
     }
 
     /// The pet window's whole size (logical px), which its saved place is the top-left corner of.
@@ -1527,6 +1524,27 @@ pub(crate) mod tests {
         ui.update(Message::Board(board(&playing(false))));
         ui.tick(Instant::now());
         assert!(!ui.input.music, "paused");
+    }
+
+    #[test]
+    fn settings_names_the_player_the_last_poll_heard() {
+        let vlc = Media {
+            name: "Vlc".into(),
+            song: Some("A song".into()),
+            playing: true,
+            track_since: NOW,
+            ..Media::default()
+        };
+        let platform = Arc::new(platform::Recorder::with_player("Spotify", vlc));
+        let ui = PetUi::new(Setup {
+            platform: platform.clone(),
+            ..Setup::detached()
+        });
+        let listen = |ui: &PetUi| ui.player().map(|player| format!("Listen along with {player}"));
+        assert_eq!(listen(&ui).as_deref(), Some("Listen along with Spotify"));
+        // the core polls the player; Settings, drawn after, names the one heard
+        platform.media().expect("a player").poll();
+        assert_eq!(listen(&ui).as_deref(), Some("Listen along with Vlc"));
     }
 
     #[test]

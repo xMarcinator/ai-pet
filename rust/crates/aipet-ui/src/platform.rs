@@ -33,8 +33,9 @@ pub trait Platform: Send + Sync {
 
 /// The music player (`IMediaPlayer`): Spotify through its window title on Windows, MPRIS on Linux.
 pub trait MediaPlayer: Send + Sync {
-    /// The player's name, for Settings' "Listen along with …" (e.g. "Spotify").
-    fn name(&self) -> &str;
+    /// The player's name, for Settings' "Listen along with …" (e.g. "Spotify"): the one the last poll heard, where the
+    /// platform hears more than one (MPRIS), as the C#'s `Name`.
+    fn name(&self) -> String;
 
     /// Asks the player what it plays, about once a second while the user listens along, and says so.
     fn poll(&self) -> Media;
@@ -79,11 +80,13 @@ pub enum Call {
 }
 
 /// A platform for tests: it notes every call, in order, and does nothing else. It has a player only when made with
-/// one ([`Recorder::with_player`]), which answers every poll with what it was given.
+/// one ([`Recorder::with_player`]), which answers every poll with what it was given and, like MPRIS, is named after
+/// the player that poll names.
 #[derive(Debug, Default)]
 pub struct Recorder {
     calls: Mutex<Vec<Call>>,
-    player: Option<(String, Media)>,
+    /// The player's name (the last polled one's), and what it plays.
+    player: Option<(Mutex<String>, Media)>,
 }
 
 impl Recorder {
@@ -92,11 +95,11 @@ impl Recorder {
         Recorder::default()
     }
 
-    /// A recorder whose player is called `name` and always plays `media`.
+    /// A recorder whose player is called `name` until a poll, and always plays `media`.
     pub fn with_player(name: &str, media: Media) -> Recorder {
         Recorder {
             calls: Mutex::default(),
-            player: Some((name.to_owned(), media)),
+            player: Some((Mutex::new(name.to_owned()), media)),
         }
     }
 
@@ -136,13 +139,21 @@ impl Platform for Recorder {
 }
 
 impl MediaPlayer for Recorder {
-    fn name(&self) -> &str {
-        self.player.as_ref().map_or("", |(name, _)| name)
+    fn name(&self) -> String {
+        self.player.as_ref().map_or_else(String::new, |(name, _)| {
+            name.lock().unwrap_or_else(PoisonError::into_inner).clone()
+        })
     }
 
     fn poll(&self) -> Media {
         self.note(Call::Poll);
-        self.player.as_ref().map(|(_, media)| media.clone()).unwrap_or_default()
+        let Some((name, media)) = &self.player else {
+            return Media::default();
+        };
+        if !media.name.is_empty() {
+            *name.lock().unwrap_or_else(PoisonError::into_inner) = media.name.clone();
+        }
+        media.clone()
     }
 
     fn previous(&self) {
@@ -193,7 +204,7 @@ mod tests {
         };
         let platform = Recorder::with_player("Spotify", song.clone());
         let player = platform.media().expect("a player");
-        assert_eq!((player.name(), player.poll()), ("Spotify", song));
+        assert_eq!((player.name(), player.poll()), ("Spotify".to_owned(), song));
         player.play_pause();
         assert_eq!(platform.calls(), [Call::Poll, Call::PlayPause]);
         assert!(NoPlatform.media().is_none());

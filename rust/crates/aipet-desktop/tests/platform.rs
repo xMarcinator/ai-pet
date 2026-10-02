@@ -278,6 +278,8 @@ fn playerctl_says_the_status_artist_title_and_player() {
     for (answer, plays) in polls {
         assert_eq!(player.poll(), plays, "{answer:?}");
     }
+    // Settings names the player last heard, as the C#'s `Name`
+    assert_eq!(player.name(), "Vlc");
     assert_eq!(script.seen(), vec![PLAYERCTL.to_owned(); 7]);
 }
 

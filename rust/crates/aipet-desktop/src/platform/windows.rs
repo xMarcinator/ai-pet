@@ -270,8 +270,8 @@ impl Spotify {
 }
 
 impl MediaPlayer for Spotify {
-    fn name(&self) -> &str {
-        "Spotify"
+    fn name(&self) -> String {
+        "Spotify".to_owned()
     }
 
     /// `Poll`: Spotify's title again. A new one says what plays; a paused one keeps the last track.
