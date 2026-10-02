@@ -580,6 +580,7 @@ impl Shell {
         if self.settings.is_some_and(|w| !w.live && now > w.deadline) {
             self.log(|| "Settings didn't appear: given up on".to_owned());
             self.settings = None;
+            self.ui.settings_closed();
         }
     }
 
@@ -721,6 +722,7 @@ impl Shell {
         } else if self.settings.is_some_and(|w| w.id == id) {
             self.log(|| "Settings closed".to_owned());
             self.settings = None;
+            self.ui.settings_closed();
         }
     }
 
