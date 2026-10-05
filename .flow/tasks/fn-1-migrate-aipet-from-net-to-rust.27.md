@@ -54,7 +54,9 @@ then: real Claude and Codex chats in the Rust pet, the .NET and Rust pets never 
 moment, the demo, the groundwork run, and the release build opening no console window (the exact commands are in task
 15's done summary). The desktop shell's title and X11 class are `AiPet`, and Settings is `AiPet · Settings`.
 ## Acceptance
-- [ ] Every check passes on Windows 10 and 11, recorded in `rust/proofs/windows-hands-on.md`. No failure is left open.
+- [ ] Every check passes on Windows 11, recorded in `rust/proofs/windows-hands-on.md`. No failure is left open.
+      Windows 10 is not tested: the user has no Windows 10 machine (the user's decision, 2026-10-05). The record
+      says so, and which checks would differ there.
 - [ ] Antivirus results are recorded, and any detections are reported to their vendors.
 
 
