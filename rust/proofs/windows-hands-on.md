@@ -205,9 +205,39 @@ Rebuild (see [Before starting](#before-starting)), then:
 
 | # | Check | Command or action | Look for | Result |
 |---|---|---|---|---|
-| R1 | E-x1: the dismiss badge | `AIPET_DEBUG=1 rust/target/debug/AiPet.exe 2> run-R.log`. Hover a bubble, then its badge, then spread a stack and hover each of its bubbles. | A 22 px dark circle (#2E2E31) with a faint 1 px white edge and a white X, on the hovered bubble's top-left corner only, lighter (#4A4A4F) while the pointer is on it. No bare X and no white circle anywhere. In a spread stack, only the hovered bubble has one. | |
-| R2 | E-x4: single icons | Hover a Jira bubble with a PR, a working Claude-app chat and the music bubble, at 100 % and at 150 %. | Each icon is drawn once, crisp, in the middle of its button: the dismiss X, Open, the pull request, Previous, Play/Pause and Next. | |
-| R3 | E-x6: width on hover | Hover a bubble with a long title, then one with a short title and buttons (the music bubble). | The long one keeps its width and its title is cut shorter beside the buttons. The short one grows by its buttons. Neither gets narrower. | |
-| R4 | D-x3: the menu's check marks | Open the menu with each combination of Show bubbles and Always on top (toggle them from the menu). | Each row's check mark shows its own setting, once, with no extra mark. | |
-| R5 | J-x8: the demo's buttons | `rust/target/demo-recheck/debug/AiPet.exe` (part 3 built it there: the old demo exe was still running and couldn't be replaced), then Settings → Avatars. | Reload and Open folder are greyed out and do nothing. | |
-| R6 | E3: Open's timing | With `AIPET_DEBUG=1`, click Open on a working Claude-app chat (Claude open behind another window), then once with Claude minimised. `grep "aipet: open:" run-R.log` | The lines give how long finding Claude's window took and how long until Claude was in front (and its waits of 15 ms), or how long opening the link took. Note the numbers and how slow it feels. | |
+| R1 | E-x1: the dismiss badge | `AIPET_DEBUG=1 rust/target/debug/AiPet.exe 2> run-R.log`. Hover a bubble, then its badge, then spread a stack and hover each of its bubbles. | A 22 px dark circle (#2E2E31) with a faint 1 px white edge and a white X, on the hovered bubble's top-left corner only, lighter (#4A4A4F) while the pointer is on it. No bare X and no white circle anywhere. In a spread stack, only the hovered bubble has one. | **Pass** (fixed). |
+| R2 | E-x4: single icons | Hover a Jira bubble with a PR, a working Claude-app chat and the music bubble, at 100 % and at 150 %. | Each icon is drawn once, crisp, in the middle of its button: the dismiss X, Open, the pull request, Previous, Play/Pause and Next. | **Pass** (fixed). |
+| R3 | E-x6: width on hover | Hover a bubble with a long title, then one with a short title and buttons (the music bubble). | The long one keeps its width and its title is cut shorter beside the buttons. The short one grows by its buttons. Neither gets narrower. | **Pass** (fixed). |
+| R4 | D-x3: the menu's check marks | Open the menu with each combination of Show bubbles and Always on top (toggle them from the menu). | Each row's check mark shows its own setting, once, with no extra mark. | **Pass** (fixed). |
+| R5 | J-x8: the demo's buttons | `rust/target/demo-recheck/debug/AiPet.exe` (part 3 built it there: the old demo exe was still running and couldn't be replaced), then Settings → Avatars. | Reload and Open folder are greyed out and do nothing. | **Pass** (fixed). |
+| R6 | E3: Open's timing | With `AIPET_DEBUG=1`, click Open on a working Claude-app chat (Claude open behind another window), then once with Claude minimised. `grep "aipet: open:" run-R.log` | The lines give how long finding Claude's window took and how long until Claude was in front (and its waits of 15 ms), or how long opening the link took. Note the numbers and how slow it feels. | **Pass**: one line, `aipet: open: a claude: link opened in 1335.3 ms`. Open goes through Windows' protocol handler, the same route as the C#, so E3 passes at about 1.3 s. |
+
+### E-x9: spreading a stack is choppy on GL
+
+Found at the re-check: spreading a stack of bubbles is choppy on the default GL backend, and worse with more bubbles
+(a little with the demo's two chats, clearly with about five real ones). The .NET pet is smooth, and the same spread
+on Vulkan (`WGPU_BACKEND=vulkan`) is noticeably smoother.
+
+What part 3's follow-up found, offscreen (iced's headless renderer on this machine's Intel GPU, the pet's real view;
+each frame's time includes reading the picture back, so only the comparisons count):
+
+| Spread of 4 chats | GL, frame | Vulkan, frame |
+|---|---|---|
+| Folded, at rest | 22 ms | 4 ms |
+| Spreading | 219 ms mean, 328 ms max | 9 ms mean, 11 ms max |
+| Spread, at rest | 105 ms | 6 ms |
+
+- **Not the icons.** The same measurement on part 1's code (3738dc3, the canvas icons) was as slow on GL: 160 ms
+  spreading and 74 ms at rest with 4 chats. Each icon's picture is made once per icon and colour and then reused
+  (`style::Icon`, tested), so nothing is uploaded per frame for them.
+- **The bubbles' text.** With the bubbles' text left out, a spread GL frame took 18 ms. Without the shadows or the
+  dots it was as slow as with them. Moving every bubble's text into one layer on top didn't help either. So the cost
+  is iced's text drawing on wgpu's GL backend, which grows with each line of text: a spread stack shows two lines per
+  bubble. It is outside the pet's code.
+- The only lever in the pet is the backend. GL starts in 0.9 s and Vulkan in 4–7 s (task 13), but Vulkan draws the
+  bubbles' text more than ten times faster here. Which default to keep is the user's decision.
+
+| # | Check | Command or action | Look for | Result |
+|---|---|---|---|---|
+| R7 | E-x9 on GL | `AIPET_DEBUG=1 rust/target/demo-e9/debug/AiPet.exe 2> run-R7-gl.log`. At 27 s into a 40 s pass (27 s after start, then every 40 s) the chats' stack fills up: four bubbles and "+N more". Click it to spread it, move away to let it fold, a few times. `grep "bubbles' animation" run-R7-gl.log` | One line per animation: its frames, and their mean and max frame time. Note the spreads' lines (4 bubbles in the stack) and how smooth it feels. | |
+| R8 | E-x9 on Vulkan | The same with `WGPU_BACKEND=vulkan`, into `run-R7-vulkan.log`. | The same lines. Compare the mean and max frame time with R7's. A smooth spread is about 16 ms a frame (the pet's lively rate). | |
