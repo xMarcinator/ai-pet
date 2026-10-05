@@ -72,9 +72,9 @@ The demo has its own target folder so that it doesn't replace the plain debug bu
 
 | # | Check | Command or action | Look for | Result |
 |---|---|---|---|---|
-| A1 | The release pet | Note the time and the SHA-256 (`sha256sum rust/target/release/AiPet.exe`), then start it once from Explorer and quit. | Any reaction from the antivirus (Trend Micro on this machine) or Defender/SmartScreen: a block, a quarantine, a scan delay, a prompt. Note the product, its version, the detection name and the time. | **Pass**: no reaction. SHA-256 at 10:56: `c25db67b2c8a189450abe54eb374b64fb403867bc4260c046636a47ec739d802`. |
+| A1 | The release pet | Note the time and the SHA-256 (`sha256sum rust/target/release/AiPet.exe`), then start it once from Explorer and quit. | Any reaction from the antivirus (Trend Micro on this machine) or Defender/SmartScreen: a block, a quarantine, a scan delay, a prompt. Note the product, its version, the detection name and the time. | **Pass**: no reaction. SHA-256 at 10:56: `c25db67b2c8a189450abe54eb374b64fb403867bc4260c046636a47ec739d802`. Final build (bce9cfe) at 14:14, **pass**: `94fe29b01ac5f915646e530fecd319f2da4d9da70d486536fced6f31a2726805`. |
 | A2 | The release hook | `sha256sum rust/target/release/aipet-hook.exe`, then `rust/target/release/aipet-hook.exe --doctor; echo $?` | As A1. `--doctor` only reads. | **Pass**: no reaction. SHA-256: `5da792ef42c47cb7a556bca423c5d0ffc30a5eb770f14defd58c8243dea3a4e2`. |
-| A3 | The debug and demo pets | Start `rust/target/debug/AiPet.exe` and `rust/target/demo/debug/AiPet.exe` once each, then quit. | As A1. A rebuild can make file operations fail with "Access to the path is denied" for a few minutes: note it, wait, and retry. | **Pass**: no reaction. Debug SHA-256 `703b9764b3f54edec89470bc1a35a6860f7a3af12bb54e42058b9b2fcbd800b0`, demo `0976026b27fe9e51e6759d18907da1fdfc86288cabfb12e69fa07929aa3a1364`. |
+| A3 | The debug and demo pets | Start `rust/target/debug/AiPet.exe` and `rust/target/demo/debug/AiPet.exe` once each, then quit. | As A1. A rebuild can make file operations fail with "Access to the path is denied" for a few minutes: note it, wait, and retry. | **Pass**: no reaction. Debug SHA-256 `703b9764b3f54edec89470bc1a35a6860f7a3af12bb54e42058b9b2fcbd800b0`, demo `0976026b27fe9e51e6759d18907da1fdfc86288cabfb12e69fa07929aa3a1364`. Final builds (bce9cfe) at 14:14, **pass**: debug `8f3b0200e6b55eac63eff7d9a698b64c38fc631720c0282e63e5600621cb3b92`, demo `61366d4ec6ed2a731789609d768c9811535a649dbae299601a0f06fcaaa6e9f1`. |
 | A4 | Reports | For every detection in A1–A3, report the file as a false positive to its vendor (the spec's handling; no code signing). | The report's reference number, here. | **Not needed**: no detections. |
 
 ## B. Start, the window and the font
@@ -125,7 +125,7 @@ Have a working Claude-app chat, a Jira issue with a PR, a GitHub review, Spotify
 | E1 | Real chats (task 15, check 1) | Work in a Claude Code chat and in a Codex chat. | Their bubbles, the mood and the laptop or lens follow. A dismissed bubble stays away until the chat does something new. | **Pass**. |
 | E2 | Buttons by kind (task 17, checks 2–3) | Point at each kind of bubble, then rest on each button for half a second. | Its buttons and the dismiss X appear, only on the front bubble of a folded stack. Each tooltip shows. No Stop button anywhere. Screenshots of the hovered bubbles. | **Partial**: chat and music bubbles checked; review bubbles not run (none existed). Findings, fixed in 30d6a61, to **re-check**: **E-x1** the dismiss badge was a bare X on unhovered bubbles and a white circle on the hovered one, and spread stacks showed it on every bubble (it must be the C#'s 22 px #2E2E31 circle with a 1 px #66FFFFFF edge and a white 1.6 px X, #4A4A4F hovered, on the hovered bubble only); **E-x4** every icon (dismiss X, Open, media buttons) was drawn twice, the second copy offset, at 100 % and 150 %; **E-x6** a hovered bubble got narrower, where the C#'s keeps its width or grows and shortens its title. |
 | E3 | Button clicks (task 17, check 4) | Click each button. | Jira and the PR open in the browser; Previous, Play/Pause and Next drive Spotify; the chat's Open opens the chat or brings its app forward. | **Pass**, but Open is slow to bring Claude forward. **Re-check** with `AIPET_DEBUG=1`: the `aipet: open:` lines time finding the window, bringing it forward and opening a link. |
-| E4 | Bubble clicks (task 17, check 5) | Click a folded stack, then a bubble body; then an error bubble. | A folded stack spreads first, then the click opens the item. An error bubble opens its Settings page. | No result reported. |
+| E4 | Bubble clicks (task 17, check 5) | Click a folded stack, then a bubble body; then an error bubble. | A folded stack spreads first, then the click opens the item. An error bubble opens its Settings page. | **Not run**: the user skipped it. No watcher had an error to show, and making one means cutting the network or breaking a watcher's settings. The click routing is covered by aipet-ui's tests. |
 | E5 | Dismiss and hover (SPIKE.md 5–6) | Hover a bubble and click its X. | The wave, eyes and close button react at once; the bubble leaves and returns when its chat does something new. | **Pass**. |
 | E6 | Click-through, GL and Vulkan (not shown by task 13) | With the default (GL), click Notepad beside the pet and in a gap between bubbles. Repeat under `WGPU_BACKEND=vulkan`. | Each click reaches Notepad, with both backends. | **Pass** (GL and Vulkan). |
 
@@ -133,7 +133,7 @@ Have a working Claude-app chat, a Jira issue with a PR, a GitHub review, Spotify
 
 | # | Check | Command or action | Look for | Result |
 |---|---|---|---|---|
-| F1 | Claude to the front | Leave the Claude app open behind another window (once minimised), and click a Claude chat bubble that has no deep link. | Claude comes to the front, restored if minimised. | No result reported. |
+| F1 | Claude to the front | Leave the Claude app open behind another window (once minimised), and click a Claude chat bubble that has no deep link. | Claude comes to the front, restored if minimised. | **Pass** (final builds): Claude came to the front. |
 | F2 | No Claude window | Close Claude and click again. | `claude://` opens Claude; aipet.log says `no claude window found; opening claude://`. | **Pass**. |
 | F3 | Codex | With ChatGPT open, click a Codex chat bubble without a deep link; then close ChatGPT and click again. | ChatGPT comes forward. Closed: nothing opens, and aipet.log says `no codex window found`. | **Pass**. |
 | F4 | Spotify | Play Spotify and turn on Settings → Listen along. Pause in Spotify. | Within a second the music bubble shows the song with "♫ Artist"; paused: "Paused · Artist". | **Pass**. |
@@ -151,7 +151,7 @@ Have a working Claude-app chat, a Jira issue with a PR, a GitHub review, Spotify
 | G5 | Jira page (task 20, checks 1–3) | Settings → Jira. Test search with the real site, email and token, then with a wrong token. Save. Remove saved token. Restore the token afterwards. | Fields from jira.json, token box empty ("A token is saved. Leave this empty to keep it."). "Searching…" then "Connected. …"; wrong: "Jira didn't accept the email/API token". Save empties the box, shows the Saved text, and an issue bubble appears within about 2 s. Remove shows its text and the button goes. | **Pass**. |
 | G6 | GitHub page (task 20, check 4) | Settings → GitHub. Type a token, Test connection, Save, Remove saved token, Create a token. Restore the token afterwards. | Typing ticks the box; "Connected as <login>. …"; Save and Remove as G5; Create a token opens `<host>/settings/personal-access-tokens/new`. | **Pass**. |
 | G7 | Updates in a dev build (task 21, check 1) | `AIPET_OPEN_SETTINGS=1 rust/target/debug/AiPet.exe` | General → updates reads "This copy doesn't update itself. To update, install AiPet again." with no button, and no `$LOCALAPPDATA/velopack` log appears. | **Pass**. |
-| G8 | Velopack uninstall hook in a dev build (task 21, check 2) | `rust/target/debug/AiPet.exe --veloapp-uninstall 0.3.0; echo $?` | Prints 0, and the pet doesn't start. Nothing changes (no hook next to a dev build). | No result reported. |
+| G8 | Velopack uninstall hook in a dev build (task 21, check 2) | `rust/target/debug/AiPet.exe --veloapp-uninstall 0.3.0; echo $?` | Prints 0, and the pet doesn't start. Nothing changes (no hook next to a dev build). | **Pass** (final debug build): exited with 0, and no pet started. |
 
 ## H. Placement and config.json (task 16)
 
@@ -162,7 +162,7 @@ Have a working Claude-app chat, a Jira issue with a PR, a GitHub review, Spotify
 | H3 | An old Toolbar config | Quit; edit config.json to `"Toolbar":true` with no `WindowHeight`; start the Rust pet, note where it is, quit; start the .NET pet. | Both pets put it in the same place. | **Not run** (the legacy Toolbar config). |
 | H4 | Off-screen | Quit; set `"Left":99999`; start. | The pet resets to the corner. | **Pass**. |
 | H5 | Untouched config | `stat -c %y "$LOCALAPPDATA/AiPet/config.json"`, start and quit without a change, `stat` again. | The modified time is the same. | **Pass**. |
-| H6 | A place on the other monitor | Main monitor at 150 %, drop the pet on the 100 % monitor, quit, start. | It opens on the second monitor where it was left. | **Pass** with both monitors at 100 %; the 150 % variant **not run**. |
+| H6 | A place on the other monitor | Main monitor at 150 %, drop the pet on the 100 % monitor, quit, start. | It opens on the second monitor where it was left. | **Pass** with both monitors at 100 %. The 150 % variant was **not run**: the user chose not to change the main monitor's scaling again. C3, C4 and C9 cover the DPI handoff at 150 %. |
 
 ## I. Never two pets (task 15, check 2)
 
@@ -188,8 +188,8 @@ Have a working Claude-app chat, a Jira issue with a PR, a GitHub review, Spotify
 - **Passed:** A1–A3 (no antivirus reaction to any of the four exes, so A4's reports aren't needed), B1–B7, C1–C4,
   C6, C8, C9, D1, D2, D4, E1, E3, E5, E6, F2–F6, G1–G7, H1, H2, H4, H5, H6 at 100 %, I1–I3 and J1–J2. E2 passed in
   part (see below).
-- **Not run:** C5 and C7 (optional), H3 (the legacy Toolbar config), E2 for review bubbles (none existed), and the
-  150 % variant of H6. E4, F1 and G8 have no result reported.
+- **Not run:** C5 and C7 (optional), H3 (the legacy Toolbar config), E2 for review bubbles (none existed), E4 and
+  the 150 % variant of H6 (both skipped by the user; reasons in their rows). F1 and G8 passed on the final builds.
 - **Found, and fixed in 30d6a61** (this task; a re-check by hand is next):
   - **E-x1, E-x4, D-x3:** the dismiss badge, the round buttons' icons and the menu's check marks came out doubled
     and stale. They were canvas meshes. The settings and the logic were right, and offscreen renders of the same view
@@ -255,3 +255,9 @@ the user's biggest stack 5-6 times on each backend (`AIPET_DEBUG`'s animation li
 Both run at about 60 frames a second, and about half the spreads drop one or two frames (a 35-40 ms gap) on either
 backend. That hitch is what the user saw as choppiness. It is not a regression of this task, and the backend is no
 lever: GL stays the default for its 0.9 s start. The user agreed to hand the hitch to task 28, the performance gate.
+
+### Final re-check (bce9cfe, 2026-10-05 14:14)
+After the review's fix to `AIPET_DEBUG`'s frame count (bce9cfe), the release, debug and demo pets were rebuilt and
+started once each from Explorer: no antivirus reaction (A1, A3; SHA-256s in their rows). F1 and G8 passed on these
+builds. E4 and H6 at 150 % were skipped by the user. R7 and R8 were measured before bce9cfe, when each line counted one
+frame too few; that doesn't change their means or worst frames by more than one frame's share, nor the outcome.
