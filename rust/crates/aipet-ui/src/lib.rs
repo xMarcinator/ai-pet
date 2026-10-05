@@ -391,6 +391,12 @@ impl FrameTimes {
             self.on = true;
             return None;
         }
+        // the frame that settles the bubbles is the animation's last
+        if self.on {
+            self.frames += 1;
+            self.total += gap;
+            self.max = self.max.max(gap);
+        }
         let done = std::mem::take(self);
         (done.frames > 0).then(|| {
             format!(
@@ -2003,8 +2009,8 @@ pub(crate) mod tests {
         assert!(hovered.width > rest.width);
     }
 
-    /// The debug line ends each animation with its frames' times, from the second frame on: the gap before the first
-    /// is the calm before it.
+    /// The debug line ends each animation with its frames' times, from the second frame on (the gap before the first
+    /// is the calm before it) to the one that settles the bubbles.
     #[test]
     fn an_animations_frame_times_are_summed_up_when_it_ends() {
         let mut times = FrameTimes::default();
@@ -2014,8 +2020,14 @@ pub(crate) mod tests {
         }
         assert_eq!(
             times.frame(0.016, false, 4).as_deref(),
-            Some("bubbles' animation: 3 frames in 66 ms, frame time mean 22.0 ms, max 30.0 ms (4 bubbles)")
+            Some("bubbles' animation: 4 frames in 82 ms, frame time mean 20.5 ms, max 30.0 ms (4 bubbles)")
         );
         assert_eq!(times.frame(0.016, false, 4), None, "said once");
+        assert_eq!(times.frame(0.016, true, 4), None);
+        assert_eq!(
+            times.frame(0.024, false, 4).as_deref(),
+            Some("bubbles' animation: 1 frames in 24 ms, frame time mean 24.0 ms, max 24.0 ms (4 bubbles)"),
+            "a one-step animation has its line too"
+        );
     }
 }
