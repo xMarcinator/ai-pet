@@ -43,6 +43,12 @@ gives the same verdict on every run.
 private, busy demo script) were taken on Vulkan. Measure on the backend the pet ships with (GL on Windows after
 task 15), and reuse or replace the sampler in `.flow/tmp/wave-2026-09-29/task-13-sampler/` (a `dotnet` helper, since
 there is no wmic on Windows 11 and PowerShell is off limits).
+**From task 27 (2026-10-05, the user agreed):** spreading or folding a bubble stack drops one or two frames (a 35-40 ms
+gap) in about half the animations, on GL and Vulkan alike, with mean frame times of 17-18 ms. The user sees it as
+choppiness; the .NET pet looks smooth. Find the cause (frame pacing, layout or text shaping on the animation's first
+frames) and fix it, comparing with the .NET pet. `AIPET_DEBUG=1` prints one line per animation with its mean and max
+frame time; the demo gathers a full stack 27-37 s into each 40 s pass. Measurements: rust/proofs/windows-hands-on.md,
+E-x9.
 ## Acceptance
 - [ ] `pet-bench.sh` and `pet-bench.ps1` run end to end and print both pets' medians and the verdict.
 - [ ] R18's budgets pass on Linux and Windows. The numbers and conditions are recorded in `rust/proofs/performance.md`.
