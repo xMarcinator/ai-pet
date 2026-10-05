@@ -25,9 +25,9 @@ const DOT: Point = Point::new(1.0 + 14.0 + 9.0, CARD_H / 2.0);
 const TEXT_X: f32 = 1.0 + 14.0 + 18.0 + 8.0;
 const TITLE_SIZE: f32 = 13.5;
 const DETAIL_SIZE: f32 = 12.0;
-/// The title's top: the lines' heights (1.362 em each) and the detail's 1 px margin, centred.
-const TITLE_Y: f32 = (CARD_H - 1.362 * (TITLE_SIZE + DETAIL_SIZE) - 1.0) / 2.0;
-const DETAIL_Y: f32 = TITLE_Y + 1.362 * TITLE_SIZE + 1.0;
+/// The title's top: the lines' heights ([`style::LINE_SPACING`] em each) and the detail's 1 px margin, centred.
+const TITLE_Y: f32 = (CARD_H - style::LINE_SPACING * (TITLE_SIZE + DETAIL_SIZE) - 1.0) / 2.0;
+const DETAIL_Y: f32 = TITLE_Y + style::LINE_SPACING * TITLE_SIZE + 1.0;
 /// A round button's icon box (MakeIcon's 16 × 16), centred in the button.
 const ICON: f32 = 16.0;
 
@@ -249,12 +249,12 @@ impl PetUi {
 }
 
 /// A bubble's dot colour: a GitHub review's purple, else its state's from the Board's table (the C#'s StatusColor,
-/// which has a paused player's green), and for a state that table lacks the pet's grey.
+/// which has a paused player's green), and for a state that table lacks the C#'s default grey.
 fn dot_colour(kind: &str, state: &str) -> u32 {
     if kind == "github" {
         GITHUB_PURPLE
     } else {
-        board::status_color(state).unwrap_or_else(|| style::status_colour(state))
+        board::status_color(state).unwrap_or(0xFF888888)
     }
 }
 
@@ -492,6 +492,7 @@ mod tests {
         assert_eq!(dot_colour("jira", "review"), 0xFF4C9AFF);
         assert_eq!(dot_colour("github-error", "error"), 0xFFE5484D);
         assert_eq!(dot_colour("music", "paused"), 0xFF5E8F6E);
+        assert_eq!(dot_colour("chat", "unheard-of"), 0xFF888888, "the C#'s default");
         let states = [
             "thinking",
             "working",
@@ -507,5 +508,25 @@ mod tests {
         for state in states {
             assert_eq!(Some(dot_colour("chat", state)), board::status_color(state), "{state}");
         }
+    }
+
+    /// The bubble's two lines are as tall as the UI font's lines (Segoe UI's on Windows, Noto Sans' elsewhere), and
+    /// with the detail's 1 px margin they sit in the middle of the bubble.
+    #[test]
+    fn a_bubbles_lines_are_the_ui_fonts_and_centred() {
+        let spacing = if cfg!(windows) { 1.330 } else { 1.362 };
+        assert!(
+            (style::LINE_SPACING - spacing).abs() < 0.0005,
+            "{}",
+            style::LINE_SPACING
+        );
+        let title = style::LINE_SPACING * TITLE_SIZE;
+        assert!((DETAIL_Y - TITLE_Y - title - 1.0).abs() < 1e-4);
+        let bottom = DETAIL_Y + style::LINE_SPACING * DETAIL_SIZE;
+        assert!(
+            (TITLE_Y - (CARD_H - bottom)).abs() < 1e-4,
+            "{TITLE_Y} above, {} below",
+            CARD_H - bottom
+        );
     }
 }

@@ -14,10 +14,15 @@ pub const UI_SEMIBOLD: Font = Font {
     weight: font::Weight::Semibold,
     ..UI
 };
-/// Noto Sans' line spacing (ascender 1069 + descender 293 per 1000 em), which Avalonia uses for a line's height.
-/// Segoe UI's is 1.330 (2210 + 514 per 2048, the same in Segoe UI Variable); the lines are kept at Noto Sans' on
-/// Windows too, because the bubbles' text positions are worked out from it.
-pub const LINE_HEIGHT: text::LineHeight = text::LineHeight::Relative(1.362);
+/// The UI font's line spacing in em, which Avalonia uses for a line's height: Segoe UI's (ascender 2210 + descender
+/// 514 per 2048, about 1.330, the same in Segoe UI Variable) on Windows, Noto Sans' (1069 + 293 per 1000) elsewhere.
+/// The bubbles' text positions are worked out from it.
+pub const LINE_SPACING: f32 = if cfg!(windows) {
+    (2210.0 + 514.0) / 2048.0
+} else {
+    (1069.0 + 293.0) / 1000.0
+};
+pub const LINE_HEIGHT: text::LineHeight = text::LineHeight::Relative(LINE_SPACING);
 
 /// A colour from 0xAARRGGBB.
 pub const fn argb(c: u32) -> Color {
@@ -29,19 +34,6 @@ pub const PANEL_EDGE: Color = argb(0xFF3A3A3F);
 pub const ICON: Color = argb(0xFFEDEDF0);
 pub const MUTED: Color = argb(0xFF9A9AA2);
 pub const AMBER: u32 = 0xFFFFCF3F;
-/// The mood colours of Board.StatusColor, by pet state.
-pub fn status_colour(state: &str) -> u32 {
-    match state {
-        "thinking" => 0xFF7AA7FF,
-        "working" => 0xFFE27A52,
-        "attention" => AMBER,
-        "done" => 0xFF5FD38D,
-        "review" => 0xFF4C9AFF,
-        "music" => 0xFF1DB954,
-        "error" => 0xFFE5484D,
-        _ => 0xFF8A8A90,
-    }
-}
 
 /// How wide `content` is on one line.
 pub fn text_width(content: &str, size: f32, font: Font) -> f32 {

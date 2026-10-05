@@ -29,7 +29,9 @@ impl PetUi {
                 Space::new().width(size.width).height(size.height).into()
             };
             let label = text(label).size(14).font(style::UI).color(style::ICON);
-            button(row![container(mark).width(CHECK_COLUMN), label].align_y(Alignment::Center))
+            // a button lays its content out from its top: the row is centred in the item's height, as the C#'s are
+            let content = row![container(mark).width(CHECK_COLUMN), label].align_y(Alignment::Center);
+            button(container(content).center_y(Length::Fill))
                 .width(Length::Fill)
                 .height(MENU_ITEM_H)
                 .padding([0, 11])
