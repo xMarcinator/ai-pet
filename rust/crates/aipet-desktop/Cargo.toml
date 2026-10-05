@@ -1,0 +1,54 @@
+[package]
+name = "aipet-desktop"
+description = "The pet in an ordinary transparent window (iced on winit): X11, XWayland, Windows and macOS; and the operating system's services for both shells."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+# the platform (src/platform) logs to aipet.log, as the C#'s does
+aipet-core = { path = "../aipet-core" }
+aipet-ui = { path = "../aipet-ui" }
+iced.workspace = true
+
+[dev-dependencies]
+# the shell's tests play the demo's script
+aipet-ui = { path = "../aipet-ui", features = ["demo"] }
+
+# The native calls behind the pet window (src/native). Each is the version winit 0.30 already builds, with features
+# it already enables, so they add nothing to compile.
+# where winit has its X11 backend: Linux and the BSDs
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies]
+# a pure-Rust connection of our own to the X server winit uses: shape for the input region, randr for the screens and
+# their work areas (winit's x11rb enables randr too, but this crate shouldn't depend on that)
+x11rb = { version = "0.13", features = ["shape", "randr"] }
+
+# The window calls (src/native), and the platform's (src/platform): the agents' windows found by their exe
+# (EnumWindows, OpenProcess, QueryFullProcessImageNameW) and brought forward (SetForegroundWindow, AttachThreadInput),
+# links and folders opened (ShellExecuteW), and Spotify's window told what to play (WM_APPCOMMAND, APPCOMMAND_*).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5.2"
+objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSGeometry", "NSThread"] }
+objc2-app-kit = { version = "0.2.2", features = [
+    "NSApplication",
+    "NSEvent",
+    "NSGraphics",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSScreen",
+    "NSView",
+    "NSWindow",
+] }

@@ -3,6 +3,22 @@
 All notable changes to AiPet are listed here. Versions follow [Semantic Versioning](https://semver.org/). The
 app, `aipet-hook` and the plugin share one version number.
 
+## [Unreleased]
+
+The first step of AiPet's move to Rust: the hook is now written in Rust, and the pet is still the .NET one.
+
+### Changed
+- `aipet-hook` is the Rust one, in the plugin and in the Windows and Linux packages. Its command line, what it sends
+  the pet, and what it registers are the same, so hooks registered by an earlier version keep working, and Codex
+  doesn't ask you to trust them again.
+- On Windows, `aipet-hook.exe` carries the same icon and version details as before, and needs no Visual C++ runtime.
+  The Linux hooks still run on glibc 2.27 and newer.
+- Linux: two pets started at the same moment no longer both run, also when one of them was started from a snap or
+  over SSH. The pet holds a lock next to its socket (`aipet.lock`) while it runs, which the Rust pet will hold too.
+  When it can't take that lock (something else is at its path, say), the pet doesn't start, and `aipet.log` says why.
+- Building from source needs Rust for the hook: `build.sh`, `build.ps1` and `install-from-source` build it with
+  cargo.
+
 ## [0.1.0] - 2026-09-25
 
 The first release. The first sections describe what it contains. The last two list what changed from the

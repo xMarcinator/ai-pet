@@ -10,18 +10,12 @@ public class PluginHooksTests
 {
     public sealed record Printed(int Exit, byte[] Stdout, string Stderr, string[] Written);
 
-    /// `dotnet aipet-hook.dll <args>` with stdin left open (a hook run would wait for it), and a temp folder and a
-    /// data folder of its own, which say whether it wrote anything.
+    /// The hook (TestEnv.HookStartInfo) with `args` and stdin left open (a hook run would wait for it), and a temp
+    /// folder and a data folder of its own, which say whether it wrote anything.
     static Printed Print(params string[] args)
     {
-        Assert.True(File.Exists(TestEnv.HookDll), "the hook isn't built at " + TestEnv.HookDll);
         var temp = TestEnv.NewDir("print");
-        var psi = new ProcessStartInfo(TestEnv.Dotnet)
-        {
-            UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
-        };
-        psi.ArgumentList.Add(TestEnv.HookDll);
-        foreach (var a in args) psi.ArgumentList.Add(a);
+        var psi = TestEnv.HookStartInfo(args);
         foreach (var name in new[] { "TMPDIR", "TMP", "TEMP" }) psi.Environment[name] = temp;
         psi.Environment["AIPET_PIPE"] = TestEnv.NoPet();
         var data = TestEnv.NewDir("print-data");
@@ -77,7 +71,7 @@ public class PluginHooksTests
     public void CheckPlugin_ComparesTheHookFilesWithTheHook()
     {
         var box = new Scripts.Sandbox();
-        var hook = new[] { "--hook", TestEnv.Dotnet, TestEnv.HookDll };
+        var hook = TestEnv.TestHook != null ? new[] { "--hook", TestEnv.TestHook } : new[] { "--hook", TestEnv.Dotnet, TestEnv.HookDll };
         var script = Path.Combine(Scripts.Repo, "scripts", "check-plugin.sh");
         var plugin = Path.Combine(Scripts.Repo, "plugins", "aipet");
         var ok = box.Run(Path.Combine(Scripts.Tools, "bash"), new[] { script, plugin }.Concat(hook));

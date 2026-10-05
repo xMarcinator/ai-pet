@@ -1,0 +1,19 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.242821Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.2",
+    "fn-1-migrate-aipet-from-net-to-rust.3",
+    "fn-1-migrate-aipet-from-net-to-rust.4",
+    "fn-1-migrate-aipet-from-net-to-rust.5"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.6",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.6.md",
+  "status": "todo",
+  "title": "Ship the Rust hook with the shared single-instance lock: build gates, release and install scripts (milestone 1)",
+  "updated_at": "2026-09-28T18:35:24.308728Z"
+}

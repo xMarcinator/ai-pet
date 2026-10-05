@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 
 namespace AiPet;
@@ -12,7 +13,9 @@ public static class Program
         // that Main calls Run.
         Updates.App().Run();
 
-        // one pet per user (named mutexes work on Linux too, but only within a login session there)
+        // one pet per user, .NET or Rust: on Linux first the lock both take, then the mutex (named mutexes work on
+        // Linux too, but only within a login session there)
+        if (OperatingSystem.IsLinux() && !TakeLock()) return;
         Mutex single;
         bool created;
         try { single = new Mutex(true, @"Local\AiPetApp", out created); }
@@ -35,6 +38,59 @@ public static class Program
         using var live = Ipc.Connect();
         return live != null;
     }
+
+    /// Linux: the single-instance lock, which a .NET pet and a Rust pet both take before anything else, so two never
+    /// run at once, whatever XDG_RUNTIME_DIR each got: an exclusive, non-blocking flock on LockFile. The file is
+    /// opened 0600 without following a symlink, and the programs the pet starts don't inherit it. The lock is held
+    /// until the pet ends: the file is never closed, and the kernel lets the lock go when the process ends, a crash
+    /// included. False when another pet holds it: this one quits quietly, as it does for the mutex. False too when the
+    /// lock file can't be opened or locked (a symlink at its path, a folder that can't be written): without the lock,
+    /// nothing atomic keeps a pet of another session or a Rust pet from starting beside this one, so this pet doesn't
+    /// start rather than risk two, as the Rust pet does, and its log says why.
+    static bool TakeLock()
+    {
+        var path = LockFile;
+        // the socket's folder may be the data folder, which may not exist yet: for this user only, as the installers
+        // make it
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path),
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        catch (Exception) { }  // then the open says what's wrong
+        int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC | NoFollow, 0x180);  // 0600
+        if (fd < 0)
+        {
+            Log.Write($"single instance: can't open {path}: {Marshal.GetPInvokeErrorMessage(Marshal.GetLastPInvokeError())}; this pet doesn't start");
+            return false;
+        }
+        int locked, error;
+        do
+        {
+            locked = flock(fd, LOCK_EX | LOCK_NB);
+            error = Marshal.GetLastPInvokeError();
+        } while (locked != 0 && error == EINTR);
+        if (locked == 0) return true;
+        close(fd);
+        if (error != EWOULDBLOCK)
+            Log.Write($"single instance: can't lock {path}: {Marshal.GetPInvokeErrorMessage(error)}; this pet doesn't start");
+        return false;
+    }
+
+    /// The lock's file, next to the socket: the socket's path with .lock in place of .sock, so it follows the socket's
+    /// rule, or <AIPET_PIPE>.lock with that override.
+    static string LockFile => Environment.GetEnvironmentVariable("AIPET_PIPE") is { Length: > 0 }
+        ? Ipc.Endpoint + ".lock"
+        : Path.ChangeExtension(Ipc.Endpoint, ".lock");
+
+    // Linux's open(2) and flock(2). O_NOFOLLOW is the flag whose value depends on the architecture.
+    const int O_RDWR = 0x2, O_CREAT = 0x40, O_CLOEXEC = 0x80000, LOCK_EX = 2, LOCK_NB = 4, EINTR = 4, EWOULDBLOCK = 11;
+    static int NoFollow =>
+        RuntimeInformation.ProcessArchitecture is Architecture.Arm or Architecture.Arm64 or Architecture.Ppc64le ? 0x8000 : 0x20000;
+    [DllImport("libc", SetLastError = true)]
+    static extern int open([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags, uint mode);
+    [DllImport("libc", SetLastError = true)] static extern int flock(int fd, int operation);
+    [DllImport("libc")] static extern int close(int fd);
 
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>().UsePlatformDetect()

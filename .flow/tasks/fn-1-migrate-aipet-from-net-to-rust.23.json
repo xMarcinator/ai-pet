@@ -1,0 +1,20 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.243114Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.6",
+    "fn-1-migrate-aipet-from-net-to-rust.21",
+    "fn-1-migrate-aipet-from-net-to-rust.22",
+    "fn-1-migrate-aipet-from-net-to-rust.27",
+    "fn-1-migrate-aipet-from-net-to-rust.28"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.23",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.23.md",
+  "status": "todo",
+  "title": "Ship the Rust pet: release pipeline, installers and CI (milestone 2)",
+  "updated_at": "2026-09-28T18:25:53.757359Z"
+}

@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.242782Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.3"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.4",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.4.md",
+  "status": "todo",
+  "title": "Codex registration: config.toml text editor, hooks.json and trust preservation",
+  "updated_at": "2026-09-28T18:32:13.328137Z"
+}

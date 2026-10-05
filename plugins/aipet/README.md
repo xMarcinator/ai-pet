@@ -66,18 +66,19 @@ disturbs a chat:
 
 ## For maintainers
 
-- The binaries in `native/<rid>/` aren't in the main repository. The release workflow builds them (NativeAOT) and
-  commits them, with this folder, to [ai-pet-plugin](https://github.com/xMarcinator/ai-pet-plugin), tagged
-  `v<version>`. Only the release workflow writes to that repository. It then pins both marketplace files
-  (`.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json`) to that commit, by setting `ref` to the
-  tag and `sha` to the commit. The value `0000000000000000000000000000000000000000` means "not released yet", and
-  installing it fails.
+- The binaries in `native/<rid>/` aren't in the main repository. The release workflow builds them with cargo, from
+  the Rust hook in `rust/crates/aipet-hook`, and commits them, with this folder, to
+  [ai-pet-plugin](https://github.com/xMarcinator/ai-pet-plugin), tagged `v<version>`. Only the release workflow
+  writes to that repository. It then pins both marketplace files (`.claude-plugin/marketplace.json` and
+  `.agents/plugins/marketplace.json`) to that commit, by setting `ref` to the tag and `sha` to the commit. The value
+  `0000000000000000000000000000000000000000` means "not released yet", and installing it fails.
 - The release job stamps the release's version into both `plugin.json` files of the commit it pushes, so there's
   nothing to bump by hand. Claude Code and Codex only pick up an update when the version changes.
 - `hooks/hooks.json` and `hooks/codex.json` must be exactly what `aipet-hook --print-plugin-hooks claude` and
-  `codex` print. CI and the release check this with `scripts/check-plugin.sh --hook`. After a change to Claude's
-  events, regenerate the file:
-  `dotnet src/AiPet.Hook/bin/Debug/net10.0/aipet-hook.dll --print-plugin-hooks claude > plugins/aipet/hooks/hooks.json`.
+  `codex` print. CI and the release check this with `scripts/check-plugin.sh --hook`, against the Rust hook. Claude's
+  events are in `rust/crates/aipet-hook/src/claude.rs` (and, until the .NET hook is removed, in its
+  `ClaudeConfig.Events`: the tests compare its output with the file too). After a change, regenerate the file:
+  `cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook -- --print-plugin-hooks claude > plugins/aipet/hooks/hooks.json`.
 - `hooks/codex.json` is frozen. Codex trusts a hook by a hash of its definition, so changing a handler makes every
   Codex user trust the hooks again.
 - Don't rename the plugin or the marketplace (`aipet@aipet`): the name is part of every Codex trust entry.

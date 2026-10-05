@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-29T12:17:20.417730Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.25"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.29",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.29.md",
+  "status": "todo",
+  "title": "Memory audit after the migration: where the Rust pet's memory goes, and how to cut it",
+  "updated_at": "2026-09-29T12:17:20.417730Z"
+}

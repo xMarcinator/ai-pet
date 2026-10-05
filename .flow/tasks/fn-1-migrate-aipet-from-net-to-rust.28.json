@@ -1,0 +1,17 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:25:51.663737Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.22",
+    "fn-1-migrate-aipet-from-net-to-rust.27"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.28",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.28.md",
+  "status": "todo",
+  "title": "Performance gate: scripted, repeatable CPU and RSS comparison with the C# pet",
+  "updated_at": "2026-09-28T18:32:14.822930Z"
+}
