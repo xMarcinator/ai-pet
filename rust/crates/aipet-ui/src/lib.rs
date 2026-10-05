@@ -362,7 +362,46 @@ pub struct PetUi {
     smooth_until: f64,
     /// `AIPET_FPS`: a fixed frame interval.
     fixed_frame: Option<Duration>,
+    /// `AIPET_DEBUG=1`: the frame times of the bubbles' animation under way.
+    frame_times: Option<FrameTimes>,
     settings: Settings,
+}
+
+/// The frame times while the bubbles ease (a stack spreading or folding, bubbles coming and going), for the
+/// `AIPET_DEBUG` line that ends each such animation.
+#[derive(Debug, Default)]
+struct FrameTimes {
+    /// Whether an animation is under way: its first frame only starts it, as the time before it isn't its.
+    on: bool,
+    frames: u32,
+    total: f64,
+    max: f64,
+}
+
+impl FrameTimes {
+    /// A frame `gap` seconds after the last one, with the bubbles still easing or not; at the end of an animation,
+    /// its line.
+    fn frame(&mut self, gap: f64, easing: bool, bubbles: usize) -> Option<String> {
+        if easing {
+            if self.on {
+                self.frames += 1;
+                self.total += gap;
+                self.max = self.max.max(gap);
+            }
+            self.on = true;
+            return None;
+        }
+        let done = std::mem::take(self);
+        (done.frames > 0).then(|| {
+            format!(
+                "bubbles' animation: {} frames in {:.0} ms, frame time mean {:.1} ms, max {:.1} ms ({bubbles} bubbles)",
+                done.frames,
+                done.total * 1000.0,
+                done.total / f64::from(done.frames) * 1000.0,
+                done.max * 1000.0
+            )
+        })
+    }
 }
 
 impl PetUi {
@@ -415,6 +454,9 @@ impl PetUi {
             inline_menu: false,
             smooth_until: 0.0,
             fixed_frame: fixed_frame(),
+            frame_times: std::env::var_os("AIPET_DEBUG")
+                .is_some_and(|v| v == "1")
+                .then(FrameTimes::default),
             settings: Settings::new(setup.services),
         }
     }
@@ -473,6 +515,11 @@ impl PetUi {
 
         self.sync_cards();
         self.stacks.animate(dt, t);
+        if let Some(times) = &mut self.frame_times
+            && let Some(line) = times.frame(elapsed, self.stacks.easing(), self.stacks.frames().count())
+        {
+            eprintln!("aipet: {line}");
+        }
         if f64::from(shift) > CALM_SPEED * elapsed || self.stacks.easing() {
             self.smooth_until = t + SMOOTH_HOLD;
         }
@@ -1954,5 +2001,21 @@ pub(crate) mod tests {
             ("Bubble Pop", "Bubble Pop")
         );
         assert!(hovered.width > rest.width);
+    }
+
+    /// The debug line ends each animation with its frames' times, from the second frame on: the gap before the first
+    /// is the calm before it.
+    #[test]
+    fn an_animations_frame_times_are_summed_up_when_it_ends() {
+        let mut times = FrameTimes::default();
+        assert_eq!(times.frame(0.1, false, 4), None, "nothing under way");
+        for gap in [0.5, 0.016, 0.020, 0.030] {
+            assert_eq!(times.frame(gap, true, 4), None);
+        }
+        assert_eq!(
+            times.frame(0.016, false, 4).as_deref(),
+            Some("bubbles' animation: 3 frames in 66 ms, frame time mean 22.0 ms, max 30.0 ms (4 bubbles)")
+        );
+        assert_eq!(times.frame(0.016, false, 4), None, "said once");
     }
 }
