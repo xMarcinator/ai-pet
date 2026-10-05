@@ -409,23 +409,21 @@ fn the_buttons_take_the_pointer() {
 }
 
 #[test]
-fn a_bubble_the_pointer_makes_narrower_keeps_the_pointer_on_the_strip_it_gave_up() {
-    // a long title is cut to 190 px while the pointer is on the bubble (UpdateChrome), so a chat without buttons gets
-    // narrower then; under the pointer it would get wide again, and flicker
+fn a_bubble_the_pointer_is_on_keeps_its_width() {
+    // a long title is cut shorter while the pointer is on the bubble (UpdateChrome), but the bubble keeps its width,
+    // as the C#'s does, so the pointer stays on it, right to its left edge
     let mut done = chat("claude:a", "done", "desktop");
     done.title = Some("A chat whose title is far too long to fit in its bubble at all".into());
     let mut pet = Pet::new(&chats(vec![done]));
     let wide = pet.shown("claude:a").body;
-    let narrow = pet.hover("claude:a").body;
-    assert!(narrow.width < wide.width - 40.0, "{narrow:?} and at rest {wide:?}");
-    let strip = Point::new(wide.x + 3.0, wide.center_y());
-    assert!(!narrow.contains(strip));
-    pet.point(strip);
+    let hovered = pet.hover("claude:a").body;
+    assert_eq!(hovered, wide);
+    let edge = Point::new(wide.x + 3.0, wide.center_y());
+    pet.point(edge);
     for _ in 0..6 {
         assert!(pet.shown("claude:a").close.is_some(), "still on it");
-        // it takes the pointer there, and a window region (Windows), which is what is drawn, holds it too
-        assert!(pet.ui.hit_rects().iter().any(|r| r.contains(strip)));
-        assert!(pet.ui.drawn_rects().iter().any(|r| r.contains(strip)));
+        assert_eq!(pet.shown("claude:a").body, wide);
+        assert!(pet.ui.hit_rects().iter().any(|r| r.contains(edge)));
         pet.run(1.0 / 60.0);
     }
 }

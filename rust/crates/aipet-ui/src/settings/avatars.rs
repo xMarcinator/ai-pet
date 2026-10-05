@@ -103,10 +103,29 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
     let folder = pet.demo.is_none();
     #[cfg(not(any(test, feature = "demo")))]
     let folder = true;
-    let send = |message| folder.then_some(crate::Message::Settings(super::Message::Avatars(message)));
+    let folder_button = |label, message| {
+        let pill = pill(label, false, accent);
+        if folder {
+            pill.on_press(crate::Message::Settings(super::Message::Avatars(message)))
+        } else {
+            // greyed out as a disabled Fluent button is (ButtonBackgroundDisabled and so on): a pill has no disabled
+            // look of its own
+            pill.style(|_, _| button::Style {
+                background: Some(argb(0x0BFFFFFF).into()),
+                text_color: argb(0x5DFFFFFF),
+                border: Border {
+                    color: argb(0x12FFFFFF),
+                    width: 1.0,
+                    radius: 16.0.into(),
+                },
+                shadow: Shadow::default(),
+                snap: true,
+            })
+        }
+    };
     let buttons = row![
-        pill("Reload", false, accent).on_press_maybe(send(Message::Reload)),
-        pill("Open folder", false, accent).on_press_maybe(send(Message::OpenFolder)),
+        folder_button("Reload", Message::Reload),
+        folder_button("Open folder", Message::OpenFolder),
     ]
     .spacing(8);
     let own = button_row(

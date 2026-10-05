@@ -207,17 +207,6 @@ impl Card {
         self.fitted().width
     }
 
-    /// How wide it takes the pointer: its width, and while it is interactive at least its width at rest. A hovered
-    /// bubble its buttons made narrower would otherwise lose the pointer to the strip it gave up, get wide again,
-    /// and flicker.
-    pub fn reach(&self) -> f32 {
-        if self.interactive {
-            self.width().max(self.rest.width)
-        } else {
-            self.width()
-        }
-    }
-
     /// Its whole title, as the Board gives it.
     pub fn title(&self) -> &str {
         &self.text.0
@@ -682,7 +671,7 @@ mod tests {
     }
 
     #[test]
-    fn the_hovered_bubble_fits_its_text_beside_its_buttons_and_keeps_its_reach() {
+    fn the_hovered_bubble_fits_its_text_beside_its_buttons() {
         let mut stacks = Stacks::default();
         let mut t = 0.0;
         let two = Buttons::default()
@@ -741,20 +730,5 @@ mod tests {
         stacks.hover(Some("r1".into()), fit);
         stacks.sync(&[], t, false, fit);
         assert!(!card(&stacks, "r1").unwrap().interactive());
-
-        // a hovered bubble its buttons make narrower still reaches as far as it did at rest
-        let narrow = |_: &str, _: &str, row: Option<f32>| Fitted {
-            title: String::new(),
-            detail: String::new(),
-            width: if row.is_some() { 250.0 } else { 300.0 },
-        };
-        let mut stacks = Stacks::default();
-        stacks.sync(&show[..1], 0.0, false, narrow);
-        stacks.hover(Some("r1".into()), narrow);
-        let r1 = card(&stacks, "r1").unwrap();
-        assert_eq!((r1.width(), r1.reach()), (250.0, 300.0));
-        stacks.hover(None, narrow);
-        let r1 = card(&stacks, "r1").unwrap();
-        assert_eq!((r1.width(), r1.reach()), (300.0, 300.0));
     }
 }

@@ -4,19 +4,16 @@
 //! everything under it from the pointer, and a tooltip while one shows.
 
 use aipet_core::board::{self, GITHUB_PURPLE};
-use iced::widget::canvas::{Frame, Geometry, Path, Stroke, stroke};
 use iced::widget::image::{FilterMethod, Handle};
-use iced::widget::{Space, button, canvas, container, image, mouse_area, opaque, pin, row, stack, text};
-use iced::{
-    Border, Color, ContentFit, Element, Length, Padding, Point, Rectangle, Renderer, Shadow, Theme, Vector, mouse,
-};
+use iced::widget::{Space, button, container, image, mouse_area, opaque, pin, row, stack, text};
+use iced::{Border, Color, ContentFit, Element, Length, Padding, Point, Rectangle, Shadow, Vector, mouse};
 
 use crate::cards::{Button, Card};
 use crate::geometry::{
     BODY, CARD_GLOW_BLUR, CARD_H, CARD_RADIUS, CARD_SHADOW_BLUR, CARD_SHADOW_Y, CLOSE_SIZE, CardFrame, HALO, HEADER_H,
     HEADER_RADIUS, INLINE_MENU,
 };
-use crate::style::{self, AMBER, Glyph, Icon, argb};
+use crate::style::{self, AMBER, Icon, argb};
 use crate::{Message, PetUi, TIP_FADE, TIP_TEXT};
 
 /// Where a bubble's parts sit in it, unscaled (MakeCard: a 1 px border, padding 14 on the left, the dot in an
@@ -28,8 +25,6 @@ const DETAIL_SIZE: f32 = 12.0;
 /// The title's top: the lines' heights ([`style::LINE_SPACING`] em each) and the detail's 1 px margin, centred.
 const TITLE_Y: f32 = (CARD_H - style::LINE_SPACING * (TITLE_SIZE + DETAIL_SIZE) - 1.0) / 2.0;
 const DETAIL_Y: f32 = TITLE_Y + style::LINE_SPACING * TITLE_SIZE + 1.0;
-/// A round button's icon box (MakeIcon's 16 × 16), centred in the button.
-const ICON: f32 = 16.0;
 
 impl PetUi {
     /// The pet's whole surface ([`crate::SURFACE`]), transparent where nothing is drawn. It reports the pointer
@@ -178,13 +173,8 @@ impl PetUi {
                 layers.push(pin(round_button(card, button, r, o, s)).position(r.position()).into());
             }
             let r = frame.close();
-            let glyph = Glyph {
-                icon: Icon::Close,
-                colour: Color::WHITE.scale_alpha(o),
-                width: 1.6,
-            };
-            let size = glyph.size() * s;
-            let close = button(container(canvas(glyph).width(size.width).height(size.height)).center(Length::Fill))
+            let cross = Icon::Close.view(Color::WHITE.scale_alpha(o), s);
+            let close = button(container(cross).center(Length::Fill))
                 .width(r.width)
                 .height(r.height)
                 .padding(0)
@@ -261,19 +251,16 @@ fn dot_colour(kind: &str, state: &str) -> u32 {
 /// One of a bubble's round buttons (App.axaml's Button.round): 32 px round, #3A3A3E (#4A4A4F hovered, #58585E
 /// pressed) with a faint 1 px edge, its icon in the middle; it fades and scales with the bubble.
 fn round_button<'a>(card: &Card, b: Button, r: Rectangle, o: f32, s: f32) -> Element<'a, Message> {
-    let icon = ButtonIcon {
-        icon: match b {
-            Button::Ticket | Button::Open => Symbol::Open,
-            Button::PullRequest => Symbol::PullRequest,
-            Button::Previous => Symbol::Previous,
-            // the player's state: pause while it plays
-            Button::PlayPause if card.state == "music" => Symbol::Pause,
-            Button::PlayPause => Symbol::Play,
-            Button::Next => Symbol::Next,
-        },
-        colour: style::ICON.scale_alpha(o),
+    let icon = match b {
+        Button::Ticket | Button::Open => Icon::Open,
+        Button::PullRequest => Icon::PullRequest,
+        Button::Previous => Icon::Previous,
+        // the player's state: pause while it plays
+        Button::PlayPause if card.state == "music" => Icon::Pause,
+        Button::PlayPause => Icon::Play,
+        Button::Next => Icon::Next,
     };
-    button(container(canvas(icon).width(ICON * s).height(ICON * s)).center(Length::Fill))
+    button(container(icon.view(style::ICON.scale_alpha(o), s)).center(Length::Fill))
         .width(r.width)
         .height(r.height)
         .padding(0)
@@ -298,116 +285,6 @@ fn round_button<'a>(card: &Card, b: Button, r: Rectangle, o: f32, s: f32) -> Ele
             snap: true,
         })
         .into()
-}
-
-/// The icons on the round buttons.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Symbol {
-    /// An arrow out of a box: Open in Jira, and a chat's Open.
-    Open,
-    /// Two branches joined: the pull request's.
-    PullRequest,
-    Previous,
-    Pause,
-    Play,
-    Next,
-}
-
-/// A round button's icon: MakeCard's path data in its 16 × 16 box, with the icon pen (1.6 px, 1.5 for the pull
-/// request's; round caps and joins), the triangles also filled.
-#[derive(Clone, Copy, Debug)]
-struct ButtonIcon {
-    icon: Symbol,
-    colour: Color,
-}
-
-impl<Message> canvas::Program<Message> for ButtonIcon {
-    type State = ();
-
-    fn draw(&self, _: &(), renderer: &Renderer, _: &Theme, bounds: Rectangle, _: mouse::Cursor) -> Vec<Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
-        // scaled with the widget, so an icon on a scaled bubble shrinks with it
-        let k = bounds.width / ICON;
-        let at = |x: f32, y: f32| Point::new(x * k, y * k);
-        let pen = |width: f32| {
-            Stroke::default()
-                .with_color(self.colour)
-                .with_width(width * k)
-                .with_line_cap(stroke::LineCap::Round)
-                .with_line_join(stroke::LineJoin::Round)
-        };
-        let triangle = |a: (f32, f32), b: (f32, f32), c: (f32, f32)| {
-            Path::new(|p| {
-                p.move_to(at(a.0, a.1));
-                p.line_to(at(b.0, b.1));
-                p.line_to(at(c.0, c.1));
-                p.close();
-            })
-        };
-        let bar = |x: f32| Path::line(at(x, 3.5), at(x, 12.5));
-        match self.icon {
-            // M9,3 H13 V7 M13,3 L7.5,8.5 M11,9.5 V12.5 A0.5,0.5 0 0 1 10.5,13 H3.5 A0.5,0.5 0 0 1 3,12.5 V5.5
-            // A0.5,0.5 0 0 1 3.5,5 H6.5
-            Symbol::Open => {
-                let path = Path::new(|p| {
-                    p.move_to(at(9.0, 3.0));
-                    p.line_to(at(13.0, 3.0));
-                    p.line_to(at(13.0, 7.0));
-                    p.move_to(at(13.0, 3.0));
-                    p.line_to(at(7.5, 8.5));
-                    p.move_to(at(11.0, 9.5));
-                    p.arc_to(at(11.0, 13.0), at(3.5, 13.0), 0.5 * k);
-                    p.arc_to(at(3.0, 13.0), at(3.0, 5.5), 0.5 * k);
-                    p.arc_to(at(3.0, 5.0), at(6.5, 5.0), 0.5 * k);
-                    p.line_to(at(6.5, 5.0));
-                });
-                frame.stroke(&path, pen(1.6));
-            }
-            // M4.5,2.5 A1.5,1.5 0 1 1 4.49,2.5 M4.5,5.5 V13.5 M11.5,10.5 A1.5,1.5 0 1 1 11.49,10.5 M11.5,10.5 V6.5
-            // A2,2 0 0 0 9.5,4.5 H7 M8.5,3 L7,4.5 L8.5,6 (the two almost-closed arcs are the branches' circles)
-            Symbol::PullRequest => {
-                let path = Path::new(|p| {
-                    p.circle(at(4.5, 4.0), 1.5 * k);
-                    p.move_to(at(4.5, 5.5));
-                    p.line_to(at(4.5, 13.5));
-                    p.circle(at(11.5, 12.0), 1.5 * k);
-                    p.move_to(at(11.5, 10.5));
-                    p.arc_to(at(11.5, 4.5), at(7.0, 4.5), 2.0 * k);
-                    p.line_to(at(7.0, 4.5));
-                    p.move_to(at(8.5, 3.0));
-                    p.line_to(at(7.0, 4.5));
-                    p.line_to(at(8.5, 6.0));
-                });
-                frame.stroke(&path, pen(1.5));
-            }
-            // M4,3.5 V12.5 M12.5,3.5 L6.5,8 L12.5,12.5 Z, filled
-            Symbol::Previous => {
-                let head = triangle((12.5, 3.5), (6.5, 8.0), (12.5, 12.5));
-                frame.fill(&head, self.colour);
-                frame.stroke(&head, pen(1.6));
-                frame.stroke(&bar(4.0), pen(1.6));
-            }
-            // M12,3.5 V12.5 M3.5,3.5 L9.5,8 L3.5,12.5 Z, filled
-            Symbol::Next => {
-                let head = triangle((3.5, 3.5), (9.5, 8.0), (3.5, 12.5));
-                frame.fill(&head, self.colour);
-                frame.stroke(&head, pen(1.6));
-                frame.stroke(&bar(12.0), pen(1.6));
-            }
-            // M5.5,3.5 V12.5 M10.5,3.5 V12.5
-            Symbol::Pause => {
-                frame.stroke(&bar(5.5), pen(1.6));
-                frame.stroke(&bar(10.5), pen(1.6));
-            }
-            // M5,3 L13,8 L5,13 Z, filled
-            Symbol::Play => {
-                let play = triangle((5.0, 3.0), (13.0, 8.0), (5.0, 13.0));
-                frame.fill(&play, self.colour);
-                frame.stroke(&play, pen(1.6));
-            }
-        }
-        vec![frame.into_geometry()]
-    }
 }
 
 /// An image stretched over `r`.
