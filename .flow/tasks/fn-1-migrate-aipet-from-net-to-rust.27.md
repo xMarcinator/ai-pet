@@ -61,9 +61,14 @@ moment, the demo, the groundwork run, and the release build opening no console w
 
 
 ## Done summary
-TBD
+The Windows 11 hands-on pass (R13), run by the user with the conductor on 2026-10-05; results in rust/proofs/windows-hands-on.md.
 
+- Fixed along the way: the scale change held until a drag's drop, centred menu rows, Segoe UI's line height (8282d68); icons as cached pictures instead of canvas meshes (the doubled dismiss badge, buttons and check marks), hovered bubbles keep their width, the demo's disabled buttons look disabled, Open's timing under AIPET_DEBUG (30d6a61); AIPET_DEBUG frame times for the bubbles' animations and a demo crowd (2ba3060), with the review's off-by-one fixed (bce9cfe).
+- Passed: A1-A3 (no antivirus reaction, re-checked on the final bce9cfe builds), B1-B7, C1-C4, C6, C8, C9, D1, D2, D4, E1, E3, E5, E6, F1-F6, G1-G8, H1, H2, H4, H5, H6 at 100 %, I1-I3, J1-J2, re-checks R1-R8.
+- Not run: Windows 10 (no machine), C5, C7, H3, E2 for review bubbles, E4 and H6 at 150 % (skipped by the user).
+- E-x9 (dropped frames when a stack spreads) measures the same on GL and Vulkan in a real window; GL stays the default and the hitch goes to task 28 (b186d81).
+- Review: Codex round 1 NEEDS_WORK (one code fix, two proof gaps), all addressed; round 2 could not run (Codex out of credits) and the user chose to skip it.
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 8282d68, 3738dc3, 30d6a61, 07ee931, 4882362, 2ba3060, 1f658c4, 69577fc, bce9cfe, 4ff97ec
+- Tests: cd rust && cargo test --workspace (all passed), cargo clippy -D warnings (clean), cargo fmt --check (clean) on a5f43f5, dotnet build AiPet.slnx && dotnet test (161 passed, 53 skipped), C# PluginHooks/Registration/Resource tests on the Rust hook (23 passed, 10 skipped), Rust server tests with the .NET hook (passed), golden live replays with AIPET_GOLDEN: doctor passed on rerun; codex and registration failed on every rerun with the known antivirus flake inside the C# harness ('Access to the path is denied', run 2 differs from run 1). Task 27 changes nothing in aipet-hook, rust/golden, src or tests.
 - PRs:
