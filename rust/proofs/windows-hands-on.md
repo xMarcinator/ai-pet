@@ -239,5 +239,19 @@ each frame's time includes reading the picture back, so only the comparisons cou
 
 | # | Check | Command or action | Look for | Result |
 |---|---|---|---|---|
-| R7 | E-x9 on GL | `AIPET_DEBUG=1 rust/target/demo-e9/debug/AiPet.exe 2> run-R7-gl.log`. At 27 s into a 40 s pass (27 s after start, then every 40 s) the chats' stack fills up: four bubbles and "+N more". Click it to spread it, move away to let it fold, a few times. `grep "bubbles' animation" run-R7-gl.log` | One line per animation: its frames, and their mean and max frame time. Note the spreads' lines (4 bubbles in the stack) and how smooth it feels. | |
-| R8 | E-x9 on Vulkan | The same with `WGPU_BACKEND=vulkan`, into `run-R7-vulkan.log`. | The same lines. Compare the mean and max frame time with R7's. A smooth spread is about 16 ms a frame (the pet's lively rate). | |
+| R7 | E-x9 on GL | `AIPET_DEBUG=1 rust/target/demo-e9/debug/AiPet.exe 2> run-R7-gl.log`. At 27 s into a 40 s pass (27 s after start, then every 40 s) the chats' stack fills up: four bubbles and "+N more". Click it to spread it, move away to let it fold, a few times. `grep "bubbles' animation" run-R7-gl.log` | One line per animation: its frames, and their mean and max frame time. Note the spreads' lines (4 bubbles in the stack) and how smooth it feels. | | Demo on GL, stacks of 3+ (13 animations): mean 17.1 ms, worst frame 40.2 ms, 6 with a frame over 25 ms. |
+| R8 | E-x9 on Vulkan | The same with `WGPU_BACKEND=vulkan`, into `run-R7-vulkan.log`. | The same lines. Compare the mean and max frame time with R7's. A smooth spread is about 16 ms a frame (the pet's lively rate). | | Demo on Vulkan (14): mean 17.1 ms, worst 38.4 ms, 6 over 25 ms. The user felt no difference. |
+
+### E-x9's outcome (2026-10-05, with the user)
+In a real window the two backends measure the same, unlike the offscreen render. The real pet, spreading and folding
+the user's biggest stack 5-6 times on each backend (`AIPET_DEBUG`'s animation lines, stacks of 3 or more):
+
+| Real chats | GL | Vulkan |
+|---|---|---|
+| Mean frame time | 17.5 ms | 18.4 ms |
+| Worst frame | 36.7 ms | 35.1 ms |
+| Spreads with a frame over 25 ms | 8 of 16 | 5 of 12 |
+
+Both run at about 60 frames a second, and about half the spreads drop one or two frames (a 35-40 ms gap) on either
+backend. That hitch is what the user saw as choppiness. It is not a regression of this task, and the backend is no
+lever: GL stays the default for its 0.9 s start. The user agreed to hand the hitch to task 28, the performance gate.
