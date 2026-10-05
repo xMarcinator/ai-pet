@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use aipet_ui::platform::{Media, MediaPlayer, Platform};
 
@@ -137,7 +137,10 @@ impl Default for Windows {
 
 impl Platform for Windows {
     fn open_url(&self, url: &str) {
+        let started = Instant::now();
         self.win32.shell_open(OsStr::new(url));
+        let scheme = url.split(':').next().unwrap_or_default();
+        debug(|| format!("a {scheme}: link opened in {}", ms(started)));
     }
 
     fn open_folder(&self, path: &Path) {
@@ -152,7 +155,11 @@ impl Platform for Windows {
             "codex" => (&["chatgpt.exe", "codex.exe"], None),
             _ => (&["claude.exe"], Some("claude://")),
         };
-        let Some(window) = self.window_of(exes) else {
+        // AIPET_DEBUG times it: the pet calls this as it handles the click
+        let started = Instant::now();
+        let found = self.window_of(exes);
+        debug(|| format!("{agent}'s window looked for in {}: {}", ms(started), found.is_some()));
+        let Some(window) = found else {
             // one link only: the chat's opens the app too (a ChatGPT window hidden in the tray isn't found)
             let url = link.or(own);
             if let Some(url) = url {
@@ -174,14 +181,35 @@ impl Platform for Windows {
             w.sleep(Duration::from_millis(15));
             tries += 1;
         }
-        if !in_front(w, window) {
+        let front = in_front(w, window);
+        if !front {
             w.log(&format!("couldn't bring {agent} to the front"));
         }
+        debug(|| {
+            let outcome = if front { "in front" } else { "not in front" };
+            format!(
+                "{agent} {outcome} {} after the click ({tries} waits of 15 ms)",
+                ms(started)
+            )
+        });
     }
 
     fn media(&self) -> Option<&dyn MediaPlayer> {
         Some(&self.spotify)
     }
+}
+
+/// With AIPET_DEBUG=1, a line on stderr, as the shell's are.
+fn debug(line: impl FnOnce() -> String) {
+    static ON: LazyLock<bool> = LazyLock::new(|| std::env::var_os("AIPET_DEBUG").is_some_and(|v| v == "1"));
+    if *ON {
+        eprintln!("aipet: open: {}", line());
+    }
+}
+
+/// The time since `started`, in ms.
+fn ms(started: Instant) -> String {
+    format!("{:.1} ms", started.elapsed().as_secs_f64() * 1000.0)
 }
 
 /// `InFront`: the foreground window belongs to the window's process.

@@ -362,7 +362,46 @@ pub struct PetUi {
     smooth_until: f64,
     /// `AIPET_FPS`: a fixed frame interval.
     fixed_frame: Option<Duration>,
+    /// `AIPET_DEBUG=1`: the frame times of the bubbles' animation under way.
+    frame_times: Option<FrameTimes>,
     settings: Settings,
+}
+
+/// The frame times while the bubbles ease (a stack spreading or folding, bubbles coming and going), for the
+/// `AIPET_DEBUG` line that ends each such animation.
+#[derive(Debug, Default)]
+struct FrameTimes {
+    /// Whether an animation is under way: its first frame only starts it, as the time before it isn't its.
+    on: bool,
+    frames: u32,
+    total: f64,
+    max: f64,
+}
+
+impl FrameTimes {
+    /// A frame `gap` seconds after the last one, with the bubbles still easing or not; at the end of an animation,
+    /// its line.
+    fn frame(&mut self, gap: f64, easing: bool, bubbles: usize) -> Option<String> {
+        if easing {
+            if self.on {
+                self.frames += 1;
+                self.total += gap;
+                self.max = self.max.max(gap);
+            }
+            self.on = true;
+            return None;
+        }
+        let done = std::mem::take(self);
+        (done.frames > 0).then(|| {
+            format!(
+                "bubbles' animation: {} frames in {:.0} ms, frame time mean {:.1} ms, max {:.1} ms ({bubbles} bubbles)",
+                done.frames,
+                done.total * 1000.0,
+                done.total / f64::from(done.frames) * 1000.0,
+                done.max * 1000.0
+            )
+        })
+    }
 }
 
 impl PetUi {
@@ -415,6 +454,9 @@ impl PetUi {
             inline_menu: false,
             smooth_until: 0.0,
             fixed_frame: fixed_frame(),
+            frame_times: std::env::var_os("AIPET_DEBUG")
+                .is_some_and(|v| v == "1")
+                .then(FrameTimes::default),
             settings: Settings::new(setup.services),
         }
     }
@@ -473,6 +515,11 @@ impl PetUi {
 
         self.sync_cards();
         self.stacks.animate(dt, t);
+        if let Some(times) = &mut self.frame_times
+            && let Some(line) = times.frame(elapsed, self.stacks.easing(), self.stacks.frames().count())
+        {
+            eprintln!("aipet: {line}");
+        }
         if f64::from(shift) > CALM_SPEED * elapsed || self.stacks.easing() {
             self.smooth_until = t + SMOOTH_HOLD;
         }
@@ -601,7 +648,7 @@ impl PetUi {
                 .filter(|(c, _)| c.content && !c.removing)
                 .find(|(c, f)| {
                     let held = hovered.as_ref() == Some(&c.id);
-                    reach(c, f).body().contains(p) || (held && f.close().contains(p))
+                    f.body().contains(p) || (held && f.close().contains(p))
                 })
                 .map(|(c, _)| Arc::clone(&c.id))
         });
@@ -902,7 +949,7 @@ impl PetUi {
             if card.o <= 0.05 {
                 continue;
             }
-            geometry::rounded(reach(card, &frame).body(), CARD_RADIUS * frame.scale, &mut rects);
+            geometry::rounded(frame.body(), CARD_RADIUS * frame.scale, &mut rects);
             if card.interactive() {
                 geometry::rounded(frame.close(), CLOSE_SIZE / 2.0 * frame.scale, &mut rects);
             }
@@ -918,7 +965,7 @@ impl PetUi {
 
     /// Where the pet's surface is drawn on, in whole logical px like [`PetUi::hit_rects`] (every one of which lies
     /// in one of these): the sprite with its glow's halo, its ground shadow where its lift puts it, every bubble
-    /// drawn with its shadow or glow (and its dismiss button while that shows, and as far as it takes the pointer),
+    /// drawn with its shadow or glow (and its dismiss button while that shows),
     /// the reviews header, the menu while it is open inline, and a tooltip while one shows. The rest of the surface
     /// is transparent, so a region that clips drawing as well (X11's bounding shape, a Windows window region) can be
     /// exactly this. It changes as things move.
@@ -932,9 +979,6 @@ impl PetUi {
                 continue;
             }
             add(geometry::shadowed(frame.body(), &self.card_shadow(card, frame.scale)));
-            if card.reach() > card.width() {
-                add(reach(card, &frame).body());
-            }
             if card.interactive() {
                 add(frame.close());
             }
@@ -1086,14 +1130,6 @@ fn buttons(s: &Session) -> Buttons {
         .with(Button::Open, busy_in_app)
 }
 
-/// Where a bubble takes the pointer: its frame as wide as its reach ([`Card::reach`]).
-fn reach(card: &Card, frame: &CardFrame) -> CardFrame {
-    CardFrame {
-        width: card.reach(),
-        ..*frame
-    }
-}
-
 /// What of a bubble the pointer at `p` is on: its dismiss button or a round button while they show, else the bubble.
 fn part_at(card: &Card, frame: &CardFrame, p: Point) -> Part {
     if card.interactive() && frame.close().contains(p) {
@@ -1169,17 +1205,29 @@ fn parse_fps(n: &str) -> Option<Duration> {
 
 /// A bubble's title and detail cut to fit, and its width (MakeCard's layout): its padding (14 + 9), 1 px borders, the
 /// dot's 18 + 8 and the longer text, from 240 to 350. At rest (`row` none) the text gets up to [`TEXT_MAX`]. Beside a
-/// row of buttons `row` px wide it gets up to [`TEXT_BESIDE`], or less where the bubble would be wider than 350.
+/// row of buttons `row` px wide it gets up to [`TEXT_BESIDE`], or less where the bubble would be wider than 350. A
+/// bubble never gets narrower for its buttons, as the C#'s doesn't: where they would make it so, it keeps its width at
+/// rest and its text gets the room the buttons leave.
 fn fit_card(title: &str, detail: &str, row: Option<f32>) -> Fitted {
     const FRAME: f32 = 14.0 + 9.0 + 2.0 + 18.0 + 8.0;
-    let (max, row) = match row {
-        None => (TEXT_MAX, 0.0),
-        Some(row) => (TEXT_BESIDE.min(CARD_MAX - FRAME - row), row),
+    let fit = |max: f32, row: f32| {
+        let (title, title_w) = style::fit(title, 13.5, style::UI_SEMIBOLD, max);
+        let (detail, detail_w) = style::fit(detail, 12.0, style::UI, max);
+        let width = (FRAME + title_w.max(detail_w).ceil() + row).clamp(CARD_MIN, CARD_MAX);
+        Fitted { title, detail, width }
     };
-    let (title, title_w) = style::fit(title, 13.5, style::UI_SEMIBOLD, max);
-    let (detail, detail_w) = style::fit(detail, 12.0, style::UI, max);
-    let width = (FRAME + title_w.max(detail_w).ceil() + row).clamp(CARD_MIN, CARD_MAX);
-    Fitted { title, detail, width }
+    let rest = fit(TEXT_MAX, 0.0);
+    let Some(row) = row else {
+        return rest;
+    };
+    let beside = fit(TEXT_BESIDE.min(CARD_MAX - FRAME - row), row);
+    if beside.width >= rest.width {
+        return beside;
+    }
+    Fitted {
+        width: rest.width,
+        ..fit(rest.width - FRAME - row, row)
+    }
 }
 
 #[cfg(test)]
@@ -1924,5 +1972,50 @@ pub(crate) mod tests {
         assert!(ui.drawn_rects().contains(&Rect::covering(reach).unwrap()));
         ui.set_inline_menu(true);
         assert!(within(&ui) && ui.drawn_rects().contains(&Rect::covering(INLINE_MENU).unwrap()));
+    }
+
+    /// Beside its buttons a bubble keeps its width at rest, its text cut shorter to make room, or grows; never
+    /// narrower, as the C#'s.
+    #[test]
+    fn a_hovered_bubble_keeps_its_width_or_grows_and_its_text_makes_room() {
+        let long = "Port the pet's bubbles, menu, Settings and platform code to Rust, every page of it";
+        let row = Buttons::default().with(Button::Open, true).row_width();
+        let rest = fit_card(long, "Editing crates/aipet-ui/src/view.rs", None);
+        let hovered = fit_card(long, "Editing crates/aipet-ui/src/view.rs", Some(row));
+        assert_eq!(hovered.width, rest.width, "{rest:?} {hovered:?}");
+        assert!(hovered.title.chars().count() < rest.title.chars().count());
+        assert!(style::text_width(&hovered.title, 13.5, style::UI_SEMIBOLD) <= rest.width - 51.0 - row);
+        // a short one grows by its buttons
+        let three = Some(
+            [Button::Previous, Button::PlayPause, Button::Next]
+                .into_iter()
+                .fold(Buttons::default(), |b, button| b.with(button, true))
+                .row_width(),
+        );
+        let (rest, hovered) = (
+            fit_card("Bubble Pop", "♫ The Pets", None),
+            fit_card("Bubble Pop", "♫ The Pets", three),
+        );
+        assert_eq!(
+            (rest.title.as_str(), hovered.title.as_str()),
+            ("Bubble Pop", "Bubble Pop")
+        );
+        assert!(hovered.width > rest.width);
+    }
+
+    /// The debug line ends each animation with its frames' times, from the second frame on: the gap before the first
+    /// is the calm before it.
+    #[test]
+    fn an_animations_frame_times_are_summed_up_when_it_ends() {
+        let mut times = FrameTimes::default();
+        assert_eq!(times.frame(0.1, false, 4), None, "nothing under way");
+        for gap in [0.5, 0.016, 0.020, 0.030] {
+            assert_eq!(times.frame(gap, true, 4), None);
+        }
+        assert_eq!(
+            times.frame(0.016, false, 4).as_deref(),
+            Some("bubbles' animation: 3 frames in 66 ms, frame time mean 22.0 ms, max 30.0 ms (4 bubbles)")
+        );
+        assert_eq!(times.frame(0.016, false, 4), None, "said once");
     }
 }

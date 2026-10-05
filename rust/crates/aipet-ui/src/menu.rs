@@ -1,10 +1,10 @@
 //! The pet's menu, styled like the C#'s ContextMenu (App.axaml: a dark rounded panel, Fluent menu items).
 
-use iced::widget::{Space, button, canvas, column, container, row, text};
+use iced::widget::{Space, button, column, container, row, text};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
 
 use crate::geometry::{MENU, MENU_ITEM_H, MENU_RADIUS, MENU_SEPARATOR_H};
-use crate::style::{self, Glyph, Icon, argb};
+use crate::style::{self, Icon, argb};
 use crate::{MenuItem, Message, PetUi};
 
 /// Room for the check mark before each item's label.
@@ -17,19 +17,16 @@ impl PetUi {
     pub fn menu_view(&self) -> Element<'_, Message> {
         let accent = self.accent();
         let item = |label: &'static str, checked: Option<bool>, choice: MenuItem| -> Element<'_, Message> {
-            let check = Glyph {
-                icon: Icon::Check,
-                colour: accent,
-                width: 1.9,
-            };
-            let size = check.size();
+            let size = Icon::Check.size();
             let mark: Element<'_, Message> = if checked == Some(true) {
-                canvas(check).width(size.width).height(size.height).into()
+                Icon::Check.view(accent, 1.0)
             } else {
                 Space::new().width(size.width).height(size.height).into()
             };
             let label = text(label).size(14).font(style::UI).color(style::ICON);
-            button(row![container(mark).width(CHECK_COLUMN), label].align_y(Alignment::Center))
+            // a button lays its content out from its top: the row is centred in the item's height, as the C#'s are
+            let content = row![container(mark).width(CHECK_COLUMN), label].align_y(Alignment::Center);
+            button(container(content).center_y(Length::Fill))
                 .width(Length::Fill)
                 .height(MENU_ITEM_H)
                 .padding([0, 11])

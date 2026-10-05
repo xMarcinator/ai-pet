@@ -1,5 +1,6 @@
 //! A scripted day in the pet's life, so the pet shows every state and animation without real chats: a Claude chat
-//! that thinks, works, needs you and finishes, a Codex chat, and a Jira issue to review. It loops every [`PERIOD`] s.
+//! that thinks, works, needs you and finishes, a Codex chat, a Jira issue to review, and late in each pass a crowd of
+//! chats that fills their stack ([`CROWD_FROM`]). It loops every [`PERIOD`] s.
 //!
 //! The script goes through the core's own [`Board`], as the hooks and the Jira watcher would report it, so the demo
 //! shows the bubbles, labels and moods the pet shows for real data. It is for development, screenshots and tests:
@@ -39,7 +40,16 @@ const CHATS: &[Step] = &[
     Step { from: 22.0, until: 34.0, id: CLAUDE, state: "done", detail: "Finished · 5 files changed" },
     Step { from: 9.0, until: 25.0, id: CODEX, state: "working", detail: "Running cargo test" },
     Step { from: 25.0, until: 29.0, id: CODEX, state: "done", detail: "All 42 tests passed" },
+    // a crowd: from CROWD_FROM the chats' stack is full (four bubbles, and "+N more" while Codex is there too), to
+    // spread out and fold again
+    Step { from: CROWD_FROM, until: 37.0, id: "claude:demo-2", state: "done", detail: "Finished · the release workflow" },
+    Step { from: CROWD_FROM, until: 37.0, id: "claude:demo-3", state: "done", detail: "Finished · the Windows proof" },
+    Step { from: CROWD_FROM, until: 37.0, id: "claude:demo-4", state: "done", detail: "Finished · the hook server" },
+    Step { from: CROWD_FROM, until: 37.0, id: "claude:demo-5", state: "done", detail: "Finished · the placement" },
 ];
+
+/// When the chats' stack fills up (seconds into each pass).
+pub const CROWD_FROM: f64 = 27.0;
 
 /// When the issue waits on you.
 const REVIEW_FROM: f64 = 13.0;
@@ -93,6 +103,12 @@ pub fn sources(t: f64) -> Sources {
                 chat.title = Some("Make the spike a real pet".into());
                 chat.cwd = Some("/home/me/ai-pet".into());
                 chat.prop = Some("laptop");
+            } else if s.id.starts_with("claude:") {
+                // the crowd: Claude Code chats in a terminal
+                chat.agent = Some("claude");
+                chat.title = Some(format!("Chat {}", &s.id["claude:demo-".len()..]));
+                chat.cwd = Some("/home/me/ai-pet".into());
+                chat.r#where = Some("terminal".into());
             } else {
                 chat.agent = Some("codex");
                 chat.chat_title = Some("Spike notes".into());
@@ -174,7 +190,18 @@ mod tests {
     #[test]
     fn bubbles_come_and_go_and_the_script_loops() {
         assert_eq!(ids(14.0), [CODEX, CLAUDE, REVIEW]);
-        assert_eq!(ids(30.0), [CLAUDE, REVIEW]);
+        assert_eq!(ids(26.0), [CODEX, CLAUDE, REVIEW]);
+        // the crowd fills the chats' stack: four bubbles, and Claude's chat left out as "+1 more"
+        let crowd = [
+            "claude:demo-2",
+            "claude:demo-3",
+            "claude:demo-4",
+            "claude:demo-5",
+            REVIEW,
+        ];
+        assert_eq!(ids(CROWD_FROM + 3.0), crowd);
+        assert_eq!(board(CROWD_FROM + 3.0).extra("chats"), 1);
+        assert_eq!(ids(36.0), &crowd[..4]);
         assert!(ids(38.0).is_empty());
         assert_eq!(ids(14.0 + 3.0 * PERIOD), ids(14.0));
         let board = board(14.0);
