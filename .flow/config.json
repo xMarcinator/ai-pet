@@ -4,6 +4,12 @@
     "claimStaleAfter": 24,
     "maxDecisions": 12
   },
+  "features": {
+    "staleAfterCommits": 50
+  },
+  "judge": {
+    "enabled": true
+  },
   "land": {
     "automatedReviewers": "",
     "ciFixBudget": 3,
@@ -31,6 +37,7 @@
   },
   "review": {
     "backend": null,
+    "fanoutExecution": "concurrent",
     "maxIterations": 8
   },
   "scouts": {

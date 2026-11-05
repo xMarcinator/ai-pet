@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-05T12:49:15.969513Z",
+  "depends_on": [
+    "fn-2-layered-sprite-and-vector-pets.3"
+  ],
+  "id": "fn-2-layered-sprite-and-vector-pets.4",
+  "priority": null,
+  "spec": "fn-2-layered-sprite-and-vector-pets",
+  "spec_path": ".flow/tasks/fn-2-layered-sprite-and-vector-pets.4.md",
+  "status": "todo",
+  "title": "Render packs in the UI: per-kind filtering and snapping, hit mask, frame pacing, Settings \u2192 Avatars",
+  "updated_at": "2026-11-05T12:49:15.969513Z"
+}
