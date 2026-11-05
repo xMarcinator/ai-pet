@@ -105,13 +105,22 @@ def sleeve(side, to):
 
 
 def laptop():
-    return ('<g id="prop">'
-            + el("rect", x=92, y=160, width=76, height=46, rx=5, fill="#26262C", stroke=C["outline"], stroke_width=4)
-            + el("rect", x=99, y=166, width=62, height=33, rx=2, fill="#0E2A1A")
-            + el("rect", x=105, y=173, width=30, height=3, rx=1.5, fill=C["hi"], opacity="0.8")
-            + el("rect", x=105, y=180, width=44, height=3, rx=1.5, fill=C["hi"], opacity="0.5")
-            + el("rect", x=105, y=187, width=22, height=3, rx=1.5, fill=C["hi"], opacity="0.5")
-            + "</g>")
+    """The working prop, as on the pixel Hood: a laptop off to the right, its dark screen showing a green prompt.
+    Drawn at its original coordinates, then scaled 1.2x and set so its right end stops just inside the Hood's right outline."""
+    return ('<g id="prop"><g transform="translate(158 172) scale(1.2) translate(-185 -172)">'
+            + el("rect", x=144, y=190, width=82, height=10, rx=3, fill="#3A3F4E", stroke=C["outline"], stroke_width=4)
+            + el("rect", x=152, y=144, width=66, height=50, rx=5, fill="#4A5266", stroke=C["outline"], stroke_width=4)
+            + el("rect", x=158, y=150, width=54, height=38, rx=2, fill="#111827")
+            # a tight glow hugging the prompt: one translucent stroke, no blur
+            + el("path", d="M168 160 L177 169 L168 178", fill="none", stroke=C["glow"], stroke_width=7,
+                 stroke_linecap="round", stroke_linejoin="round", opacity="0.3")
+            + el("path", d="M168 160 L177 169 L168 178", fill="none", stroke=C["hi"], stroke_width=4,
+                 stroke_linecap="round", stroke_linejoin="round")
+            + '<g class="caret">'
+            + el("rect", x=179.5, y=173.5, width=14, height=6.5, rx=3, fill=C["glow"], opacity="0.3")
+            + el("rect", x=181, y=175, width=11, height=3.5, rx=1.5, fill=C["hi"], opacity="0.8")
+            + "</g>"
+            + "</g></g>")
 
 
 def hood(expr="open", look=(0, 0), glow=True, hands="rest", prop=False, mirror=False, standalone=False):
@@ -154,11 +163,11 @@ def hood(expr="open", look=(0, 0), glow=True, hands="rest", prop=False, mirror=F
     elif hands == "raised":
         hl, hr = (28, 126), (232, 126)
     elif hands == "hold":
-        hl, hr = (96, 186), (164, 186)
+        hl, hr = (119, 196), (209, 196)  # screen-left hand types at the near edge; screen-right hand holds the far end  # screen-left hand types on the deck; screen-right hand holds its far end
     if prop:
         fig.append(laptop())
-    fig.append('<g id="arms">' + "".join(arms) + hand("hand-left", hl, "bob-l" if standalone else "", hands == "raised")
-                + hand("hand-right", hr, "bob-r" if standalone else "", hands in ("wave", "raised")) + "</g>")
+    fig.append('<g id="arms">' + "".join(arms) + hand("hand-left", hl, "type" if hands == "hold" else ("bob-l" if standalone else ""), hands == "raised")
+                + hand("hand-right", hr, "" if hands == "hold" else ("bob-r" if standalone else ""), hands in ("wave", "raised")) + "</g>")
     inner = "".join(fig)
     cls = ' class="breathe"' if standalone else ""
     o.append(f'<g id="figure" transform="translate(0 22)"><g{cls}>{inner}</g></g>')
@@ -182,7 +191,13 @@ STYLE = """<style>
     .bob-l, .bob-r { animation: bob 2.8s ease-in-out infinite; }
     .bob-r { animation-delay: -1.4s; }
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-    @media (prefers-reduced-motion: reduce) { .breathe, .bob-l, .bob-r { animation: none; } }
+    .type { animation: type 1.1s steps(1, end) infinite; }
+    @keyframes type { 0% { transform: translateY(0); } 8% { transform: translate(-2px, 3px); }
+      16% { transform: translateY(0); } 26% { transform: translate(3px, 3px); } 34% { transform: translateY(0); }
+      44% { transform: translate(-1px, 3px); } 52% { transform: translateY(0); } 100% { transform: translateY(0); } }
+    .caret { animation: caret 1s steps(1, end) infinite; }
+    @keyframes caret { 0% { opacity: 1; } 50% { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .breathe, .bob-l, .bob-r, .type, .caret { animation: none; } }
   </style>"""
 
 
@@ -206,7 +221,7 @@ def main():
         ("squint", {"expr": "squint"}),
         ("waving", {"hands": "wave"}),
         ("hands raised", {"hands": "raised", "expr": "wide"}),
-        ("holding laptop", {"hands": "hold", "prop": True, "look": (0, 4)}),
+        ("working at laptop (typing)", {"hands": "hold", "prop": True, "look": (4, 3)}),
         ("mirrored (look right→left)", {"look": (5, 0), "mirror": True}),
         ("glow off", {"glow": False}),
     ]
@@ -234,6 +249,12 @@ def main():
   td {{ padding: 4px; }}
   .box {{ width: 130px; height: 120px; overflow: hidden; outline: 1px dashed #bbb; }}
   .box svg {{ display: block; width: 130px; height: 125px; margin-top: -2.5px; }}
+  .type {{ animation: type 1.1s steps(1, end) infinite; }}
+  @keyframes type {{ 0% {{ transform: translateY(0); }} 8% {{ transform: translate(-2px, 3px); }}
+  16% {{ transform: translateY(0); }} 26% {{ transform: translate(3px, 3px); }} 34% {{ transform: translateY(0); }}
+  44% {{ transform: translate(-1px, 3px); }} 52% {{ transform: translateY(0); }} 100% {{ transform: translateY(0); }} }}
+  .caret {{ animation: caret 1s steps(1, end) infinite; }}
+  @keyframes caret {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0; }} }}
 </style></head><body>
 <h2>Pixel original vs vector, at comparable character height (on near-black)</h2>
 <div class="cmp">
@@ -250,6 +271,10 @@ def main():
 """
     with open(os.path.join(OUT, "hood-green-preview.html"), "w", encoding="utf-8", newline="\n") as f:
         f.write(html)
+    with open(os.path.join(OUT, "hood-green-working.svg"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(svg("\n  <title>Hood (green), working</title>\n  <!-- Experimental: the working pose, typing, with a "
+                    "blinking cursor. Generated by hood_gen.py. -->\n  " + STYLE + "\n  "
+                    + hood(hands="hold", prop=True, look=(4, 3), standalone=True) + "\n") + "\n")
 
 
 if __name__ == "__main__":
