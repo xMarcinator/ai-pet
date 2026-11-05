@@ -11,6 +11,6 @@
   "spec": "fn-2-layered-sprite-and-vector-pets",
   "spec_path": ".flow/tasks/fn-2-layered-sprite-and-vector-pets.2.md",
   "status": "todo",
-  "title": "Bake Sprout and Hood into layered packs, switch the pet to the compositor, remove the procedural renderer",
-  "updated_at": "2026-11-05T12:49:15.969426Z"
+  "title": "Bake Sprout, Hood and Hood (green) into layered packs, switch the pet to the compositor, remove the procedural renderer",
+  "updated_at": "2026-11-05T14:59:27.956593Z"
 }
