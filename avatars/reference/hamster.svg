@@ -4,8 +4,8 @@
      turned slightly to the left, big round ears, small brown square eyes, a brown nose and mouth, cream arms meeting
      in small paws on the belly, thin feet, and a soft brown outline (lighter on the lit left, darker on the right).
      Same layered system as the green Hood, with plain shapes only (no filters, masks, clip paths, gradients or <use>).
-     Groups map to canvas parts: shadow, ears, feet, body, face, eyes (eye-left, eye-right, translated to their
-     centres), prop, headphones, arms (arm-left, arm-right, translated to their shoulder pivots and rotated for
+     Groups map to canvas parts: shadow, ears, headphones-back (the far cup, behind the body), feet, body, face, eyes
+     (eye-left, eye-right, translated to their centres), prop, headphones, arms (arm-left, arm-right, translated to their shoulder pivots and rotated for
      poses; left/right are screen sides in this unmirrored drawing; mirror around x=130), fx. Every state:
      pet_states.STATES. The CSS is only a preview. -->
   <style>

@@ -112,10 +112,39 @@ def arm(name, pivot, angle=0, cls="", lift=(0, 0)):
             + "</g></g>")
 
 
+# The Hamster is drawn in a three-quarter view, turned to the left: its head is centred between the ears, left of
+# the canvas centre, and narrower than the body. Parts worn or held are placed for that view, not the front-facing
+# pets' places in pet_states.py.
+HEAD_CX = X(19.2)  # the crown, between the ears
+LAPTOP_AT = (X(20), 186)  # the laptop's centre and the line its base stands on, in front of the belly
+LENS_AT = (-140, 4)  # the shared magnifier moved from the lower right to the lower left, the way the hamster faces
+
+
+def headphones():
+    """The headset in three-quarter view: the band rests on the crown between the ears, the near cup sits at the
+    head's screen-right side, and the far cup peeks out behind the head's left edge (drawn behind the body)."""
+    near, far, cup_y = (X(30.4), Y(16.6)), (X(8.6), Y(17.2)), Y(16.6)
+    band = (f"M{far[0]} {far[1] - 14} C{far[0] - 3} {Y(10.6)} {HEAD_CX - 36} {Y(9.4)} {HEAD_CX} {Y(9.6)} "
+            f"C{HEAD_CX + 34} {Y(9.8)} {near[0] + 2} {Y(11.2)} {near[0]} {near[1] - 16}")
+    back = ('<g id="headphones-back">'
+            + el("rect", x=far[0] - 7, y=far[1] - 14, width=14, height=28, rx=6, fill=pet_states.HP_CUP,
+                 stroke=C["edgeDark"], stroke_width=4) + "</g>")
+    front = ('<g id="headphones">'
+             + el("path", d=band, fill="none", stroke=C["edgeDark"], stroke_width=11, stroke_linecap="round")
+             + el("path", d=band, fill="none", stroke=pet_states.HP_DARK, stroke_width=6, stroke_linecap="round")
+             + el("rect", x=near[0] - 11, y=cup_y - 17, width=22, height=34, rx=8, fill=pet_states.HP_CUP,
+                  stroke=C["edgeDark"], stroke_width=4)
+             + el("rect", x=near[0] - 5, y=cup_y - 11, width=5, height=20, rx=2.5, fill=C["orange"], opacity="0.9")
+             + "</g>")
+    return back, front
+
+
 def laptop(caret=True):
-    """The working prop, as on the other pets: a laptop at the lower right, its dark screen showing a cyan prompt."""
+    """The working prop, as on the other pets (a dark screen showing a cyan prompt), but standing in front of the
+    belly, under the turned face, with a paw at each end of its base."""
     hi = "#7FEFFF"
-    return ('<g id="prop"><g transform="translate(160 170) scale(1.2) translate(-185 -172)">'
+    x, base = LAPTOP_AT
+    return (f'<g id="prop"><g transform="translate({x} {base - 28}) translate(-185 -172)">'
             + el("rect", x=144, y=190, width=82, height=10, rx=3, fill="#C9CDD6", stroke=C["dark"], stroke_width=4)
             + el("rect", x=152, y=144, width=66, height=50, rx=5, fill="#3A3A43", stroke=C["dark"], stroke_width=4)
             + el("rect", x=158, y=150, width=54, height=38, rx=2, fill="#1E2236")
@@ -192,19 +221,21 @@ def figure(pose, standalone=False):
         ar, lr = (-140, (16, -8)) if not phase else (-115, (18, -2))
     elif arms == "raised":
         al, ar, ll, lr = 140, -140, (-16, -8), (16, -8)
-    elif arms == "hold":  # screen-left arm types at the laptop's near edge; screen-right arm holds its far end
-        al, ll = -15, (26 + tap[0], 32 + tap[1])
-        ar, lr = -10, (58, 38)
-    elif arms == "lens":  # screen-right arm holds the magnifier's handle
-        ar, lr = 0, (80 + scan * pet_states.LENS_STEP, 30)
+    elif arms == "hold":  # a paw at each end of the laptop's base: the screen-left one types, the other holds
+        al, ll = 20, (-8 + tap[0], 26 + tap[1])
+        ar, lr = -20, (10, 26)
+    elif arms == "lens":  # the screen-left arm grips the end of the magnifier's handle
+        al, ll = 40, (29 + scan * pet_states.LENS_STEP, 37)
     elif arms == "run":  # arms swing: one forward and up, one back
         al, ar, ll, lr = (40, -70, (-8, 6), (14, -4)) if not phase else (-60, 40, (-12, -4), (10, 6))
     if prop == "laptop":
         fig.append(laptop(pose.get("caret", True)))
     elif prop == "lens":
-        fig.append(pet_states.magnifier(scan))
+        fig.append(f'<g transform="translate({LENS_AT[0]} {LENS_AT[1]})">' + pet_states.magnifier(scan) + "</g>")
     if pose.get("headphones"):
-        fig.append(pet_states.headphones(46, 214, 104, 22, C["orange"], C["edgeDark"]))
+        back, front = headphones()
+        fig.insert(fig.index(next(p for p in fig if p.startswith('<g id="body">'))), back)
+        fig.append(front)
     cl = ("type" if arms == "hold" else ("bob-l" if standalone else ""),
           "" if arms == "hold" else ("bob-r" if standalone else ""))
     fig.append('<g id="arms">' + arm("arm-left", SHOULDER_L, al, cl[0], ll) + arm("arm-right", SHOULDER_R, ar, cl[1], lr)
@@ -221,8 +252,8 @@ HEADER = """<!-- Hamster: a vector trace of the pixel hamster (avatars/reference
      turned slightly to the left, big round ears, small brown square eyes, a brown nose and mouth, cream arms meeting
      in small paws on the belly, thin feet, and a soft brown outline (lighter on the lit left, darker on the right).
      Same layered system as the green Hood, with plain shapes only (no filters, masks, clip paths, gradients or <use>).
-     Groups map to canvas parts: shadow, ears, feet, body, face, eyes (eye-left, eye-right, translated to their
-     centres), prop, headphones, arms (arm-left, arm-right, translated to their shoulder pivots and rotated for
+     Groups map to canvas parts: shadow, ears, headphones-back (the far cup, behind the body), feet, body, face, eyes
+     (eye-left, eye-right, translated to their centres), prop, headphones, arms (arm-left, arm-right, translated to their shoulder pivots and rotated for
      poses; left/right are screen sides in this unmirrored drawing; mirror around x=130), fx. Every state:
      pet_states.STATES. The CSS is only a preview. -->"""
 
