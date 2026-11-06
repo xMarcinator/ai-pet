@@ -1,0 +1,96 @@
+# The Rive spike's throwaway CI run (fn-2 task 13, question 1): does rive-rs build and run with the tiny-skia
+# renderer on Windows (MSVC), Linux and macOS? Not part of the product CI. To run it, copy this file to
+# .github/workflows/rive-spike.yml on the spike/rive branch and push that branch, or start it by hand
+# (workflow_dispatch). Each job uploads its logs and rendered PNGs.
+name: rive-spike
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [spike/rive]
+
+permissions:
+  contents: read
+
+env:
+  # rive-rs main as cloned for the spike (2025-07-04); its submodules come at the revisions it pins
+  RIVE_RS_REV: 3d26aa1c3865260e5ef9751ad0172dcc197ff8eb
+  CARGO_TERM_COLOR: never
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: rust/spikes/rive
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # the workspace's toolchain (ci.yml)
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      - name: Clone rive-rs and its submodules
+        run: |
+          git clone https://github.com/rive-app/rive-rs vendor/rive-rs
+          git -C vendor/rive-rs checkout "$RIVE_RS_REV"
+          git -C vendor/rive-rs submodule update --init --recursive
+          git -C vendor/rive-rs submodule status
+      - name: Toolchain versions
+        run: |
+          mkdir -p out
+          { rustc -vV; cargo -V; c++ --version 2>/dev/null || true; } | tee out/toolchain.txt
+      - name: Build without default features (no text, no layout)
+        run: |
+          start=$(date +%s)
+          cargo build --release 2>&1 | tee out/build.txt
+          echo "build seconds: $(( $(date +%s) - start ))" | tee -a out/build.txt
+          ls -l target/release/ | tee -a out/build.txt
+      - name: Try the layout feature (expected to fail; the yoga sources aren't in the clone)
+        continue-on-error: true
+        run: cargo build --release --features layout 2>&1 | tail -20 | tee out/build-layout.txt
+      - name: Try the text feature (expected to fail; its harfbuzz is older than rive-cpp needs)
+        continue-on-error: true
+        run: cargo build --release --features text 2>&1 | grep -E 'error|warning: .*error' | head -20 | tee out/build-text.txt
+      - name: Dynamic libraries
+        run: |
+          case "$RUNNER_OS" in
+            Linux) ldd target/release/rive-spike ;;
+            macOS) otool -L target/release/rive-spike ;;
+            Windows) dumpbin //DEPENDENTS target/release/rive-spike.exe || objdump -p target/release/rive-spike.exe | grep 'DLL Name' ;;
+          esac 2>&1 | tee out/libs.txt
+      - name: Run the spike on the samples
+        run: |
+          bin=target/release/rive-spike
+          v=vendor/rive-rs
+          t=$v/submodules/rive-cpp/tests/unit_tests/assets
+          for f in "$t/death_knight.riv" "$v/assets/rating-animation.riv" "$t/bad_skin.riv" "$t/hosted_image_file.riv"; do
+            "$bin" info "$f"
+            "$bin" render "$f" out/render 8 250
+            "$bin" inputs "$f" out/inputs
+          done 2>&1 | tee out/run.txt
+          for f in "$t/death_knight.riv" "$t/bad_skin.riv"; do
+            "$bin" bench "$f"
+          done 2>&1 | tee out/bench.txt
+      - name: Corrupted and truncated files, each in a child process
+        run: |
+          bin=target/release/rive-spike
+          t=vendor/rive-rs/submodules/rive-cpp/tests/unit_tests/assets
+          for f in "$t/death_knight.riv" "$t/bad_skin.riv"; do
+            "$bin" fuzz "$f" out/fuzz | head -1
+          done 2>&1 | tee out/fuzz.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rive-spike-${{ matrix.os }}
+          path: |
+            rust/spikes/rive/out/*.txt
+            rust/spikes/rive/out/render/
+            rust/spikes/rive/out/inputs/
+          retention-days: 7

@@ -1,0 +1,31 @@
+# Throwaway spike (fn-2 task 13): can rive-rs run a .riv state machine through a tiny-skia CPU renderer?
+# Its own workspace, so the main workspace in rust/ and its Cargo.lock stay untouched.
+[workspace]
+# the clone keeps its own workspace (rive-rs inherits its vello dependency from it)
+exclude = ["vendor"]
+
+[package]
+name = "rive-spike"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[features]
+default = []
+# rive-rs's layout feature compiles yoga from ../submodules/yoga, which the repository doesn't have (question 1)
+layout = ["rive-rs/layout"]
+# rive-rs's text feature: its harfbuzz submodule (8.3.0) is older than rive-cpp needs (question 1)
+text = ["rive-rs/text"]
+
+[dependencies]
+# rive-rs isn't on crates.io. The spike builds a clone in vendor/ (git clone --recursive, rev 3d26aa1); CI clones
+# the same revision.
+rive-rs = { path = "vendor/rive-rs/rive-rs", default-features = false, features = [] }
+# the version iced 0.14 already locks in the main workspace
+tiny-skia = { version = "=0.11.4", default-features = false, features = ["std", "simd", "png-format"] }
+
+[profile.release]
+debug = 1
+
+[build-dependencies]
+cc = "1"
