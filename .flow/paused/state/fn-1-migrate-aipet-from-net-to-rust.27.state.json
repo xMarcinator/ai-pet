@@ -1,0 +1,51 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-10-05T08:09:26.139494Z",
+  "evidence": {
+    "base_commit": "76aab52",
+    "commits": [
+      "8282d68",
+      "3738dc3",
+      "30d6a61",
+      "07ee931",
+      "4882362",
+      "2ba3060",
+      "1f658c4",
+      "69577fc",
+      "bce9cfe",
+      "4ff97ec"
+    ],
+    "hands_on": "rust/proofs/windows-hands-on.md: Windows 11 with the user, 2026-10-05",
+    "integrated": {
+      "base": "76aab52",
+      "head": "4ff97ec",
+      "merges": [
+        "7e666a2",
+        "a5f43f5"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from the contracts draw (correctness and integration SHIP): FrameTimes::frame one frame short (fixed bce9cfe); A1/A3 on pre-30d6a61 binaries (re-run on the bce9cfe builds, 4ff97ec); E4, F1, G8 unreported and H6 at 150 % without a reason (F1 and G8 pass; E4 and H6 at 150 % skipped by the user, reasons recorded)",
+      "fix_commits": [
+        "bce9cfe",
+        "4ff97ec"
+      ],
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-0c6048176ac3-fn-1-migrate-aipet-from-net-to-rust.27.json",
+      "rounds": 1,
+      "verdict": "NEEDS_WORK (round 1); round 2 not run: Codex out of credits, and the user chose to skip the review (2026-10-05)"
+    },
+    "tests": [
+      "cd rust && cargo test --workspace (all passed), cargo clippy -D warnings (clean), cargo fmt --check (clean) on a5f43f5",
+      "dotnet build AiPet.slnx && dotnet test (161 passed, 53 skipped)",
+      "C# PluginHooks/Registration/Resource tests on the Rust hook (23 passed, 10 skipped)",
+      "Rust server tests with the .NET hook (passed)",
+      "golden live replays with AIPET_GOLDEN: doctor passed on rerun; codex and registration failed on every rerun with the known antivirus flake inside the C# harness ('Access to the path is denied', run 2 differs from run 1). Task 27 changes nothing in aipet-hook, rust/golden, src or tests."
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-05T13:26:43.000763Z"
+}

@@ -1,0 +1,46 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-10-02T08:40:10.417814Z",
+  "evidence": {
+    "base_commit": "2d6f460e4fae84e5b8562822d1ae60984aac0b4d",
+    "commits": [
+      "7d539917f85a143996eefe73eac0d48dcfdb7563",
+      "b4467a4"
+    ],
+    "integrated": {
+      "base": "2d6f460",
+      "head": "b4467a4",
+      "merges": [
+        "46fe685",
+        "4ff23c3"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from all three draws, 4 P2s: Avatars Reload didn't re-apply an edited worn avatar or drop a deleted one's tile, Open folder ignored a folder it couldn't create, and Import read presets only as UTF-8",
+      "fix_commits": [
+        "b4467a4"
+      ],
+      "note": "round 2 first failed on Codex credits and lost its receipt; after the user reset the credits, the conductor restored the round-1 receipt from flowctl's history copy and the single re-review ran; flowctl 6.7.0 pinned to codex:gpt-5.6-sol:high",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-task19-fn-1-migrate-aipet-from-net-to-rust.19.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check, run with --offline at 2d6f460e4fae84e5b8562822d1ae60984aac0b4d: 371 passed)",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check (--offline, at 7d53991: suite_rc=0, 377 passed, green receipt 7d539917-unittest)",
+      "cargo clippy -p aipet-ui --all-targets -- -D warnings (Windows): clean",
+      "cargo clippy -p aipet-ui -p aipet --features aipet-ui/demo,aipet/demo --all-targets -- -D warnings: clean",
+      "cross clippy -p aipet-ui --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu -- -D warnings: clean",
+      "cross clippy -p aipet-ui --all-targets -Zbuild-std --target aarch64-apple-darwin -- -D warnings: clean (future-incompat note for block v0.1.6 only)",
+      "mutation check: without forget_token / create_dir_all, a_preset_that_moves_jira_or_github_forgets_that_token and reload_shows_new_avatars_and_open_folder_makes_the_folder_first fail",
+      "dotnet test AiPet.slnx: not run (no C# or hook path touched; the task changes aipet-ui only)",
+      "integrated verify (Windows, work branch 4ff23c3 with tasks 19, 20 and 21 and their review fixes merged): cargo test --workspace --no-fail-fast -- --skip credential_manager_tokens_are_the_apps green, clippy -D warnings and fmt clean; at 436d693: dotnet build and test 161 passed, 53 skipped, C# hook tests on the Rust hook 23 passed, Rust server with the .NET hook green; the live doctor replay, which failed in the full gate under load (the antivirus flake), passed alone at 4ff23c3"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-02T12:15:26.063890Z"
+}

@@ -2,6 +2,47 @@
   "assignee": "25668644+xMarcinator@users.noreply.github.com",
   "claim_note": "",
   "claimed_at": "2026-09-28T19:47:48.286465Z",
-  "status": "in_progress",
-  "updated_at": "2026-09-28T19:47:48.286437Z"
+  "evidence": {
+    "base_commit": "88b528fb14c628ff0f13d0381fa8a0652ac63454",
+    "commits": [
+      "3d914e692db654363b3861760b7496fd4d9f682d",
+      "8435fa6fa238b5e0c10f32160c60a129e5aa7d2f",
+      "d19afd7"
+    ],
+    "integrated": {
+      "base": "242d7cc",
+      "head": "d19afd7",
+      "merges": [
+        "12fc826",
+        "f91a758"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK: Unix trace-log rotation deleted by name after an inode check (TOCTOU, R2)",
+      "fix_commits": [
+        "d19afd7"
+      ],
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-50a8de0315cd-fn-1-migrate-aipet-from-net-to-rust.2.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green via handoff at 88b528f (paused run, Linux: cargo test/clippy -D warnings/fmt green; dotnet build then test --no-build 234 passed, 1 skipped)",
+      "baseline (resume, Windows, HEAD b531bab): cargo test --workspace green after re-checking-out a stale CRLF avatars/hood-green.json (no diff); cargo fmt --check green; cargo clippy -D warnings red only for 3 lints new in local rust 1.98.1 (CI pins 1.89.0): aipet-sprite avatar.rs x4 and aipet-ui sprite.rs x1 (inherited), aipet-hook event.rs x1 (fixed in 8435fa6); dotnet test AiPet.slnx -p:UseAppHost=false: 160 passed, 42 skipped, 0 failed",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check  (Windows, rust 1.98.1: rc 0, 108 tests passed, clippy warnings only in aipet-sprite/aipet-ui)",
+      "cargo clippy -p aipet-hook -p aipet-ipc --all-targets --locked -- -D warnings  (Windows, rust 1.98.1: clean)",
+      "dotnet test AiPet.slnx -p:UseAppHost=false  (Windows: 160 passed, 42 skipped, 0 failed)",
+      "AIPET_TEST_HOOK=rust/target/debug/aipet-hook.exe dotnet test tests/AiPet.Tests --no-build --filter <HookContractTests|HookSocketTests|HookRequestSizeTests|EndToEndTests|HookServerTests|NoPetTests|HookServerUnixTests|StarvedPoolTests>  (Windows: 19 passed, 11 skipped as Unix-only, 0 failed; a missing AIPET_TEST_HOOK path fails with \"the hook isn't built at\")",
+      "scratch probe, .NET HookServer + both hooks with non-JSON and duplicate-member stdin (Windows): both exit 0 silently; aipet-hook.log in %TMP% has the C#'s line format (HH:mm:ss user= pipe=), messages worded by each runtime",
+      "cross-runtime.yml test step dry-run locally in bash against the debug hook: \"passed: 19\", step rc 0; the jq selection of the hook's bin test executable checked",
+      "not run locally: Linux/macOS (no Linux or Apple target installed); cross-runtime.yml has not run in CI (nothing pushed)",
+      "integrated verify (Windows, work branch f91a758): cargo test --workspace, clippy --workspace --all-targets -D warnings, fmt --check green; dotnet build -p:UseAppHost=false + dotnet test AiPet.slnx: 160 passed, 42 skipped, 0 failed; AIPET_TEST_HOOK=rust/target/debug/aipet-hook.exe on the 8 cross-runtime classes: 19 passed, 11 skipped (Unix-only), 0 failed",
+      "still pending: Linux/macOS compile and run, and cross-runtime.yml in CI (the work branch isn't pushed)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-29T10:43:12.023947Z"
 }

@@ -1,0 +1,48 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-30T10:01:25.816591Z",
+  "evidence": {
+    "base_commit": "c66df24d4f9b5de7a7683cc5ba49e4be877c88f1",
+    "commits": [
+      "8d020e65d79bc4fc778bc508f933d8bf6312b80a",
+      "eed8209",
+      "0a714c0"
+    ],
+    "integrated": {
+      "base": "c66df24",
+      "head": "0a714c0",
+      "merges": [
+        "4e692a3",
+        "53b3625"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK: P1 (correctness, integration) the config.toml check ran before the backup and the temp-file write, so a Codex write in that window would be overwritten; P2 (correctness) install::upper didn't reproduce the hook's ordinal casing for newer Unicode pairs; contracts SHIP (70 fixtures match, a regenerated codex.json byte-identical)",
+      "fix_commits": [
+        "eed8209",
+        "0a714c0"
+      ],
+      "note": "the first fan-out failed within seconds on flow-next 6.7.0's default Codex model (rejected on this account; refunded); the draws then ran pinned to codex:gpt-5.6-sol:high. The reviewer's suggestion to copy cleanup.rs's casing exclusions was measured against .NET 10.0.12 and not followed: that list matches the app's ICU casing, not the hook's InvariantGlobalization; the re-review accepted it",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-0818c8b5311c-fn-1-migrate-aipet-from-net-to-rust.4.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check; dotnet test AiPet.slnx -p:UseAppHost=false: 160 passed, 42 skipped)",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check",
+      "dotnet test AiPet.slnx -p:UseAppHost=false (160 passed, 42 skipped, as the baseline)",
+      "cargo clippy --workspace --all-targets -- -D warnings",
+      "AIPET_GOLDEN=<abs>/rust/golden/bin/Release/net10.0/aipet-golden.dll cargo test -p aipet-hook --test codex --test registration (live C# corpus on Windows replayed)",
+      "AIPET_TEST_HOOK=<abs>/rust/target/debug/aipet-hook.exe dotnet test tests/AiPet.Tests -p:UseAppHost=false --filter RegistrationTests|PluginHooksTests (14 passed, 10 skipped as Unix-only)",
+      "RUSTC_BOOTSTRAP=1 cargo clippy -p aipet-hook --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu -- -D warnings (Unix-only code linted; not run: no Linux here)",
+      "integrated verify (Windows, work branch 53b3625 with the review fixes merged): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green, clippy --workspace --all-targets -D warnings and fmt --check clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped; AIPET_TEST_HOOK=<rust hook> dotnet test --filter PluginHooksTests|RegistrationTests: 14 passed, 10 Unix-only skipped; AIPET_GOLDEN live replay: tests/codex.rs 2 passed",
+      "AIPET_GOLDEN live replay of tests/registration.rs: 6 passed on the third run; the first two failed in the C# generator's own live run, which recorded 'Access to the path is denied' from its File.Move in a different case each time (hooks-json-no-final-newline, then ours-not-last) while the Rust side matched every case the C# completed: the known antivirus flake on this machine (the committed golden replays passed every time)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-30T12:49:53.597647Z"
+}

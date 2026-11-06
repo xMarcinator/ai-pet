@@ -1,0 +1,56 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-10-01T09:02:03.807177Z",
+  "evidence": {
+    "base_commit": "f3678f40716f0caf23c48eae8b76f3aed1caf913",
+    "commits": [
+      "40b7c245154b31f792310bcd597cca8dbcf1d9ba",
+      "0c1887a685e012d9629d24452078bc7d6c9cb03b",
+      "81b8262e01470a603f6e793b2d38c9a3cf9b7161",
+      "dc78a08",
+      "2f33e33",
+      "a6b6b03"
+    ],
+    "integrated": {
+      "base": "f3678f4",
+      "head": "a6b6b03",
+      "merges": [
+        "516e1a6",
+        "5d9765a"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from all three draws: P2 the single instance was taken after the shell probe; P3 bubble ids interned with Box::leak kept memory for the pet's life (two draws). The wrapper dropped a contracts P1 (where /run/user/<uid> doesn't exist, the lock follows XDG_RUNTIME_DIR, against R7's wording), which the conductor settled by clarifying R7 in the spec (d073658), and a P2 about unbounded channels (the C# also posts a Refresh per event; both shells drain every frame)",
+      "fix_commits": [
+        "dc78a08",
+        "2f33e33",
+        "a6b6b03"
+      ],
+      "note": "the conductor allowed cards.rs and view.rs (tasks 17 and 27's files, neither started) for the id fix; round 3 caught a Linux-only Wayland test the id change broke (a6b6b03); round 4 found nothing new; flow-next 6.7.0's flowctl pinned to codex:gpt-5.6-sol:high, no transport failures",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-0b91e501d800-fn-1-migrate-aipet-from-net-to-rust.15.json",
+      "rounds": 4,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green at f3678f4 (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: 311 passed, clippy and fmt clean; dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped)",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: green at 81b8262 (336 passed, 0 failed; green receipt 81b8262e-unittest)",
+      "cd rust && cargo clippy --workspace --all-targets -- -D warnings: clean at 81b8262",
+      "dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped at 81b8262 (green receipt 81b8262e-dotnet)",
+      "cd rust && cargo check --workspace --all-targets --locked --offline: clean (Cargo.lock current)",
+      "cargo clippy -p aipet --features demo --all-targets -- -D warnings, cargo clippy -p aipet-ui -- -D warnings (no demo, no test): clean",
+      "cross-target clippy -D warnings, -Zbuild-std with stand-in cc/ar/pkg-config: aipet-wayland, aipet-desktop, aipet-ui --all-targets on x86_64-unknown-linux-gnu; aipet-desktop, aipet-ui on aarch64-apple-darwin; single.rs through a scratch crate on both: clean. Not run: no Linux toolchain here; -p aipet can't be checked offline for Linux (velopack's unix crates aren't cached)",
+      "cargo build --release -p aipet: the demo's strings (Make the spike a real pet, Allow cargo build?, AIPET-42, claude:demo) are absent from target/release/AiPet.exe; present in the --features demo debug build",
+      "aipet-ui a_poke_and_a_hop_are_smooth (reseeded, looks two calm frames after the hop starts): 10 of 10 runs passed",
+      "mutation checks: single.rs ignoring ERROR_ALREADY_EXISTS fails 3 tests, ERROR_ACCESS_DENIED as an error fails 1; core_thread without the dismiss or the alert fails 2; lib.rs without app labels, +N more and the Board's mood fails 5",
+      "not run here (GUI apps and the Unix-only tests): manual checks 1-7 in the summary; single.rs's unix tests run in CI's Linux job",
+      "integrated verify (Windows, work branch 5d9765a with task 15 and its review fixes merged; rfd added uncommitted in the same tree): cargo test --workspace --no-fail-fast -- --skip credential_manager_tokens_are_the_apps green, clippy --workspace --all-targets -D warnings and fmt --check clean; cargo check --workspace --all-targets --locked --offline green; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 51 skipped; AIPET_TEST_HOOK=<rust hook> dotnet test --filter PluginHooksTests|RegistrationTests|ResourceTests: 23 passed, 10 Unix-only skipped; AIPET_TEST_HOOK=<.NET hook dll> cargo test -p aipet-core --test server: 15 passed; with AIPET_GOLDEN the workspace green except aipet-hook's codex live replay, whose C# generator failed under load (the antivirus flake); rerun alone at 50b5ee2 it passed in 55 s (it also passed alone twice at c324cd4)",
+      "only CI confirms: the Linux and macOS builds of aipet (velopack's Unix crates aren't in cargo's cache here, and a6b6b03 was checked by reading), and the Unix single-instance tests; manual checks 1-7 in the summary wait for the user (carried into tasks 22 and 27)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-01T12:28:47.318793Z"
+}

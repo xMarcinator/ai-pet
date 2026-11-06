@@ -1,0 +1,45 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-10-02T09:59:52.489608Z",
+  "evidence": {
+    "base_commit": "2d6f460e4fae84e5b8562822d1ae60984aac0b4d",
+    "commits": [
+      "216c4a1a2f51ee1f672cda329bbd623a092903fc",
+      "2486601",
+      "0093af4"
+    ],
+    "integrated": {
+      "base": "2d6f460",
+      "head": "0093af4",
+      "merges": [
+        "436d693",
+        "157cb0e"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from the correctness draw (contracts and integration said SHIP): a slow Test's late result could overwrite Save's or Forget's status, and reopening Settings brought back an unsaved typed token",
+      "fix_commits": [
+        "2486601",
+        "0093af4"
+      ],
+      "note": "the conductor allowed settings/mod.rs, lib.rs and both shells' close handling for the closed hook (reset on close, as the C#, not on open); round 2 first failed on Codex credits and lost its receipt, which the conductor restored from flowctl's history copy; flowctl 6.7.0 pinned to codex:gpt-5.6-sol:high",
+      "receipt": "C:/Users/MJE/Documents/projects/ai-pet-waves/task-20/.flow/tmp/impl-review-receipt.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green (cd rust && cargo test --workspace --offline && cargo clippy --workspace --all-targets --offline && cargo fmt --all -- --check, at 2d6f460)",
+      "cd rust && cargo test --workspace --offline && cargo clippy --workspace --all-targets --offline -- -D warnings && cargo fmt --all -- --check (green at 216c4a1; receipt .flow/tmp/green-receipts/216c4a1a-unittest.json)",
+      "first verify run: inherited timing flake in aipet-core tests/watchers.rs (jira_errors_are_the_csharps, github_errors_are_the_csharps: 500 ms client timeout under load, untouched by this task); 19/19 alone, then full gate green",
+      "cargo test -p aipet-ui --offline --test settings_services (5 passed; mutation checks: no token clear, no GitHub status reset, no refill each fail a test)",
+      "dotnet test AiPet.slnx: not run (no C#, hook or core change in this task)",
+      "integrated verify (Windows, work branch 4ff23c3 with tasks 19, 20 and 21 and their review fixes merged): cargo test --workspace --no-fail-fast -- --skip credential_manager_tokens_are_the_apps green, clippy -D warnings and fmt clean; at 436d693: dotnet build and test 161 passed, 53 skipped, C# hook tests on the Rust hook 23 passed, Rust server with the .NET hook green; the live doctor replay, which failed in the full gate under load (the antivirus flake), passed alone at 4ff23c3"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-02T12:15:46.715765Z"
+}

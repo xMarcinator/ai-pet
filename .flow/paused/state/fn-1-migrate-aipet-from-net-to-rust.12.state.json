@@ -1,0 +1,40 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-30T12:32:07.142509Z",
+  "evidence": {
+    "base_commit": "fb1a6dff54a411b311a65222c3529c8902b0652e",
+    "commits": [
+      "9d0d6ea4309d26e87d75f7e4242a764721414e64",
+      "8c546af3fcbbf8d3c6728a0cf38374cd9bdcc228"
+    ],
+    "integrated": {
+      "base": "fb1a6df",
+      "head": "8c546af",
+      "merges": [
+        "f289072"
+      ],
+      "method": "merge commit on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "fix_commits": [],
+      "note": "the first fan-out stopped when the Codex account ran out of credits (a refunded transport failure); after the user reset the limit the draws ran pinned to codex:gpt-5.6-sol:high and all returned SHIP with no findings",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-3488b2153df8-fn-1-migrate-aipet-from-net-to-rust.12.json",
+      "rounds": 1,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check at fb1a6df; dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped)",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: green at 8c546af (299 tests; tests/board.rs 16 passed: every_board_case_matches_the_csharp, every_watcher_case_matches_the_csharp, app_agent_and_pull_request_labels_match_the_csharp, the_golden_data_covers_the_board, the_golden_data_covers_the_watcher, sources_are_read_from_the_live_watchers, merge::* 6, reviews::* 4; unit tests board::tests 2, codex_watcher::tests 2)",
+      "cd rust && cargo clippy -p aipet-core --all-targets -- -D warnings: clean",
+      "dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped",
+      "golden: dotnet build rust/golden -c Release -p:UseAppHost=false && dotnet rust/golden/bin/Release/net10.0/aipet-golden.dll board: board.json 33 cases / 59 steps, watcher.json 12 cases",
+      "mutation checks: 11 mutations of board.rs and codex_watcher.rs; the 10 that change reachable behaviour each fail tests/board.rs (the TAIL one survived the first run, so 8c546af pins that window in the golden data); the eleventh only changes a hook offered after a log with the same id, which can't happen",
+      "integrated verify (Windows, work branch f289072 with task 12 merged): cargo test --workspace --no-fail-fast -- --skip credential_manager_tokens_are_the_apps green, clippy --workspace --all-targets -D warnings and fmt --check clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-01T08:52:36.634276Z"
+}

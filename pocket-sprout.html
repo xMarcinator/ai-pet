@@ -1,0 +1,644 @@
+<title>Pocket Sprout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gluten:wght@500;700&family=Figtree:wght@400;600;700&family=DM+Mono:wght@500&display=swap">
+<style>
+  :root {
+    --ground: #EEF1F7; --surface: #FFFFFF; --ink: #1D2233; --muted: #5E6780; --line: #D9DFEA;
+    --wall: #DCE4F2; --floor: #C9D3E6; --rug: #B3C2E6; --sky: #9CC9F5; --sun: #FFD36B;
+    --accent: #4553C9; --pet: #FFB48F; --pet-shade: #F0966F; --belly: #FFD6BF;
+    --cheek: #FF7FA0; --leaf: #46A873; --eye: #232838; --shadow: rgba(30,40,80,.14);
+    --zz: #7F8BE8; --night: #0E1230;
+    --ok: #3C9D6B; --warn: #D69A2B; --bad: #D2505A;
+    --berry: #D8445E; --cookie: #D7A56A; --choc: #6B4428; --dumpling: #F5EEE2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #12151F; --surface: #1B2030; --ink: #E7EAF3; --muted: #9AA3BA; --line: #2C3348;
+      --wall: #1F2640; --floor: #2A3352; --rug: #35416B; --sky: #2B3A6B; --sun: #E9E4C4;
+      --accent: #8C98FF; --pet: #FFAA85; --pet-shade: #E48E69; --belly: #FFC9AD;
+      --cheek: #FF7FA0; --leaf: #5CC48C; --eye: #161A26; --shadow: rgba(0,0,0,.35);
+      --zz: #C9D0FF; --night: #05070F;
+      --ok: #52B883; --warn: #E3AE45; --bad: #E56B74;
+      --dumpling: #EDE4D4;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #12151F; --surface: #1B2030; --ink: #E7EAF3; --muted: #9AA3BA; --line: #2C3348;
+    --wall: #1F2640; --floor: #2A3352; --rug: #35416B; --sky: #2B3A6B; --sun: #E9E4C4;
+    --accent: #8C98FF; --pet: #FFAA85; --pet-shade: #E48E69; --belly: #FFC9AD;
+    --cheek: #FF7FA0; --leaf: #5CC48C; --eye: #161A26; --shadow: rgba(0,0,0,.35);
+    --zz: #C9D0FF; --night: #05070F;
+    --ok: #52B883; --warn: #E3AE45; --bad: #E56B74;
+    --dumpling: #EDE4D4;
+  }
+
+  body {
+    background: var(--ground); color: var(--ink);
+    font-family: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px;
+    padding-inline: 16px; padding-block: 24px 40px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; }
+
+  .top { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 8px 16px; }
+  .who { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .name {
+    font-family: "Gluten", "Comic Sans MS", cursive; font-weight: 700; font-size: 40px; line-height: 1.1;
+    color: var(--ink); background: transparent; border: 0; border-bottom: 2px dashed transparent;
+    padding: 0; min-width: 3ch; max-width: 100%;
+  }
+  .name:hover { border-bottom-color: var(--line); }
+  .name:focus-visible { outline: none; border-bottom-color: var(--accent); }
+  .chip {
+    font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    padding: 5px 10px; border-radius: 99px; color: var(--surface); background: var(--ok);
+    transition: background .3s;
+  }
+  .chip[data-tone="warn"] { background: var(--warn); }
+  .chip[data-tone="bad"] { background: var(--bad); }
+  .chip[data-tone="calm"] { background: var(--accent); }
+  .age { color: var(--muted); font-size: 13px; }
+  .age b { font-family: "DM Mono", ui-monospace, monospace; font-weight: 500; color: var(--ink); }
+
+  .stage { position: relative; border-radius: 22px; overflow: hidden; background: var(--wall); }
+  .stage svg { display: block; width: 100%; height: auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .bubble {
+    position: absolute; left: 50%; top: 20%; transform: translate(-50%, -100%);
+    width: max-content; max-width: min(60%, 280px);
+    background: var(--surface); color: var(--ink);
+    font-family: "Gluten", "Comic Sans MS", cursive; font-weight: 500; font-size: 17px; line-height: 1.25;
+    padding: 9px 15px; border-radius: 18px; box-shadow: 0 6px 18px var(--shadow);
+    pointer-events: none; opacity: 0; transition: opacity .25s; text-align: center;
+  }
+  .bubble.on { opacity: 1; }
+  .bubble::after {
+    content: ""; position: absolute; left: 50%; bottom: -7px; width: 14px; height: 14px;
+    background: var(--surface); transform: translateX(-50%) rotate(45deg); border-radius: 3px;
+  }
+
+  .panel { background: var(--surface); border-radius: 22px; padding: 18px; display: grid; gap: 18px; }
+  .meters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 18px; }
+  .meter { display: grid; gap: 6px; }
+  .meter .row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+  .meter .row span:first-child { font-weight: 600; color: var(--ink); }
+  .val { font-family: "DM Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .fill { height: 100%; width: 50%; border-radius: inherit; background: var(--ok); transition: width .4s, background .4s; }
+  .fill.bond { background: var(--cheek); }
+
+  .actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .act {
+    font: inherit; font-weight: 700; color: var(--ink); background: var(--ground);
+    border: 1.5px solid transparent; border-radius: 14px; padding: 12px 8px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; transition: border-color .15s, transform .1s;
+  }
+  .act small { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .act:hover:not(:disabled) { border-color: var(--accent); }
+  .act:active:not(:disabled) { transform: scale(.97); }
+  .act:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .act:disabled { opacity: .45; cursor: not-allowed; }
+
+  .foot { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-size: 13px; }
+  .reset { font: inherit; font-size: 13px; color: var(--muted); background: none; border: 0; padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .reset.armed { color: var(--bad); font-weight: 700; }
+  .reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  @media (max-width: 560px) {
+    .meters, .actions { grid-template-columns: repeat(2, 1fr); }
+    .name { font-size: 32px; }
+  }
+
+  /* room + pet */
+  .wall { fill: var(--wall); } .floor { fill: var(--floor); } .rug { fill: var(--rug); }
+  .win { fill: var(--surface); } .sky { fill: var(--sky); } .sun { fill: var(--sun); }
+  .sill { fill: var(--floor); }
+  .shadow { fill: var(--shadow); }
+  .pet { fill: var(--pet); } .pet-shade { fill: var(--pet-shade); } .belly { fill: var(--belly); }
+  .leaf { fill: var(--leaf); } .stem { stroke: var(--leaf); fill: none; stroke-width: 4; stroke-linecap: round; }
+  .eye { fill: var(--eye); } .eye-hi { fill: #fff; }
+  .lid, .mouth { stroke: var(--eye); fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+  .mouth { stroke-width: 3.5; }
+  .mouth-open { fill: var(--eye); }
+  .cheek { fill: var(--cheek); }
+  .heart { fill: var(--cheek); }
+  .zz { fill: var(--zz); font-family: "Gluten", cursive; font-weight: 700; }
+  .night { fill: var(--night); }
+  .ball { fill: var(--accent); } .ball-stripe { stroke: var(--surface); stroke-width: 3; fill: none; }
+  .berry { fill: var(--berry); } .cookie { fill: var(--cookie); } .choc { fill: var(--choc); }
+  .dumpling { fill: var(--dumpling); stroke: var(--cookie); stroke-width: 1.5; }
+  .crumb { fill: var(--cookie); }
+</style>
+
+<main class="wrap">
+  <header class="top">
+    <div class="who">
+      <input id="petName" class="name" value="Pip" maxlength="14" aria-label="Your pet's name" spellcheck="false" autocomplete="off">
+      <span class="chip" id="mood">Content</span>
+    </div>
+    <div class="age" id="age">Day <b>1</b></div>
+  </header>
+
+  <section class="stage" aria-label="Your pet's room">
+    <svg id="room" viewBox="0 0 600 360" role="img" aria-label="A little sprout creature in its room">
+      <rect class="wall" width="600" height="300"/>
+      <rect class="win" x="412" y="42" width="136" height="104" rx="12"/>
+      <rect class="sky" x="420" y="50" width="120" height="88" rx="7"/>
+      <circle class="sun" id="sun" cx="508" cy="80" r="16"/>
+      <rect class="win" x="478" y="50" width="4" height="88"/>
+      <rect class="sill" x="404" y="144" width="152" height="8" rx="4"/>
+      <rect class="floor" y="300" width="600" height="60"/>
+      <ellipse class="rug" cx="300" cy="322" rx="190" ry="20"/>
+      <g id="items"></g>
+      <ellipse id="shadow" class="shadow" cx="300" cy="302" rx="62" ry="8"/>
+      <g id="pet" transform="translate(300 300)">
+        <g id="petBody">
+          <ellipse id="footL" class="pet-shade" cx="-30" cy="-5" rx="17" ry="8"/>
+          <ellipse id="footR" class="pet-shade" cx="30" cy="-5" rx="17" ry="8"/>
+          <g id="sprout">
+            <path class="stem" d="M0 -118 Q 3 -136 0 -150"/>
+            <path class="leaf" d="M0 -150 C -8 -164 -30 -167 -35 -156 C -26 -145 -8 -145 0 -150 Z"/>
+            <path class="leaf" d="M0 -150 C 8 -169 33 -173 37 -160 C 28 -147 8 -145 0 -150 Z"/>
+          </g>
+          <path class="pet" d="M -72 -50 C -72 -100 -40 -122 0 -122 C 40 -122 72 -100 72 -50 C 72 -14 42 0 0 0 C -42 0 -72 -14 -72 -50 Z"/>
+          <ellipse class="belly" cx="0" cy="-30" rx="38" ry="22"/>
+          <ellipse id="cheekL" class="cheek" cx="-47" cy="-58" rx="11" ry="6.5" opacity=".5"/>
+          <ellipse id="cheekR" class="cheek" cx="47" cy="-58" rx="11" ry="6.5" opacity=".5"/>
+          <g id="eyesOpen">
+            <g id="eyeL" transform="translate(-26 -78)"><ellipse class="eye" id="eyeLb" rx="8.5" ry="11.5"/><circle class="eye-hi" cx="-2.5" cy="-4.5" r="3"/></g>
+            <g id="eyeR" transform="translate(26 -78)"><ellipse class="eye" id="eyeRb" rx="8.5" ry="11.5"/><circle class="eye-hi" cx="-2.5" cy="-4.5" r="3"/></g>
+          </g>
+          <path id="eyesHappy" class="lid" d="M -36 -76 Q -26 -89 -16 -76 M 16 -76 Q 26 -89 36 -76" visibility="hidden"/>
+          <path id="eyesSleep" class="lid" d="M -36 -79 Q -26 -70 -16 -79 M 16 -79 Q 26 -70 36 -79" visibility="hidden"/>
+          <path id="mouth" class="mouth" d="M -10 -52 Q 0 -43 10 -52"/>
+          <ellipse id="mouthOpen" class="mouth-open" cx="0" cy="-50" rx="8" ry="7" visibility="hidden"/>
+        </g>
+      </g>
+      <rect id="night" class="night" width="600" height="360" opacity="0" pointer-events="none"/>
+      <g id="fx" pointer-events="none"></g>
+    </svg>
+    <div class="bubble" id="bubble" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" aria-label="Care">
+    <div class="meters">
+      <div class="meter"><div class="row"><span>Tummy</span><span class="val" id="vFull">0</span></div><div class="bar"><div class="fill" id="bFull"></div></div></div>
+      <div class="meter"><div class="row"><span>Fun</span><span class="val" id="vFun">0</span></div><div class="bar"><div class="fill" id="bFun"></div></div></div>
+      <div class="meter"><div class="row"><span>Energy</span><span class="val" id="vEnergy">0</span></div><div class="bar"><div class="fill" id="bEnergy"></div></div></div>
+      <div class="meter"><div class="row"><span>Bond</span><span class="val" id="vBond">0</span></div><div class="bar"><div class="fill bond" id="bBond"></div></div></div>
+    </div>
+    <div class="actions">
+      <button class="act" id="btnFeed" type="button">Feed<small>drop a snack</small></button>
+      <button class="act" id="btnPlay" type="button">Play<small>toss the ball</small></button>
+      <button class="act" id="btnPet" type="button">Pat<small>a gentle pat</small></button>
+      <button class="act" id="btnSleep" type="button"><span id="sleepLabel">Nap</span><small id="sleepSub">lights out</small></button>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>Stroke <span class="pn">Pip</span> with your cursor or finger to pet. Tap for a boop. <span class="pn">Pip</span> keeps living while you're away.</span>
+    <button class="reset" id="reset" type="button">Start over</button>
+  </footer>
+</main>
+
+<script>
+(() => {
+  const W = 600, FLOOR = 300, KEY = "pocket-sprout-v1";
+  const NS = "http://www.w3.org/2000/svg";
+  const $ = id => document.getElementById(id);
+  const svg = $("room"), petG = $("pet"), bodyG = $("petBody"), shadow = $("shadow");
+  const itemsG = $("items"), fxG = $("fx"), bubble = $("bubble");
+  const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+  // ---------- persistent state ----------
+  function fresh() {
+    return { name: "Pip", born: Date.now(), full: 72, fun: 58, energy: 80, bond: 20, asleep: false, last: Date.now() };
+  }
+  let S = fresh();
+  try { const raw = localStorage.getItem(KEY); if (raw) S = Object.assign(fresh(), JSON.parse(raw)); } catch (e) {}
+  function save() { S.last = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+  // per-minute rates
+  const RATE = { full: -0.25, fun: -0.35, energyAwake: -0.18, energyAsleep: 1.6 };
+  function decay(min) {
+    S.full = clamp(S.full + RATE.full * min, 0, 100);
+    S.fun = clamp(S.fun + RATE.fun * (S.asleep ? 0.3 : 1) * min, 0, 100);
+    S.energy = clamp(S.energy + (S.asleep ? RATE.energyAsleep : RATE.energyAwake) * min, 0, 100);
+    if (Math.min(S.full, S.fun) < 20) S.bond = clamp(S.bond - 0.02 * min, 0, 100);
+  }
+  const awayMin = clamp((Date.now() - S.last) / 60000, 0, 60 * 24 * 3);
+  decay(awayMin);
+  if (S.asleep && S.energy >= 100) S.asleep = false;
+
+  // ---------- runtime state ----------
+  let x = 300, targetX = 300, jy = 0, jvy = 0, land = 0, t = 0;
+  let wanderIn = 2, blinkIn = 2, blinkT = 0, happyT = 0, eatT = 0, chatIn = rand(14, 22);
+  let bubbleT = 0, lastPointer = -10, pointer = { x: 300, y: 200 }, strokeAcc = 0, lastStroke = null;
+  let petLineCd = 0, jumpCd = 0, zIn = 0, walking = false, nightO = S.asleep ? 1 : 0;
+  let food = null, ball = null, down = null;
+  const particles = [];
+  const scale = () => 0.82 + Math.min((Date.now() - S.born) / 864e5, 7) * 0.026;
+
+  // ---------- speech ----------
+  function say(text, secs = 3.2) {
+    bubble.textContent = text.replaceAll("{n}", S.name);
+    bubble.classList.add("on");
+    bubbleT = secs;
+  }
+  const LINES = {
+    hungry: ["My tummy is doing the rumbly thing.", "Is that… a snack I smell?", "Could I maybe have a berry?"],
+    bored: ["Throw the ball? Pleeease?", "I counted the rug threads. Twice.", "Let's play something!"],
+    tired: ["*yawn* … naptime?", "My leaf is drooping. Sleepy.", "Eyes… getting… heavy…"],
+    happy: ["I like it here.", "You're my favourite human.", "My leaf feels extra tall today.", "Hi hi hi!", "Did you know sprouts can hum? Hmmmm."],
+    petted: ["Mmm, right there.", "prrrrr…", "Hehe, that tickles!", "More pats, please."],
+    boop: ["Boop!", "Hee!", "Hey, that's my nose!"],
+    sleepyBoop: ["zz… five more minutes…", "mmh… not yet…"],
+  };
+  function fmtAway(min) {
+    if (min < 60) return `${Math.round(min)} minutes`;
+    if (min < 60 * 36) { const h = Math.round(min / 60); return `${h} hour${h > 1 ? "s" : ""}`; }
+    const d = Math.round(min / 1440); return `${d} day${d > 1 ? "s" : ""}`;
+  }
+
+  // ---------- svg helpers ----------
+  function el(tag, attrs, parent) {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function toSvg(e) {
+    const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY;
+    return p.matrixTransform(svg.getScreenCTM().inverse());
+  }
+  const HEART = "M0 5 C -7 -2 -11 -7 -7 -11 C -4 -14 0 -11 0 -8 C 0 -11 4 -14 7 -11 C 11 -7 7 -2 0 5 Z";
+  function heart(px, py) {
+    const g = el("path", { d: HEART, class: "heart" }, fxG);
+    particles.push({ el: g, x: px + rand(-8, 8), y: py, vx: rand(-15, 15), vy: rand(-70, -45), life: 1.3, max: 1.3, s: rand(0.9, 1.4) });
+  }
+  function zed() {
+    const s = scale();
+    const g = el("text", { class: "zz", "font-size": "22" }, fxG); g.textContent = "z";
+    particles.push({ el: g, x: x + 40 * s, y: FLOOR - 120 * s, vx: 18, vy: -28, life: 2.6, max: 2.6, s: rand(0.8, 1.3), z: true });
+  }
+  function crumbs(px) {
+    for (let i = 0; i < 4; i++) {
+      const g = el("circle", { r: 2.4, class: "crumb" }, fxG);
+      particles.push({ el: g, x: px + rand(-6, 6), y: FLOOR - 50, vx: rand(-60, 60), vy: rand(-120, -40), life: 0.7, max: 0.7, s: 1, g: 500 });
+    }
+  }
+
+  // ---------- actions ----------
+  const FOODS = [
+    { kind: "berry", value: 18, line: "A berry! Tangy.", draw: g => { el("circle", { cy: -10, r: 10, class: "berry" }, g); el("path", { d: "M0 -19 q5 -7 10 -4", class: "stem", "stroke-width": 3 }, g); } },
+    { kind: "cookie", value: 26, line: "Cookie crumbs everywhere. Worth it.", draw: g => { el("circle", { cy: -11, r: 12, class: "cookie" }, g); [[-4, -14], [4, -8], [3, -17], [-5, -6]].forEach(([cx, cy]) => el("circle", { cx, cy, r: 1.9, class: "choc" }, g)); } },
+    { kind: "dumpling", value: 32, line: "Dumpling! My absolute favourite.", draw: g => { el("path", { d: "M-15 0 C -15 -18 15 -18 15 0 Z", class: "dumpling" }, g); el("path", { d: "M-6 -11 q3 -4 6 0 q3 -4 6 0", class: "mouth", "stroke-width": 1.5, stroke: "var(--cookie)" }, g); } },
+  ];
+  function feed() {
+    if (S.asleep) return;
+    if (food) return say("I've still got one here!");
+    if (S.full > 94) return say("I'm stuffed! Maybe later.");
+    const f = pick(FOODS);
+    let fx = rand(90, 510);
+    if (Math.abs(fx - x) < 90) fx = x < 300 ? x + rand(120, 200) : x - rand(120, 200);
+    const g = el("g", {}, itemsG); f.draw(g);
+    food = { ...f, x: fx, y: -30, vy: 0, landed: false, el: g };
+  }
+  function play() {
+    if (S.asleep) return;
+    if (ball) return say("The ball's still out!");
+    if (S.energy < 10) return say("Too sleepy to play…");
+    const fromRight = x < 300;
+    const g = el("g", {}, itemsG);
+    el("circle", { r: 14, class: "ball" }, g);
+    el("path", { d: "M-14 0 Q 0 -8 14 0", class: "ball-stripe" }, g);
+    ball = { x: fromRight ? 575 : 25, y: 160, vx: (fromRight ? -1 : 1) * rand(210, 320), vy: rand(-420, -300), r: 14, a: 0, still: 0, el: g };
+    S.energy = clamp(S.energy - 3, 0, 100);
+    say(pick(["Ooh ooh ooh!", "Ball!!", "I got it, I got it!"]), 1.8);
+  }
+  function pat() {
+    if (S.asleep) { say(pick(LINES.sleepyBoop)); return; }
+    const s = scale();
+    for (let i = 0; i < 3; i++) setTimeout(() => heart(x + rand(-30, 30), FLOOR + jy - 125 * s), i * 120);
+    land = 0.16; happyT = 1.6;
+    S.bond = clamp(S.bond + 2, 0, 100); S.fun = clamp(S.fun + 1.5, 0, 100);
+    say(pick(LINES.petted), 2);
+    save();
+  }
+  function toggleSleep() {
+    S.asleep = !S.asleep;
+    if (S.asleep) { say("Night night…", 2); targetX = x; }
+    else say(S.energy > 70 ? "Good morning! I feel great." : "*stretches* I'm up. Mostly.");
+    syncButtons(); save();
+  }
+  function boop() {
+    if (S.asleep) return say(pick(LINES.sleepyBoop));
+    if (jy === 0) { jvy = -380; }
+    happyT = 1; S.bond = clamp(S.bond + 0.5, 0, 100);
+    say(pick(LINES.boop), 1.4);
+  }
+
+  // ---------- input ----------
+  function petHit(p) {
+    const s = scale();
+    const cx = x, cy = FLOOR + jy - 62 * s;
+    return Math.hypot((p.x - cx) / (76 * s), (p.y - cy) / (66 * s)) < 1;
+  }
+  svg.addEventListener("pointermove", e => {
+    const p = toSvg(e); pointer = p; lastPointer = t;
+    const over = petHit(p);
+    svg.style.cursor = over ? "grab" : "default";
+    if (over && lastStroke && !S.asleep) {
+      strokeAcc += Math.hypot(p.x - lastStroke.x, p.y - lastStroke.y);
+      if (strokeAcc > 70) {
+        strokeAcc = 0; heart(p.x, p.y - 10);
+        S.bond = clamp(S.bond + 0.8, 0, 100); S.fun = clamp(S.fun + 0.6, 0, 100);
+        happyT = 1.2;
+        if (petLineCd <= 0) { say(pick(LINES.petted), 2); petLineCd = 6; }
+      }
+    }
+    lastStroke = over ? p : null;
+  });
+  svg.addEventListener("pointerleave", () => { lastStroke = null; svg.style.cursor = "default"; });
+  svg.addEventListener("pointerdown", e => { const p = toSvg(e); if (petHit(p)) down = p; });
+  svg.addEventListener("pointerup", e => {
+    if (!down) return;
+    const p = toSvg(e);
+    if (Math.hypot(p.x - down.x, p.y - down.y) < 8) boop();
+    down = null;
+  });
+
+  $("btnFeed").addEventListener("click", feed);
+  $("btnPlay").addEventListener("click", play);
+  $("btnPet").addEventListener("click", pat);
+  $("btnSleep").addEventListener("click", toggleSleep);
+
+  const nameIn = $("petName");
+  function syncName() {
+    nameIn.size = Math.max(3, nameIn.value.length + 1);
+    document.querySelectorAll(".pn").forEach(n => n.textContent = S.name);
+  }
+  nameIn.value = S.name;
+  nameIn.addEventListener("input", () => { S.name = nameIn.value.trim() || "Pip"; syncName(); save(); });
+  nameIn.addEventListener("keydown", e => { if (e.key === "Enter") nameIn.blur(); });
+  nameIn.addEventListener("change", () => say("{n}? I love it!"));
+
+  const resetBtn = $("reset"); let armT = null;
+  resetBtn.addEventListener("click", () => {
+    if (!resetBtn.classList.contains("armed")) {
+      resetBtn.classList.add("armed"); resetBtn.textContent = "Tap again to start over";
+      armT = setTimeout(() => { resetBtn.classList.remove("armed"); resetBtn.textContent = "Start over"; }, 3500);
+      return;
+    }
+    clearTimeout(armT); resetBtn.classList.remove("armed"); resetBtn.textContent = "Start over";
+    S = fresh(); nameIn.value = S.name; syncName();
+    if (food) { food.el.remove(); food = null; }
+    if (ball) { ball.el.remove(); ball = null; }
+    x = targetX = 300; save(); syncButtons(); say("Hello! I just sprouted. Who are you?");
+  });
+
+  // ---------- ui ----------
+  function syncButtons() {
+    $("btnFeed").disabled = S.asleep; $("btnPlay").disabled = S.asleep;
+    $("sleepLabel").textContent = S.asleep ? "Wake up" : "Nap";
+    $("sleepSub").textContent = S.asleep ? "lights on" : "lights out";
+  }
+  function tone(v) { return v < 25 ? "var(--bad)" : v < 50 ? "var(--warn)" : "var(--ok)"; }
+  function moodOf() {
+    if (S.asleep) return ["Asleep", "calm"];
+    if (happyT > 0) return ["Loved", "good"];
+    if (S.full < 25) return ["Hungry", "bad"];
+    if (S.energy < 20) return ["Sleepy", "warn"];
+    if (S.fun < 25) return ["Bored", "warn"];
+    const avg = (S.full + S.fun + S.energy) / 3;
+    if (avg > 75) return ["Overjoyed", "good"];
+    if (avg > 50) return ["Content", "good"];
+    return ["Meh", "warn"];
+  }
+  function renderUI() {
+    [["Full", S.full], ["Fun", S.fun], ["Energy", S.energy]].forEach(([k, v]) => {
+      $("v" + k).textContent = Math.round(v);
+      const b = $("b" + k); b.style.width = v + "%"; b.style.background = tone(v);
+    });
+    $("vBond").textContent = Math.round(S.bond); $("bBond").style.width = S.bond + "%";
+    const [label, tn] = moodOf(); const chip = $("mood");
+    chip.textContent = label; chip.dataset.tone = tn;
+    const day = Math.floor((Date.now() - S.born) / 864e5) + 1;
+    const since = new Date(S.born).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    $("age").innerHTML = `Day <b>${day}</b> · sprouted ${since}`;
+  }
+
+  // ---------- simulation ----------
+  function update(dt) {
+    t += dt;
+    decay(dt / 60);
+    happyT = Math.max(0, happyT - dt); petLineCd -= dt; jumpCd -= dt;
+    if (S.asleep && S.energy >= 100) { S.asleep = false; syncButtons(); say("Good morning! Fully charged."); }
+
+    // food falling
+    if (food && !food.landed) {
+      food.vy += 900 * dt; food.y += food.vy * dt;
+      if (food.y >= FLOOR + 2) { food.y = FLOOR + 2; food.landed = true; say(pick(["Snack!", "Ooh, for me?", "Food food food!"]), 1.6); }
+    }
+    // ball physics
+    if (ball) {
+      ball.vy += 900 * dt; ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+      if (ball.y + ball.r > FLOOR + 6) {
+        ball.y = FLOOR + 6 - ball.r;
+        ball.vy = Math.abs(ball.vy) < 70 ? 0 : -ball.vy * 0.6;
+        ball.vx *= Math.exp(-1.6 * dt) * (ball.vy ? 0.9 : 1);
+      }
+      if (ball.x < 20) { ball.x = 20; ball.vx = Math.abs(ball.vx) * 0.8; }
+      if (ball.x > 580) { ball.x = 580; ball.vx = -Math.abs(ball.vx) * 0.8; }
+      ball.a += (ball.vx * dt) / ball.r;
+      ball.still = (ball.vy === 0 && Math.abs(ball.vx) < 10) ? ball.still + dt : 0;
+    }
+
+    // decide target
+    const s = scale();
+    let speed = 80;
+    if (S.asleep || eatT > 0) targetX = x;
+    else if (food && food.landed) { targetX = food.x + (food.x > x ? -8 : 8); speed = 120; }
+    else if (ball) { targetX = ball.x; speed = 170; }
+    else {
+      wanderIn -= dt;
+      if (wanderIn <= 0) {
+        wanderIn = rand(3, 8);
+        targetX = S.energy < 20 ? x : clamp(x + rand(-220, 220), 90, 510);
+      }
+    }
+
+    // move
+    const dx = targetX - x;
+    walking = Math.abs(dx) > 3 && jy === 0;
+    if (Math.abs(dx) > 3) x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
+
+    // jump for ball / catch
+    if (ball && !S.asleep) {
+      const headY = FLOOR + jy - 110 * s;
+      if (jy === 0 && jumpCd <= 0 && Math.abs(ball.x - x) < 55 && ball.y < FLOOR - 95 * s && ball.vy > -100) {
+        jvy = -540; jumpCd = 0.9;
+      }
+      if (Math.hypot(ball.x - x, ball.y - headY) < 46 * s || (ball.still > 0.2 && Math.abs(ball.x - x) < 24)) {
+        const air = jy < -10;
+        ball.el.remove(); ball = null;
+        S.fun = clamp(S.fun + (air ? 22 : 14), 0, 100); S.bond = clamp(S.bond + 1.5, 0, 100);
+        S.energy = clamp(S.energy - 2, 0, 100);
+        happyT = 1.8; for (let i = 0; i < 3; i++) heart(x + rand(-25, 25), headY);
+        say(air ? pick(["Caught it! Did you see?!", "Midair! I'm basically a pro."]) : pick(["Got it!", "Again! Again!"]), 2.4);
+        save();
+      }
+    }
+    // jump physics
+    if (jy < 0 || jvy < 0) {
+      jvy += 1500 * dt; jy += jvy * dt;
+      if (jy >= 0) { jy = 0; jvy = 0; land = 0.2; }
+    }
+    land *= Math.exp(-9 * dt);
+
+    // eating
+    if (food && food.landed && eatT <= 0 && Math.abs(food.x - x) < 26 && jy === 0) { eatT = 1.4; }
+    if (eatT > 0) {
+      eatT -= dt;
+      if (food) { const k = clamp(eatT / 1.4, 0, 1); food.el.setAttribute("transform", `translate(${food.x} ${food.y}) scale(${0.25 + 0.75 * k})`); if (Math.random() < dt * 5) crumbs(x); }
+      if (eatT <= 0 && food) {
+        S.full = clamp(S.full + food.value, 0, 100); S.bond = clamp(S.bond + 1, 0, 100);
+        say(food.line, 2.6); happyT = 1.2;
+        food.el.remove(); food = null; save();
+      }
+    }
+
+    // blink
+    blinkIn -= dt;
+    if (blinkIn <= 0) { blinkT = 0.16; blinkIn = rand(2, 5.5); }
+    blinkT = Math.max(0, blinkT - dt);
+
+    // chatter
+    chatIn -= dt;
+    if (chatIn <= 0 && !S.asleep && bubbleT <= 0) {
+      chatIn = rand(18, 32);
+      if (S.full < 30) say(pick(LINES.hungry));
+      else if (S.energy < 20) say(pick(LINES.tired));
+      else if (S.fun < 30) say(pick(LINES.bored));
+      else if (Math.random() < 0.6) say(pick(LINES.happy));
+    }
+    if (bubbleT > 0) { bubbleT -= dt; if (bubbleT <= 0) bubble.classList.remove("on"); }
+
+    // sleep z's
+    if (S.asleep) { zIn -= dt; if (zIn <= 0) { zed(); zIn = 1.3; } }
+    nightO += ((S.asleep ? 0.55 : 0) - nightO) * Math.min(1, dt * 2.5);
+
+    // particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt;
+      if (p.life <= 0) { p.el.remove(); particles.splice(i, 1); continue; }
+      if (p.g) p.vy += p.g * dt;
+      p.x += (p.vx + (p.z ? Math.sin(t * 3 + i) * 12 : 0)) * dt; p.y += p.vy * dt;
+      const k = p.life / p.max;
+      p.el.setAttribute("transform", `translate(${p.x} ${p.y}) scale(${p.s * (p.z ? 1.3 - k * 0.5 : 1)})`);
+      p.el.setAttribute("opacity", Math.min(1, k * 2).toFixed(2));
+    }
+  }
+
+  function render() {
+    const s = scale();
+    const amp = calm ? 0.3 : 1;
+    const breathe = Math.sin(t * (S.asleep ? 1.4 : 2.2)) * (S.asleep ? 0.035 : 0.02) * amp;
+    const hop = walking && !calm ? -Math.abs(Math.sin(t * 8)) * 6 : 0;
+    const stretch = jy < 0 ? Math.min(0.1, -jvy / 5000) : 0;
+    const sq = breathe + land - stretch;
+    const y = FLOOR + jy + hop;
+    petG.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${s.toFixed(3)})`);
+    bodyG.setAttribute("transform", `scale(${(1 + sq).toFixed(3)} ${(1 - sq).toFixed(3)})`);
+    const lift = clamp(1 + (jy + hop) / 260, 0.45, 1);
+    shadow.setAttribute("cx", x.toFixed(1));
+    shadow.setAttribute("rx", (62 * s * lift).toFixed(1));
+    shadow.setAttribute("opacity", lift.toFixed(2));
+
+    // feet
+    const step = walking ? Math.sin(t * 16) * 4 * amp : 0;
+    $("footL").setAttribute("cy", (-5 - Math.max(0, step)).toFixed(1));
+    $("footR").setAttribute("cy", (-5 - Math.max(0, -step)).toFixed(1));
+
+    // sprout: droops with the lowest need
+    const worst = Math.min(S.full, S.fun, S.energy);
+    const droop = S.asleep ? 28 : worst < 45 ? (45 - worst) / 45 * 38 : 0;
+    const sway = Math.sin(t * 1.7) * 5 * amp + (walking ? Math.sin(t * 8) * 4 * amp : 0) + (happyT > 0 ? Math.sin(t * 14) * 8 * amp : 0);
+    $("sprout").setAttribute("transform", `rotate(${(droop + sway).toFixed(1)} 0 -118)`);
+
+    // eyes
+    const happy = happyT > 0 || eatT > 0;
+    $("eyesSleep").setAttribute("visibility", S.asleep ? "visible" : "hidden");
+    $("eyesHappy").setAttribute("visibility", !S.asleep && happy ? "visible" : "hidden");
+    $("eyesOpen").setAttribute("visibility", !S.asleep && !happy ? "visible" : "hidden");
+    let look = { x: 0, y: 2 };
+    if (t - lastPointer < 2.5) look = pointer;
+    else if (ball) look = ball;
+    else if (food) look = food;
+    let lx = 0, ly = 0;
+    if (look !== undefined && look.x !== 0) {
+      const vx = look.x - x, vy = look.y - (y - 78 * s), d = Math.hypot(vx, vy) || 1;
+      lx = vx / d * Math.min(5, d / 20); ly = vy / d * Math.min(4, d / 20);
+    }
+    const tired = S.energy < 20 ? 0.6 : 1;
+    const open = (blinkT > 0 ? 0.12 : 1) * tired;
+    $("eyeL").setAttribute("transform", `translate(${(-26 + lx).toFixed(1)} ${(-78 + ly).toFixed(1)})`);
+    $("eyeR").setAttribute("transform", `translate(${(26 + lx).toFixed(1)} ${(-78 + ly).toFixed(1)})`);
+    $("eyeLb").setAttribute("ry", (11.5 * open).toFixed(1));
+    $("eyeRb").setAttribute("ry", (11.5 * open).toFixed(1));
+
+    // mouth
+    const chomping = eatT > 0 && Math.sin(t * 18) > 0;
+    $("mouthOpen").setAttribute("visibility", chomping || (jy < -20 && !S.asleep) ? "visible" : "hidden");
+    const avg = (S.full + S.fun + S.energy) / 3;
+    let m = "M -8 -50 L 8 -50";
+    if (S.asleep) m = "M -5 -50 Q 0 -47 5 -50";
+    else if (happy || avg > 55) m = "M -11 -53 Q 0 -42 11 -53";
+    else if (worst < 25) m = "M -10 -46 Q 0 -54 10 -46";
+    $("mouth").setAttribute("d", m);
+    $("mouth").setAttribute("visibility", chomping ? "hidden" : "visible");
+
+    const ch = clamp(0.3 + S.bond / 200 + (happyT > 0 ? 0.3 : 0), 0, 0.95).toFixed(2);
+    $("cheekL").setAttribute("opacity", ch); $("cheekR").setAttribute("opacity", ch);
+
+    // items
+    if (food && eatT <= 0) food.el.setAttribute("transform", `translate(${food.x.toFixed(1)} ${food.y.toFixed(1)})`);
+    if (ball) ball.el.setAttribute("transform", `translate(${ball.x.toFixed(1)} ${ball.y.toFixed(1)}) rotate(${(ball.a * 57.3).toFixed(0)})`);
+
+    $("night").setAttribute("opacity", nightO.toFixed(3));
+
+    // bubble follows the pet
+    if (bubbleT > 0) {
+      bubble.style.left = clamp(x / W * 100, 22, 78) + "%";
+      bubble.style.top = ((y - 168 * s) / 360 * 100) + "%";
+    }
+  }
+
+  // ---------- boot ----------
+  syncName(); syncButtons(); renderUI();
+  if (awayMin > 10) setTimeout(() => say(S.asleep ? "zz… oh! You're back." : `You're back! It's been ${fmtAway(awayMin)}.`, 3.6), 500);
+  else if (awayMin < 0.02) setTimeout(() => say("Hi! I'm {n}. Stroke my head?", 3.6), 500);
+
+  let last = performance.now(), uiAcc = 0, saveAcc = 0;
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    update(dt); render();
+    uiAcc += dt; saveAcc += dt;
+    if (uiAcc > 0.25) { uiAcc = 0; renderUI(); }
+    if (saveAcc > 5) { saveAcc = 0; save(); }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { hiddenAt = Date.now(); save(); }
+    else { if (hiddenAt) decay((Date.now() - hiddenAt) / 60000); last = performance.now(); }
+  });
+  addEventListener("pagehide", save);
+})();
+</script>

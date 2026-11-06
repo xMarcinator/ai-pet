@@ -1,0 +1,48 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-30T12:50:33.673306Z",
+  "evidence": {
+    "base_commit": "27079a812d9a7254b49fc28da86d1b9823029bab",
+    "commits": [
+      "6a70f68fb13048abe1d2c73f9264f11b46800bed",
+      "73f7875619effa07437fd32591319a24300e6460",
+      "d41029ba0e141b4a5f27aabc6ff13939fec834f9"
+    ],
+    "integrated": {
+      "base": "27079a8",
+      "head": "d41029b",
+      "merges": [
+        "882fb90",
+        "2569d3c"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from the contracts draw (P2): a hooks.json that names a member twice made codex::all_handlers() fail, and unwrap_or_default() dropped config.toml's valid hooks with it, so the doctor said AiPet wasn't registered; the correctness and integration draws gave SHIP",
+      "fix_commits": [
+        "d41029b"
+      ],
+      "note": "flow-next 6.7.0's flowctl pinned to codex:gpt-5.6-sol:high; the fan-out took about 12.5 minutes and the re-review about 3; no transport failures",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-36c8860ba011-fn-1-migrate-aipet-from-net-to-rust.5.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green: cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check (pre-edit, suite_rc=0)",
+      "baseline: dotnet test AiPet.slnx red pre-edit in the fresh worktree only because AiPet.UI was not built (6 ResourceTests/VelopackTests); green after dotnet build AiPet.slnx -p:UseAppHost=false + dotnet test --no-build (160 passed, 42 skipped)",
+      "cd rust && cargo test --workspace -- --skip credential_manager_tokens_are_the_apps && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check (green at 73f7875, suite_rc=0; green receipt 73f78756-unittest)",
+      "dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build (green at 73f7875: 160 passed, 42 skipped; green receipt 73f78756-dotnet)",
+      "AIPET_TEST_HOOK=rust/target/debug/aipet-hook.exe dotnet test AiPet.slnx --no-build --filter PluginHooksTests|RegistrationTests: run 1 failed 1 in-process C# test (InstallClaude_WithThePluginEnabled_RegistersNone: UnauthorizedAccessException in Install.Save File.Move, the antivirus flake; the test does not run the hook); rerun green: 14 passed, 10 skipped (Unix-only)",
+      "cargo test -p aipet-hook --test doctor (committed corpus, 26 Windows scenarios through the Rust hook: green)",
+      "AIPET_GOLDEN=<abs>/rust/golden/bin/Release/net10.0/aipet-golden.dll cargo test -p aipet-hook --test doctor the_csharp_on_this_os_is_replayed (C# regenerated the corpus on this machine, Rust replayed it: green, 168 s)",
+      "RUSTC_BOOTSTRAP=1 cargo clippy -p aipet-hook --all-targets --target x86_64-unknown-linux-gnu -Zbuild-std --offline -- -D warnings (clean: lints the Unix code and cfg(unix) tests, which only CI runs)",
+      "dotnet rust/golden/bin/Release/net10.0/aipet-golden.dll doctor (wrote tests/golden/doctor/doctor.json, 26 scenarios on Windows)",
+      "integrated verify (Windows, work branch 2569d3c with task 5 and its review fix merged): cargo test --workspace --no-fail-fast -- --skip credential_manager_tokens_are_the_apps green, clippy --workspace --all-targets -D warnings and fmt --check clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped (a run while two workers built had 2 failures and took 1 m 16 s; the rerun was green in 18 s); AIPET_TEST_HOOK=<rust hook> dotnet test --filter PluginHooksTests|RegistrationTests: 14 passed, 10 Unix-only skipped; AIPET_TEST_HOOK=<.NET hook dll> cargo test -p aipet-core --test server: 15 passed; with AIPET_GOLDEN every live replay (doctor, registration, Codex registration) green except aipet-ipc's paths_equal_the_csharps_in_the_same_environment, which task 30 fixes (it reproduces here at 2569d3c and at f3678f4); an earlier live run failed in the C# generator itself (\"Access to the path is denied\" in its own settings write, a different case each run: the antivirus flake), and the rerun passed"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-01T09:54:38.660897Z"
+}

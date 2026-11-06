@@ -2,6 +2,53 @@
 
 This file tracks where the work stands, so it can continue on another machine. Delete it once everything below is done.
 
+## Where the work stands (2026-11-06)
+
+Everything is on the branch `fn-1-migrate-aipet-from-net-to-rust` (draft PR https://github.com/xMarcinator/ai-pet/pull/1). To pick it up:
+
+1. **Restore flowctl's task state** first: [.flow/paused/README.md](../.flow/paused/README.md). Git doesn't carry it, and without it the 23 done tasks read as todo.
+2. **Set the commit identity in the clone** (see Decisions, last item).
+
+### The migration (flow-next spec `fn-1-migrate-aipet-from-net-to-rust`)
+
+- **Done:** 23 of 30 tasks.
+  - The Rust hook, registration and doctor;
+  - the core, watchers and Board;
+  - the hook server;
+  - the pet app with its Settings, updates, placement, bubble actions and platform services;
+  - the Windows proofs;
+  - the Windows hands-on pass (task 27, `rust/proofs/windows-hands-on.md`; its second Codex review round was skipped at the owner's request after round 1's findings were fixed);
+  - the release pipeline fix and dry run.
+- **Next:** task 22, the Linux hands-on parity pass, which needs a person at a Linux (Hyprland) machine. Then 28 (performance gate, which also owns task 27's E-x9 frame drops), 23 (ship the Rust pet, milestone 2), 24, 25 (cutover), 26 (docs) and 29 (memory audit).
+- **The .NET pet is still the shipped one** (release 0.1.0); the Rust pet runs from the branch: `cd rust && cargo build --release -p aipet`, then `target/release/AiPet.exe` (Windows) or `target/release/AiPet`.
+
+### The pets' new look (flow-next spec `fn-2-layered-sprite-and-vector-pets`)
+
+Planned after fn-1: 15 tasks, R1–R22. It replaces today's code-drawn pet with **layered sprite packs**. A pet is layers (body, eyes, arms, feet, props, headphones, effects), each with animations picked by the pet's behaviour. Pack kinds:
+- pixel and painted sheets, including native Aseprite files and grid sheets;
+- vector parts drawn with iced's canvas;
+- Rive files.
+
+Parts carry their own positions and motion as data (R18), and a pack-making agent skill is planned (R19). Spikes come first for Aseprite (task 15) and Rive (task 13). The spec has the details and decisions.
+
+**Approved reference drawings, for fn-2's vector packs:** `avatars/reference/`.
+- **Pets:** Hood (green), Hamster and Sprout, each made by a Python generator (`hood_gen.py`, `hamster_gen.py`, `sprout_gen.py`; run `python avatars/reference/<name>_gen.py` from anywhere, no packages needed).
+- **Shared states:** `pet_states.py` holds every state the pet supports today (from `rust/crates/aipet-sprite/src/pet.rs`): moods, idle acts, reactions and second frames, plus the shared effects, magnifier, headphones, whole-body motion, shadow and mirroring.
+- **Outputs per pet:** `<pet>.svg`, `<pet>-working.svg` (with experimental typing), `<pet>-preview.html` (the pixel original beside the vector, then every state in 130×120 boxes on three backgrounds) and `<pet>-sheet.svg`.
+- **Pixel originals:** `hood-pixel.png`, `hood-pixel-working.png`, `hamster.png`, `sprout-pixel.png`.
+- **Review:** Codex rated all three READY on 2026-11-06.
+- **The owner's design decisions:**
+  - **Hood:** round hood with no peak, slim, short robe, tall glowing eyes, round hands resting in front of the robe that float out to wave, no feet, the laptop at the lower right (one hand holds it, one types) with only a tight glow on `>_`.
+  - **Hamster:** true to its pixel reference, with the back in the head's yellow and orange only as an edge shadow.
+  - **Sprout:** flat body with the outline as its only edge, and no blush.
+  - **Pip:** the repo-root `pocket-sprout.html` is the owner's Pip design that fn-2 task 5 builds from.
+
+### Tools and services
+
+- **Reviews:** Codex CLI, model `gpt-5.6-sol`, high effort, with an explicit `--receipt` and no timeout override. If Codex reports the workspace is out of credits, the owner refills it.
+- **Progress tracker:** the user-level flow-next-tracker MCP server (`http://127.0.0.1:3210/mcp`). It was unreachable from 2026-11-05, so the board hasn't been told about fn-2, the reference drawings or anything since task 27. Publish fn-2 (`planning_started`, `sync_task`, `planning_finished`) and fn-1's current state once it's back.
+- **On Windows,** start the pet detached, so it outlives the shell that started it: `cmd //c start "" "<repo>\rust\target\release\AiPet.exe"` from Git Bash.
+
 ## State of this commit
 
 The first snapshot has been reviewed, fixed and tested on Linux (Arch, Hyprland 0.56), together with the second part of the distribution work. What's left to check needs Windows or a machine other than the developer's. Release 0.1.0 is out (see Next steps, 1).
@@ -46,10 +93,7 @@ The first snapshot has been reviewed, fixed and tested on Linux (Arch, Hyprland 
    - **Stay on .NET; don't port to Rust.** Rust's general windowing layers don't solve it either (winit has only all-or-nothing click-through and no positioning on Wayland; Tauri's tao is GTK3, where stay-on-top and positioning do nothing on Wayland), so a rewrite of the core (~12k lines, 105 test methods) would buy nothing for the UI. Rust has the pieces if a port is ever wanted (interprocess for the socket and pipe, keyring, an official velopack crate).
    - **Avalonia can't do it:** its Wayland backend (12.1, experimental, opt-in with `UseWayland()`) has no layer-shell, returns a null native handle, and a maintainer declined exposing `wl_surface`/`wl_display` (AvaloniaUI/Avalonia#22223); a render-thread interop path (PR #21713) is under discussion.
    - **Recommended:** keep Avalonia for Windows, X11, macOS and Settings; add a Wayland-only backend for the pet window with GTK4 + gtk4-layer-shell, through GirCore in the same process (bindings generated from `Gtk4LayerShell-1.0.gir`; there's no GirCore package for it). Fallback: a small Rust overlay process (gtk4-rs + the `gtk4-layer-shell` crate, or `iced_exwlshell`, which has a working input-region example) talking to the C# core over the socket, which would need a new subscribe/stream message in HookServer. GNOME and X11 keep today's XWayland/X11 window.
-   - **Migration in progress (branch `fn-1-migrate-aipet-from-net-to-rust`):** the flow-next spec
-     `fn-1-migrate-aipet-from-net-to-rust` plans the full move to Rust (19 requirements, 28 tasks, three milestones).
-     It is paused mid-way; how to pick it up on another machine is in [.flow/paused/README.md](../.flow/paused/README.md).
-   - **Spike in progress (branch `spike/iced`):** despite the advice above, we're trying a Rust front end with iced 0.14 (iced_exwlshell layer-shell on Wayland, plain iced elsewhere) in `rust/`. Status, how to run it, the hands-on tests still to do, the open review findings and the next steps are in [rust/SPIKE.md](../rust/SPIKE.md).
+   - **Superseded:** the iced spike (`spike/iced`, [rust/SPIKE.md](../rust/SPIKE.md)) became the full migration to Rust, flow-next spec `fn-1-migrate-aipet-from-net-to-rust`, now 23 of 30 tasks done. See "Where the work stands" above.
    - **Plan for the recommended GTK4 route** (not the iced spike; one developer, rough): a 1-2 week spike on Hyprland (60 fps sprite, an input region updated every frame, dragging by margins, the menu as a popover, fractional scaling, also on Sway and KDE); then an `IPetSurface` abstraction behind the pet window (1 week), the production backend with runtime detection and the XWayland fallback (3-5 weeks), packaging GTK4 and gtk4-layer-shell (1-2 weeks) and testing the GNOME/X11 fallback (1 week): about 7-12 weeks. A full Rust rewrite was estimated at 4-7 months.
 4. **Before going public:** squash the history, and report the false positives to Microsoft and AhnLab.
 5. **Then the next-meeting bubble** (Outlook calendar, optionally Teams' local API for live meeting state), planned and built with flow-next.

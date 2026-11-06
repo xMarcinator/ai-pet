@@ -1,0 +1,55 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-30T10:01:28.719353Z",
+  "evidence": {
+    "base_commit": "c66df24d4f9b5de7a7683cc5ba49e4be877c88f1",
+    "commits": [
+      "5a68af1e59898a0791758a5a8e94b1d0e717b7d9",
+      "165221a4a80e43d9c522237832475f81cb516151",
+      "bb4c7d3",
+      "3d93a05"
+    ],
+    "integrated": {
+      "base": "c66df24",
+      "head": "3d93a05",
+      "merges": [
+        "3486e04",
+        "0a5517b"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK (contracts, integration; correctness SHIP): the Windows start could return Err while the listeners it had started kept serving and held the pipe name; the busy-CPU test's 15 s limit on all 20 hooks mostly timed process start-up and failed now and then",
+      "fix_commits": [
+        "bb4c7d3",
+        "3d93a05"
+      ],
+      "note": "run with flowctl 4.12.0 (flow-next 6.7.0's default Codex model is rejected on this account)",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-d066ac38df8e-fn-1-migrate-aipet-from-net-to-rust.9.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green at c66df24 (Windows, rust 1.98.1): cd rust && cargo test --workspace rc 0; cargo clippy --workspace --all-targets -- -D warnings rc 0; cargo fmt --all -- --check rc 0; dotnet build AiPet.slnx -p:UseAppHost=false then dotnet test AiPet.slnx -p:UseAppHost=false --no-build: 160 passed, 42 skipped, 0 failed",
+      "cd rust && cargo test --workspace (Windows, at 5a68af1): rc 0; aipet-core lib 27 passed (7 new server unit tests), tests/server.rs 15 passed, every other suite as at baseline",
+      "cd rust && cargo clippy --workspace --all-targets -- -D warnings (Windows, at 5a68af1): clean",
+      "cd rust && cargo fmt --all -- --check (at 5a68af1 and 165221a): clean",
+      "dotnet test AiPet.slnx -p:UseAppHost=false --no-build --nologo (at 5a68af1): 160 passed, 42 skipped, 0 failed",
+      "cd rust && cargo test -p aipet-core --test server (Windows, at 165221a): 15 passed, and 4 more runs under load, 15 passed each",
+      "AIPET_TEST_HOOK=src/AiPet.Hook/bin/Debug/net10.0/aipet-hook.dll cargo test -p aipet-core --test server (Windows, the C# hook against the Rust server, at 5a68af1): 15 passed; a missing AIPET_TEST_HOOK path fails the hook tests (checked)",
+      "AIPET_TEST_HOOK=rust/target/debug/aipet-hook.exe dotnet test tests/AiPet.Tests --no-build --filter PluginHooksTests (Windows): 5 passed, 1 skipped (Unix only)",
+      "Linux and macOS: RUSTC_BOOTSTRAP=1 cargo clippy --offline --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu and --target aarch64-apple-darwin -- -D warnings, on a scratch crate over aipet-core's server/, sessions/, log.rs and tests/server.rs (at 165221a): clean for both; not run: no Linux toolchain here (WSL Ubuntu has no rustc and no crt1.o), so the Unix tests run first in CI",
+      "C# probe (scratch, .NET 10, AiPet.Core's HookServer on a test pipe): the replies to 36 request lines, the STJ escapes, the OnlyMe SDDL and 9 hook-events.log halving cases, encoded in the_answers_are_the_csharps, strings_are_written_as_system_text_json_writes_them, the_pipe_is_the_users_alone and a_file_keeps_its_last_half_as_the_csharp_cuts_it",
+      "flowctl gate classify --base c66df24: FULL (cross-runtime.yml)",
+      "gate receipts written in the workspace only (.flow/tmp/green-receipts, 5a68af1 unittest and dotnet)",
+      "cross-runtime.yml has not run in CI (nothing pushed)",
+      "first integrated verify (3486e04, three Codex reviews loading the machine): listeners_answer_hooks_while_every_cpu_is_busy failed with the .NET hook (the batch over 15 s; on an isolated rerun, one hook's pipe cut off by the 2 s silent-client cut-off), and aipet-hook's a_mode_without_an_agent_is_a_usage_error missed its 2 s bound; both passed alone; 3d93a05 then dropped the batch bound, and the 2 s bound is recorded for task 5",
+      "integrated verify (Windows, work branch 0a5517b with tasks 9 and 11 and their review fixes merged): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green, clippy --workspace --all-targets -D warnings and fmt --check clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped; AIPET_TEST_HOOK=<Debug aipet-hook.dll> cargo test -p aipet-core --test server: 15 passed (the .NET hook against the Rust server); AIPET_TEST_HOOK=<rust hook> dotnet test --filter PluginHooksTests|RegistrationTests: 14 passed, 10 Unix-only skipped"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-30T12:30:44.057775Z"
+}
