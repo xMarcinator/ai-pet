@@ -1,13 +1,16 @@
-"""Generates avatars/reference/hood-green.svg (neutral pose, canvas-ready geometry) and
-avatars/reference/hood-green-preview.html (pixel comparison, 130x120 boxes on three backgrounds, poses and
-expressions) from one description of the green Hood.
+"""Generates avatars/reference/hood-green.svg (neutral pose, canvas-ready geometry), hood-green-working.svg (the
+working pose, with experimental typing), hood-green-preview.html (pixel original vs vector, then every state the pet
+supports, in 130x120 boxes on three backgrounds) and hood-green-sheet.svg (every state as a labelled frame, plus the
+typing frames) from one description of the green Hood; the states come from pet_states.py.
 
 Canvas-ready means: plain paths, rects, circles and ellipses with flat fills and opacity; no filters, masks, clip
 paths, gradients or <use>. Run from anywhere: python avatars/reference/hood_gen.py
 """
-import base64
 import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pet_states  # noqa: E402
 
 ROOT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 OUT = os.path.join(ROOT, "avatars", "reference")
@@ -54,10 +57,12 @@ def eye(name, origin, expr="open", look=(0, 0), glow=True):
     x, y = origin[0] + look[0], origin[1] + look[1]
     parts = []
     g = C["glow"]
-    if expr == "closed":
+    oy = 0
+    if expr in ("closed", "blink", "sleep"):  # blink: a short line; sleep: a wider one (pet.rs eye_cells)
+        w = 18 if expr != "sleep" else 26
         if glow:
-            parts.append(el("rect", x=-12, y=3, width=24, height=10, rx=5, fill=g, opacity="0.15"))
-        parts.append(el("rect", x=-9, y=6, width=18, height=4, rx=2, fill=C["eye"]))
+            parts.append(el("rect", x=-w / 2 - 3, y=3, width=w + 6, height=10, rx=5, fill=g, opacity="0.15"))
+        parts.append(el("rect", x=-w / 2, y=6, width=w, height=4, rx=2, fill=C["eye"]))
     elif expr == "happy":
         if glow:
             parts.append(el("path", d="M-10 6 C-8 -8 8 -8 10 6", fill="none", stroke=g, stroke_width=11,
@@ -65,7 +70,11 @@ def eye(name, origin, expr="open", look=(0, 0), glow=True):
         parts.append(el("path", d="M-8 5 C-6 -5 6 -5 8 5", fill="none", stroke=C["eye"], stroke_width=5,
                         stroke_linecap="round"))
     else:
-        w, h, r = {"open": (18, 26, 7), "wide": (22, 34, 9), "squint": (18, 12, 5)}[expr]
+        w, h, r = {"open": (18, 26, 7), "wide": (22, 34, 9), "squint": (18, 12, 5)}[
+            "open" if expr in ("up", "down") else expr]
+        oy = 0
+        if expr in ("up", "down"):  # the pixel pet's up/down eyes: two of the eye's three rows, at the top or bottom
+            oy, h = (-h / 6 if expr == "up" else h / 2), h * 2 / 3
         if glow:
             parts.append(el("rect", x=-w / 2 - 5, y=-h / 2 - 5, width=w + 10, height=h + 10, rx=r + 5, fill=g,
                             opacity="0.10"))
@@ -79,7 +88,7 @@ def eye(name, origin, expr="open", look=(0, 0), glow=True):
                         fill=C["eyeLo"]))
         if expr != "squint":
             parts.append(el("rect", x=-w / 2 + 3, y=-h / 2 + 3, width=4, height=4, rx=1, fill=C["eyeHi"]))
-    return f'<g id="{name}" transform="translate({x} {y})">' + "".join(parts) + "</g>"
+    return f'<g id="{name}" transform="translate({x} {y + oy})">' + "".join(parts) + "</g>"
 
 
 def hand(name, pos, cls="", halo=False):
@@ -91,17 +100,6 @@ def hand(name, pos, cls="", halo=False):
             + el("circle", cx=0, cy=0, r=10, fill=C["body"], stroke=C["outline"], stroke_width=4)
             + el("path", d=rim, fill="none", stroke=C["hi"], stroke_width=3, stroke_linecap="round")
             + "</g></g>")
-
-
-def sleeve(side, to):
-    """A short dark sleeve from the cloak's side to a raised hand, so a moved hand stays attached."""
-    sx, sy = (40, 176) if side == "l" else (220, 176)
-    tx, ty = to
-    mx = (sx + tx) / 2 + (-8 if side == "l" else 8)
-    my = (sy + ty) / 2
-    return el("path", d=f"M{sx} {sy} Q{mx} {my} {tx} {ty}", fill="none", stroke=C["outline"], stroke_width=16,
-              stroke_linecap="round") + el("path", d=f"M{sx} {sy} Q{mx} {my} {tx} {ty}", fill="none",
-                                            stroke=C["shade"], stroke_width=9, stroke_linecap="round")
 
 
 def laptop(caret=True):
@@ -116,21 +114,30 @@ def laptop(caret=True):
                  stroke_linecap="round", stroke_linejoin="round", opacity="0.3")
             + el("path", d="M168 160 L177 169 L168 178", fill="none", stroke=C["hi"], stroke_width=4,
                  stroke_linecap="round", stroke_linejoin="round")
-            + ('<g class="caret">' if caret else '<g class="caret" opacity="0">')
+            + ('<g id="caret" class="caret">' if caret else '<g id="caret" class="caret" opacity="0">')
             + el("rect", x=179.5, y=173.5, width=14, height=6.5, rx=3, fill=C["glow"], opacity="0.3")
             + el("rect", x=181, y=175, width=11, height=3.5, rx=1.5, fill=C["hi"], opacity="0.8")
             + "</g>"
             + "</g></g>")
 
 
-def hood(expr="open", look=(0, 0), glow=True, hands="rest", prop=False, mirror=False, standalone=False,
-         tap=(0, 0), caret=True):
-    o = []
-    # ground shadow: stays put while the figure breathes
-    o.append('<g id="shadow">'
-             + el("ellipse", cx=130, cy=244, rx=84, ry=7, fill="#000", opacity="0.10")
-             + el("ellipse", cx=130, cy=244, rx=68, ry=5.5, fill="#000", opacity="0.12")
-             + el("ellipse", cx=130, cy=244, rx=50, ry=4, fill="#000", opacity="0.16") + "</g>")
+GROUND = 242  # the robe's hem, where the figure stands (figure coordinates + 22)
+
+
+def shadow():
+    """The ground shadow: stays put while the figure moves."""
+    return ('<g id="shadow">'
+            + el("ellipse", cx=130, cy=244, rx=84, ry=7, fill="#000", opacity="0.10")
+            + el("ellipse", cx=130, cy=244, rx=68, ry=5.5, fill="#000", opacity="0.12")
+            + el("ellipse", cx=130, cy=244, rx=50, ry=4, fill="#000", opacity="0.16") + "</g>")
+
+
+def figure(pose, standalone=False):
+    """The Hood for one pose (pet_states.STATES): aura, body, face, eyes, prop, headphones, hands. It has no feet,
+    so foot poses don't change it."""
+    expr, look, glow = pose.get("expr", "open"), pose.get("look", (0, 0)), pose.get("glow", True)
+    hands, prop, tap = pose.get("arms", "rest"), pose.get("prop"), pose.get("tap", (0, 0))
+    phase, scan = pose.get("phase", 0), pose.get("scan", 0)
     fig = []
     if glow:  # the back aura: behind the body, around the hood only
         fig.append('<g id="aura">'
@@ -158,155 +165,83 @@ def hood(expr="open", look=(0, 0), glow=True, hands="rest", prop=False, mirror=F
     fig.append('<g id="eyes">' + eye("eye-left", EYE_L, expr, look, glow) + eye("eye-right", EYE_R, expr, look, glow)
                + "</g>")
     hl, hr = HAND_L, HAND_R
-    arms = []
-    if hands == "wave":
-        hr = (232, 126)
+    if hands == "wave":  # two frames, A and B
+        hr = (232, 126) if not phase else (226, 142)
     elif hands == "raised":
         hl, hr = (28, 126), (232, 126)
     elif hands == "hold":
         # screen-left hand types at the near edge (tap: a keystroke's offset); screen-right hand holds the far end
         hl, hr = (119 + tap[0], 196 + tap[1]), (209, 196)
-    if prop:
-        fig.append(laptop(caret))
-    fig.append('<g id="arms">' + "".join(arms) + hand("hand-left", hl, "type" if hands == "hold" else ("bob-l" if standalone else ""), hands == "raised")
-                + hand("hand-right", hr, "" if hands == "hold" else ("bob-r" if standalone else ""), hands in ("wave", "raised")) + "</g>")
-    inner = "".join(fig)
+    elif hands == "lens":  # screen-right hand holds the magnifier's handle
+        hr = (234 + scan * pet_states.LENS_STEP, 188)
+    elif hands == "run":  # hands swing: one forward and up, one back and down
+        hl, hr = ((32, 196), (222, 140)) if not phase else ((38, 140), (216, 196))
+    if prop == "laptop":
+        fig.append(laptop(pose.get("caret", True)))
+    elif prop == "lens":
+        fig.append(pet_states.magnifier(scan))
+    if pose.get("headphones"):
+        fig.append(pet_states.headphones(64, 196, 112, 24, C["hi"], C["outline"]))
+    floating = hands in ("wave", "raised", "run")
+    fig.append('<g id="arms">'
+               + hand("hand-left", hl, "type" if hands == "hold" else ("bob-l" if standalone else ""),
+                      hands in ("raised", "run"))
+               + hand("hand-right", hr, "" if hands == "hold" else ("bob-r" if standalone else ""), floating)
+               + "</g>")
     cls = ' class="breathe"' if standalone else ""
-    o.append(f'<g id="figure" transform="translate(0 22)"><g{cls}>{inner}</g></g>')
-    body = "".join(o)
-    if mirror:
-        body = f'<g transform="translate(260 0) scale(-1 1)">{body}</g>'
-    return body
+    return f'<g id="figure" transform="translate(0 22)"><g{cls}>{"".join(fig)}</g></g>'
+
+
+def frame(pose, standalone=False):
+    return pet_states.compose(figure(pose, standalone), shadow(), GROUND, pose, C["hi"], C["outline"])
 
 
 HEADER = """<!-- Hood (green): a smooth, flat-shaded cartoon vector of the pixel Hood. Round hood with no peak, upright sides,
-     a robe that falls straight from the shoulders, a dark recessed face, tall glowing eyes, small round hands resting in front of the robe that float out when waving, bright rim light.
-     Colours: avatars/hood-green.json. Generated with plain shapes only (no filters, masks, clip paths, gradients or
-     <use>), so each group maps to a canvas part: shadow, aura, body, face, eyes (eye-left, eye-right, each translated
-     to its centre), arms (hand-left, hand-right, translated to their centres; left/right are screen sides in this
-     unmirrored drawing; mirror around x=130). Draw order: shadow, aura, body, face, eyes, prop, arms. The CSS below is
-     only a preview of breathing and the hands' bobbing; the app drives motion itself. -->"""
+     a robe that falls straight from the shoulders, a dark recessed face, tall glowing eyes, small round hands resting
+     in front of the robe that float out when waving, bright rim light. Colours: avatars/hood-green.json. Generated
+     with plain shapes only (no filters, masks, clip paths, gradients or <use>), so each group maps to a canvas part:
+     shadow, aura, body, face, eyes (eye-left, eye-right, each translated to its centre), prop, headphones, arms
+     (hand-left, hand-right, translated to their centres; left/right are screen sides in this unmirrored drawing;
+     mirror around x=130), fx. Every state: pet_states.STATES. The CSS below is only a preview of breathing and the
+     hands' bobbing; the app drives motion itself. -->"""
 
-STYLE = """<style>
-    .breathe { transform-origin: 130px 220px; animation: breathe 3.6s ease-in-out infinite; }
-    @keyframes breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.01, 0.988); } }
-    .bob-l, .bob-r { animation: bob 2.8s ease-in-out infinite; }
-    .bob-r { animation-delay: -1.4s; }
-    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-    .type { animation: type 1.1s steps(1, end) infinite; }
-    @keyframes type { 0% { transform: translateY(0); } 8% { transform: translate(-2px, 3px); }
-      16% { transform: translateY(0); } 26% { transform: translate(3px, 3px); } 34% { transform: translateY(0); }
-      44% { transform: translate(-1px, 3px); } 52% { transform: translateY(0); } 100% { transform: translateY(0); } }
-    .caret { animation: caret 1s steps(1, end) infinite; }
-    @keyframes caret { 0% { opacity: 1; } 50% { opacity: 0; } }
-    @media (prefers-reduced-motion: reduce) { .breathe, .bob-l, .bob-r, .type, .caret { animation: none; } }
-  </style>"""
-
-
-def svg(content, w=520, h=500, extra=""):
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 250" width="{w}" height="{h}">'
-            f"{extra}{content}</svg>")
+ANIM = [
+    "    .type { animation: type 1.1s steps(1, end) infinite; }",
+    "    @keyframes type { 0% { transform: translateY(0); } 8% { transform: translate(-2px, 3px); }",
+    "      16% { transform: translateY(0); } 26% { transform: translate(3px, 3px); } 34% { transform: translateY(0); }",
+    "      44% { transform: translate(-1px, 3px); } 52% { transform: translateY(0); } 100% { transform: translateY(0); } }",
+    "    .caret { animation: caret 1s steps(1, end) infinite; }",
+    "    @keyframes caret { 0% { opacity: 1; } 50% { opacity: 0; } }",
+]
+STYLE = ("<style>\n"
+         "    .breathe { transform-origin: 130px 220px; animation: breathe 3.6s ease-in-out infinite; }\n"
+         "    @keyframes breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.01, 0.988); } }\n"
+         "    .bob-l, .bob-r { animation: bob 2.8s ease-in-out infinite; }\n"
+         "    .bob-r { animation-delay: -1.4s; }\n"
+         "    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }\n"
+         + "\n".join(ANIM) + "\n"
+         "    @media (prefers-reduced-motion: reduce) { .breathe, .bob-l, .bob-r, .type, .caret { animation: none; } }\n"
+         "  </style>")
 
 
 def main():
-    with open(os.path.join(OUT, "hood-green.svg"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(svg("\n  <title>Hood (green)</title>\n  " + HEADER + "\n  " + STYLE + "\n  "
-                    + hood(standalone=True) + "\n", extra="") + "\n")
+    def write(name, text):
+        with open(os.path.join(OUT, name), "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
 
-    states = [
-        ("neutral", {}),
-        ("look up-right", {"look": (5, -4)}),
-        ("look down-left", {"look": (-5, 4)}),
-        ("blink (closed)", {"expr": "closed"}),
-        ("happy", {"expr": "happy"}),
-        ("wide", {"expr": "wide"}),
-        ("squint", {"expr": "squint"}),
-        ("waving", {"hands": "wave"}),
-        ("hands raised", {"hands": "raised", "expr": "wide"}),
-        ("working at laptop (typing)", {"hands": "hold", "prop": True, "look": (4, 3)}),
-        ("mirrored (look right→left)", {"look": (5, 0), "mirror": True}),
-        ("glow off", {"glow": False}),
-    ]
-    bgs = [("white", "#ffffff"), ("mid-grey", "#808080"), ("near-black", "#101214")]
-    box = lambda s, bg: (f'<div class="box" style="background:{bg}">'
-                         f'{svg(hood(**s), 130, 125)}</div>')
-    rows = []
-    for name, s in states:
-        rows.append(f'<tr><th>{name}</th>' + "".join(f"<td>{box(s, bg)}</td>" for _, bg in bgs) + "</tr>")
-    with open(os.path.join(OUT, "hood-pixel.png"), "rb") as f:
-        pixel_src = "data:image/png;base64," + base64.b64encode(f.read()).decode()
-    html = f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Hood (green) review</title>
-<style>
-  :root {{ color-scheme: light; }}
-  body {{ font: 14px system-ui, sans-serif; margin: 16px; background: #f4f4f4; color: #111; }}
-  h2 {{ margin: 24px 0 8px; font-size: 16px; }}
-  .cmp {{ display: flex; gap: 24px; align-items: flex-end; }}
-  .cmp figure {{ margin: 0; text-align: center; }}
-  .cmp .stage {{ background: #101214; padding: 12px; display: flex; align-items: flex-end; justify-content: center;
-                height: 240px; width: 260px; }}
-  .pixel {{ image-rendering: pixelated; height: 216px; }}
-  table {{ border-collapse: collapse; }}
-  th {{ text-align: right; padding: 4px 10px; font-weight: 500; white-space: nowrap; }}
-  td {{ padding: 4px; }}
-  .box {{ width: 130px; height: 120px; overflow: hidden; outline: 1px dashed #bbb; }}
-  .box svg {{ display: block; width: 130px; height: 125px; margin-top: -2.5px; }}
-  .type {{ animation: type 1.1s steps(1, end) infinite; }}
-  @keyframes type {{ 0% {{ transform: translateY(0); }} 8% {{ transform: translate(-2px, 3px); }}
-  16% {{ transform: translateY(0); }} 26% {{ transform: translate(3px, 3px); }} 34% {{ transform: translateY(0); }}
-  44% {{ transform: translate(-1px, 3px); }} 52% {{ transform: translateY(0); }} 100% {{ transform: translateY(0); }} }}
-  .caret {{ animation: caret 1s steps(1, end) infinite; }}
-  @keyframes caret {{ 0% {{ opacity: 1; }} 50% {{ opacity: 0; }} }}
-</style></head><body>
-<h2>Pixel original vs vector, at comparable character height (on near-black)</h2>
-<div class="cmp">
-  <figure><div class="stage"><img class="pixel" src="{pixel_src}" alt="pixel Hood"></div>
-    <figcaption>pixel Hood (screenshot)</figcaption></figure>
-  <figure><div class="stage">{svg(hood(), 228, 219)}</div><figcaption>vector Hood (green)</figcaption></figure>
-  <figure><div class="stage">{svg(hood(glow=False), 228, 219)}</div><figcaption>vector, glow off</figcaption></figure>
-</div>
-<h2>App size: 130×120 logical px boxes (dashed), on white, mid-grey and near-black</h2>
-<table><tr><th></th>{"".join(f"<th style='text-align:left'>{n}</th>" for n, _ in bgs)}</tr>
-{"".join(rows)}
-</table>
-</body></html>
-"""
-    with open(os.path.join(OUT, "hood-green-preview.html"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(html)
-    # The state sheet: every pose and expression as a labelled frame, the working pose as its typing frames.
-    frames = [
-        ("neutral", {}), ("look up", {"look": (0, -5)}), ("look down", {"look": (0, 5)}),
-        ("look left", {"look": (-6, 0)}), ("look right", {"look": (6, 0)}), ("look up-right", {"look": (5, -4)}),
-        ("look down-left", {"look": (-5, 4)}), ("blink (closed)", {"expr": "closed"}), ("happy", {"expr": "happy"}),
-        ("wide", {"expr": "wide"}), ("squint", {"expr": "squint"}), ("waving", {"hands": "wave"}),
-        ("hands raised", {"hands": "raised", "expr": "wide"}), ("mirrored", {"look": (5, 0), "mirror": True}),
-        ("glow off (preview)", {"glow": False}),
-        ("working 1: rest", {"hands": "hold", "prop": True, "look": (4, 3)}),
-        ("working 2: tap", {"hands": "hold", "prop": True, "look": (4, 3), "tap": (-2, 3)}),
-        ("working 3: rest", {"hands": "hold", "prop": True, "look": (4, 3), "caret": False}),
-        ("working 4: tap", {"hands": "hold", "prop": True, "look": (4, 3), "tap": (3, 3), "caret": False}),
-        ("working 5: tap", {"hands": "hold", "prop": True, "look": (4, 3), "tap": (-1, 3)}),
-    ]
-    cols, cw, ch = 5, 260, 280
-    rows_n = -(-len(frames) // cols)
-    cells = []
-    for i, (label, kw) in enumerate(frames):
-        x, y = (i % cols) * cw, (i // cols) * ch
-        cells.append(f'<g transform="translate({x} {y})">'
-                     + el("rect", x=4, y=4, width=cw - 8, height=ch - 8, rx=8, fill="#EDEDED", stroke="#C8C8C8")
-                     + f'<g transform="translate(0 4)">{hood(**kw)}</g>'
-                     + f'<text x="{cw / 2}" y="{ch - 14}" text-anchor="middle" font-family="system-ui, sans-serif" '
-                     + f'font-size="15" fill="#333">{label}</text></g>')
-    with open(os.path.join(OUT, "hood-green-sheet.svg"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {cols * cw} {rows_n * ch}" '
-                f'width="{cols * cw}" height="{rows_n * ch}">\n  <title>Hood (green) state sheet</title>\n'
-                "  <!-- Every state of the vector Hood (green) as a frame, generated by hood_gen.py. The working pose "
-                "is shown as its typing frames (keystroke offsets, cursor on/off). Labels and cell backgrounds are "
-                "for the sheet only. -->\n  " + "".join(cells) + "\n</svg>\n")
-    with open(os.path.join(OUT, "hood-green-working.svg"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(svg("\n  <title>Hood (green), working</title>\n  <!-- Experimental: the working pose, typing, with a "
-                    "blinking cursor. Generated by hood_gen.py. -->\n  " + STYLE + "\n  "
-                    + hood(hands="hold", prop=True, look=(4, 3), standalone=True) + "\n") + "\n")
+    svg = pet_states.svg
+    working = {"arms": "hold", "prop": "laptop", "look": (4, 3)}
+    write("hood-green.svg", svg("\n  <title>Hood (green)</title>\n  " + HEADER + "\n  " + STYLE + "\n  "
+                                + frame({}, standalone=True) + "\n") + "\n")
+    write("hood-green-working.svg", svg("\n  <title>Hood (green), working</title>\n  <!-- Experimental: the working "
+                                        "pose, typing, with a blinking cursor. Generated by hood_gen.py. -->\n  "
+                                        + STYLE + "\n  " + frame(working, standalone=True) + "\n") + "\n")
+    typing = [("typing 1: rest", working), ("typing 2: tap", {**working, "tap": (-2, 3)}),
+              ("typing 3: rest, cursor off", {**working, "caret": False}),
+              ("typing 4: tap, cursor off", {**working, "tap": (3, 3), "caret": False}),
+              ("typing 5: tap", {**working, "tap": (-1, 3)}), ("glow off (preview)", {"glow": False})]
+    pet_states.write_pages(OUT, "hood-green", "Hood (green)", frame, os.path.join(OUT, "hood-pixel.png"),
+                           "pixel Hood (screenshot)", "\n".join("  " + l.strip() for l in ANIM), typing)
 
 
 if __name__ == "__main__":

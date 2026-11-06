@@ -15,12 +15,13 @@ Write an agent skill so a new agent (Claude or Codex) can design, build, check a
 - `SKILL.md`, the workflow:
   1. Pick the kind: pixel, painted, vector or Rive.
   2. Gather references from the user (their pixel art, sketches, images).
-  3. Draw with a generator modelled on `avatars/reference/hood_gen.py` and `hamster_gen.py`: named parts at their origins, canvas-ready shapes only, poses by moving, rotating or swapping parts.
-  4. Produce the review page (pixel original beside the vector; 130×120 boxes on white, mid-grey and near-black; every state) and the state sheet.
-  5. Iterate with the user.
-  6. Run a Codex review: `codex exec` read-only, with screenshots attached and the owner's decisions listed as fixed.
-  7. Emit the pack manifest and run `AiPet --check-pack`.
-  8. Add the pack to `avatars/` or the built-ins.
+  3. Cover every state in `avatars/reference/pet_states.py` (`STATES` and `PHASES`); the generator only draws the pet's own parts per pose, while the shared module adds effects, the magnifier, headphones, whole-body motion, the shadow, mirroring, the review page and the state sheet.
+  4. Draw with a generator modelled on `avatars/reference/hood_gen.py`, `hamster_gen.py` and `sprout_gen.py`: named parts at their origins, canvas-ready shapes only, poses by moving, rotating or swapping parts.
+  5. Produce the review page (pixel original beside the vector; 130×120 boxes on white, mid-grey and near-black; every state) and the state sheet.
+  6. Iterate with the user.
+  7. Run a Codex review: `codex exec` read-only, with screenshots attached and the owner's decisions listed as fixed.
+  8. Emit the pack manifest and run `AiPet --check-pack`.
+  9. Add the pack to `avatars/` or the built-ins.
 - One skill (the user's choice), with one reference file per technology, loaded only when that technology is used: `references/pixel-and-painted.md` (sheets, explicit and grid frames), `references/vector.md` (parts and generators), `references/aseprite.md` (native files and exports), `references/rive.md` (state machine, inputs, the manifest mapping). Plus shared references:
   - the full manifest with Part motion (R18) and an example per kind;
   - native Aseprite and export settings, and grid sheets (R20);

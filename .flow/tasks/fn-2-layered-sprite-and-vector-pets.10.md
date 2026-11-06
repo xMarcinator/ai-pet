@@ -1,13 +1,13 @@
 ---
-satisfies: [R16, R18]
+satisfies: [R16, R18, R22]
 ---
 # fn-2-layered-sprite-and-vector-pets.10 Vector Hood (green) and vector Hamster packs from the approved reference drawings
 
 ## Description
-Turn the two approved reference drawings into built-in vector packs, using the vector kind that task 5 builds. The designs are settled: they were iterated with the user and reviewed by Codex (Hood READY; Hamster NEEDS_WORK resolved). This task converts them and adds the missing parts. It doesn't redesign them.
+Turn the three approved reference drawings (Hood (green), Hamster and Sprout, R16 and R22) into built-in vector packs, using the vector kind that task 5 builds. The designs are settled: they were iterated with the user and reviewed by Codex (Hood READY; Hamster NEEDS_WORK resolved). This task converts them and adds the missing parts. It doesn't redesign them.
 
 **Size:** M
-**Files:** `rust/crates/aipet-sprite/packs/{hood-green-vector,hamster-vector}/**` (new), `rust/crates/aipet-sprite/src/pack.rs` (built-in list), `avatars/reference/*_gen.py` (an export path, if converting from the generators)
+**Files:** `rust/crates/aipet-sprite/packs/{hood-green-vector,hamster-vector,sprout-vector}/**` (new), `rust/crates/aipet-sprite/src/pack.rs` (built-in list), `avatars/reference/*_gen.py` (an export path, if converting from the generators)
 **Touches:** [rust/crates/aipet-sprite/packs/**, rust/crates/aipet-sprite/src/pack.rs, avatars/reference/**]
 
 ### Approach
@@ -35,7 +35,8 @@ Turn the two approved reference drawings into built-in vector packs, using the v
 The preview pages show the reference pixel art beside each vector, and 130×120 boxes on three backgrounds. Use them to check the converted packs look the same in the app.
 
 ## Acceptance
-- [ ] Hood (green) and Hamster vector packs are built in, generated reproducibly from the reference generators, and `--check-pack` reports OK for both
+- [ ] Every built-in vector pack covers every state and second frame in `pet_states.STATES` and `PHASES`, with the R22 part ids; a pack test fails on a missing state (R22)
+- [ ] Hood (green), Hamster and Sprout vector packs are built in, generated reproducibly from the reference generators, and `--check-pack` reports OK for both
 - [ ] Rendered in the app, every state shown on the review pages matches its drawing (screenshots side by side)
 - [ ] Both packs have every state, including the magnifier, headphones and the effects
 - [ ] No ground shadow in the packs; coordinates sit in the art box with the anchor on the ground

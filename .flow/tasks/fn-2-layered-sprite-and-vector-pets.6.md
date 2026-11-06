@@ -1,5 +1,5 @@
 ---
-satisfies: [R11]
+satisfies: [R11, R22]
 ---
 # fn-2-layered-sprite-and-vector-pets.6 Hamster pixel pack from the user's reference image
 
@@ -25,6 +25,7 @@ The reference image was shared in chat; the user saves it to `avatars/reference/
 
 ## Acceptance
 - [ ] The Hamster pack has every state, expression, look direction, prop, headphones and effect; `--check-pack` reports OK
+- [ ] It covers every state and second frame in `avatars/reference/pet_states.py` (R22); a pack test fails on a missing state
 - [ ] It is built in and selectable in Settings
 - [ ] It matches the reference's proportions and palette (user confirms in the hands-on task)
 
