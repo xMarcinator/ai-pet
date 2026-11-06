@@ -1,0 +1,20 @@
+[package]
+name = "aseprite-spike"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Standalone: not part of rust/'s workspace, own lockfile.
+[workspace]
+
+[dependencies]
+# crates.io 0.3.8 (2024-03-14) pins image 0.24 and adds a second copy beside the workspace's 0.25.10.
+# Unreleased master (2024-07-21, "Allow both image 0.24 & 0.25") takes ">= 0.24, < 0.26" and unifies.
+asefile = { git = "https://github.com/alpine-alpaca/asefile", rev = "2274c354cea6764f85597252a0d2228e64709348" }
+# The workspace's version, plus PNG for writing renders. png and its deps come from the local cargo cache
+# (built with --offline), not a new download.
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+flate2 = "1"
+
+[profile.release]
+debug = false
