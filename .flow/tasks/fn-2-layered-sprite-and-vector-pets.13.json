@@ -11,6 +11,6 @@
   "spec": "fn-2-layered-sprite-and-vector-pets",
   "spec_path": ".flow/tasks/fn-2-layered-sprite-and-vector-pets.13.md",
   "status": "todo",
-  "title": "Rive proof: rive-rs builds everywhere and renders on the CPU within budget",
-  "updated_at": "2026-11-06T08:53:23.780455Z"
+  "title": "Rive spike: rive-rs with a tiny-skia renderer, before any Rive implementation",
+  "updated_at": "2026-11-06T14:35:38.427151Z"
 }

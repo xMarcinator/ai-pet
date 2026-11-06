@@ -21,7 +21,7 @@ Write an agent skill so a new agent (Claude or Codex) can design, build, check a
   6. Run a Codex review: `codex exec` read-only, with screenshots attached and the owner's decisions listed as fixed.
   7. Emit the pack manifest and run `AiPet --check-pack`.
   8. Add the pack to `avatars/` or the built-ins.
-- References:
+- One skill (the user's choice), with one reference file per technology, loaded only when that technology is used: `references/pixel-and-painted.md` (sheets, explicit and grid frames), `references/vector.md` (parts and generators), `references/aseprite.md` (native files and exports), `references/rive.md` (state machine, inputs, the manifest mapping). Plus shared references:
   - the full manifest with Part motion (R18) and an example per kind;
   - native Aseprite and export settings, and grid sheets (R20);
   - Rive packs: building the state machine and inputs a pet needs, and the manifest's input mapping (R21);
@@ -42,7 +42,7 @@ Write an agent skill so a new agent (Claude or Codex) can design, build, check a
 The copy under `.agents/skills/` keeps Codex in step; a test or script should check that the two copies are identical.
 
 ## Acceptance
-- [ ] `.claude/skills/aipet-avatar-pack/` exists with `SKILL.md` and references covering the R19 list; `.agents/skills/aipet-avatar-pack/` is identical (checked by a test or script)
+- [ ] `.claude/skills/aipet-avatar-pack/` exists with `SKILL.md`, one reference per technology (pixel and painted, vector, Aseprite, Rive) and the shared references, covering the R19 list; `.agents/skills/aipet-avatar-pack/` is identical (checked by a test or script)
 - [ ] The worked example in `avatars/samples/` passes `AiPet --check-pack`
 - [ ] A fresh agent, given only the skill and a reference image, produces a pack that passes `--check-pack` without opening Rust files (one dry run recorded in the task's evidence)
 

@@ -4,7 +4,8 @@
   "claimed_at": null,
   "created_at": "2026-11-06T08:47:05.589713Z",
   "depends_on": [
-    "fn-2-layered-sprite-and-vector-pets.3"
+    "fn-2-layered-sprite-and-vector-pets.3",
+    "fn-2-layered-sprite-and-vector-pets.15"
   ],
   "id": "fn-2-layered-sprite-and-vector-pets.11",
   "priority": null,
@@ -12,5 +13,5 @@
   "spec_path": ".flow/tasks/fn-2-layered-sprite-and-vector-pets.11.md",
   "status": "todo",
   "title": "Native .aseprite files and grid sprite sheets in packs",
-  "updated_at": "2026-11-06T08:52:37.658112Z"
+  "updated_at": "2026-11-06T14:35:46.510540Z"
 }
