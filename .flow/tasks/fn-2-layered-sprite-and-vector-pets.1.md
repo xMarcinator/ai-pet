@@ -1,5 +1,5 @@
 ---
-satisfies: [R1, R2]
+satisfies: [R1, R2, R18]
 ---
 # fn-2-layered-sprite-and-vector-pets.1 Pose, pack model and compositor in aipet-sprite (headless)
 
@@ -13,7 +13,7 @@ Split today's `compute_pose` into a renderer-neutral **Pose** (spec: Architectur
 ### Approach
 - Derive the Pose from the existing `Pose` struct and `compute_pose` (`pet.rs:365-531`). Keep `PetInput`, `PetRng` and `update`'s motion maths (`pet.rs:534-573`) unchanged, and use enums, not strings, for channel values.
 - Look direction: quantise the pointer (grid DIPs, `PetInput.mouse`) into 9 directions with hysteresis. Keep the existing eye-follow maths as the source.
-- Pack model types: Pack, Layer (channel binding, hit flag, default, fallback), Animation (frames with durations, loop mode), Frame (raster rect or vector parts placeholder). Validate fallback cycles and depth here.
+- Pack model types: Pack, Layer (channel binding, hit flag, default, fallback), Animation (frames with durations, loop mode), Frame (raster rect with pivot, or vector parts placeholder), Part (id, origin), Pose table, Look table, keyframe Animation (R18). Validate fallback cycles and depth here.
 - Compositor: `(pack, pose, t) -> per-layer (animation, frame index, mirrored)`. A pure function, unit-tested with scripted Poses.
 - Hit runs: per-frame alpha → row runs at art resolution (adapt `runs()` from `rust/crates/aipet-ui/src/sprite.rs:136`).
 
@@ -35,6 +35,7 @@ The goldens compare doubles bit-exactly (`EXACT_LIBM`, golden.rs:205). The Pose 
 - [ ] Compositor picks animation and frame by channel and elapsed time for loop, once and pingpong, with mirroring; unit tests cover each mode and the fallbacks
 - [ ] Look direction has hysteresis (a test moves the pointer across a threshold and back without flicker)
 - [ ] Per-frame hit runs from alpha, unit-tested
+- [ ] Part motion (spec: API Contracts → Part motion, R18) in the model and compositor: parts with origins, shapes or frames per value, the `look` table with nearest-direction fallback, `poses` with eased transitions, and keyframe `animations` with `phase`, applied in the stated order before whole-body motion and mirroring. Unit tests drive a pose change mid-transition, a looping keyframe animation with two phases, and a look offset, and read the parts' final positions
 
 ## Done summary
 TBD

@@ -1,5 +1,5 @@
 ---
-satisfies: [R8, R11]
+satisfies: [R8, R11, R18]
 ---
 # fn-2-layered-sprite-and-vector-pets.5 Vector packs and the two Pip pets (vector and painted)
 
@@ -30,6 +30,7 @@ iced's `svg` feature is off and would re-rasterise each animated frame; don't en
 - [ ] The vector hit mask follows the drawn parts
 - [ ] Vector Pip and painted Pip are built-in, with every state, eye, arm, prop, headphone and effect layer; `--check-pack` reports OK for both
 - [ ] No external resource can be loaded by a vector pack (test with a path or URL-like value)
+- [ ] Vector parts draw at their composited placement (R18): a part's shapes around its origin, plus the pose, animation and look offsets and its rotation, scale and opacity. Pip's eyes follow the pointer and its hands animate through the same tables
 
 ## Done summary
 TBD

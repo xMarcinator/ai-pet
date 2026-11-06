@@ -7,7 +7,8 @@
     "fn-2-layered-sprite-and-vector-pets.5",
     "fn-2-layered-sprite-and-vector-pets.6",
     "fn-2-layered-sprite-and-vector-pets.7",
-    "fn-2-layered-sprite-and-vector-pets.10"
+    "fn-2-layered-sprite-and-vector-pets.10",
+    "fn-2-layered-sprite-and-vector-pets.14"
   ],
   "id": "fn-2-layered-sprite-and-vector-pets.8",
   "priority": null,
@@ -15,5 +16,5 @@
   "spec_path": ".flow/tasks/fn-2-layered-sprite-and-vector-pets.8.md",
   "status": "todo",
   "title": "Performance, memory and hands-on verification across pack kinds",
-  "updated_at": "2026-11-05T14:59:32.428558Z"
+  "updated_at": "2026-11-06T08:53:45.893569Z"
 }

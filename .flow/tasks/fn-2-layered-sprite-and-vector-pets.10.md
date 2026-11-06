@@ -1,5 +1,5 @@
 ---
-satisfies: [R16]
+satisfies: [R16, R18]
 ---
 # fn-2-layered-sprite-and-vector-pets.10 Vector Hood (green) and vector Hamster packs from the approved reference drawings
 
@@ -39,6 +39,7 @@ The preview pages show the reference pixel art beside each vector, and 130×120 
 - [ ] Rendered in the app, every state shown on the review pages matches its drawing (screenshots side by side)
 - [ ] Both packs have every state, including the magnifier, headphones and the effects
 - [ ] No ground shadow in the packs; coordinates sit in the art box with the anchor on the ground
+- [ ] The generators emit the Part motion tables (R18) from their existing numbers: eye origins and look offsets, hand poses (rest, wave, raised, type) and the typing keyframes, the hand bob with phases, the Hamster's shoulder rotations, and the caret's opacity loop
 
 ## Done summary
 TBD

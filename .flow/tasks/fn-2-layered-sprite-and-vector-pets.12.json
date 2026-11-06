@@ -1,0 +1,19 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-06T08:47:05.589807Z",
+  "depends_on": [
+    "fn-2-layered-sprite-and-vector-pets.9",
+    "fn-2-layered-sprite-and-vector-pets.10",
+    "fn-2-layered-sprite-and-vector-pets.11",
+    "fn-2-layered-sprite-and-vector-pets.14"
+  ],
+  "id": "fn-2-layered-sprite-and-vector-pets.12",
+  "priority": null,
+  "spec": "fn-2-layered-sprite-and-vector-pets",
+  "spec_path": ".flow/tasks/fn-2-layered-sprite-and-vector-pets.12.md",
+  "status": "todo",
+  "title": "Agent skill for making avatar packs",
+  "updated_at": "2026-11-06T08:53:42.342210Z"
+}

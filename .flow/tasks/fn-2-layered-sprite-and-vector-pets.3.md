@@ -1,5 +1,5 @@
 ---
-satisfies: [R2, R4, R5, R6, R12]
+satisfies: [R2, R4, R5, R6, R12, R18]
 ---
 # fn-2-layered-sprite-and-vector-pets.3 Pack loading from disk: limits, containment, Aseprite, legacy avatars, --check-pack
 
@@ -34,6 +34,7 @@ Aseprite writes `repeat` as a JSON string and omits it when it is 0. A `json-has
 - [ ] Legacy `avatars/hood-green.json` loads and differs from today only in body outline and shading
 - [ ] `AiPet --check-pack` prints OK or one line per problem with exit 0/1, run against a good and a bad pack
 - [ ] A sample pack in the repo's `avatars/` loads
+- [ ] The Part motion fields parse and validate (R18): parts, origins, pivots, `look`, `poses`, `transition_ms`, keyframe `animations` and `phase`. Tests give each R18 error case (non-finite, out-of-box, unknown part id or pose value, duplicate id, more than 64 keys, out-of-range duration) and read the reason. An Aseprite export's part slices become origins, and its per-frame slice keys become pose positions
 
 ## Done summary
 TBD
