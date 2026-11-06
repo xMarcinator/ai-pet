@@ -3,6 +3,8 @@ satisfies: [R21]
 ---
 # fn-2-layered-sprite-and-vector-pets.14 Rive pack kind: input mapping, rendering, click-through, safe loading
 
+**Blocked:** task fn-2-layered-sprite-and-vector-pets.13's spike is a no-go (`rust/proofs/rive.md`), and R21 is deferred. The CPU renderer misses fn-1's calm budget (about 0.8 ms per frame, 3.4–11 % of a core at 30 Hz for a pet that keeps animating). rive-rs builds only without text and layout, and damaged files crash or hang in `File::new`. Don't start this task. If R21 comes back, carry over from the spike: a renderer that never returns `None` from `Image::decode`; an inspection shim (`FileAssetLoader` plus a no-op factory) for names, referenced assets and view models; a child check that also plays frames, with a time limit, on the exact bytes that will load; static libstdc++ on Linux; CI that clones rive-rs at a pinned revision with submodules.
+
 ## Description
 Build the `rive` pack kind on task 13's renderer (spec: API Contracts → Rive packs; R21). Map Pose channels onto state-machine inputs; render each changed frame into the sprite path; take click-through from alpha; validate `.riv` files in a child process before loading them; report them in `--check-pack`. Ship one sample Rive pack.
 

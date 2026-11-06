@@ -43,9 +43,9 @@ Questions to answer, with evidence (commands, outputs, timings):
 - [ ] The spike code stays on its `spike/` branch; nothing from `rust/spikes/` is merged into the work branch
 
 ## Done summary
-TBD
+No-go for `rive-rs` plus tiny-skia (provisional; the Windows and macOS builds and fn-1's C# calm baseline are still to come, and could only flip it if the Rust pet is several points cheaper at calm). rive-rs `3d26aa1` builds on Linux only with no features: `text` needs a newer harfbuzz fork, and `layout` needs yoga, which isn't a submodule. The 500-line tiny-skia renderer draws the samples correctly by eye, and number, boolean and trigger inputs all change the output. A pet-like file that keeps animating costs about 0.8 ms per frame at 260×240, 98 % of it drawing: 3.4–11 % of a core at 30 Hz against a 0.5-point margin. Files that settle cost about 1 µs per idle tick. Of 525 damaged files, 15 % crashed and 3 % hung, mostly inside `File::new`. It adds +1.8 MB to the binary and a `libstdc++` dependency on Linux. R21 is deferred in the spec and task 14 is blocked. Proof: `rust/proofs/rive.md`.
 
 ## Evidence
-- Commits:
-- Tests:
+- Commits: `e0b5d5d` on `spike/rive` (spike code, CI workflow not yet run, proof; not merged, not pushed)
+- Tests: spike runs recorded in `rust/proofs/rive.md`; the death_knight benchmark was rerun when the result was checked (0.80 ms mean, 11 % of a core paced at 30 Hz)
 - PRs:
