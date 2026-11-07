@@ -1,0 +1,693 @@
+{
+ "format_version": 1,
+ "name": "Hamster (pixel)",
+ "kind": "pixel",
+ "pixel_size": 3,
+ "anchor": [
+  21,
+  37
+ ],
+ "mirror": "none",
+ "accent": "#F4B236",
+ "glow": "#7FEFFF",
+ "layers": [
+  {
+   "name": "body",
+   "channel": "state",
+   "hit": true,
+   "default": "idle",
+   "animations": {
+    "idle": {
+     "sheet": "body.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    }
+   }
+  },
+  {
+   "name": "feet",
+   "channel": "feet",
+   "hit": true,
+   "default": "stand",
+   "animations": {
+    "stand": {
+     "sheet": "feet.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "tap": {
+     "sheet": "feet.png",
+     "frames": [
+      [
+       43,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "dangle-a": {
+     "sheet": "feet.png",
+     "frames": [
+      [
+       86,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "dangle-b": {
+     "sheet": "feet.png",
+     "frames": [
+      [
+       129,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "run-a": {
+     "sheet": "feet.png",
+     "frames": [
+      [
+       172,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "run-b": {
+     "sheet": "feet.png",
+     "frames": [
+      [
+       215,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    }
+   }
+  },
+  {
+   "name": "prop",
+   "channel": "prop",
+   "fallback": {
+    "none": null
+   },
+   "default": "laptop",
+   "animations": {
+    "laptop": {
+     "sheet": "prop.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "lens": {
+     "sheet": "prop.png",
+     "frames": [
+      [
+       43,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    }
+   }
+  },
+  {
+   "name": "screen",
+   "channel": "prop",
+   "glow": true,
+   "fallback": {
+    "lens": null,
+    "none": null
+   },
+   "default": "laptop",
+   "animations": {
+    "laptop": {
+     "sheet": "screen.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    }
+   }
+  },
+  {
+   "name": "arms",
+   "channel": "arms",
+   "hit": true,
+   "default": "rest",
+   "animations": {
+    "rest": {
+     "sheet": "arms.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "raised": {
+     "sheet": "arms.png",
+     "frames": [
+      [
+       43,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "wave-a": {
+     "sheet": "arms.png",
+     "frames": [
+      [
+       86,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "wave-b": {
+     "sheet": "arms.png",
+     "frames": [
+      [
+       129,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "run-a": {
+     "sheet": "arms.png",
+     "frames": [
+      [
+       172,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "run-b": {
+     "sheet": "arms.png",
+     "frames": [
+      [
+       215,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "hold": {
+     "sheet": "arms.png",
+     "frames": [
+      [
+       258,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "lens": {
+     "sheet": "arms.png",
+     "frames": [
+      [
+       301,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    }
+   }
+  },
+  {
+   "name": "headphones",
+   "channel": "headphones",
+   "hit": true,
+   "fallback": {
+    "off": null
+   },
+   "default": "on",
+   "animations": {
+    "on": {
+     "sheet": "headphones.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    }
+   }
+  },
+  {
+   "name": "eyes",
+   "channel": "eyes",
+   "hit": true,
+   "look": {
+    "center": [
+     0,
+     0
+    ],
+    "left": [
+     -3,
+     0
+    ],
+    "right": [
+     3,
+     0
+    ],
+    "up": [
+     0,
+     -3
+    ],
+    "down": [
+     0,
+     3
+    ],
+    "up-left": [
+     -3,
+     -3
+    ],
+    "up-right": [
+     3,
+     -3
+    ],
+    "down-left": [
+     -3,
+     3
+    ],
+    "down-right": [
+     3,
+     3
+    ],
+    "far-left": [
+     -3,
+     0
+    ],
+    "far-right": [
+     3,
+     0
+    ],
+    "up-far-left": [
+     -3,
+     -3
+    ],
+    "up-far-right": [
+     3,
+     -3
+    ],
+    "down-far-left": [
+     -3,
+     3
+    ],
+    "down-far-right": [
+     3,
+     3
+    ]
+   },
+   "default": "open",
+   "animations": {
+    "open": {
+     "sheet": "eyes.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "wide": {
+     "sheet": "eyes.png",
+     "frames": [
+      [
+       43,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "up": {
+     "sheet": "eyes.png",
+     "frames": [
+      [
+       86,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "down": {
+     "sheet": "eyes.png",
+     "frames": [
+      [
+       129,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "blink": {
+     "sheet": "eyes.png",
+     "frames": [
+      [
+       172,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "squint": {
+     "sheet": "eyes.png",
+     "frames": [
+      [
+       215,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "closed": {
+     "sheet": "eyes.png",
+     "frames": [
+      [
+       258,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    },
+    "happy": {
+     "sheet": "eyes.png",
+     "frames": [
+      [
+       301,
+       0,
+       43,
+       40,
+       1000
+      ]
+     ],
+     "loop": "loop"
+    }
+   }
+  },
+  {
+   "name": "fx",
+   "channel": "fx",
+   "fallback": {
+    "zs+sparkles": "zs",
+    "dots+sparkles": "dots",
+    "notes+sparkles": "notes",
+    "alert+sparkles": "alert",
+    "none": null,
+    "dust": null,
+    "dust+sparkles": null,
+    "sparkles": null
+   },
+   "default": "zs",
+   "animations": {
+    "zs": {
+     "sheet": "fx.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       420
+      ],
+      [
+       43,
+       0,
+       43,
+       40,
+       420
+      ],
+      [
+       86,
+       0,
+       43,
+       40,
+       420
+      ]
+     ],
+     "loop": "loop",
+     "clock": "pet"
+    },
+    "dots": {
+     "sheet": "fx.png",
+     "frames": [
+      [
+       129,
+       0,
+       43,
+       40,
+       320
+      ],
+      [
+       172,
+       0,
+       43,
+       40,
+       320
+      ],
+      [
+       215,
+       0,
+       43,
+       40,
+       320
+      ]
+     ],
+     "loop": "loop",
+     "clock": "pet"
+    },
+    "notes": {
+     "sheet": "fx.png",
+     "frames": [
+      [
+       258,
+       0,
+       43,
+       40,
+       360
+      ],
+      [
+       301,
+       0,
+       43,
+       40,
+       360
+      ]
+     ],
+     "loop": "loop",
+     "clock": "pet"
+    },
+    "alert": {
+     "sheet": "fx.png",
+     "frames": [
+      [
+       344,
+       0,
+       43,
+       40,
+       260
+      ],
+      [
+       387,
+       0,
+       43,
+       40,
+       260
+      ]
+     ],
+     "loop": "loop",
+     "clock": "pet"
+    }
+   }
+  },
+  {
+   "name": "sparkles",
+   "channel": "fx",
+   "fallback": {
+    "none": null,
+    "dust": null,
+    "zs": null,
+    "dots": null,
+    "notes": null,
+    "alert": null
+   },
+   "default": "sparkles",
+   "animations": {
+    "sparkles": {
+     "sheet": "sparkles.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       140
+      ],
+      [
+       43,
+       0,
+       43,
+       40,
+       140
+      ],
+      [
+       86,
+       0,
+       43,
+       40,
+       140
+      ]
+     ],
+     "loop": "loop",
+     "clock": "pet"
+    }
+   }
+  },
+  {
+   "name": "dust",
+   "channel": "fx",
+   "mirror": "flip",
+   "fallback": {
+    "dust+sparkles": "dust",
+    "none": null,
+    "sparkles": null,
+    "zs": null,
+    "dots": null,
+    "notes": null,
+    "alert": null,
+    "zs+sparkles": null,
+    "dots+sparkles": null,
+    "notes+sparkles": null,
+    "alert+sparkles": null
+   },
+   "default": "dust",
+   "animations": {
+    "dust": {
+     "sheet": "dust.png",
+     "frames": [
+      [
+       0,
+       0,
+       43,
+       40,
+       110
+      ],
+      [
+       43,
+       0,
+       43,
+       40,
+       110
+      ]
+     ],
+     "loop": "loop",
+     "clock": "pet"
+    }
+   }
+  }
+ ]
+}

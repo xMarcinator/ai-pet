@@ -38,6 +38,8 @@ const PIP_PAINTED: Files = pack!("pip-painted": "pack.json", "feet.png", "sprout
 const HOOD_GREEN_VECTOR: Files = pack!("hood-green-vector": "pack.json");
 const HAMSTER_VECTOR: Files = pack!("hamster-vector": "pack.json");
 const SPROUT_VECTOR: Files = pack!("sprout-vector": "pack.json");
+const HAMSTER_PIXEL: Files = pack!("hamster-pixel": "pack.json", "body.png", "feet.png", "prop.png", "screen.png",
+    "arms.png", "headphones.png", "eyes.png", "fx.png", "sparkles.png", "dust.png");
 
 /// The green Hood's avatar, as the repo's `avatars/hood-green.json` gives it.
 fn hood_green() -> Option<Avatar> {
@@ -55,6 +57,7 @@ pub fn all() -> Vec<LoadedPack> {
         HOOD_GREEN_VECTOR,
         HAMSTER_VECTOR,
         SPROUT_VECTOR,
+        HAMSTER_PIXEL,
     ]
     .into_iter()
     .map(|files| {

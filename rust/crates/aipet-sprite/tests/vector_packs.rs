@@ -47,6 +47,7 @@ fn the_vector_packs_are_what_their_generators_write() {
         ("hood_gen.py", "hood-green-vector"),
         ("hamster_gen.py", "hamster-vector"),
         ("sprout_gen.py", "sprout-vector"),
+        ("hamster_pixel_gen.py", "hamster-pixel"),
     ] {
         let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join(folder);
         let _ = std::fs::remove_dir_all(&out);
@@ -113,14 +114,15 @@ const USED: [(Channel, &[&str]); 6] = [
 ];
 
 #[test]
-fn every_built_in_vector_pack_has_every_state() {
+fn every_built_in_pack_drawn_to_pet_states_has_every_state() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-custom-pets");
     let vector: Vec<_> = aipet_sprite::load::all(&dir)
         .pets
         .into_iter()
-        .filter(|p| p.pack.kind == Kind::Vector)
+        // the vector packs, and the pixel Hamster, drawn to the same list
+        .filter(|p| p.pack.kind == Kind::Vector || p.pack.name == "Hamster (pixel)")
         .collect();
-    assert!(vector.len() >= 4, "{} vector packs", vector.len());
+    assert!(vector.len() >= 5, "{} packs", vector.len());
     for loaded in vector {
         let pack = &loaded.pack;
         for (channel, values) in USED {

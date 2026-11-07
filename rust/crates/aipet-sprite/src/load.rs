@@ -906,6 +906,7 @@ mod tests {
                 "Hood (green, vector)",
                 "Hamster",
                 "Sprout (vector)",
+                "Hamster (pixel)",
                 "Other"
             ]
         );
