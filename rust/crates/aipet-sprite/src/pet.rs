@@ -10,6 +10,7 @@ use std::f64::consts::PI;
 use std::hash::{BuildHasher, Hasher};
 
 use crate::avatar::Avatar;
+use crate::pose::{self, Expression, Facing, Fx, IdleAct, Look, Mood, Motion, Pose, Prop, StateValue, Values};
 
 /// A cell on the pixel grid: (x, y).
 pub type Cell = (i32, i32);
@@ -255,13 +256,24 @@ pub struct Pet<R: PetRng = XorShift64> {
     squash: f64,
     look: i32,
     last_draw_frame: i32,
+
+    // ------------------------------------------------------------------ the pose
+    tracker: pose::Tracker,
+    pose: Pose,
 }
 
-struct Pose<'a> {
+/// What one frame draws, in the renderer's terms (cells and eye names), with the named poses ([`pose`]) it chose.
+struct Figure<'a> {
     eyes: &'static str,
     lx: i32,
     arms: Vec<Cell>,
+    arms_pose: pose::Arms,
     feet: Vec<Cell>,
+    feet_pose: pose::Feet,
+    /// The idle act, while one plays and is shown (not while hovered or held).
+    act: Option<&'static str>,
+    /// The pointer the eyes follow, if they do (DIPs over the sprite).
+    pointer: Option<(f64, f64)>,
     prop: Option<&'a str>,
     x: f64,
     y: f64,
@@ -271,13 +283,17 @@ struct Pose<'a> {
     headphones: bool,
 }
 
-impl Default for Pose<'_> {
+impl Default for Figure<'_> {
     fn default() -> Self {
-        Pose {
+        Figure {
             eyes: "normal",
             lx: 0,
             arms: ARMS_DOWN.to_vec(),
+            arms_pose: pose::Arms::Rest,
             feet: FEET.to_vec(),
+            feet_pose: pose::Feet::Stand,
+            act: None,
+            pointer: None,
             prop: None,
             x: 0.0,
             y: 0.0,
@@ -329,6 +345,8 @@ impl<R: PetRng> Pet<R> {
             squash: 0.0,
             look: 0,
             last_draw_frame: -1,
+            tracker: pose::Tracker::default(),
+            pose: Pose::scripted(Values::IDLE, 0.0),
         };
         pet.set_avatar(Avatar::sprout());
         pet
@@ -356,14 +374,20 @@ impl<R: PetRng> Pet<R> {
         (self.hp_band, self.hp_cups, self.hp_shine) = build_headphones(&self.body);
         self.avatar = a;
         self.last_draw_frame = -1;
+        self.tracker.reset();
+    }
+
+    /// The last frame's pose ([`Pet::update`] computes it): what each pack layer shows, and the motion.
+    pub fn pose(&self) -> &Pose {
+        &self.pose
     }
 
     fn r(&mut self, a: f64, b: f64) -> f64 {
         a + self.rng.next_double() * (b - a)
     }
 
-    fn compute_pose<'a>(&mut self, inp: &'a PetInput, t: f64) -> Pose<'a> {
-        let mut p = Pose::default();
+    fn compute_pose<'a>(&mut self, inp: &'a PetInput, t: f64) -> Figure<'a> {
+        let mut p = Figure::default();
         let mut st: &'a str = if t < inp.alert_until { "attention" } else { &inp.state };
         p.headphones = inp.music;
         // with nothing to do and music on, the pet listens along instead of idling or napping
@@ -390,10 +414,11 @@ impl<R: PetRng> Pet<R> {
             self.look = [-1, 0, 0, 1][self.rng.next_int(4) as usize];
             self.look_at = t + self.r(2.5, 6.0);
         }
-        let wave = |rate: f64| -> Vec<Cell> {
+        let wave = |rate: f64| -> (Vec<Cell>, pose::Arms) {
             let mut arms = ARM_L.to_vec();
-            arms.extend_from_slice(if (t * rate) as i32 % 2 == 1 { WAVE_A } else { WAVE_B });
-            arms
+            let a = (t * rate) as i32 % 2 == 1;
+            arms.extend_from_slice(if a { WAVE_A } else { WAVE_B });
+            (arms, if a { pose::Arms::WaveA } else { pose::Arms::WaveB })
         };
 
         match st {
@@ -411,6 +436,7 @@ impl<R: PetRng> Pet<R> {
                         self.idle_act = None;
                         self.next_idle = t + self.r(5.0, 11.0);
                     }
+                    p.act = self.idle_act;
                     match self.idle_act {
                         Some("look") => p.lx = [-2, -1, 0, 1, 2, 1, 0, -1][((t * 4.0) as i32 % 8) as usize],
                         Some("hop") => {
@@ -418,12 +444,15 @@ impl<R: PetRng> Pet<R> {
                         }
                         Some("stretch") => {
                             p.arms = ARMS_UP.to_vec();
+                            p.arms_pose = pose::Arms::Raised;
                             p.eyes = "happy";
                             p.y = -PF;
                         }
                         Some("wiggle") => p.x = (t * 16.0).sin() * 0.8 * PF,
                         Some("tap") => {
-                            p.feet = if (t * 5.0) as i32 % 2 == 1 { FOOT_TAP } else { FEET }.to_vec();
+                            let tap = (t * 5.0) as i32 % 2 == 1;
+                            p.feet = if tap { FOOT_TAP } else { FEET }.to_vec();
+                            p.feet_pose = if tap { pose::Feet::Tap } else { pose::Feet::Stand };
                             p.lx = 1;
                         }
                         _ => {}
@@ -462,7 +491,7 @@ impl<R: PetRng> Pet<R> {
                 } else {
                     0.0
                 };
-                p.arms = wave(3.0);
+                (p.arms, p.arms_pose) = wave(3.0);
             }
             "done" => {
                 p.eyes = "happy";
@@ -472,13 +501,14 @@ impl<R: PetRng> Pet<R> {
                     0.0
                 };
                 if since < 4.0 {
-                    p.arms = wave(3.0);
+                    (p.arms, p.arms_pose) = wave(3.0);
                 }
             }
             _ => {}
         }
 
         if let Some(m) = inp.mouse.filter(|_| inp.hover && !drg && st != "working") {
+            p.pointer = Some(m);
             p.lx = (((m.0 - (13 * P) as f64) / 28.0).round_ties_even() as i32).clamp(-2, 2);
             p.eyes = if m.1 < (11 * P - 40) as f64 { "up" } else { "normal" };
             if st == "sleep" {
@@ -486,7 +516,7 @@ impl<R: PetRng> Pet<R> {
             }
         }
         if waving && matches!(st, "idle" | "sleep" | "done") {
-            p.arms = wave(5.0);
+            (p.arms, p.arms_pose) = wave(5.0);
             p.eyes = "happy";
         }
         if p.poked {
@@ -504,6 +534,11 @@ impl<R: PetRng> Pet<R> {
             let f = ((t * 10.0) as i32 % 2) as usize;
             p.feet = mirror(RUN_FEET[f], inp.facing);
             p.arms = mirror(RUN_ARMS[f], inp.facing);
+            (p.feet_pose, p.arms_pose) = if f == 0 {
+                (pose::Feet::RunA, pose::Arms::RunA)
+            } else {
+                (pose::Feet::RunB, pose::Arms::RunB)
+            };
             p.y = -(t * 10.0 * PI).sin().abs() * PF;
             p.x = inp.facing.wrapping_mul(P) as f64;
             p.eyes = "normal";
@@ -511,8 +546,11 @@ impl<R: PetRng> Pet<R> {
             p.prop = None;
             p.running = true;
         } else if drg {
-            p.feet = if (t * 3.0) as i32 % 2 == 1 { DANGLE_A } else { DANGLE_B }.to_vec();
+            let a = (t * 3.0) as i32 % 2 == 1;
+            p.feet = if a { DANGLE_A } else { DANGLE_B }.to_vec();
+            p.feet_pose = if a { pose::Feet::DangleA } else { pose::Feet::DangleB };
             p.arms = ARMS_UP.to_vec();
+            p.arms_pose = pose::Arms::Raised;
             p.eyes = "wide";
             p.lx = 0;
             p.y = 0.0;
@@ -558,21 +596,90 @@ impl<R: PetRng> Pet<R> {
         };
         self.prev_y = pose.y;
         let lift = (1.0 + pose.y / 45.0).clamp(0.5, 1.0);
-        PetFrame {
-            body: &self.body_px,
-            glow: &self.glow_px,
-            fx: &self.fx_px,
-            pixels_changed,
+        let motion = Motion {
             x: pose.x,
             y: pose.y,
             scale_x: 1.0 + self.squash - stretch * 0.5 - breathe * 0.5,
             scale_y: 1.0 - self.squash + stretch + breathe,
             shadow_scale: if pose.held { 0.55 } else { lift },
             shadow_opacity: if pose.held { 0.35 } else { lift },
+        };
+        let values = self.values(&pose, inp, t);
+        self.pose = self.tracker.pose(values, motion, t);
+        PetFrame {
+            body: &self.body_px,
+            glow: &self.glow_px,
+            fx: &self.fx_px,
+            pixels_changed,
+            x: motion.x,
+            y: motion.y,
+            scale_x: motion.scale_x,
+            scale_y: motion.scale_y,
+            shadow_scale: motion.shadow_scale,
+            shadow_opacity: motion.shadow_opacity,
         }
     }
 
-    fn draw(&mut self, p: &Pose, inp: &PetInput, t: f64) {
+    /// The pose's channels for what `draw` draws from `p`: the same conditions, in the pose's terms.
+    fn values(&mut self, p: &Figure, inp: &PetInput, t: f64) -> Values {
+        let mood = Mood::of(&self.anim_state);
+        let expression = Expression::of(p.eyes);
+        let look = match self.tracker.pointer_look(p.pointer) {
+            Some(look) => look,
+            None => Look {
+                dx: p.lx.signum() as i8,
+                dy: match expression {
+                    Expression::Up => -1,
+                    Expression::Down => 1,
+                    _ => 0,
+                },
+            },
+        };
+        let prop = match p.prop.filter(|_| !p.poked && t >= inp.land_until) {
+            Some("lens") => Prop::Lens,
+            Some(_) => Prop::Laptop,
+            None => Prop::None,
+        };
+        let arms = match (p.arms_pose, prop) {
+            (pose::Arms::Rest, Prop::Laptop) => pose::Arms::Hold,
+            (pose::Arms::Rest, Prop::Lens) => pose::Arms::Lens,
+            (arms, _) => arms,
+        };
+        let fx = if p.running {
+            Fx::Dust
+        } else if (self.anim_state == "done" || p.poked) && !p.held {
+            Fx::Sparkles
+        } else if p.held {
+            Fx::None
+        } else {
+            match mood {
+                Mood::Thinking => Fx::Dots,
+                Mood::Listen => Fx::Notes,
+                Mood::Sleep if !inp.hover => Fx::Zs,
+                Mood::Attention => Fx::Alert,
+                _ => Fx::None,
+            }
+        };
+        Values {
+            state: StateValue {
+                mood,
+                act: if mood == Mood::Idle {
+                    p.act.and_then(IdleAct::of)
+                } else {
+                    None
+                },
+            },
+            eyes: pose::Eyes { expression, look },
+            arms,
+            feet: p.feet_pose,
+            prop,
+            headphones: p.headphones,
+            fx,
+            facing: if inp.facing > 0 { Facing::Right } else { Facing::Left },
+        }
+    }
+
+    fn draw(&mut self, p: &Figure, inp: &PetInput, t: f64) {
         let a = &self.avatar;
         let body_px = &mut self.body_px;
         let glow_px = &mut self.glow_px;
@@ -1017,6 +1124,63 @@ mod tests {
             state: "idle".to_owned(),
             ..PetInput::default()
         }
+    }
+
+    #[test]
+    fn the_pose_names_what_the_renderer_draws() {
+        use crate::pose::{Arms, Channel, Expression, Facing, Feet, Fx, Mood, Prop};
+        let mut pet = Pet::with_rng(Fixed(0.5));
+        // asleep, not hovered: eyes closed, Zs
+        pet.update(&PetInput::default(), 1.0);
+        let p = *pet.pose();
+        assert_eq!(
+            (p.state.mood, p.eyes.expression, p.fx),
+            (Mood::Sleep, Expression::Closed, Fx::Zs)
+        );
+        assert_eq!(p.since(Channel::State), 1.0);
+        // working with the laptop: the arms hold it, the eyes look down at it
+        let working = PetInput {
+            state: "working".to_owned(),
+            ..PetInput::default()
+        };
+        pet.update(&working, 2.0);
+        let p = *pet.pose();
+        assert_eq!(
+            (p.prop, p.arms, p.eyes.expression),
+            (Prop::Laptop, Arms::Hold, Expression::Down)
+        );
+        assert_eq!((p.eyes.look.dx, p.eyes.look.dy), (1, 1));
+        assert_eq!(p.since(Channel::State), 2.0);
+        // held without moving for a while: dangling, arms up, wide eyes, nothing held, no effect
+        let held = PetInput {
+            dragging: true,
+            moved: true,
+            last_move: 0.0,
+            ..idle()
+        };
+        pet.update(&held, 3.0);
+        let p = *pet.pose();
+        assert!(matches!(p.feet, Feet::DangleA | Feet::DangleB));
+        assert_eq!(
+            (p.arms, p.eyes.expression, p.prop, p.fx),
+            (Arms::Raised, Expression::Wide, Prop::None, Fx::None)
+        );
+        // running to the left: the run poses, dust, facing left
+        let running = PetInput {
+            last_move: 4.0,
+            facing: -1,
+            ..held
+        };
+        pet.update(&running, 4.1);
+        let p = *pet.pose();
+        assert!(matches!(p.arms, Arms::RunA | Arms::RunB));
+        assert_eq!((p.fx, p.facing), (Fx::Dust, Facing::Left));
+        assert_eq!(p.motion.x, -5.0);
+        // the music replaces idling: listen, with headphones and notes
+        let music = PetInput { music: true, ..idle() };
+        pet.update(&music, 5.0);
+        let p = *pet.pose();
+        assert_eq!((p.state.key(), p.headphones, p.fx), ("listen", true, Fx::Notes));
     }
 
     #[test]
