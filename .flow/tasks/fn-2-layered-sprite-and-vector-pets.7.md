@@ -29,9 +29,12 @@ A platform that can't read the setting counts as off.
 - [ ] Windows and Linux read the system setting (unit tests where the API can be stubbed; checked hands-on in the verification task)
 
 ## Done summary
-TBD
+Reduced motion: no idle acts, no bob, squash or breathing, every animation on its first frame (`Pose::still`), while state and expression changes still show; a ten-minute idle test checks it, and a held animation doesn't count as fast for the frame pacing. It is on with `AIPET_REDUCE_MOTION=1` or when the platform says so, read at start and whenever Settings opens. Windows: `SPI_GETCLIENTAREAANIMATION` through the `Win32` trait (not compiled here: this machine can't build the MSVC target's C dependencies, so the Windows build or the hands-on task checks it). Linux: KDE's `AnimationDurationFactor=0` in kdeglobals (unit-tested), else GNOME's `enable-animations` through the settings portal (tested with scripted tools). macOS counts as off (not supported yet).
 
+Deviation: the GNOME read runs `dbus-send` once per Settings open, as the platform's MPRIS code already does, instead of a D-Bus crate; the task said not to spawn processes.
+
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 4c9b34b
+- Tests: cd rust && cargo test -p aipet-sprite -p aipet-ui -p aipet-desktop -p aipet-wayland (passed), cargo clippy --workspace --all-targets -D warnings (clean), cargo fmt --check (clean)
 - PRs:
