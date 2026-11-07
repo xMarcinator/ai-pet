@@ -362,8 +362,11 @@ names before tasks fn-1-migrate-aipet-from-net-to-rust.15 onwards.
 
 ## Parked unknowns
 
-- The default shell on Hyprland: layer-shell (planned) or XWayland. Resolved by the hands-on pass in task fn-1-migrate-aipet-from-net-to-rust.22 and
-  the user's call.
+- ~~The default shell on Hyprland: layer-shell (planned) or XWayland.~~ Resolved by task
+  fn-1-migrate-aipet-from-net-to-rust.22's Hyprland pass (2026-11-07): layer-shell, as planned. The user approved the
+  pet on it on Hyprland 0.57.0, with the packaged `no_anim` layer rule. The default drag became `overlay` (follows the
+  pointer every frame; `margin` jumps every other frame once the animation is off), with the pet hidden for about
+  45 ms at the drop while the surface shrinks ([rust/proofs/linux-hands-on.md](../../rust/proofs/linux-hands-on.md)).
 - The version numbers for milestones 1, 2 and 3: suggested 0.2.0, 0.3.0 and 1.0.0. The user decides.
 - ~~The update path from .NET to Rust on Windows: in place, or a one-time reinstall.~~ Resolved by task
   fn-1-migrate-aipet-from-net-to-rust.14 (2026-09-29): in place, by full package and by delta, with the data folder
