@@ -37,9 +37,14 @@ After fn-1's cutover the C# generator is gone, so frames.json can't be regenerat
 - [ ] `cargo test -p aipet-sprite -p aipet-ui` passes; clippy and fmt are clean
 
 ## Done summary
-TBD
+The early proof point holds. `bake.rs` runs today's renderer once per channel value into a layered pixel pack: the body; the headphones' outline (under the limbs) and fill (over them); arms and feet as what they change on the bare body, so the shading where a limb meets the body stays exact; left-facing runs as `run-a@left` frames; the prop; the eyes and the laptop's screen in the glow layer; and the effects and the lens's scan on the pet clock, sampled every millisecond over a whole number of periods. Sprout, Hood and Hood (green) are committed as packs (manifest + PNG sheets, 72 KB each), embedded, and checked byte for byte against the bake by `tests/bake.rs`; any other avatar is baked at load. `Pet` composites the pack into its three layers at its 24 fps redraws, and `Pet::draw`, the cell tables and the rasteriser are gone from `pet.rs` (the drawing lives on in `bake.rs`, run once per avatar).
 
+The golden replay passes against the composited frames: 3914 samples, identical except at outlines (at most 12 of 624 pixels a layer), or each pixel as drawn within 1 ms for an effect on the pet clock (35 samples); the deliberate `midpoint-z` cases have only their motion and redraws compared (3 samples). R3's tolerance text says so now. Additions to the model, recorded in the spec: `clock: pet`, `glow` and `mirror` per layer, `null` fallbacks, `<value>@left`, combined fx values (`zs+sparkles`), far look directions, and `blink` apart from `closed`.
+
+Deviations: two commits, not three (the switch came with the bake, as the proof point had to be measured before the bake's design was settled). A facing so large that 2 × facing wraps now looks far to the side, where the C#'s eyes fell off the grid.
+
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 4a41a32, 0c8b20e
+- Tests: cd rust && cargo test -p aipet-sprite (50 unit, bake, 5 golden: 3914 samples within the tolerance), cargo test -p aipet-ui (passed), cargo clippy --workspace --all-targets -D warnings (clean), cargo fmt --check (clean)
 - PRs:

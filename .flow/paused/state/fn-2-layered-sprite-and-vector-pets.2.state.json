@@ -1,0 +1,17 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-11-07T12:18:29.057034Z",
+  "evidence": {
+    "commits": [
+      "4a41a32",
+      "0c8b20e"
+    ],
+    "prs": [],
+    "tests": [
+      "cd rust && cargo test -p aipet-sprite (50 unit, bake, 5 golden: 3914 samples within the tolerance), cargo test -p aipet-ui (passed), cargo clippy --workspace --all-targets -D warnings (clean), cargo fmt --check (clean)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-07T12:47:19.803002Z"
+}
