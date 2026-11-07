@@ -33,6 +33,8 @@ windows-sys = "0.52"
 ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier", "win-system-proxy"] }
 # the Windows hook's icon and version resource (aipet-hook's build script)
 winresource = "0.1"
+# Vector packs' hit masks, stills and the painted bake: the version iced already builds.
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
 # The front end. wgpu only: tiny-skia cannot draw a transparent window. iced always builds its winit shell, and
 # winit needs a backend on Linux, hence x11 and wayland. tokio is the executor (and gives time::every).
 iced = { version = "0.14.0", default-features = false, features = [

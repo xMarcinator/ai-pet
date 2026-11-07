@@ -15,6 +15,7 @@ use iced::widget::image::{FilterMethod, Handle};
 use iced::{Point, Rectangle, Size};
 
 use crate::geometry::{HALO_PAD, SPRITE_ORIGIN};
+use crate::vector_view::VectorArt;
 
 /// The ground shadow's bitmap: 4 px per logical px of its 76 × 13, so it stays smooth when scaled.
 const SHADOW_W: usize = 76 * 4;
@@ -175,6 +176,8 @@ pub struct Sprite {
     pub hits: Vec<Rectangle>,
     /// Whether an animation on screen moves faster than the calm frame rate shows (its typical frame is shorter).
     pub fast_ms: Option<u32>,
+    /// A vector pack's drawing, and where its canvas goes in the sprite (before the body's motion).
+    pub vector: Option<(VectorArt, Rectangle)>,
 }
 
 impl Sprite {
@@ -184,6 +187,7 @@ impl Sprite {
             shown: Vec::new(),
             hits: Vec::new(),
             fast_ms: None,
+            vector: (p.pack.kind == Kind::Vector).then(|| (VectorArt::default(), Rectangle::default())),
         }
     }
 
@@ -202,6 +206,25 @@ impl Sprite {
             SPRITE_ORIGIN.x - pack.anchor.0 as f32 * ps,
             SPRITE_ORIGIN.y - pack.anchor.1 as f32 * ps,
         );
+        if let Some((art, rect)) = &mut self.vector {
+            art.update(pack, pose, t);
+            self.fast_ms = art.fast_ms;
+            let pad = aipet_sprite::pose::HALO_PAD as f32;
+            *rect = Rectangle::new(
+                Point::new(origin.x - pad * ps, origin.y - pad * ps),
+                Size::new(
+                    (aipet_sprite::pose::ART_W as f32 + 2.0 * pad) * ps,
+                    (aipet_sprite::pose::ART_H as f32 + 2.0 * pad) * ps,
+                ),
+            );
+            for &(x, y, len) in &art.runs {
+                self.hits.push(Rectangle::new(
+                    Point::new(rect.x + x as f32 * ps, rect.y + y as f32 * ps),
+                    Size::new(len as f32 * ps, ps),
+                ));
+            }
+            return;
+        }
         for pick in compose::pick(pack, pose, t) {
             let layer = &pack.layers[pick.layer];
             let Some(frames) = self.art.layers[pick.layer].get(pick.value) else {
@@ -263,6 +286,22 @@ impl Sprite {
 
 /// One pet standing idle, all layers in one image (for Settings' avatar picker).
 pub fn still(avatar: &LoadedPack) -> Handle {
+    if avatar.pack.kind == Kind::Painted {
+        let pose = Pose::scripted(aipet_sprite::pose::Values::IDLE, 0.0);
+        let (w, h, px) = compose::flatten(&avatar.pack, &avatar.sheets, &pose, 0.0);
+        return Handle::from_rgba(w, h, straight_rgba(&px));
+    }
+    if avatar.pack.kind == Kind::Vector {
+        // the picker shows 78 × 72: drawn at twice that, then scaled down
+        let (w, h, px) = aipet_sprite::vector::still(&avatar.pack, 78.0 * 2.0 / aipet_sprite::pose::ART_W);
+        let px: Vec<u32> = px
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&[r, g, b, a]| u32::from_be_bytes([a, r, g, b]))
+            .collect();
+        return Handle::from_rgba(w, h, straight_rgba(&px));
+    }
     let mut pet = Pet::with_rng(XorShift64::new(1));
     pet.set_pack(avatar.clone());
     let input = PetInput {

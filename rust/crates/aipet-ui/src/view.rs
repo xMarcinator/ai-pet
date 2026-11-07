@@ -5,7 +5,7 @@
 
 use aipet_core::board::{self, GITHUB_PURPLE};
 use iced::widget::image::{FilterMethod, Handle};
-use iced::widget::{Space, button, container, image, mouse_area, opaque, pin, row, stack, text};
+use iced::widget::{Space, button, canvas, container, image, mouse_area, opaque, pin, row, stack, text};
 use iced::{Border, Color, ContentFit, Element, Length, Padding, Point, Rectangle, Shadow, Vector, mouse};
 
 use crate::cards::{Button, Card};
@@ -52,6 +52,14 @@ impl PetUi {
         // the pack's frames: the body's layers, the glow's halos, then the glow and the effects over them, each moved
         // with the body and put on whole device pixels
         let place = |r: Rectangle| crate::geometry::snap(self.motion.rect_to_surface(r), self.scale);
+        if let Some((art, rect)) = &self.sprite.vector {
+            let r = place(*rect);
+            layers.push(
+                pin(canvas(art.drawing(self.pet.pack())).width(r.width).height(r.height))
+                    .position(r.position())
+                    .into(),
+            );
+        }
         let shown = &self.sprite.shown;
         for s in shown.iter().filter(|s| s.target == Target::Body) {
             layers.push(pixels(&s.image, place(s.rect), s.filter));

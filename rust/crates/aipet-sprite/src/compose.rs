@@ -9,10 +9,10 @@
 use std::collections::HashMap;
 
 use crate::pack::{Clock, Kind, Layer, LoopMode, Mirror, Pack};
-use crate::pose::{ANCHOR, ART_W, Channel, Facing, Look, Pose};
+use crate::pose::{ANCHOR, ART_H, ART_W, Channel, Facing, Look, Pose};
 
 /// Which item of a sequence plays `elapsed` ms in, by `mode`: each lasts `ms(i)`, there are `n` (at least one).
-fn step(n: usize, ms: impl Fn(usize) -> u32, mode: LoopMode, elapsed: f64) -> usize {
+pub(crate) fn step(n: usize, ms: impl Fn(usize) -> u32, mode: LoopMode, elapsed: f64) -> usize {
     // before the start, or a time that isn't one: the first
     if n <= 1 || elapsed.is_nan() || elapsed <= 0.0 {
         return 0;
@@ -187,6 +187,13 @@ pub struct Parts {
 }
 
 impl Parts {
+    /// Whether a part is still on its way to a pose's position at `t`.
+    pub fn moving(&self, t: f64) -> bool {
+        self.moves
+            .values()
+            .any(|m| m.from != m.to && (t - m.start) * 1000.0 < f64::from(m.ms))
+    }
+
     /// Every part's place at `t`, layer by layer. A layer that draws nothing for the pose's value places none.
     pub fn place(&mut self, pack: &Pack, pose: &Pose, t: f64) -> Vec<Placed> {
         let m = pose.motion;
@@ -203,7 +210,14 @@ impl Parts {
             } else {
                 (0.0, 0.0)
             };
-            for (pi, part) in layer.parts.iter().enumerate() {
+            // a vector layer without parts draws its shapes in art-box coordinates, as one part at (0, 0)
+            let whole = [crate::vector::whole()];
+            let parts = if layer.parts.is_empty() && pack.kind == Kind::Vector {
+                &whole[..]
+            } else {
+                &layer.parts[..]
+            };
+            for (pi, part) in parts.iter().enumerate() {
                 let target = targets.and_then(|t| t.get(&part.id)).copied().unwrap_or(part.origin);
                 let mv = self.moves.entry((li, pi)).or_insert(Move {
                     from: target,
@@ -258,6 +272,55 @@ impl Parts {
         }
         placed
     }
+}
+
+/// A raster pack's frames for `pose` at `t`, laid over each other in its art box at the pack's own resolution:
+/// (width, height, premultiplied 0xAARRGGBB pixels). For a still of a painted pack.
+pub fn flatten(pack: &Pack, sheets: &[crate::bake::Sheet], pose: &Pose, t: f64) -> (u32, u32, Vec<u32>) {
+    let (w, h) = (
+        (ART_W / pack.pixel_size).round() as i64,
+        (ART_H / pack.pixel_size).round() as i64,
+    );
+    let mut out = vec![0u32; (w * h) as usize];
+    for p in pick(pack, pose, t) {
+        let layer = &pack.layers[p.layer];
+        let Some(crate::pack::Art::Raster {
+            sheet,
+            x,
+            y,
+            w: fw,
+            h: fh,
+            pivot,
+        }) = p.frame.map(|f| layer.animations[p.value].frames[f].art.clone())
+        else {
+            continue;
+        };
+        let (dx, dy) = raster_offset(pack, layer, pose);
+        let ox = (dx / pack.pixel_size).round() as i64 - pivot.0 as i64;
+        let oy = (dy / pack.pixel_size).round() as i64 - pivot.1 as i64;
+        let s = &sheets[sheet];
+        for fy in 0..i64::from(fh) {
+            for fx in 0..i64::from(fw) {
+                let src = s.pixels[((i64::from(y) + fy) * i64::from(s.width) + i64::from(x) + fx) as usize];
+                let cx = if p.mirrored { w - 1 - (fx + ox) } else { fx + ox };
+                let cy = fy + oy;
+                if src >> 24 == 0 || !(0..w).contains(&cx) || !(0..h).contains(&cy) {
+                    continue;
+                }
+                let dst = &mut out[(cy * w + cx) as usize];
+                let top = crate::pm(src);
+                let a = top >> 24;
+                // premultiplied source-over, channel by channel
+                let mut px = 0;
+                for shift in [0, 8, 16, 24] {
+                    let c = ((top >> shift) & 0xFF) + ((*dst >> shift) & 0xFF) * (255 - a) / 255;
+                    px |= c.min(255) << shift;
+                }
+                *dst = px;
+            }
+        }
+    }
+    (w as u32, h as u32, out)
 }
 
 /// The rows of a frame's pixels with any alpha, as (x, y, length), from premultiplied `0xAARRGGBB` pixels in rows of

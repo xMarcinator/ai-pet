@@ -26,6 +26,7 @@ pub mod platform;
 pub mod settings;
 mod sprite;
 mod style;
+pub mod vector_view;
 mod view;
 
 use std::borrow::Cow;

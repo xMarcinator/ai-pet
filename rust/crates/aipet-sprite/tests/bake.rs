@@ -63,6 +63,71 @@ fn the_built_in_packs_are_the_bake_of_their_avatars() {
     }
 }
 
+/// Whether two sheets are the same within `by` per channel: tiny-skia's anti-aliasing may round a step apart on
+/// another CPU's SIMD.
+fn close(a: &aipet_sprite::bake::Sheet, b: &aipet_sprite::bake::Sheet, by: i32) -> bool {
+    (a.width, a.height) == (b.width, b.height)
+        && a.pixels
+            .iter()
+            .zip(&b.pixels)
+            .all(|(&p, &q)| (0..4).all(|i| ((p >> (8 * i)) as u8 as i32 - (q >> (8 * i)) as u8 as i32).abs() <= by))
+}
+
+#[test]
+fn painted_pip_is_the_vector_pip_painted() {
+    let write = std::env::var_os("AIPET_BAKE").is_some_and(|v| v == "1");
+    let vector = aipet_sprite::load::load_folder(&packs().join("pip")).expect("the vector Pip loads");
+    let baked = aipet_sprite::painted::paint(&vector.pack, "Pip (painted)", 2.0).unwrap();
+    let dir = packs().join("pip-painted");
+    if write {
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+    }
+    for (name, bytes) in files(&baked.pack, &baked.sheets) {
+        let path = dir.join(&name);
+        if write {
+            std::fs::write(&path, &bytes).unwrap();
+            continue;
+        }
+        let committed = std::fs::read(&path).unwrap_or_default();
+        let matches = if name.ends_with(".png") {
+            matches!((decode_png(&committed), decode_png(&bytes)), (Ok(a), Ok(b)) if close(&a, &b, 2))
+        } else {
+            committed == bytes
+        };
+        assert!(
+            matches,
+            "{} isn't what painting the vector Pip makes: run AIPET_BAKE=1 cargo test -p aipet-sprite --test bake",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn painted_pip_standing_looks_like_the_vector_pip() {
+    use aipet_sprite::Pose;
+    use aipet_sprite::pose::Values;
+    let vector = aipet_sprite::load::load_folder(&packs().join("pip")).unwrap().pack;
+    let painted = aipet_sprite::painted::paint(&vector, "Pip (painted)", 2.0).unwrap();
+    let pose = Pose::scripted(Values::IDLE, 0.0);
+    let (w, h, flat) = aipet_sprite::compose::flatten(&painted.pack, &painted.sheets, &pose, 0.0);
+    let (vw, _, drawn) = aipet_sprite::vector::still(&vector, 2.0);
+    let pad = 20;
+    let mut worst = 0;
+    for y in 0..h {
+        for x in 0..w {
+            let p = flat[(y * w + x) as usize];
+            let q = &drawn[(((y + pad) * vw + x + pad) * 4) as usize..][..4];
+            let q = u32::from_be_bytes([q[3], q[0], q[1], q[2]]);
+            for i in 0..4 {
+                worst = worst.max(((p >> (8 * i)) as u8 as i32 - (q >> (8 * i)) as u8 as i32).abs());
+            }
+        }
+    }
+    // layer by layer through straight colours rounds a little differently from one pass
+    assert!(worst <= 4, "a channel differs by {worst}");
+}
+
 /// The basic sample pack in the repo's `avatars/samples/basic/`: a small pack written to read, not baked from an avatar. A round
 /// pet with a two-frame idle bob and a sleep frame, and eyes that blink, close and look around.
 fn sample() -> (aipet_sprite::pack::Pack, Vec<aipet_sprite::bake::Sheet>) {

@@ -18,8 +18,10 @@ pub mod compose;
 pub mod load;
 pub mod manifest;
 pub mod pack;
+pub mod painted;
 mod pet;
 pub mod pose;
+pub mod vector;
 
 pub use avatar::{Avatar, AvatarJson, drawable, read_all_text, try_parse_color};
 pub use pet::{Cell, GH, GW, P, PIXELS, Pet, PetFrame, PetInput, PetRng, XorShift64, pm};

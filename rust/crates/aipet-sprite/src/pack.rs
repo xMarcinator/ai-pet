@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::pose::{ART_H, ART_W, Channel, HALO_PAD, Look};
+use crate::vector::{Cap, Join, Seg};
 
 /// At most this many layers in a pack.
 pub const MAX_LAYERS: usize = 16;
@@ -114,12 +115,35 @@ pub struct Animation {
     pub clock: Clock,
 }
 
-/// A vector shape: path data in SVG `d` syntax, drawn around its part's origin (task 5 draws it).
+/// A vector shape: path data in SVG `d` syntax (parsed at load), drawn around its part's origin, with its paint.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Shape {
     pub d: String,
-    pub fill: String,
-    pub stroke: Option<String>,
+    pub path: Vec<Seg>,
+    /// Straight 0xAARRGGBB; `None` paints nothing.
+    pub fill: Option<u32>,
+    pub stroke: Option<u32>,
+    /// The stroke's width, in the part's px.
+    pub width: f64,
+    pub cap: Cap,
+    pub join: Join,
+    pub opacity: f64,
+}
+
+impl Shape {
+    /// A shape filled with `colour` and no stroke. Panics on bad path data (for the code's own shapes).
+    pub fn filled(d: &str, colour: u32) -> Shape {
+        Shape {
+            d: d.to_owned(),
+            path: crate::vector::parse(d).expect("the shape's path data"),
+            fill: Some(colour),
+            stroke: None,
+            width: 1.0,
+            cap: Cap::Butt,
+            join: Join::Miter,
+            opacity: 1.0,
+        }
+    }
 }
 
 /// A movable piece of a layer: a unique id, and its origin in art-box px.
@@ -183,8 +207,8 @@ pub struct Layer {
     /// Frames per value.
     pub animations: BTreeMap<String, Animation>,
     pub parts: Vec<Part>,
-    /// Shapes per value or by name (vector packs).
-    pub shapes: BTreeMap<String, Shape>,
+    /// The drawing per value or by name (vector packs): its shapes, bottom to top.
+    pub shapes: BTreeMap<String, Vec<Shape>>,
     /// The eyes' offset per direction (the eyes channel only); missing directions take the nearest given.
     pub look: BTreeMap<Look, (f64, f64)>,
     /// Target positions per value, for some or all parts.
@@ -343,6 +367,7 @@ impl Layer {
                 offset(name, value, (k.dx, k.dy))?;
             }
         }
+        crate::vector::validate(self)?;
         if self.glow && self.channel == Channel::Fx {
             return Err(format!("layer {name:?}: an effects layer can't glow"));
         }

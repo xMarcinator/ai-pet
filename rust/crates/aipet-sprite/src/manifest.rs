@@ -14,6 +14,7 @@ use serde_json::Value;
 use crate::bake::Sheet;
 use crate::pack::{Animation, Art, Clock, Frame, Key, Kind, Layer, LoopMode, Mirror, Pack, Part, PartAnimation, Shape};
 use crate::pose::{Channel, Look};
+use crate::vector::{self, Cap, Join};
 
 /// The newest `format_version` this build reads.
 pub const FORMAT_VERSION: u32 = 1;
@@ -54,7 +55,7 @@ struct LayerJson {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     parts: Vec<PartJson>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    shapes: BTreeMap<String, ShapeJson>,
+    shapes: BTreeMap<String, Drawing>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     poses: BTreeMap<String, BTreeMap<String, [f64; 2]>>,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -76,12 +77,43 @@ struct PartJson {
     shape: Option<String>,
 }
 
+/// A value's drawing: one shape, or several bottom to top.
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum Drawing {
+    One(ShapeJson),
+    Many(Vec<ShapeJson>),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ShapeJson {
     d: String,
+    #[serde(default = "no_paint")]
     fill: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    stroke: Option<String>,
+    #[serde(default = "no_paint")]
+    stroke: String,
+    #[serde(default = "one")]
+    stroke_width: f64,
+    #[serde(default = "butt")]
+    linecap: String,
+    #[serde(default = "miter")]
+    linejoin: String,
+    #[serde(default = "one")]
+    opacity: f64,
+}
+
+fn no_paint() -> String {
+    "none".into()
+}
+fn one() -> f64 {
+    1.0
+}
+fn butt() -> String {
+    "butt".into()
+}
+fn miter() -> String {
+    "miter".into()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -219,7 +251,7 @@ pub fn write(pack: &Pack) -> String {
                             ms: None,
                             mode: mode_name(a.mode).to_owned(),
                             clock: (a.clock == Clock::Pet).then(|| "pet".to_owned()),
-                            pivot: None,
+                            pivot: pivots(&a.frames),
                         };
                         (
                             value.clone(),
@@ -233,6 +265,20 @@ pub fn write(pack: &Pack) -> String {
     let mut text = serde_json::to_string_pretty(&json).expect("a pack's manifest always serialises");
     text.push('\n');
     text
+}
+
+/// The frames' pivots as a manifest writes them: none when every frame is placed by its top-left corner.
+fn pivots(frames: &[Frame]) -> Option<Value> {
+    let each: Vec<[f64; 2]> = frames
+        .iter()
+        .map(|f| match f.art {
+            Art::Raster { pivot, .. } => [pivot.0, pivot.1],
+            Art::Vector => [0.0, 0.0],
+        })
+        .collect();
+    each.iter()
+        .any(|p| *p != [0.0, 0.0])
+        .then(|| serde_json::to_value(each).expect("numbers always serialise"))
 }
 
 fn mirror_name(m: Mirror) -> &'static str {
@@ -332,18 +378,27 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
                 shape: p.shape,
             })
             .collect();
-        layer.shapes = l
-            .shapes
-            .into_iter()
-            .map(|(k, s)| {
-                let shape = Shape {
+        for (value, drawing) in l.shapes {
+            let list = match drawing {
+                Drawing::One(s) => vec![s],
+                Drawing::Many(v) => v,
+            };
+            let mut shapes = Vec::with_capacity(list.len());
+            for s in list {
+                let bad = |e: String| format!("layer {:?}: shape {value:?}: {e}", layer.name);
+                shapes.push(Shape {
+                    path: vector::parse(&s.d).map_err(bad)?,
                     d: s.d,
-                    fill: s.fill,
-                    stroke: s.stroke,
-                };
-                (k, shape)
-            })
-            .collect();
+                    fill: vector::colour(&s.fill).map_err(bad)?,
+                    stroke: vector::colour(&s.stroke).map_err(bad)?,
+                    width: s.stroke_width,
+                    cap: Cap::parse(&s.linecap).map_err(bad)?,
+                    join: Join::parse(&s.linejoin).map_err(bad)?,
+                    opacity: s.opacity,
+                });
+            }
+            layer.shapes.insert(value, shapes);
+        }
         for (value, targets) in l.poses {
             layer
                 .poses
@@ -634,6 +689,42 @@ mod tests {
             ]}}"##
         );
         read(&text, |_| Err("no sheets".into())).map(|(p, _)| p)
+    }
+
+    #[test]
+    fn a_vector_pack_with_bad_shapes_or_an_outside_reference_is_refused_with_why() {
+        let eyes = |shape: &str| {
+            format!(
+                r##"{{"name": "eyes", "channel": "eyes", "default": "open", "parts": [{{"id": "e", "origin": [60, 60]}}],
+                "shapes": {{"open": {shape}}}}}"##
+            )
+        };
+        let reason = |shape: &str| read_parts(&eyes(shape)).unwrap_err();
+        // malformed path data, and numbers out of range inside it
+        assert!(reason(r##"{"d": "M 0 0 L 1", "fill": "#000"}"##).contains("expected a number"));
+        assert!(reason(r##"{"d": "M 1e999 0", "fill": "#000"}"##).contains("out of range"));
+        assert!(reason(r##"{"d": "M 0 0", "fill": "#000", "stroke_width": 1e999}"##).contains("isn't valid"));
+        // nothing from outside the pack: a path or URL where path data or a colour goes
+        assert!(reason(r##"{"d": "file:///etc/passwd", "fill": "#000"}"##).contains("path data"));
+        assert!(reason(r##"{"d": "M 0 0", "fill": "url(https://example.com/x.svg#g)"}"##).contains("colour"));
+        assert!(reason(r##"{"d": "M 0 0", "fill": "#000", "href": "pip.svg"}"##).contains("isn't valid"));
+        // a binding to a part the layer lacks
+        let unknown = r##"{"name": "eyes", "channel": "eyes", "default": "open", "parts": [{"id": "e", "origin": [60, 60]}],
+            "shapes": {"open": {"d": "M 0 0", "fill": "#000"}},
+            "animations": {"open": {"part": "nose", "keys": [[0, 1, 100]]}}}"##;
+        assert!(read_parts(unknown).unwrap_err().contains("unknown part \"nose\""));
+        // and a good one, drawn as several shapes with their stroke
+        let pack = read_parts(&eyes(
+            r##"[{"d": "M -2 0 A 2 2 0 1 0 2 0 A 2 2 0 1 0 -2 0 Z", "fill": "#161A26"},
+                 {"d": "M -1 -1 L 1 1", "stroke": "#FFF", "stroke_width": 0.5, "linecap": "round", "opacity": 0.8}]"##,
+        ))
+        .unwrap();
+        let open = &pack.layers[1].shapes["open"];
+        assert_eq!(open.len(), 2);
+        assert_eq!(
+            (open[1].stroke, open[1].fill, open[1].opacity),
+            (Some(0xFFFFFFFF), None, 0.8)
+        );
     }
 
     const EYES: &str = r##"{"name": "eyes", "channel": "eyes", "default": "open",

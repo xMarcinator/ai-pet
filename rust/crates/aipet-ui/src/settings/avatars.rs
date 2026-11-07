@@ -6,6 +6,7 @@ use std::fs;
 
 use aipet_sprite::Avatar;
 use aipet_sprite::load::{self, LoadedPack};
+use aipet_sprite::pack::Kind;
 use iced::widget::image::FilterMethod;
 use iced::widget::{Row, button, column, container, image, row, text, tooltip};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
@@ -70,7 +71,12 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
                 image(still.clone())
                     .width(78)
                     .height(72)
-                    .filter_method(FilterMethod::Nearest),
+                    // pixel art stays crisp; painted and vector stills are drawn larger and scaled down smoothly
+                    .filter_method(if avatar.pack.kind == Kind::Pixel {
+                        FilterMethod::Nearest
+                    } else {
+                        FilterMethod::Linear
+                    }),
                 name,
             ]
             .spacing(8)

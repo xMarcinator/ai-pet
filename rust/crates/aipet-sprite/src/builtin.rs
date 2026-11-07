@@ -1,6 +1,6 @@
 //! The built-in pets' packs, embedded in the binary: Sprout, Hood and Hood (green), baked ahead of time from their
 //! avatars (`tests/bake.rs` checks the committed files are the bake's: the manifests as text, the sheets pixel for
-//! pixel).
+//! pixel); and the vector Pip (`avatars/reference/pip_gen.py` writes it) with its painting (`tests/bake.rs` again).
 
 use std::collections::BTreeMap;
 
@@ -29,6 +29,10 @@ macro_rules! baked {
 const SPROUT: Files = baked!("sprout");
 const HOOD: Files = baked!("hood");
 const HOOD_GREEN: Files = baked!("hood-green");
+const PIP: Files = pack!("pip": "pack.json");
+const PIP_PAINTED: Files = pack!("pip-painted": "pack.json", "feet.png", "sprout.png", "body.png", "mouth.png", "eyes.png",
+    "headphones.png", "prop.png", "arms.png", "screen.png", "zs.png", "notes.png", "dots.png", "alert.png",
+    "sparkles.png", "dust.png");
 
 /// The green Hood's avatar, as the repo's `avatars/hood-green.json` gives it.
 fn hood_green() -> Option<Avatar> {
@@ -37,7 +41,7 @@ fn hood_green() -> Option<Avatar> {
 
 /// The built-in pets, in order.
 pub fn all() -> Vec<LoadedPack> {
-    [SPROUT, HOOD, HOOD_GREEN]
+    [SPROUT, HOOD, HOOD_GREEN, PIP, PIP_PAINTED]
         .into_iter()
         .map(|files| {
             let (pack, sheets) = load(files).expect("the embedded packs load (tests/bake.rs)");
