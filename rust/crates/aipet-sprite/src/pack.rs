@@ -128,7 +128,7 @@ pub struct Shape {
     pub cap: Cap,
     pub join: Join,
     pub opacity: f64,
-    /// The palette colours the fill and stroke name (`$robe`), which a recolour changes.
+    /// The palette colours the fill and stroke name (`$robe`), which a theme changes.
     pub fill_name: Option<String>,
     pub stroke_name: Option<String>,
 }
@@ -206,6 +206,8 @@ pub struct Layer {
     pub glow: bool,
     /// Its own mirror policy, where it differs from the pack's (the baked pets mirror only running limbs and dust).
     pub mirror: Option<Mirror>,
+    /// Whether a theme changes its sheets' colours (a pixel pack): every layer but the effects, unless it says.
+    pub themed: bool,
     pub default: String,
     /// Where a value the layer lacks goes next; `None` draws nothing for it (no headphones layer when off).
     pub fallback: BTreeMap<String, Option<String>>,
@@ -231,6 +233,7 @@ impl Layer {
             hit: false,
             glow: false,
             mirror: None,
+            themed: channel != Channel::Fx,
             default: default.to_owned(),
             fallback: BTreeMap::new(),
             animations: BTreeMap::new(),
@@ -422,14 +425,95 @@ fn offset(layer: &str, what: &str, d: (f64, f64)) -> Result<(), String> {
     }
 }
 
-/// A vector pack's named colours (straight 0xAARRGGBB), which its shapes, accent and glow may name, and which a
-/// recolour file may change.
-#[derive(Clone, Debug, Default, PartialEq)]
+/// At most this many themes on a pet, its own and the user's.
+pub const MAX_THEMES: usize = 64;
+
+/// The name of a pack's default theme when it doesn't give one.
+pub const DEFAULT_THEME: &str = "Default";
+
+/// A pack's named colours (straight 0xAARRGGBB), which are its default theme, and its other themes. A vector pack's
+/// shapes, accent and glow name them (`$robe`); a pixel pack's name exact colours in its sheets.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Palette {
     pub colours: BTreeMap<String, u32>,
     /// The colour the accent and the glow name, if they name one.
     pub accent: Option<String>,
     pub glow: Option<String>,
+    /// The default theme's name.
+    pub theme: String,
+    /// The other themes, in order: the pack's own, then the user's.
+    pub themes: Vec<Theme>,
+}
+
+impl Default for Palette {
+    fn default() -> Palette {
+        Palette {
+            colours: BTreeMap::new(),
+            accent: None,
+            glow: None,
+            theme: DEFAULT_THEME.to_owned(),
+            themes: Vec::new(),
+        }
+    }
+}
+
+/// A named colour theme: some of a palette's colours, changed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Theme {
+    pub name: String,
+    pub colours: BTreeMap<String, u32>,
+    /// For one of the user's themes, its file's name in the themes folder.
+    pub file: Option<String>,
+}
+
+impl Palette {
+    /// Every theme's name, the default first.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.theme.as_str()).chain(self.themes.iter().map(|t| t.name.as_str()))
+    }
+
+    /// The palette's colours in the theme `name`: the default's, with the theme's changes. `None` for a theme it
+    /// doesn't have.
+    pub fn in_theme(&self, name: &str) -> Option<BTreeMap<String, u32>> {
+        if name == self.theme {
+            return Some(self.colours.clone());
+        }
+        let theme = self.themes.iter().find(|t| t.name == name)?;
+        let mut colours = self.colours.clone();
+        colours.extend(theme.colours.iter().map(|(n, &c)| (n.clone(), c)));
+        Some(colours)
+    }
+
+    /// Whether `theme` can join the palette's themes: a name of its own, and only colours the palette names.
+    pub fn check(&self, theme: &Theme) -> Result<(), String> {
+        if !theme_name(&theme.name) {
+            return Err("its name is empty, or starts or ends with a space".to_owned());
+        }
+        if self.colours.is_empty() {
+            return Err("there are no named colours to change".to_owned());
+        }
+        if self.names().any(|n| n == theme.name) {
+            return Err("there is already a theme by that name".to_owned());
+        }
+        if self.themes.len() + 1 >= MAX_THEMES {
+            return Err(format!("there are too many themes (at most {MAX_THEMES})"));
+        }
+        for colour in theme.colours.keys() {
+            if !self.colours.contains_key(colour) {
+                let names: Vec<&str> = self.colours.keys().map(String::as_str).collect();
+                return Err(format!(
+                    "there is no colour named {colour:?} (the colours are {})",
+                    names.join(", ")
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Whether `name` will do as a theme's: not empty, and no space at either end.
+pub fn theme_name(name: &str) -> bool {
+    !name.trim().is_empty() && name.trim() == name
 }
 
 /// A pet.
@@ -451,8 +535,9 @@ pub struct Pack {
 }
 
 impl Pack {
-    /// The same pet in other colours: each named colour in `colours` replaces the palette's, wherever the pack
-    /// names it. A name the palette lacks is the reason it can't.
+    /// The same pet in other colours: each named colour in `colours` replaces the palette's, wherever the pack's
+    /// shapes, accent and glow name it (a pixel pack's sheets change with [`crate::load::LoadedPack::recoloured`]).
+    /// A name the palette lacks is the reason it can't.
     pub fn recolour(&mut self, colours: &BTreeMap<String, u32>) -> Result<(), String> {
         if self.palette.colours.is_empty() {
             return Err(format!("{} has no named colours to change", self.name));

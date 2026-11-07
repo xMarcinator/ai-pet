@@ -8,8 +8,24 @@
     22.0
   ],
   "mirror": "none",
-  "accent": "#E27A52",
-  "glow": "#7FEFFF",
+  "accent": "$accent",
+  "glow": "$eye",
+  "palette": {
+    "accent": "#E27A52",
+    "bezel": "#2A2F4D",
+    "blush": "#F08A7C",
+    "body": "#E47E55",
+    "deep": "#A24A2C",
+    "eye": "#7FEFFF",
+    "eyeHi": "#E4FFFF",
+    "eyeLo": "#3FB8D8",
+    "glint": "#3D4674",
+    "hi": "#F5A57D",
+    "outline": "#3E1C12",
+    "screen": "#171A2C",
+    "shade": "#C65F3B",
+    "spec": "#FFD6BC"
+  },
   "layers": [
     {
       "name": "body",
@@ -722,6 +738,7 @@
       "name": "fx",
       "channel": "fx",
       "hit": false,
+      "themed": true,
       "default": "zs",
       "fallback": {
         "alert+sparkles": "alert",

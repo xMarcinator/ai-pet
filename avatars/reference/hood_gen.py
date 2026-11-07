@@ -24,6 +24,14 @@ C = {  # avatars/hood-green.json
     "rimMid": "#1C7A3E",
 }
 
+# The pixel Hood's colours (Avatar::hood), as the vector Hood's Blue theme; rimMid is the same step between its body
+# and hi.
+BLUE = {
+    "outline": "#04050B", "deep": "#0A1330", "shade": "#0F1C45", "body": "#16285E", "hi": "#3E74E8",
+    "spec": "#8DBBFF", "screen": "#030409", "eye": "#66C8FF", "eyeHi": "#E8F7FF", "eyeLo": "#2F8FF0",
+    "glow": "#3D9BFF", "rimMid": "#264695",
+}
+
 # One outer silhouette: a round, slightly low hood with upright sides, flowing into a broad, grounded cloak.
 SILHOUETTE = ("M130 40 C166 40 190 62 192 100 L194 138 C204 146 210 158 212 174 C214 190 214 202 212 210 "
               "C190 218 166 220 130 220 C94 220 70 218 48 210 C46 202 46 190 48 174 C50 158 56 146 66 138 "
@@ -228,8 +236,8 @@ STYLE = ("<style>\n"
 # ------------------------------------------------------------------ the vector pack (--pack)
 
 def pack():
-    """The green Hood as a vector pack (vector_pack.py): its groups read back from figure() for every state. It has
-    no feet. The preview's "glow off" becomes sleep: asleep, the back aura goes out."""
+    """The Hood as a vector pack (vector_pack.py), in Green with a Blue theme: its groups read back from figure() for
+    every state. It has no feet. The preview's "glow off" becomes sleep: asleep, the back aura goes out."""
     d = vp.Drawing(figure, GROUND)
     a = vp.ANCHOR
     hold, lens = vp.ARMS["hold"], vp.ARMS["lens"]
@@ -263,7 +271,7 @@ def pack():
 
     return vp.named({
         "format_version": 1,
-        "name": "Hood (green, vector)",
+        "name": "Hood (vector)",
         "kind": "vector",
         "pixel_size": 1,
         "anchor": list(a),
@@ -274,11 +282,11 @@ def pack():
                    # the screen-left hand types; the screen-right one holds the magnifier as it scans
                    hand("hand-left", "bob-l", {"hold": typing}), hand("hand-right", "bob-r", {"lens": vp.scan_keys()}),
                    *vp.effect_layers(C["hi"], C["outline"], d.norm)],
-    }, C)
+    }, C, theme="Green", themes={"Blue": BLUE})
 
 
 def main():
-    folder = vp.pack_arg("hood-green-vector")
+    folder = vp.pack_arg("hood-vector")
     if folder:
         vp.write(folder, pack())
         return

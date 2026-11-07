@@ -8,8 +8,20 @@
   37
  ],
  "mirror": "none",
- "accent": "#F4B236",
- "glow": "#7FEFFF",
+ "accent": "$orange",
+ "glow": "$glow",
+ "palette": {
+  "outline": "#D89163",
+  "hi": "#F8EAB6",
+  "head": "#F5CD75",
+  "orange": "#F4B236",
+  "cream": "#F2EBD9",
+  "creamShade": "#E0D3B8",
+  "creamEdge": "#A5967A",
+  "eye": "#6B3F20",
+  "lid": "#C08A5C",
+  "glow": "#7FEFFF"
+ },
  "layers": [
   {
    "name": "body",

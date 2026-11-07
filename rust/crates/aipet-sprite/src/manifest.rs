@@ -3,8 +3,9 @@
 //! The reader takes the whole contract: kinds; layers bound to channels, with hit, glow and mirror; raster frames
 //! `[x, y, w, h, duration_ms]` with an optional `pivot`; loop modes and the pet clock; fallbacks (a `null` one draws
 //! nothing); look tables; and part motion (R18): parts with origins, shapes, poses with `transition_ms`, and keyframe
-//! part animations with `phase`. It asks for each sheet by name ([`read`]), so a loader from disk can check the path
-//! and the size first. Unknown keys are ignored.
+//! part animations with `phase`; and colour themes: a `palette` of named colours (the default theme, named by
+//! `theme`) and the other `themes`, each changing some of them. It asks for each sheet by name ([`read`]), so a loader
+//! from disk can check the path and the size first. Unknown keys are ignored.
 
 use std::collections::BTreeMap;
 
@@ -13,7 +14,8 @@ use serde_json::Value;
 
 use crate::bake::Sheet;
 use crate::pack::{
-    Animation, Art, Clock, Frame, Key, Kind, Layer, LoopMode, Mirror, Pack, Palette, Part, PartAnimation, Shape,
+    Animation, Art, Clock, DEFAULT_THEME, Frame, Key, Kind, Layer, LoopMode, Mirror, Pack, Palette, Part,
+    PartAnimation, Shape, Theme,
 };
 use crate::pose::{Channel, Look};
 use crate::vector::{self, Cap, Join};
@@ -32,9 +34,16 @@ struct PackJson {
     mirror: String,
     accent: String,
     glow: String,
-    /// Named colours that shapes, the accent and the glow may use as `$name` (vector packs).
+    /// The default theme's named colours: shapes, the accent and the glow may use them as `$name` (vector packs), or
+    /// they name exact colours in the sheets (pixel packs).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     palette: BTreeMap<String, String>,
+    /// The default theme's name ("Default" when there is none).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    theme: Option<String>,
+    /// The other themes, by name: each changes some of the palette's colours.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    themes: BTreeMap<String, BTreeMap<String, String>>,
     layers: Vec<LayerJson>,
 }
 
@@ -52,6 +61,9 @@ struct LayerJson {
     glow: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     mirror: Option<String>,
+    /// Whether a theme changes the layer's sheets, where it differs from the default (every layer but the effects).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    themed: Option<bool>,
     default: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     fallback: BTreeMap<String, Option<String>>,
@@ -219,9 +231,23 @@ pub fn write(pack: &Pack) -> String {
         pixel_size: pack.pixel_size,
         anchor: [pack.anchor.0, pack.anchor.1],
         mirror: mirror_name(pack.mirror).to_owned(),
-        accent: colour(pack.accent),
-        glow: colour(pack.glow),
-        palette: BTreeMap::new(),
+        accent: match &pack.palette.accent {
+            Some(name) => format!("${name}"),
+            None => colour(pack.accent),
+        },
+        glow: match &pack.palette.glow {
+            Some(name) => format!("${name}"),
+            None => colour(pack.glow),
+        },
+        palette: named(&pack.palette.colours),
+        theme: (pack.palette.theme != DEFAULT_THEME).then(|| pack.palette.theme.clone()),
+        themes: pack
+            .palette
+            .themes
+            .iter()
+            .filter(|t| t.file.is_none())
+            .map(|t| (t.name.clone(), named(&t.colours)))
+            .collect(),
         layers: pack
             .layers
             .iter()
@@ -231,6 +257,7 @@ pub fn write(pack: &Pack) -> String {
                 hit: l.hit,
                 glow: l.glow,
                 mirror: l.mirror.map(|m| mirror_name(m).to_owned()),
+                themed: (l.themed != (l.channel != Channel::Fx)).then_some(l.themed),
                 default: l.default.clone(),
                 fallback: l.fallback.clone(),
                 look: l.look.iter().map(|(k, v)| (k.key().to_owned(), [v.0, v.1])).collect(),
@@ -271,6 +298,26 @@ pub fn write(pack: &Pack) -> String {
     let mut text = serde_json::to_string_pretty(&json).expect("a pack's manifest always serialises");
     text.push('\n');
     text
+}
+
+/// Named colours as a manifest writes them.
+fn named(colours: &BTreeMap<String, u32>) -> BTreeMap<String, String> {
+    colours
+        .iter()
+        .map(|(n, &c)| (n.clone(), vector::colour_name(Some(c))))
+        .collect()
+}
+
+/// Named colours from a manifest or a theme file: each a colour (not `none`); `what` says whose, for the reason.
+pub(crate) fn colours(named: &BTreeMap<String, String>, what: &str) -> Result<BTreeMap<String, u32>, String> {
+    let mut out = BTreeMap::new();
+    for (name, value) in named {
+        let c = vector::colour(value)
+            .map_err(|e| format!("{what} colour {name:?}: {e}"))?
+            .ok_or_else(|| format!("{what} colour {name:?} is none"))?;
+        out.insert(name.clone(), c);
+    }
+    Ok(out)
 }
 
 /// The frames' pivots as a manifest writes them: none when every frame is placed by its top-left corner.
@@ -358,12 +405,41 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
         ));
     }
     let kind = Kind::parse(&json.kind).ok_or_else(|| format!("unknown kind {:?}", json.kind))?;
-    let mut palette = Palette::default();
-    for (name, value) in &json.palette {
-        let c = vector::colour(value)
-            .map_err(|e| format!("palette colour {name:?}: {e}"))?
-            .ok_or_else(|| format!("palette colour {name:?} is none"))?;
-        palette.colours.insert(name.clone(), c);
+    let mut palette = Palette {
+        colours: colours(&json.palette, "palette")?,
+        ..Palette::default()
+    };
+    if let Some(theme) = json.theme {
+        palette.theme = theme;
+    }
+    if kind == Kind::Painted && !(palette.colours.is_empty() && json.themes.is_empty()) {
+        return Err("a painted pack has no named colours or themes (its colours are blended)".to_owned());
+    }
+    if kind == Kind::Pixel {
+        // a theme swaps exact colours, so no two names may share one
+        let mut seen: BTreeMap<u32, &str> = BTreeMap::new();
+        for (name, &c) in &palette.colours {
+            if let Some(first) = seen.insert(c & 0x00FF_FFFF, name) {
+                return Err(format!(
+                    "palette colours {first:?} and {name:?} are the same colour: name each colour once"
+                ));
+            }
+        }
+    }
+    if !crate::pack::theme_name(&palette.theme) {
+        return Err(format!(
+            "the default theme's name {:?} is empty, or starts or ends with a space",
+            palette.theme
+        ));
+    }
+    for (name, named) in &json.themes {
+        let theme = Theme {
+            name: name.clone(),
+            colours: colours(named, &format!("theme {name:?}:"))?,
+            file: None,
+        };
+        palette.check(&theme).map_err(|e| format!("theme {name:?}: {e}"))?;
+        palette.themes.push(theme);
     }
     // a colour, or a palette colour by `$name`: the colour and the name
     let paint = |s: &str| -> Result<(Option<u32>, Option<String>), String> {
@@ -386,6 +462,9 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
         layer.hit = l.hit;
         layer.glow = l.glow;
         layer.mirror = l.mirror.as_deref().map(parse_mirror).transpose()?;
+        if let Some(themed) = l.themed {
+            layer.themed = themed;
+        }
         layer.fallback = l.fallback;
         layer.transition_ms = l.transition_ms;
         for (k, [dx, dy]) in l.look {

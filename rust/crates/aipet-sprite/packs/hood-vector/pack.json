@@ -1,6 +1,6 @@
 {
  "format_version": 1,
- "name": "Hood (green, vector)",
+ "name": "Hood (vector)",
  "kind": "vector",
  "pixel_size": 1,
  "anchor": [
@@ -22,6 +22,22 @@
   "eyeLo": "#22C45E",
   "glow": "#2BFF7A",
   "rimMid": "#1C7A3E"
+ },
+ "theme": "Green",
+ "themes": {
+  "Blue": {
+   "outline": "#04050B",
+   "deep": "#0A1330",
+   "shade": "#0F1C45",
+   "body": "#16285E",
+   "hi": "#3E74E8",
+   "spec": "#8DBBFF",
+   "eye": "#66C8FF",
+   "eyeHi": "#E8F7FF",
+   "eyeLo": "#2F8FF0",
+   "glow": "#3D9BFF",
+   "rimMid": "#264695"
+  }
  },
  "layers": [
   {

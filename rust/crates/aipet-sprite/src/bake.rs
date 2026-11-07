@@ -15,7 +15,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::avatar::Avatar;
-use crate::pack::{Animation, Art, Clock, Frame, Kind, Layer, LoopMode, Mirror, Pack};
+use crate::pack::{Animation, Art, Clock, Frame, Kind, Layer, LoopMode, Mirror, Pack, Palette, Theme};
 use crate::pet::{Cell, GH, GW, PIXELS};
 use crate::pose::{Channel, Look};
 
@@ -451,6 +451,12 @@ impl Making {
         }
     }
 
+    /// A theme changes this layer's colours, though it is an effects layer.
+    fn themed(mut self) -> Making {
+        self.layer.themed = true;
+        self
+    }
+
     fn still(mut self, value: &str, buf: Buf) -> Making {
         self.values
             .push((value.to_owned(), vec![(buf, 1000)], LoopMode::Once, Clock::Change));
@@ -620,7 +626,9 @@ pub fn bake(a: &Avatar) -> Baked {
             dust.layer.mirror = Some(Mirror::Flip);
             dust
         },
+        // the dots, notes and alert are drawn in the avatar's outline and accent: a theme changes them too
         Making::new("fx", Channel::Fx, "zs")
+            .themed()
             .timed("zs", sampled(20_000, draw_zs))
             .timed("dots", sampled(4000, |t| draw_dots(a, t)))
             .timed("notes", sampled(20_000, |t| draw_notes(a, t)))
@@ -654,10 +662,81 @@ pub fn bake(a: &Avatar) -> Baked {
             accent: a.accent,
             glow: a.glow,
             layers: done,
-            palette: Default::default(),
+            palette: palette(a),
         },
         sheets,
     }
+}
+
+/// An avatar's colours by their palette names, in the palette's order.
+fn named(a: &Avatar) -> [(&'static str, u32); 15] {
+    [
+        ("outline", a.outline),
+        ("deep", a.deep),
+        ("shade", a.shade),
+        ("body", a.body),
+        ("hi", a.hi),
+        ("spec", a.spec),
+        ("blush", a.blush_c),
+        ("screen", a.screen),
+        ("bezel", a.bezel),
+        ("glint", a.glint),
+        ("eye", a.eye),
+        ("eyeHi", a.eye_hi),
+        ("eyeLo", a.eye_lo),
+        ("glow", a.glow),
+        ("accent", a.accent),
+    ]
+}
+
+/// The baked pack's palette: each of the avatar's colours once, under the first name that has it, so that a theme
+/// changing one name never changes another's pixels. The accent and the glow name theirs.
+fn palette(a: &Avatar) -> Palette {
+    let mut p = Palette::default();
+    let mut by_colour: BTreeMap<u32, &str> = BTreeMap::new();
+    for (name, c) in named(a) {
+        if let std::collections::btree_map::Entry::Vacant(e) = by_colour.entry(c & 0x00FF_FFFF) {
+            e.insert(name);
+            p.colours.insert(name.to_owned(), c | 0xFF00_0000);
+        }
+    }
+    let name_of = |c: u32| {
+        let name = by_colour.get(&(c & 0x00FF_FFFF))?;
+        (p.colours[*name] == c).then(|| (*name).to_owned())
+    };
+    let (accent, glow) = (name_of(a.accent), name_of(a.glow));
+    Palette { accent, glow, ..p }
+}
+
+/// A theme named `name` for a pack baked from one avatar, from another avatar of the same drawing: its colours under
+/// the names the palette keeps.
+pub fn theme(palette: &Palette, name: &str, other: &Avatar) -> Theme {
+    let colours = named(other)
+        .into_iter()
+        .filter(|(n, _)| palette.colours.contains_key(*n))
+        .map(|(n, c)| (n.to_owned(), c | 0xFF00_0000))
+        .collect();
+    Theme {
+        name: name.to_owned(),
+        colours,
+        file: None,
+    }
+}
+
+/// The green Hood's avatar, as the repo's `avatars/hood-green.json` gives it.
+pub fn hood_green() -> Avatar {
+    Avatar::parse(include_str!("../../../../avatars/hood-green.json"), "hood-green")
+        .expect("avatars/hood-green.json is an avatar")
+}
+
+/// The built-in pixel pets as the bake makes them, by pack folder: Sprout, and Hood in Blue with its Green theme
+/// (`avatars/hood-green.json`).
+pub fn built_in() -> Vec<(&'static str, Baked)> {
+    let mut hood = bake(&Avatar::hood());
+    hood.pack.palette.theme = "Blue".to_owned();
+    let green = theme(&hood.pack.palette, "Green", &hood_green());
+    hood.pack.palette.themes.push(green);
+    vec![("sprout", bake(&Avatar::sprout())), ("hood", hood)]
 }
 
 // ------------------------------------------------------------------ avatar geometry

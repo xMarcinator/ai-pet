@@ -1,5 +1,5 @@
 //! Draws a vector pack in every state and expression as one PNG, for looking at it while drawing:
-//! `cargo run -p aipet-sprite --example pack_sheet -- <pack folder or recolour file> <out.png> [scale]`; `PACK_CASES=8,9` draws only
+//! `cargo run -p aipet-sprite --example pack_sheet -- <pack folder or theme file> <out.png> [scale]`; `PACK_CASES=8,9` draws only
 //! those.
 
 use std::path::Path;
@@ -16,14 +16,24 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let (dir, out) = (Path::new(&args[1]), Path::new(&args[2]));
     let scale: f64 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(3.0);
-    // a recolour file draws as the pet it makes, found beside it
+    // a theme file draws as its pet in that theme, the pet found among the built-ins or in the avatars folder
     let loaded = if dir.is_file() {
-        let found = load::all(dir.parent().unwrap());
-        let file = dir.file_name().unwrap().to_string_lossy();
-        if let Some(s) = found.skipped.iter().find(|s| s.file == file) {
-            panic!("{}", s.reason);
+        let theme = load::read_theme(dir).unwrap_or_else(|e| panic!("{e}"));
+        let (line, ok) = load::check(dir);
+        assert!(ok, "{line}");
+        let parent = dir.parent().unwrap();
+        let folder = if parent.ends_with(load::THEMES) {
+            parent.parent().unwrap()
+        } else {
+            parent
+        };
+        let found = load::all(folder);
+        let pet = found.pets.iter().find(|p| p.name() == theme.pet).unwrap();
+        let mut colours = pet.pack.palette.colours.clone();
+        for (name, value) in &theme.palette {
+            colours.insert(name.clone(), vector::colour(value).unwrap().unwrap());
         }
-        found.pets.last().unwrap().clone()
+        pet.recoloured(&colours).unwrap()
     } else {
         load::load_folder(dir).unwrap_or_else(|e| panic!("{e}"))
     };

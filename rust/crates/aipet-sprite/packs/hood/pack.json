@@ -8,8 +8,41 @@
     22.0
   ],
   "mirror": "none",
-  "accent": "#4A8CFF",
-  "glow": "#3D9BFF",
+  "accent": "$accent",
+  "glow": "$glow",
+  "palette": {
+    "accent": "#4A8CFF",
+    "bezel": "#070A16",
+    "body": "#16285E",
+    "deep": "#0A1330",
+    "eye": "#66C8FF",
+    "eyeHi": "#E8F7FF",
+    "eyeLo": "#2F8FF0",
+    "glow": "#3D9BFF",
+    "hi": "#3E74E8",
+    "outline": "#04050B",
+    "screen": "#030409",
+    "shade": "#0F1C45",
+    "spec": "#8DBBFF"
+  },
+  "theme": "Blue",
+  "themes": {
+    "Green": {
+      "accent": "#2FD36B",
+      "bezel": "#050D08",
+      "body": "#0F4422",
+      "deep": "#061F0F",
+      "eye": "#5CFF9C",
+      "eyeHi": "#E8FFF0",
+      "eyeLo": "#22C45E",
+      "glow": "#2BFF7A",
+      "hi": "#2FD36B",
+      "outline": "#030805",
+      "screen": "#020604",
+      "shade": "#0A3118",
+      "spec": "#A4FFC4"
+    }
+  },
   "layers": [
     {
       "name": "body",
@@ -722,6 +755,7 @@
       "name": "fx",
       "channel": "fx",
       "hit": false,
+      "themed": true,
       "default": "zs",
       "fallback": {
         "alert+sparkles": "alert",

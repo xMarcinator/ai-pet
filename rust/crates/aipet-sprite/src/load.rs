@@ -15,7 +15,7 @@ use serde_json::Value;
 use crate::avatar::{Avatar, AvatarJson, drawable, read_all_text};
 use crate::bake::{Sheet, bake};
 use crate::manifest::{self, decode_png, png_size};
-use crate::pack::{Animation, Art, Clock, Frame, Kind, Layer, LoopMode, Mirror, Pack, Part};
+use crate::pack::{Animation, Art, Clock, Frame, Kind, Layer, LoopMode, Mirror, Pack, Part, Theme};
 use crate::pose::{ART_H, ART_W, Channel, HALO_PAD};
 
 /// A manifest or an Aseprite export's JSON: at most 256 KB, nested at most 64 deep.
@@ -37,6 +37,68 @@ pub struct LoadedPack {
 impl LoadedPack {
     pub fn name(&self) -> &str {
         &self.pack.name
+    }
+
+    /// The pet in other colours, from its default theme: `colours` (by name) wherever its shapes, accent and glow
+    /// name them; for a pixel pack also each named colour's exact pixels (keeping their alpha) in the frames of every
+    /// themed layer, which is every layer but the effects unless it says. A name the pet lacks is the reason it can't.
+    pub fn recoloured(&self, colours: &BTreeMap<String, u32>) -> Result<LoadedPack, String> {
+        let mut pet = self.clone();
+        pet.pack.recolour(colours)?;
+        if self.pack.kind != Kind::Pixel {
+            return Ok(pet);
+        }
+        let swap: BTreeMap<u32, u32> = colours
+            .iter()
+            .filter_map(|(name, &to)| {
+                let from = self.pack.palette.colours.get(name)? & 0x00FF_FFFF;
+                (from != to & 0x00FF_FFFF).then_some((from, to & 0x00FF_FFFF))
+            })
+            .collect();
+        if swap.is_empty() {
+            return Ok(pet);
+        }
+        // the pixels the themed layers' frames cover, sheet by sheet (a sheet may hold several layers' frames)
+        let mut covered: Vec<Vec<bool>> = pet.sheets.iter().map(|_| Vec::new()).collect();
+        let frames = self
+            .pack
+            .layers
+            .iter()
+            .filter(|l| l.themed)
+            .flat_map(|l| l.animations.values())
+            .flat_map(|a| &a.frames);
+        for f in frames {
+            let Art::Raster { sheet, x, y, w, h, .. } = f.art else {
+                continue;
+            };
+            let Some(s) = pet.sheets.get(sheet) else {
+                continue;
+            };
+            let mask = &mut covered[sheet];
+            if mask.is_empty() {
+                *mask = vec![false; s.pixels.len()];
+            }
+            for row in y..(y + h).min(s.height) {
+                let at = (row * s.width) as usize;
+                mask[at + x as usize..at + (x + w).min(s.width) as usize].fill(true);
+            }
+        }
+        for (s, mask) in pet.sheets.iter_mut().zip(&covered) {
+            for (p, _) in s.pixels.iter_mut().zip(mask).filter(|(p, on)| **on && **p >> 24 != 0) {
+                if let Some(to) = swap.get(&(*p & 0x00FF_FFFF)) {
+                    *p = (*p & 0xFF00_0000) | to;
+                }
+            }
+        }
+        Ok(pet)
+    }
+
+    /// The pet in its theme `name`, from its default theme; `None` for a theme it hasn't.
+    pub fn in_theme(&self, name: &str) -> Option<LoadedPack> {
+        if name == self.pack.palette.theme {
+            return Some(self.clone());
+        }
+        self.recoloured(&self.pack.palette.in_theme(name)?).ok()
     }
 
     /// The built-in pet's embedded pack for `avatar`, else the avatar baked now.
@@ -64,8 +126,16 @@ pub struct Found {
     pub skipped: Vec<Skipped>,
 }
 
-/// The built-in pets, then those in `dir`, by name; a missing or unreadable folder gives just the built-ins.
+/// The built-in pets, then those in `dir`, by name, with the user's themes in its `themes` folder on them; a missing
+/// or unreadable folder gives just the built-ins.
 pub fn all(dir: &Path) -> Found {
+    let mut found = pets(dir);
+    themes(&mut found, &dir.join(THEMES), None);
+    found
+}
+
+/// The built-in pets, then those in `dir`, without the user's themes.
+fn pets(dir: &Path) -> Found {
     let mut found = Found {
         pets: crate::builtin::all(),
         skipped: Vec::new(),
@@ -75,48 +145,20 @@ pub fn all(dir: &Path) -> Found {
     };
     let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
     paths.sort();
-    // recolour files go last, so a pet in the folder can be a base
-    let mut recolours = Vec::new();
     for path in paths {
-        let file = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
+        let file = name_of(&path);
         let loaded = if path.is_dir() {
-            load_folder(&path)
-        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
-            if let Some(recolour) = recolour_file(&path) {
-                recolours.push((file, recolour));
+            // the user's themes, which are read once the pets are
+            if file == THEMES {
                 continue;
             }
+            load_folder(&path)
+        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
             load_legacy(&path)
         } else {
             continue;
         };
         keep(&mut found, file, loaded);
-    }
-    // a recolour of a recolour waits for its base: each pass takes those whose base is there
-    let mut waiting = recolours;
-    loop {
-        let before = waiting.len();
-        let mut later = Vec::new();
-        for (file, recolour) in waiting {
-            match recolour {
-                Ok(r) if !found.pets.iter().any(|p| p.name() == r.base) => later.push((file, Ok(r))),
-                recolour => {
-                    let loaded = recolour.and_then(|r| recoloured(&found.pets, r));
-                    keep(&mut found, file, loaded);
-                }
-            }
-        }
-        if later.is_empty() || later.len() == before {
-            for (file, recolour) in later {
-                let loaded = recolour.and_then(|r| recoloured(&found.pets, r));
-                keep(&mut found, file, loaded);
-            }
-            break;
-        }
-        waiting = later;
     }
     found
 }
@@ -133,53 +175,68 @@ fn keep(found: &mut Found, file: String, loaded: Result<LoadedPack, String>) {
     }
 }
 
-/// A recolour file: a vector pet by name in other colours, under a name of its own.
+/// The folder in the avatars folder that holds the user's themes, which is never read as a pack.
+pub const THEMES: &str = "themes";
+
+/// A theme file: a theme of the user's for a pet, by the pet's name: some of its named colours, changed.
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Recolour {
-    pub base: String,
-    pub name: String,
+pub struct ThemeFile {
+    pub pet: String,
+    pub theme: String,
     pub palette: BTreeMap<String, String>,
 }
 
-/// `path` read as a recolour file, if it is one (a JSON object with a `base`); `None` for anything else.
-fn recolour_file(path: &Path) -> Option<Result<Recolour, String>> {
-    if fs::metadata(path).ok()?.len() > MAX_MANIFEST {
-        return None;
-    }
-    let text = read_all_text(path).ok()?;
-    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
-    value.get("base")?;
-    Some(serde_json::from_value(value).map_err(|e| format!("the recolour file isn't valid: {e}")))
+/// `path` read as a theme file, or why it isn't one.
+pub fn read_theme(path: &Path) -> Result<ThemeFile, String> {
+    let text = read_json(path)?;
+    serde_json::from_str(&text).map_err(|e| format!("the theme file isn't valid: {e}"))
 }
 
-/// The pet `r` recolours, from `pets`, in its new colours and name.
-fn recoloured(pets: &[LoadedPack], r: Recolour) -> Result<LoadedPack, String> {
-    let base = pets
-        .iter()
-        .find(|p| p.name() == r.base)
-        .ok_or_else(|| format!("there is no pet named {:?} to recolour", r.base))?;
-    if base.pack.kind != Kind::Vector {
-        return Err(format!(
-            "{} isn't a vector pet: only vector pets can be recoloured",
-            r.base
-        ));
+/// The themes in `folder`, each put on its pet in file order; one that can't be is skipped with why. `except` is a
+/// file to leave out.
+fn themes(found: &mut Found, folder: &Path, except: Option<&std::ffi::OsStr>) {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return;
+    };
+    let mut paths: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")))
+        .filter(|p| except.is_none() || p.file_name() != except)
+        .collect();
+    paths.sort();
+    for path in paths {
+        let file = name_of(&path);
+        if let Err(reason) = read_theme(&path).and_then(|t| attach(&mut found.pets, &file, t)) {
+            found.skipped.push(Skipped {
+                file: format!("{THEMES}/{file}"),
+                reason,
+            });
+        }
     }
-    if r.name.trim().is_empty() {
-        return Err("the recolour has no name".to_owned());
+}
+
+/// Puts the theme `t`, from the file `file`, on its pet in `pets`, all or nothing.
+fn attach(pets: &mut [LoadedPack], file: &str, t: ThemeFile) -> Result<(), String> {
+    let pet = pets
+        .iter_mut()
+        .find(|p| p.name() == t.pet)
+        .ok_or_else(|| format!("there is no pet named {:?} for the theme", t.pet))?;
+    if pet.pack.kind == Kind::Painted {
+        return Err(format!("{} is a painted pet, which has no themes", t.pet));
     }
-    let mut colours = BTreeMap::new();
-    for (name, value) in &r.palette {
-        let c = crate::vector::colour(value)
-            .map_err(|e| format!("colour {name:?}: {e}"))?
-            .ok_or_else(|| format!("colour {name:?} is none"))?;
-        colours.insert(name.clone(), c);
-    }
-    let mut pet = base.clone();
-    pet.pack.name = r.name;
-    pet.pack.recolour(&colours)?;
-    pet.pack.validate()?;
-    Ok(pet)
+    let theme = Theme {
+        colours: manifest::colours(&t.palette, "the")?,
+        name: t.theme,
+        file: Some(file.to_owned()),
+    };
+    pet.pack
+        .palette
+        .check(&theme)
+        .map_err(|e| format!("{}'s theme {:?}: {e}", t.pet, theme.name))?;
+    pet.pack.palette.themes.push(theme);
+    Ok(())
 }
 
 /// A legacy ellipse avatar, baked into a pack: exactly the drawing the pet made of it before packs.
@@ -916,21 +973,13 @@ fn build_aseprite(src: AseSource, extra: Option<&str>) -> Result<(Pack, Vec<Shee
     Ok((pack, vec![src.sheet]))
 }
 
-/// `AiPet --check-pack <folder>`: the line to print and whether the pack loads.
+/// `AiPet --check-pack <folder or theme file>`: the line to print and whether the pack, or the theme, loads.
 pub fn check(folder: &Path) -> (String, bool) {
-    // a recolour file, checked against the built-ins and the pets beside it
-    if folder.is_file()
-        && let Some(recolour) = recolour_file(folder)
-    {
-        let found = all(folder.parent().unwrap_or(Path::new(".")));
-        let loaded = recolour.and_then(|r| recoloured(&found.pets, r));
-        return match loaded {
-            Ok(p) => (format!("OK {} (a recolour of a vector pet)", p.pack.name), true),
-            Err(reason) => (reason, false),
-        };
+    if folder.is_file() {
+        return check_theme(folder);
     }
     if !folder.is_dir() {
-        return (format!("{}: not a folder or a recolour file", folder.display()), false);
+        return (format!("{}: not a folder or a theme file", folder.display()), false);
     }
     match load_folder(folder) {
         Ok(p) => {
@@ -939,14 +988,43 @@ pub fn check(folder: &Path) -> (String, bool) {
                 Kind::Painted => "painted",
                 Kind::Vector => "vector",
             };
-            let line = format!(
-                "OK {} ({kind}, {} layers, {} frames)",
+            let mut line = format!(
+                "OK {} ({kind}, {} layers, {} frames",
                 p.pack.name,
                 p.pack.layers.len(),
                 p.pack.frame_count()
             );
+            if !p.pack.palette.themes.is_empty() {
+                let names: Vec<&str> = p.pack.palette.names().collect();
+                line += &format!(", themes {}", names.join(", "));
+            }
+            line.push(')');
             (line, true)
         }
+        Err(reason) => (reason, false),
+    }
+}
+
+/// A theme file, checked against its pet: a built-in, or one in the avatars folder it is in (the `themes` folder's
+/// parent), with the other themes there.
+fn check_theme(path: &Path) -> (String, bool) {
+    let parent = path.parent().unwrap_or(Path::new("."));
+    let in_themes = parent.file_name().is_some_and(|n| n == THEMES);
+    let mut found = pets(if in_themes {
+        parent.parent().unwrap_or(Path::new("."))
+    } else {
+        parent
+    });
+    if in_themes {
+        themes(&mut found, parent, path.file_name());
+    }
+    let file = name_of(path);
+    let checked = read_theme(path).and_then(|t| {
+        let line = format!("OK {} in {} (a theme)", t.pet, t.theme);
+        attach(&mut found.pets, &file, t).map(|()| line)
+    });
+    match checked {
+        Ok(line) => (line, true),
         Err(reason) => (reason, false),
     }
 }
@@ -995,10 +1073,9 @@ mod tests {
             [
                 "Sprout",
                 "Hood",
-                "Hood (green)",
                 "Pip",
                 "Pip (painted)",
-                "Hood (green, vector)",
+                "Hood (vector)",
                 "Hamster",
                 "Sprout (vector)",
                 "Hamster (pixel)",
@@ -1615,33 +1692,44 @@ mod tests {
     }
 
     #[test]
-    fn a_recolour_file_is_a_vector_pet_in_other_colours_under_its_own_name() {
-        let d = dir("recolour");
-        let write = |file: &str, text: &str| fs::write(d.join(file), text).unwrap();
+    fn a_theme_file_puts_a_theme_on_its_pet() {
+        let d = dir("themes");
+        let themes = d.join(THEMES);
+        fs::create_dir_all(&themes).unwrap();
+        let write = |file: &str, text: &str| fs::write(themes.join(file), text).unwrap();
         write(
             "hood-red.json",
-            r##"{"base": "Hood (green, vector)", "name": "Hood (red)", "palette": {"body": "#4A1010", "hi": "#FF5A3C"}}"##,
+            r##"{"pet": "Hood (vector)", "theme": "Red", "palette": {"body": "#4A1010", "hi": "#FF5A3C"}}"##,
+        );
+        write(
+            "sprout-mint.json",
+            r##"{"pet": "Sprout", "theme": "Mint", "palette": {"body": "#7FD8A0"}}"##,
         );
         write(
             "bad-name.json",
-            r##"{"base": "Pip", "name": "Pip (blue)", "palette": {"fur": "#3050FF"}}"##,
+            r##"{"pet": "Pip", "theme": "Blue", "palette": {"fur": "#3050FF"}}"##,
         );
-        write("bad-base.json", r##"{"base": "Nobody", "name": "X", "palette": {}}"##);
+        write("bad-pet.json", r##"{"pet": "Nobody", "theme": "X", "palette": {}}"##);
         write(
-            "pixel.json",
-            r##"{"base": "Sprout", "name": "Sprout (blue)", "palette": {}}"##,
+            "painted.json",
+            r##"{"pet": "Pip (painted)", "theme": "Blue", "palette": {}}"##,
         );
         write(
             "url.json",
-            r##"{"base": "Pip", "name": "Pip (url)", "palette": {"body": "url(http://x/y)"}}"##,
+            r##"{"pet": "Pip", "theme": "Url", "palette": {"body": "url(http://x/y)"}}"##,
+        );
+        write(
+            "clash.json",
+            r##"{"pet": "Hood", "theme": "Green", "palette": {"body": "#000000"}}"##,
         );
         let found = all(&d);
-        let green = found.pets.iter().find(|p| p.name() == "Hood (green, vector)").unwrap();
-        let red = found
-            .pets
-            .iter()
-            .find(|p| p.name() == "Hood (red)")
-            .expect("the recolour loads");
+        // the themes folder is never read as a pack
+        assert!(found.skipped.iter().all(|s| s.file != THEMES), "{:?}", found.skipped);
+        let pet = |name: &str| found.pets.iter().find(|p| p.name() == name).unwrap();
+        let hood = pet("Hood (vector)");
+        assert_eq!(hood.pack.palette.names().collect::<Vec<_>>(), ["Green", "Blue", "Red"]);
+        assert_eq!(hood.pack.palette.themes[1].file.as_deref(), Some("hood-red.json"));
+        let red = hood.in_theme("Red").unwrap();
         // the named colours changed everywhere they're used, the accent with them; nothing else did
         assert_eq!(red.pack.palette.colours["body"], 0xFF4A1010);
         assert_eq!(red.pack.accent, 0xFFFF5A3C);
@@ -1655,31 +1743,131 @@ mod tests {
                 .map(|s| s.fill)
                 .collect()
         };
-        assert!(!fills(red, "body").is_empty());
-        assert!(fills(red, "body").iter().all(|&f| f == Some(0xFF4A1010)));
-        assert_eq!(fills(red, "eye"), fills(green, "eye"));
+        assert!(!fills(&red, "body").is_empty());
+        assert!(fills(&red, "body").iter().all(|&f| f == Some(0xFF4A1010)));
+        assert_eq!(fills(&red, "eye"), fills(hood, "eye"));
+        // a pixel pet takes a theme of the user's too
+        let sprout = pet("Sprout");
+        let mint = sprout.in_theme("Mint").unwrap();
+        let body = sprout.pack.palette.colours["body"];
+        let count = |p: &LoadedPack, c: u32| p.sheets[0].pixels.iter().filter(|&&px| px == c).count();
+        assert!(count(sprout, body) > 0);
+        assert_eq!(count(&mint, body), 0);
+        assert_eq!(count(&mint, 0xFF7FD8A0), count(sprout, body));
         let reason = |file: &str| {
             found
                 .skipped
                 .iter()
-                .find(|s| s.file == file)
+                .find(|s| s.file == format!("themes/{file}"))
                 .map(|s| s.reason.clone())
-                .unwrap_or_else(|| panic!("{file} wasn't skipped"))
+                .unwrap_or_else(|| panic!("{file} wasn't skipped: {:?}", found.skipped))
         };
         assert!(
             reason("bad-name.json").contains("no colour named \"fur\""),
             "{}",
             reason("bad-name.json")
         );
-        assert!(reason("bad-base.json").contains("no pet named \"Nobody\""));
-        assert!(reason("pixel.json").contains("only vector pets"));
-        assert!(reason("url.json").contains("colour"));
-        // --check-pack takes the file too
-        assert_eq!(
-            check(&d.join("hood-red.json")),
-            ("OK Hood (red) (a recolour of a vector pet)".into(), true)
+        assert!(reason("bad-pet.json").contains("no pet named \"Nobody\""));
+        assert!(reason("painted.json").contains("painted pet"));
+        assert!(reason("url.json").contains("colour \"body\""), "{}", reason("url.json"));
+        assert!(
+            reason("clash.json").contains("already a theme"),
+            "{}",
+            reason("clash.json")
         );
-        assert!(!check(&d.join("bad-name.json")).1);
+        assert_eq!(found.skipped.len(), 5);
+        // --check-pack takes a theme file, against the others in its folder
+        assert_eq!(
+            check(&themes.join("hood-red.json")),
+            ("OK Hood (vector) in Red (a theme)".into(), true)
+        );
+        assert!(!check(&themes.join("bad-name.json")).1);
+        let samples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../avatars/samples");
+        assert_eq!(
+            check(&samples.join("themes/hood-red.json")),
+            ("OK Hood (vector) in Red (a theme)".into(), true)
+        );
+    }
+
+    #[test]
+    fn a_pixel_theme_swaps_exact_colours_and_leaves_the_effects_alone() {
+        let hamster = crate::builtin::all()
+            .into_iter()
+            .find(|p| p.name() == "Hamster (pixel)")
+            .unwrap();
+        let orange = hamster.pack.palette.colours["orange"];
+        assert_eq!(hamster.pack.accent, orange);
+        let blue = hamster
+            .recoloured(&BTreeMap::from([("orange".to_owned(), 0xFF3050FF)]))
+            .unwrap();
+        assert_eq!(blue.pack.accent, 0xFF3050FF);
+        for (i, layer) in hamster.pack.layers.iter().enumerate() {
+            let (before, after) = (&hamster.sheets[i].pixels, &blue.sheets[i].pixels);
+            if layer.themed {
+                for (&p, &q) in before.iter().zip(after) {
+                    let want = if p & 0x00FF_FFFF == orange & 0x00FF_FFFF && p >> 24 != 0 {
+                        (p & 0xFF00_0000) | 0x3050FF
+                    } else {
+                        p
+                    };
+                    assert_eq!(q, want, "layer {}", layer.name);
+                }
+            } else {
+                assert_eq!(before, after, "the effects layer {} is as it was", layer.name);
+            }
+        }
+        assert_ne!(hamster.sheets[0], blue.sheets[0], "the body is orange somewhere");
+        let fx = hamster.pack.layers.iter().position(|l| l.name == "fx").unwrap();
+        assert!(hamster.sheets[fx].pixels.contains(&orange), "the notes take the accent");
+        assert!(
+            hamster
+                .recoloured(&BTreeMap::from([("fur".to_owned(), 0xFF3050FF)]))
+                .unwrap_err()
+                .contains("no colour named \"fur\"")
+        );
+    }
+
+    #[test]
+    fn a_pack_carries_its_themes_and_a_bad_one_is_the_reason_it_is_skipped() {
+        let pack = |kind: &str, palette: &str, extra: &str| {
+            format!(
+                r##"{{"format_version": 1, "name": "P", "kind": "{kind}", "pixel_size": 1, "anchor": [65, 110],
+                "accent": "#FFE08A", "glow": "#FFE08A", "palette": {palette}{extra}, "layers": [
+                  {{"name": "body", "channel": "state", "default": "idle",
+                    "shapes": {{"idle": {{"d": "M0 0 L 1 1", "fill": "$fur"}}}}}}]}}"##
+            )
+        };
+        let read = |text: String| manifest::read(&text, |_| Err("no sheets".into())).map(|(p, _)| p);
+        let fur = r##"{"fur": "#3050FF", "eye": "#FFFFFF"}"##;
+        let p = read(pack(
+            "vector",
+            fur,
+            r##", "theme": "Blue", "themes": {"Red": {"fur": "#FF3020"}, "Grey": {"fur": "#808080", "eye": "#000000"}}"##,
+        ))
+        .unwrap();
+        assert_eq!(p.palette.names().collect::<Vec<_>>(), ["Blue", "Grey", "Red"]);
+        assert_eq!(p.palette.in_theme("Red").unwrap()["fur"], 0xFFFF3020);
+        assert_eq!(p.palette.in_theme("Red").unwrap()["eye"], 0xFFFFFFFF);
+        assert_eq!(p.palette.in_theme("Purple"), None);
+        assert_eq!(read(pack("vector", fur, "")).unwrap().palette.theme, "Default");
+        let bad = |extra: &str| read(pack("vector", fur, extra)).unwrap_err();
+        assert!(bad(r##", "themes": {"Red": {"skin": "#FF3020"}}"##).contains("no colour named \"skin\""));
+        assert!(bad(r##", "themes": {"Red": {"fur": "url(x)"}}"##).contains("theme \"Red\""));
+        assert!(bad(r##", "themes": {"Red": {"fur": "none"}}"##).contains("is none"));
+        assert!(bad(r##", "theme": "Red", "themes": {"Red": {"fur": "#FF3020"}}"##).contains("already a theme"));
+        assert!(bad(r##", "theme": " ""##).contains("default theme's name"));
+        // a painted pack's colours are blended: no themes
+        assert!(
+            read(pack("painted", fur, ""))
+                .unwrap_err()
+                .contains("a painted pack has no named colours")
+        );
+        // a pixel pack names each colour once, since a theme swaps exact colours
+        let twice = manifest::read(&pack("pixel", r##"{"fur": "#3050FF", "body": "#3050FF"}"##, ""), |_| {
+            Err("no sheets".into())
+        })
+        .unwrap_err();
+        assert!(twice.contains("the same colour"), "{twice}");
     }
 
     #[test]

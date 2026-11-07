@@ -372,7 +372,7 @@ def dust():
                   **{v: None for v in FX_VALUES if v not in ("dust", "dust+sparkles")}})
 
 
-# the colours a recolour may change, by name
+# the colours a theme may change, by name
 NAMED = {"body": PET, "shade": SHADE, "belly": BELLY, "cheek": CHEEK, "leaf": LEAF, "eyes": EYE}
 
 

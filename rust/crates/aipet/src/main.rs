@@ -52,8 +52,9 @@ const X11: bool = cfg!(all(
     not(any(target_os = "macos", target_os = "ios", target_os = "android"))
 ));
 
-/// `AiPet --check-pack <folder>`: loads the pack as the pet would, with the same limits, and prints `OK <name>
-/// (<kind>, <layers> layers, <frames> frames)` (exit 0) or why it can't (exit 1). It never starts the pet or writes.
+/// `AiPet --check-pack <folder or theme file>`: loads the pack as the pet would, with the same limits, and prints `OK
+/// <name> (<kind>, <layers> layers, <frames> frames[, themes <names>])` (exit 0) or why it can't (exit 1); a theme file
+/// is put on its pet (`OK <pet> in <theme> (a theme)`). It never starts the pet or writes.
 fn check_pack(folder: Option<std::ffi::OsString>) -> ExitCode {
     // a GUI app on Windows has no console of its own: print to the one it was started from
     #[cfg(windows)]
@@ -62,7 +63,7 @@ fn check_pack(folder: Option<std::ffi::OsString>) -> ExitCode {
         windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS);
     }
     let Some(folder) = folder else {
-        eprintln!("usage: AiPet --check-pack <folder>");
+        eprintln!("usage: AiPet --check-pack <folder or theme file>");
         return ExitCode::FAILURE;
     };
     let (line, ok) = aipet_sprite::load::check(std::path::Path::new(&folder));
@@ -280,6 +281,7 @@ impl aipet_ui::Host for App {
             config.on_top = prefs.on_top;
             config.music = prefs.music;
             config.avatar = prefs.avatar.clone();
+            config.avatar_theme = prefs.avatar_theme.clone();
         });
         if let Err(e) = written {
             aipet_core::log::write(&format!("config: can't write config.json: {e}"));

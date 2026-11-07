@@ -44,7 +44,7 @@ fn generate(generator: &str, out: &Path) {
 #[test]
 fn the_vector_packs_are_what_their_generators_write() {
     for (generator, folder) in [
-        ("hood_gen.py", "hood-green-vector"),
+        ("hood_gen.py", "hood-vector"),
         ("hamster_gen.py", "hamster-vector"),
         ("sprout_gen.py", "sprout-vector"),
         ("hamster_pixel_gen.py", "hamster-pixel"),

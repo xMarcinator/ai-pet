@@ -118,6 +118,8 @@ pub enum Message {
     /// A menu item was chosen. The shell closes the menu.
     Menu(MenuItem),
     SelectAvatar(usize),
+    /// Wear the worn pet in its theme by this name.
+    SelectTheme(String),
     SetBubbles(bool),
     SetOnTop(bool),
     SetMusic(bool),
@@ -171,14 +173,17 @@ impl From<News> for Message {
     }
 }
 
-/// The pet's preferences, as `config.json` keeps them (`Pills`, `OnTop`, `Music`, `Avatar`).
+/// The pet's preferences, as `config.json` keeps them (`Pills`, `OnTop`, `Music`, `Avatar`, `AvatarTheme`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Prefs {
     pub bubbles: bool,
     pub on_top: bool,
     pub music: bool,
-    /// The avatar's name; the first avatar when none or an unknown one.
+    /// The avatar's name; the first avatar when none or an unknown one. An older name for a pet in one of its themes,
+    /// "<pet> (<theme>)" such as "Hood (green)", is that pet in that theme.
     pub avatar: Option<String>,
+    /// The avatar's colour theme; its default when none or one it hasn't.
+    pub avatar_theme: Option<String>,
 }
 
 impl From<&Config> for Prefs {
@@ -188,6 +193,7 @@ impl From<&Config> for Prefs {
             on_top: config.on_top,
             music: config.music,
             avatar: config.avatar.clone(),
+            avatar_theme: config.avatar_theme.clone(),
         }
     }
 }
@@ -331,9 +337,11 @@ pub struct PetUi {
     skipped: Vec<aipet_sprite::load::Skipped>,
     /// Device px per logical px on the pet's output, as the shell says: a pixel pack's pixels are snapped to them.
     scale: f32,
-    /// Each avatar standing still, for the picker.
+    /// Each avatar standing still, for the picker: the worn one in its theme, the others in their default.
     stills: Vec<Handle>,
     avatar: usize,
+    /// The worn avatar's theme: one it has.
+    theme: String,
     stacks: Stacks,
     /// The core's last Board, if one came.
     board: Option<Arc<Board>>,
@@ -415,6 +423,35 @@ impl FrameTimes {
     }
 }
 
+/// The avatar and theme the preferences name: the avatar by its name, or by an older "<pet> (<theme>)" name for one
+/// of a pet's themes (any case), as "Hood (green)" names the Hood in Green; else the first. The theme is the one
+/// the preferences name, else the one the older name does, else the avatar's default.
+fn choose(avatars: &[aipet_sprite::load::LoadedPack], prefs: &Prefs) -> (usize, String) {
+    let name = prefs.avatar.as_deref().unwrap_or_default();
+    let by_name = avatars.iter().position(|a| a.name() == name).map(|i| (i, None));
+    let by_theme = || {
+        avatars.iter().enumerate().find_map(|(i, a)| {
+            let theme = name.strip_prefix(a.name())?.strip_prefix(" (")?.strip_suffix(')')?;
+            let theme = a.pack.palette.names().find(|t| t.eq_ignore_ascii_case(theme))?;
+            Some((i, Some(theme.to_owned())))
+        })
+    };
+    let (i, old) = by_name.or_else(by_theme).unwrap_or((0, None));
+    let palette = &avatars[i].pack.palette;
+    let theme = prefs
+        .avatar_theme
+        .clone()
+        .filter(|t| palette.names().any(|n| n == t))
+        .or(old)
+        .unwrap_or_else(|| palette.theme.clone());
+    (i, theme)
+}
+
+/// `pet` in its theme `theme`, which it has.
+fn themed(pet: &aipet_sprite::load::LoadedPack, theme: &str) -> aipet_sprite::load::LoadedPack {
+    pet.in_theme(theme).unwrap_or_else(|| pet.clone())
+}
+
 /// Whether the pet reduces its motion: `AIPET_REDUCE_MOTION=1`, or the system asks (as the platform reads it).
 fn reduce_motion(platform: &dyn Platform) -> bool {
     std::env::var_os("AIPET_REDUCE_MOTION").is_some_and(|v| v == "1") || platform.reduced_motion()
@@ -426,15 +463,12 @@ impl PetUi {
     pub fn new(setup: Setup) -> Self {
         let found = aipet_sprite::load::all(&setup.avatars);
         let (avatars, skipped) = (found.pets, found.skipped);
-        let avatar = setup
-            .prefs
-            .avatar
-            .as_deref()
-            .and_then(|name| avatars.iter().position(|a| a.name() == name))
-            .unwrap_or(0);
-        let stills = avatars.iter().map(sprite::still).collect();
+        let (avatar, theme) = choose(&avatars, &setup.prefs);
+        let worn = themed(&avatars[avatar], &theme);
+        let mut stills: Vec<Handle> = avatars.iter().map(sprite::still).collect();
+        stills[avatar] = sprite::still(&worn);
         let mut pet = Pet::new();
-        pet.set_pack(avatars[avatar].clone());
+        pet.set_pack(worn.clone());
         pet.set_reduced_motion(reduce_motion(&*setup.platform));
         PetUi {
             host: setup.host,
@@ -444,7 +478,7 @@ impl PetUi {
             start: None,
             t: 0.0,
             motion: Motion::REST,
-            sprite: Sprite::new(&avatars[avatar]),
+            sprite: Sprite::new(&worn),
             sprite_rects: Vec::new(),
             shadow: sprite::shadow_image(),
             avatars,
@@ -452,6 +486,7 @@ impl PetUi {
             scale: 1.0,
             stills,
             avatar,
+            theme,
             stacks: Stacks::default(),
             board: None,
             show: Vec::new(),
@@ -802,9 +837,17 @@ impl PetUi {
             },
             Message::SelectAvatar(i) => {
                 if let Some(avatar) = self.avatars.get(i).filter(|_| i != self.avatar) {
-                    self.avatar = i;
-                    self.pet.set_pack(avatar.clone());
-                    self.sprite = Sprite::new(avatar);
+                    let theme = avatar.pack.palette.theme.clone();
+                    // the theme editor was for the pet taken off
+                    self.settings.avatars.theme = None;
+                    self.wear(i, &theme);
+                    self.save_prefs();
+                }
+            }
+            Message::SelectTheme(theme) => {
+                let has = self.avatars[self.avatar].pack.palette.names().any(|n| n == theme);
+                if has && theme != self.theme {
+                    self.wear(self.avatar, &theme);
                     self.save_prefs();
                 }
             }
@@ -914,14 +957,43 @@ impl PetUi {
         Effect::OpenSettings
     }
 
-    /// The preferences now.
+    /// The preferences now: the avatar's theme only when it isn't the avatar's default.
     pub fn prefs(&self) -> Prefs {
+        let avatar = &self.avatars[self.avatar];
         Prefs {
             bubbles: self.bubbles,
             on_top: self.on_top,
             music: self.music,
-            avatar: Some(self.avatars[self.avatar].name().to_owned()),
+            avatar: Some(avatar.name().to_owned()),
+            avatar_theme: (self.theme != avatar.pack.palette.theme).then(|| self.theme.clone()),
         }
+    }
+
+    /// The worn avatar's theme.
+    pub fn theme(&self) -> &str {
+        &self.theme
+    }
+
+    /// Puts on the avatar `i` in its theme `theme` (its default when it hasn't one by that name). The picker's stills
+    /// follow: the one taken off in its default, the one put on in its theme.
+    fn wear(&mut self, i: usize, theme: &str) {
+        let base = &self.avatars[i];
+        let theme = if base.pack.palette.names().any(|n| n == theme) {
+            theme.to_owned()
+        } else {
+            base.pack.palette.theme.clone()
+        };
+        let worn = themed(base, &theme);
+        if i != self.avatar
+            && let Some(old) = self.avatars.get(self.avatar)
+        {
+            self.stills[self.avatar] = sprite::still(old);
+        }
+        self.stills[i] = sprite::still(&worn);
+        self.avatar = i;
+        self.theme = theme;
+        self.pet.set_pack(worn.clone());
+        self.sprite = Sprite::new(&worn);
     }
 
     fn save_prefs(&mut self) {
@@ -1682,6 +1754,7 @@ pub(crate) mod tests {
                 on_top: false,
                 music: true,
                 avatar: Some("Hood".into()),
+                avatar_theme: None,
             },
             ..Setup::detached()
         });
@@ -1692,7 +1765,8 @@ pub(crate) mod tests {
                 bubbles: false,
                 on_top: false,
                 music: true,
-                avatar: Some("Hood".into())
+                avatar: Some("Hood".into()),
+                avatar_theme: None,
             }
         );
         assert_eq!(ui.update(Message::SetOnTop(true)), Some(Effect::OnTop(true)));
@@ -1707,7 +1781,8 @@ pub(crate) mod tests {
                 bubbles: true,
                 on_top: true,
                 music: true,
-                avatar: Some("Sprout".into())
+                avatar: Some("Sprout".into()),
+                avatar_theme: None,
             })
         );
         // an avatar it doesn't know: the first
@@ -1719,6 +1794,44 @@ pub(crate) mod tests {
             ..Setup::detached()
         });
         assert_eq!(ui.avatar, 0);
+    }
+
+    #[test]
+    fn the_avatar_wears_its_theme_and_an_older_name_for_a_theme_still_works() {
+        let start = |avatar: &str, theme: Option<&str>| {
+            PetUi::new(Setup {
+                prefs: Prefs {
+                    avatar: Some(avatar.into()),
+                    avatar_theme: theme.map(str::to_owned),
+                    ..Prefs::default()
+                },
+                ..Setup::detached()
+            })
+        };
+        let hood = |ui: &PetUi| ui.avatars.iter().find(|a| a.name() == "Hood").unwrap().clone();
+        // "Hood (green)" was a pet of its own: it is the Hood in Green now
+        let ui = start("Hood (green)", None);
+        assert_eq!((ui.avatars[ui.avatar].name(), ui.theme()), ("Hood", "Green"));
+        assert_eq!(ui.pet.loaded(), hood(&ui).in_theme("Green").unwrap());
+        assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood"));
+        assert_eq!(ui.prefs().avatar_theme.as_deref(), Some("Green"));
+        // the accent follows the theme
+        assert_eq!(ui.pet.pack().accent, 0xFF2FD36B);
+        // a theme it hasn't is its default, and the default isn't kept
+        let mut ui = start("Hood", Some("Purple"));
+        assert_eq!(ui.theme(), "Blue");
+        assert_eq!(ui.prefs().avatar_theme, None);
+        ui.update(Message::SelectTheme("Green".into()));
+        assert_eq!(ui.theme(), "Green");
+        assert_eq!(ui.pet.loaded(), hood(&ui).in_theme("Green").unwrap());
+        ui.update(Message::SelectTheme("Purple".into()));
+        assert_eq!(ui.theme(), "Green", "not a theme it has");
+        // another pet goes on in its default
+        ui.update(Message::SelectAvatar(0));
+        assert_eq!((ui.avatars[ui.avatar].name(), ui.theme()), ("Sprout", "Default"));
+        let ui = start("Hood (vector)", Some("Blue"));
+        assert_eq!(ui.theme(), "Blue");
+        assert_eq!(start("Hood (vector)", None).theme(), "Green");
     }
 
     #[test]

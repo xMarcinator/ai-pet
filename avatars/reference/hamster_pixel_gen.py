@@ -52,6 +52,11 @@ PALETTE = {
     "t": "#7FEFFF",  # the screen's glow
 }
 
+# The colours a theme may change, by name: each an exact colour in the sheets of every layer but the effects (the
+# headphones' and laptop's darks, the white and the props' and effects' colours stay).
+NAMED = {"outline": "O", "hi": "L", "head": "Y", "orange": "R", "cream": "C", "creamShade": "S", "creamEdge": "G",
+         "eye": "E", "lid": "e", "glow": "t"}
+
 # The reference, cell for cell (" " is see-through).
 HAMSTER = [
     "   OOOO        OOOOO        ",
@@ -421,8 +426,9 @@ def pack():
         "pixel_size": PIXEL,
         "anchor": list(ANCHOR),
         "mirror": "none",
-        "accent": "#F4B236",
-        "glow": "#7FEFFF",
+        "accent": "$orange",
+        "glow": "$glow",
+        "palette": {name: PALETTE[c] for name, c in NAMED.items()},
         "layers": layers,
     }
     return manifest, sheets

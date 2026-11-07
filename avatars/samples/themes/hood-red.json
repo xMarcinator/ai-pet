@@ -1,6 +1,6 @@
 {
-  "base": "Hood (green, vector)",
-  "name": "Hood (red)",
+  "pet": "Hood (vector)",
+  "theme": "Red",
   "palette": {
     "deep": "#1F0606",
     "shade": "#310A0A",

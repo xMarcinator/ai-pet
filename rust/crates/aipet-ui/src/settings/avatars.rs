@@ -1,14 +1,16 @@
 //! Settings' Avatars page (`SettingsWindow.axaml.cs:214-261`): every avatar as a still with its accent's dot, to pick
-//! one (the pet wears it, and Settings takes its colour), then "Your own avatars": Reload, and Open folder, which
-//! makes the avatars folder first if it is missing; and Recolour, which makes a new pet from a vector one in colours
-//! you pick, saved as a recolour file in the avatars folder.
+//! one (the pet wears it, and Settings takes its colour); under them the worn pet's colour themes, to pick one, and
+//! New theme, which opens an editor on the pet in its theme, saved as a theme file in the avatars folder's `themes`
+//! folder (the user's own themes can be edited and deleted too); then "Your own avatars": Reload, and Open folder,
+//! which makes the avatars folder first if it is missing.
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::path::Path;
 
 use aipet_sprite::Avatar;
-use aipet_sprite::load::{self, LoadedPack};
-use aipet_sprite::pack::Kind;
+use aipet_sprite::load::{self, LoadedPack, THEMES};
+use aipet_sprite::pack::{Kind, Theme};
 use iced::widget::image::FilterMethod;
 use iced::widget::{Row, button, column, container, image, row, text, text_input, tooltip};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
@@ -25,33 +27,44 @@ pub struct Avatars {
     gone: Option<usize>,
     /// Why Open folder couldn't make the avatars folder, under "Your own avatars".
     pub folder_error: Option<String>,
-    /// The recolour being made, while the editor is open.
-    pub recolour: Option<Recolouring>,
+    /// The theme being made or edited, while the editor is open.
+    pub theme: Option<Theming>,
+    /// Why a theme couldn't be deleted, under the themes.
+    pub theme_error: Option<String>,
 }
 
-/// A new pet being made from a vector one: its name, and each named colour as typed.
+/// A theme being made or edited for the worn pet: its name, and each named colour as typed.
 #[derive(Debug)]
-pub struct Recolouring {
-    pub base: String,
+pub struct Theming {
+    pub pet: String,
+    /// The user's theme being edited, by the name it had when the editor opened; `None` for a new theme.
+    pub editing: Option<String>,
     pub name: String,
-    /// The base's colour names, in its palette's order, each with its text.
+    /// The pet's colour names, in its palette's order, each with its text.
     pub colours: Vec<(String, String)>,
-    /// The new colours on the base, standing idle.
+    /// The colours on the pet, standing idle.
     preview: Option<image::Handle>,
     pub error: Option<String>,
 }
 
-/// The vector pets a recolour can start from.
-fn bases(pet: &PetUi) -> impl Iterator<Item = &LoadedPack> {
-    shown(pet)
-        .map(|(_, a)| a)
-        .filter(|a| a.pack.kind == Kind::Vector && !a.pack.palette.colours.is_empty())
+/// The theme being made or edited, if the editor is open.
+#[doc(hidden)]
+pub fn theming(pet: &PetUi) -> Option<&Theming> {
+    pet.settings.avatars.theme.as_ref()
 }
 
-/// The recolour being made, if the editor is open.
+/// The worn pet's themes as the page shows them, in order: each one's name, whether it is worn, and whether it is
+/// one of the user's (which Edit and Delete take).
 #[doc(hidden)]
-pub fn recolouring(pet: &PetUi) -> Option<&Recolouring> {
-    pet.settings.avatars.recolour.as_ref()
+pub fn themes(pet: &PetUi) -> Vec<(&str, bool, bool)> {
+    let palette = &pet.avatars[pet.avatar].pack.palette;
+    if palette.colours.is_empty() {
+        return Vec::new();
+    }
+    std::iter::once((palette.theme.as_str(), false))
+        .chain(palette.themes.iter().map(|t| (t.name.as_str(), t.file.is_some())))
+        .map(|(name, own)| (name, name == pet.theme, own))
+        .collect()
 }
 
 /// The tiles the page draws, in order: each avatar's name, and whether it is the one worn. The worn avatar's tile is
@@ -61,7 +74,7 @@ pub fn tiles(pet: &PetUi) -> Vec<(&str, bool)> {
     shown(pet).map(|(i, avatar)| (avatar.name(), i == pet.avatar)).collect()
 }
 
-/// The pet worn, as drawn: its pack and sheets.
+/// The pet worn, as drawn: its pack and sheets, in its theme.
 #[doc(hidden)]
 pub fn worn(pet: &PetUi) -> LoadedPack {
     pet.pet.loaded()
@@ -72,21 +85,26 @@ fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &LoadedPack)> {
     pet.avatars.iter().enumerate().filter(move |&(i, _)| Some(i) != gone)
 }
 
-/// What the Avatars page sends of its own (picking an avatar sends the pet's [`crate::Message::SelectAvatar`]).
+/// What the Avatars page sends of its own (picking an avatar sends the pet's [`crate::Message::SelectAvatar`], and
+/// picking a theme its [`crate::Message::SelectTheme`]).
 #[derive(Clone, Debug)]
 pub enum Message {
     /// Read the avatars folder again.
     Reload,
     /// Open the avatars folder, made first if it is missing.
     OpenFolder,
-    /// Start a recolour of the vector pet with this name.
-    Recolour(String),
-    RecolourName(String),
-    /// A colour's text, by its index in the base's palette.
-    RecolourColour(usize, String),
-    /// Save the recolour as a file in the avatars folder, read the folder again and wear it.
-    SaveRecolour,
-    CancelRecolour,
+    /// Open the editor on a new theme for the worn pet, from its theme now.
+    NewTheme,
+    /// Open the editor on the worn pet's theme of the user's by this name.
+    EditTheme(String),
+    /// Delete the worn pet's theme of the user's by this name: its file goes.
+    DeleteTheme(String),
+    ThemeName(String),
+    /// A colour's text, by its index in the pet's palette.
+    ThemeColour(usize, String),
+    /// Save the theme as a file in the themes folder, read the avatars folder again and wear the pet in it.
+    SaveTheme,
+    CancelTheme,
 }
 
 pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
@@ -180,7 +198,6 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
         buttons,
     );
     let mut own = column![own].spacing(8);
-    own = own.push(recolour_view(pet, accent, folder));
     if let Some(line) = &pet.settings.avatars.folder_error {
         own = own.push(status(line.as_str(), Tone::Bad));
     }
@@ -191,45 +208,66 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
             Tone::Bad,
         ));
     }
-    column![grid, card(own)]
+    column![grid, card(themes_view(pet, accent, folder)), card(own)]
         .spacing(16)
         .padding(iced::Padding::ZERO.top(10).bottom(24))
         .into()
 }
 
-/// Recolour: the vector pets to start from, then the editor: a preview, the name and each named colour.
-fn recolour_view(pet: &PetUi, accent: Color, folder: bool) -> Element<'_, crate::Message> {
+/// The worn pet's themes as pills, the one worn marked, with New theme (and Edit and Delete for one of the user's);
+/// or the editor, while it is open: a preview, the name and each named colour.
+fn themes_view(pet: &PetUi, accent: Color, folder: bool) -> Element<'_, crate::Message> {
     let send = |m| crate::Message::Settings(super::Message::Avatars(m));
-    let Some(r) = &pet.settings.avatars.recolour else {
-        let choices = Row::with_children(bases(pet).map(|a| {
-            let p = pill(a.name(), false, accent);
-            if folder {
-                p.on_press(send(Message::Recolour(a.name().to_owned())))
-            } else {
-                p
-            }
-            .into()
-        }))
-        .spacing(8)
-        .wrap()
-        .vertical_spacing(8);
-        return column![
+    let worn = &pet.avatars[pet.avatar];
+    let Some(t) = &pet.settings.avatars.theme else {
+        let list = themes(pet);
+        if list.is_empty() {
+            return super::label(
+                "Themes",
+                format!(
+                    "{} has no colours to change: only pixel and vector pets with named colours have themes.",
+                    worn.name()
+                ),
+            );
+        }
+        let enabled = |p: button::Button<'static, crate::Message>, m| if folder { p.on_press(send(m)) } else { p };
+        let mut pills: Vec<Element<'_, crate::Message>> = list
+            .iter()
+            .map(|&(name, on, _)| {
+                pill(name, on, accent)
+                    .on_press(crate::Message::SelectTheme(name.to_owned()))
+                    .into()
+            })
+            .collect();
+        pills.push(enabled(pill("New theme", false, accent), Message::NewTheme).into());
+        if let Some(&(name, _, _)) = list.iter().find(|&&(_, on, own)| on && own) {
+            pills.push(enabled(pill("Edit", false, accent), Message::EditTheme(name.to_owned())).into());
+            pills.push(enabled(pill("Delete", false, accent), Message::DeleteTheme(name.to_owned())).into());
+        }
+        let pills = Row::with_children(pills).spacing(8).wrap().vertical_spacing(8);
+        let mut out = column![
             super::label(
-                "Recolour a pet",
-                "Make a new pet from a vector one in your own colours."
+                "Themes",
+                format!(
+                    "{} in other colours. New theme makes one of your own from the colours it has on.",
+                    worn.name()
+                )
             ),
-            choices
+            pills
         ]
-        .spacing(10)
-        .into();
+        .spacing(10);
+        if let Some(e) = &pet.settings.avatars.theme_error {
+            out = out.push(status(e.as_str(), Tone::Bad));
+        }
+        return out.into();
     };
-    let colours = Row::with_children(r.colours.iter().enumerate().map(|(i, (name, value))| {
+    let colours = Row::with_children(t.colours.iter().enumerate().map(|(i, (name, value))| {
         let shown = aipet_sprite::vector::colour(value)
             .ok()
             .flatten()
             .map_or(Color::TRANSPARENT, argb);
         let input = text_input("#RRGGBB", value)
-            .on_input(move |s| send(Message::RecolourColour(i, s)))
+            .on_input(move |s| send(Message::ThemeColour(i, s)))
             .size(13)
             .font(style::UI)
             .padding([6, 8])
@@ -246,30 +284,35 @@ fn recolour_view(pet: &PetUi, accent: Color, folder: bool) -> Element<'_, crate:
     .spacing(12)
     .wrap()
     .vertical_spacing(12);
-    let preview: Element<'_, crate::Message> = match &r.preview {
+    let preview: Element<'_, crate::Message> = match &t.preview {
         Some(h) => image(h.clone())
             .width(156)
             .height(144)
-            .filter_method(FilterMethod::Linear)
+            .filter_method(if worn.pack.kind == Kind::Pixel {
+                FilterMethod::Nearest
+            } else {
+                FilterMethod::Linear
+            })
             .into(),
         None => iced::widget::Space::new().width(156).height(144).into(),
     };
     let buttons = row![
-        pill("Save", true, accent).on_press(send(Message::SaveRecolour)),
-        pill("Cancel", false, accent).on_press(send(Message::CancelRecolour)),
+        pill("Save", true, accent).on_press(send(Message::SaveTheme)),
+        pill("Cancel", false, accent).on_press(send(Message::CancelTheme)),
     ]
     .spacing(8);
+    let title = match &t.editing {
+        Some(name) => format!("Edit {}'s theme {name}", t.pet),
+        None => format!("A new theme for {}", t.pet),
+    };
     let mut editor = column![
-        text(format!("Recolour {}", r.base))
-            .size(14)
-            .font(style::UI_SEMIBOLD)
-            .color(Color::WHITE),
+        text(title).size(14).font(style::UI_SEMIBOLD).color(Color::WHITE),
         row![
             preview,
             column![
-                field("Name", "My pet", &r.name, false, move |s| send(Message::RecolourName(
-                    s
-                ))),
+                field("Theme name", "My theme", &t.name, false, move |s| send(
+                    Message::ThemeName(s)
+                )),
                 colours
             ]
             .spacing(12)
@@ -278,7 +321,7 @@ fn recolour_view(pet: &PetUi, accent: Color, folder: bool) -> Element<'_, crate:
         buttons,
     ]
     .spacing(12);
-    if let Some(e) = &r.error {
+    if let Some(e) = &t.error {
         editor = editor.push(status(e.as_str(), Tone::Bad));
     }
     editor.into()
@@ -308,60 +351,82 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
             pet.skipped = found.skipped;
             reload(pet, found.pets);
         }
-        // the platform opens only a folder that is there: one that can't be made isn't opened, and the page says why
-        Message::Recolour(base) => {
-            let b = bases(pet).find(|a| a.name() == base)?;
-            let colours = b
+        Message::NewTheme => {
+            let base = &pet.avatars[pet.avatar];
+            let taken = |n: &str| base.pack.palette.names().any(|t| t == n);
+            let name = (1..)
+                .map(|i| {
+                    if i == 1 {
+                        "My theme".to_owned()
+                    } else {
+                        format!("My theme {i}")
+                    }
+                })
+                .find(|n| !taken(n))
+                .expect("a name is free");
+            let theme = pet.theme.clone();
+            open_editor(pet, &theme, None, name);
+        }
+        Message::EditTheme(name) => {
+            let own = pet.avatars[pet.avatar]
                 .pack
                 .palette
-                .colours
+                .themes
                 .iter()
-                .map(|(n, &c)| (n.clone(), aipet_sprite::vector::colour_name(Some(c))))
-                .collect();
-            let name = format!("{} (mine)", b.name().split(" (").next().unwrap_or(b.name()));
-            let mut r = Recolouring {
-                base,
-                name,
-                colours,
-                preview: None,
-                error: None,
-            };
-            r.preview = preview(pet, &r);
-            pet.settings.avatars.recolour = Some(r);
-        }
-        Message::RecolourName(name) => {
-            if let Some(r) = &mut pet.settings.avatars.recolour {
-                r.name = name;
-                r.error = None;
+                .any(|t| t.name == name && t.file.is_some());
+            if own {
+                open_editor(pet, &name, Some(name.clone()), name.clone());
             }
         }
-        Message::RecolourColour(i, value) => {
-            if let Some(mut r) = pet.settings.avatars.recolour.take() {
-                if let Some(c) = r.colours.get_mut(i) {
+        Message::DeleteTheme(name) => {
+            let file = own_theme(pet, &name)?.file.clone()?;
+            let path = folder.join(THEMES).join(&file);
+            match fs::remove_file(&path) {
+                Ok(()) => {
+                    pet.settings.avatars.theme_error = None;
+                    let found = load::all(&folder);
+                    pet.skipped = found.skipped;
+                    reload(pet, found.pets);
+                    pet.save_prefs();
+                }
+                Err(e) => pet.settings.avatars.theme_error = Some(format!("Couldn't delete {}: {e}", path.display())),
+            }
+        }
+        Message::ThemeName(name) => {
+            if let Some(t) = &mut pet.settings.avatars.theme {
+                t.name = name;
+                t.error = None;
+            }
+        }
+        Message::ThemeColour(i, value) => {
+            if let Some(mut t) = pet.settings.avatars.theme.take() {
+                if let Some(c) = t.colours.get_mut(i) {
                     c.1 = value;
                 }
-                r.error = None;
-                r.preview = preview(pet, &r);
-                pet.settings.avatars.recolour = Some(r);
+                t.error = None;
+                t.preview = preview(pet, &t);
+                pet.settings.avatars.theme = Some(t);
             }
         }
-        Message::CancelRecolour => pet.settings.avatars.recolour = None,
-        Message::SaveRecolour => {
-            let r = pet.settings.avatars.recolour.take()?;
-            match save(pet, &r, &folder) {
+        Message::CancelTheme => pet.settings.avatars.theme = None,
+        Message::SaveTheme => {
+            let t = pet.settings.avatars.theme.take()?;
+            match save(pet, &t, &folder.join(THEMES)) {
                 Ok(name) => {
                     let found = load::all(&folder);
                     pet.skipped = found.skipped;
                     reload(pet, found.pets);
-                    if let Some(i) = pet.avatars.iter().position(|a| a.name() == name) {
-                        return pet.update(crate::Message::SelectAvatar(i));
+                    if let Some(i) = pet.avatars.iter().position(|a| a.name() == t.pet) {
+                        pet.wear(i, &name);
+                        pet.save_prefs();
                     }
                 }
                 Err(e) => {
-                    pet.settings.avatars.recolour = Some(Recolouring { error: Some(e), ..r });
+                    pet.settings.avatars.theme = Some(Theming { error: Some(e), ..t });
                 }
             }
         }
+        // the platform opens only a folder that is there: one that can't be made isn't opened, and the page says why
         Message::OpenFolder => match fs::create_dir_all(&folder) {
             Ok(()) => {
                 pet.settings.avatars.folder_error = None;
@@ -376,27 +441,70 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
     None
 }
 
+/// The worn pet's theme of the user's by `name`.
+fn own_theme<'a>(pet: &'a PetUi, name: &str) -> Option<&'a Theme> {
+    pet.avatars[pet.avatar]
+        .pack
+        .palette
+        .themes
+        .iter()
+        .find(|t| t.name == name && t.file.is_some())
+}
+
+/// Opens the editor on the worn pet in its theme `from`, as `name`.
+fn open_editor(pet: &mut PetUi, from: &str, editing: Option<String>, name: String) {
+    let base = &pet.avatars[pet.avatar];
+    let Some(colours) = base.pack.palette.in_theme(from) else {
+        return;
+    };
+    let mut t = Theming {
+        pet: base.name().to_owned(),
+        editing,
+        name,
+        colours: colours
+            .into_iter()
+            .map(|(n, c)| (n, aipet_sprite::vector::colour_name(Some(c))))
+            .collect(),
+        preview: None,
+        error: None,
+    };
+    t.preview = preview(pet, &t);
+    pet.settings.avatars.theme_error = None;
+    pet.settings.avatars.theme = Some(t);
+}
+
 /// The avatars as read again (`FillAvatars`), one tile each. The worn avatar's tile is the one with its name, and
-/// when its file has changed the pet wears it as it is now (the C# reapplies a tile clicked again; here the one worn
-/// takes no click). When its file has gone, the pet keeps wearing it as it was, with no tile, until it takes another.
+/// when its file has changed the pet wears it as it is now, in its theme if it still has it, else in its default (the
+/// C# reapplies a tile clicked again; here the one worn takes no click). When its file has gone, the pet keeps
+/// wearing it as it was, with no tile, until it takes another.
 fn reload(pet: &mut PetUi, mut avatars: Vec<LoadedPack>) {
-    let (index, gone) = match avatars.iter().position(|a| a.name() == pet.pet.pack().name) {
-        Some(i) => {
-            // a pack whose art changed is worn as it is now
-            if avatars[i] != pet.pet.loaded() {
-                pet.pet.set_pack(avatars[i].clone());
-                pet.sprite = crate::sprite::Sprite::new(&avatars[i]);
-            }
-            (i, None)
-        }
+    let (index, gone) = match avatars.iter().position(|a| a.name() == pet.avatars[pet.avatar].name()) {
+        Some(i) => (i, None),
         None => {
-            avatars.push(pet.pet.loaded());
+            avatars.push(pet.avatars[pet.avatar].clone());
             (avatars.len() - 1, Some(avatars.len() - 1))
         }
     };
-    pet.stills = avatars.iter().map(crate::sprite::still).collect();
+    let palette = &avatars[index].pack.palette;
+    let theme = if palette.names().any(|n| n == pet.theme) {
+        pet.theme.clone()
+    } else {
+        palette.theme.clone()
+    };
+    let worn = crate::themed(&avatars[index], &theme);
+    // a pack whose art changed is worn as it is now
+    if worn != pet.pet.loaded() {
+        pet.pet.set_pack(worn.clone());
+        pet.sprite = crate::sprite::Sprite::new(&worn);
+    }
+    pet.stills = avatars
+        .iter()
+        .enumerate()
+        .map(|(i, a)| crate::sprite::still(if i == index { &worn } else { a }))
+        .collect();
     pet.avatars = avatars;
     pet.avatar = index;
+    pet.theme = theme;
     pet.settings.avatars.gone = gone;
 }
 
@@ -418,27 +526,20 @@ fn words(name: &str) -> String {
     out
 }
 
-/// The base in `r`'s colours (those that read as colours), standing idle.
-fn preview(pet: &PetUi, r: &Recolouring) -> Option<image::Handle> {
-    let mut base = bases(pet).find(|a| a.name() == r.base)?.clone();
-    let colours: BTreeMap<String, u32> = r
+/// The worn pet in `t`'s colours (those that read as colours), standing idle.
+fn preview(pet: &PetUi, t: &Theming) -> Option<image::Handle> {
+    let base = pet.avatars.iter().find(|a| a.name() == t.pet)?;
+    let colours: BTreeMap<String, u32> = t
         .colours
         .iter()
         .filter_map(|(n, v)| Some((n.clone(), aipet_sprite::vector::colour(v).ok().flatten()?)))
         .collect();
-    base.pack.recolour(&colours).ok()?;
-    Some(crate::sprite::still(&base))
+    Some(crate::sprite::still(&base.recoloured(&colours).ok()?))
 }
 
-/// Writes `r` as a recolour file in `folder`, named after the pet: the colours that differ from the base's. The pet's
-/// name, or why it can't be saved.
-fn save(pet: &PetUi, r: &Recolouring, folder: &std::path::Path) -> Result<String, String> {
-    let name = r.name.trim();
-    if name.is_empty() {
-        return Err("Give the new pet a name.".to_owned());
-    }
-    let stem: String = name
-        .chars()
+/// A name as part of a file name: lower case letters and digits, words joined by `-`.
+fn slug(name: &str) -> String {
+    name.chars()
         .map(|c| {
             if c.is_alphanumeric() {
                 c.to_ascii_lowercase()
@@ -450,42 +551,60 @@ fn save(pet: &PetUi, r: &Recolouring, folder: &std::path::Path) -> Result<String
         .split('-')
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
-        .join("-");
-    let path = folder.join(format!("{}.json", if stem.is_empty() { "recolour" } else { &stem }));
-    // a name already taken is fine only when it's this file's own pet, saved again
-    let file: Option<serde_json::Value> = fs::read_to_string(&path)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok());
-    let own = file
-        .as_ref()
-        .is_some_and(|v| v.get("name").and_then(|n| n.as_str()) == Some(name));
-    if !own && pet.avatars.iter().any(|a| a.name() == name) {
-        return Err(format!("There's already a pet named {name}."));
+        .join("-")
+}
+
+/// Writes `t` as a theme file in `folder` (the themes folder): the colours that differ from the pet's default. An
+/// edited theme keeps its file; a new one is named after the pet and the theme. The theme's name, or why it can't be
+/// saved.
+fn save(pet: &PetUi, t: &Theming, folder: &Path) -> Result<String, String> {
+    let name = t.name.trim();
+    if name.is_empty() {
+        return Err("Give the theme a name.".to_owned());
     }
-    if path.exists() && !own {
-        return Err(format!("{} is already in the avatars folder.", path.display()));
+    let base = pet
+        .avatars
+        .iter()
+        .find(|a| a.name() == t.pet)
+        .ok_or("The pet has gone.")?;
+    let palette = &base.pack.palette;
+    if t.editing.as_deref() != Some(name) && palette.names().any(|n| n == name) {
+        return Err(format!("{} already has a theme named {name}.", t.pet));
     }
-    // a recolour saved again under its own name keeps the pet it was made from as its base
-    let base_name = match file.as_ref().and_then(|v| v.get("base")?.as_str()) {
-        Some(b) if own && r.base == name => b.to_owned(),
-        _ => r.base.clone(),
-    };
-    let base = bases(pet)
-        .find(|a| a.name() == base_name)
-        .ok_or("The pet it starts from has gone.")?;
-    let mut palette = serde_json::Map::new();
-    for (n, v) in &r.colours {
+    let mut colours = serde_json::Map::new();
+    for (n, v) in &t.colours {
         let c = aipet_sprite::vector::colour(v.trim())
             .ok()
             .flatten()
-            .ok_or_else(|| format!("{n}: {v:?} isn't a colour (#RRGGBB)."))?;
-        if base.pack.palette.colours.get(n) != Some(&c) {
-            palette.insert(n.clone(), aipet_sprite::vector::colour_name(Some(c)).into());
+            .ok_or_else(|| format!("{}: {v:?} isn't a colour (#RRGGBB).", words(n)))?;
+        if palette.colours.get(n) != Some(&c) {
+            colours.insert(n.clone(), aipet_sprite::vector::colour_name(Some(c)).into());
         }
     }
-    let json = serde_json::json!({"base": base_name, "name": name, "palette": palette});
-    fs::create_dir_all(folder).map_err(|e| format!("Couldn't make the avatars folder: {e}"))?;
-    let text = serde_json::to_string_pretty(&json).expect("a recolour always serialises") + "\n";
+    let editing = t
+        .editing
+        .as_ref()
+        .and_then(|e| palette.themes.iter().find(|th| &th.name == e)?.file.clone());
+    let file = match editing {
+        Some(file) => file,
+        None => {
+            let stem = format!("{}-{}", slug(&t.pet), slug(name));
+            (1..)
+                .map(|i| {
+                    if i == 1 {
+                        format!("{stem}.json")
+                    } else {
+                        format!("{stem}-{i}.json")
+                    }
+                })
+                .find(|f| !folder.join(f).exists())
+                .expect("a file name is free")
+        }
+    };
+    let path = folder.join(file);
+    let json = serde_json::json!({"pet": t.pet, "theme": name, "palette": colours});
+    fs::create_dir_all(folder).map_err(|e| format!("Couldn't make the themes folder: {e}"))?;
+    let text = serde_json::to_string_pretty(&json).expect("a theme always serialises") + "\n";
     fs::write(&path, text).map_err(|e| format!("Couldn't save {}: {e}", path.display()))?;
     Ok(name.to_owned())
 }

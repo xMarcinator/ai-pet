@@ -321,6 +321,7 @@ impl Host for ConfigFile {
         config.on_top = prefs.on_top;
         config.music = prefs.music;
         config.avatar = prefs.avatar.clone();
+        config.avatar_theme = prefs.avatar_theme.clone();
         config.save_to(&self.0).unwrap();
         *self.1.lock().unwrap() += 1;
     }
@@ -368,7 +369,8 @@ fn the_switches_and_the_avatar_persist_through_config_json() {
             bubbles: false,
             on_top: false,
             music: false,
-            avatar: Some("Hood".into())
+            avatar: Some("Hood".into()),
+            avatar_theme: None,
         }
     );
     // the next start reads them back
@@ -397,10 +399,10 @@ fn reload_shows_new_avatars_and_open_folder_makes_the_folder_first() {
     let green = include_str!("../../../../avatars/hood-green.json").replace("Hood (green)", "Mint");
     let custom = folder.join("mint.json");
     std::fs::write(&custom, &green).unwrap();
-    ui.update(Message::SelectAvatar(9));
+    ui.update(Message::SelectAvatar(8));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Sprout"), "not there before Reload");
     ui.update(avatars(settings::avatars::Message::Reload));
-    ui.update(Message::SelectAvatar(9));
+    ui.update(Message::SelectAvatar(8));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Mint"));
 
     // the avatar worn, edited under the same name, is worn as it is now once read again
@@ -440,7 +442,7 @@ fn reload_shows_new_avatars_and_open_folder_makes_the_folder_first() {
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood"));
     assert!(settings::avatars::tiles(&ui)[1].1, "its tile is the one worn now");
     ui.update(avatars(settings::avatars::Message::Reload));
-    ui.update(Message::SelectAvatar(9));
+    ui.update(Message::SelectAvatar(8));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood"), "its tile went with it");
 }
 
@@ -466,7 +468,7 @@ fn reload_lists_what_didnt_load_and_why() {
     assert!(skipped[0].1.contains("manifest isn't valid"), "{skipped:?}");
     assert_eq!(skipped[1].0, "note.json");
     // the pets themselves are all there
-    assert_eq!(settings::avatars::tiles(&ui).len(), 9);
+    assert_eq!(settings::avatars::tiles(&ui).len(), 8);
 }
 
 #[test]
@@ -500,80 +502,142 @@ fn open_folder_opens_nothing_when_the_folder_cannot_be_made() {
 }
 
 #[test]
-fn recolour_makes_a_new_pet_from_a_vector_one_and_wears_it() {
-    let pet = Pet::new("recolour");
-    let mut ui = pet.ui;
-    let folder = aipet_sprite::Avatar::custom_dir(&pet.scratch.0);
+fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persists() {
+    let scratch = Scratch::new("themes");
+    let config = scratch.0.join("config.json");
+    let writes = Arc::new(Mutex::new(0));
+    let start = |prefs: Prefs| {
+        PetUi::new(Setup {
+            host: Box::new(ConfigFile(config.clone(), writes.clone())),
+            prefs,
+            avatars: aipet_sprite::Avatar::custom_dir(&scratch.0),
+            services: Services::detached(scratch.0.clone()),
+            ..Setup::detached()
+        })
+    };
+    let themes = aipet_sprite::Avatar::custom_dir(&scratch.0).join("themes");
     let avatars = |message| Message::Settings(settings::Message::Avatars(message));
     use settings::avatars::Message as A;
-    ui.update(avatars(A::Recolour("Hood (green, vector)".into())));
-    let r = settings::avatars::recolouring(&ui).expect("the editor opens");
-    let body = r
-        .colours
-        .iter()
-        .position(|(n, _)| n == "body")
-        .expect("the Hood names its body colour");
-    assert_eq!(r.colours[body].1, "#0F4422");
+    let mut ui = start(Prefs {
+        avatar: Some("Hood (vector)".into()),
+        ..Prefs::default()
+    });
+    assert_eq!(
+        settings::avatars::themes(&ui),
+        [("Green", true, false), ("Blue", false, false)]
+    );
 
+    // a built-in theme, picked: worn, and kept in config.json
+    ui.update(Message::SelectTheme("Blue".into()));
+    assert_eq!(settings::avatars::worn(&ui).pack.palette.colours["body"], 0xFF16285E);
+    assert_eq!(Config::load_from(&config).0.avatar_theme.as_deref(), Some("Blue"));
+
+    // New theme opens the editor on the pet in the theme it has on
+    ui.update(avatars(A::NewTheme));
+    let t = settings::avatars::theming(&ui).expect("the editor opens");
+    assert_eq!(
+        (t.pet.as_str(), t.name.as_str(), t.editing.as_deref()),
+        ("Hood (vector)", "My theme", None)
+    );
+    let body = t.colours.iter().position(|(n, _)| n == "body").unwrap();
+    assert_eq!(t.colours[body].1, "#16285E");
     // a colour that isn't one, and a name that's taken, are said and nothing is saved
-    ui.update(avatars(A::RecolourColour(body, "red".into())));
-    ui.update(avatars(A::SaveRecolour));
-    let error = settings::avatars::recolouring(&ui).unwrap().error.clone().unwrap();
+    ui.update(avatars(A::ThemeColour(body, "red".into())));
+    ui.update(avatars(A::SaveTheme));
+    let error = settings::avatars::theming(&ui).unwrap().error.clone().unwrap();
     assert!(error.contains("isn't a colour"), "{error}");
-    ui.update(avatars(A::RecolourColour(body, "#441010".into())));
-    ui.update(avatars(A::RecolourName("Pip".into())));
-    ui.update(avatars(A::SaveRecolour));
-    assert!(
-        settings::avatars::recolouring(&ui)
-            .unwrap()
-            .error
-            .as_ref()
-            .unwrap()
-            .contains("already a pet named Pip")
-    );
-    assert!(!folder.exists());
+    ui.update(avatars(A::ThemeColour(body, "#441010".into())));
+    ui.update(avatars(A::ThemeName("Green".into())));
+    ui.update(avatars(A::SaveTheme));
+    let error = settings::avatars::theming(&ui).unwrap().error.clone().unwrap();
+    assert!(error.contains("already has a theme named Green"), "{error}");
+    assert!(!themes.exists());
 
-    // saved: a file in the avatars folder with only what changed, read back as a pet, and worn
-    ui.update(avatars(A::RecolourName("Hood (red)".into())));
-    ui.update(avatars(A::SaveRecolour));
-    assert!(settings::avatars::recolouring(&ui).is_none(), "the editor closes");
-    let saved: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(folder.join("hood-red.json")).unwrap()).unwrap();
+    // saved: a theme file with what differs from the default, read back onto the pet, and worn
+    ui.update(avatars(A::ThemeName("Red".into())));
+    ui.update(avatars(A::SaveTheme));
+    assert!(settings::avatars::theming(&ui).is_none(), "the editor closes");
+    let read = |file: &str| -> serde_json::Value {
+        serde_json::from_str(&std::fs::read_to_string(themes.join(file)).unwrap()).unwrap()
+    };
+    let saved = read("hood-vector-red.json");
+    assert_eq!(saved["pet"], "Hood (vector)");
+    assert_eq!(saved["theme"], "Red");
+    // the Blue theme's colours that aren't the default Green's, and the new body
+    assert_eq!(saved["palette"]["body"], "#441010");
+    assert_eq!(saved["palette"]["hi"], "#3E74E8");
     assert_eq!(
-        saved,
-        serde_json::json!({"base": "Hood (green, vector)", "name": "Hood (red)", "palette": {"body": "#441010"}})
+        settings::avatars::themes(&ui),
+        [("Green", false, false), ("Blue", false, false), ("Red", true, true)]
     );
-    assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (red)"));
-    let worn = settings::avatars::worn(&ui);
-    assert_eq!(worn.pack.palette.colours["body"], 0xFF441010);
-    assert!(
-        settings::avatars::tiles(&ui)
-            .iter()
-            .any(|(name, on)| *name == "Hood (red)" && *on)
-    );
+    assert_eq!(settings::avatars::worn(&ui).pack.palette.colours["body"], 0xFF441010);
+    assert_eq!(ui.prefs().avatar_theme.as_deref(), Some("Red"));
+    assert!(ui.skipped().is_empty(), "{:?}", ui.skipped());
+    // the next start wears it again
+    let again = start(Prefs::from(&Config::load_from(&config).0));
+    assert_eq!(again.theme(), "Red");
+    assert_eq!(settings::avatars::worn(&again), settings::avatars::worn(&ui));
 
-    // edited again under its own name, it keeps the Hood as its base
-    ui.update(avatars(A::Recolour("Hood (red)".into())));
-    let r = settings::avatars::recolouring(&ui).unwrap();
-    assert_eq!(r.colours[body].1, "#441010");
-    let hi = r.colours.iter().position(|(n, _)| n == "hi").unwrap();
-    ui.update(avatars(A::RecolourName("Hood (red)".into())));
-    ui.update(avatars(A::RecolourColour(hi, "#FF4A3A".into())));
-    ui.update(avatars(A::SaveRecolour));
-    assert!(settings::avatars::recolouring(&ui).is_none());
-    let saved: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(folder.join("hood-red.json")).unwrap()).unwrap();
-    assert_eq!(saved["base"], "Hood (green, vector)");
-    assert_eq!(
-        saved["palette"],
-        serde_json::json!({"body": "#441010", "hi": "#FF4A3A"})
-    );
+    // edited: renamed in the same file, worn as it is now
+    ui.update(avatars(A::EditTheme("Red".into())));
+    let t = settings::avatars::theming(&ui).unwrap();
+    assert_eq!(t.editing.as_deref(), Some("Red"));
+    assert_eq!(t.colours[body].1, "#441010");
+    let hi = t.colours.iter().position(|(n, _)| n == "hi").unwrap();
+    ui.update(avatars(A::ThemeColour(hi, "#FF4A3A".into())));
+    ui.update(avatars(A::ThemeName("Ember".into())));
+    ui.update(avatars(A::SaveTheme));
+    assert!(settings::avatars::theming(&ui).is_none());
+    let saved = read("hood-vector-red.json");
+    assert_eq!(saved["theme"], "Ember");
+    assert_eq!(saved["palette"]["hi"], "#FF4A3A");
+    assert_eq!(std::fs::read_dir(&themes).unwrap().count(), 1);
+    assert_eq!(ui.theme(), "Ember");
     assert_eq!(settings::avatars::worn(&ui).pack.palette.colours["hi"], 0xFFFF4A3A);
 
-    // a new pet from the red one is a recolour of it, read after it
-    ui.update(avatars(A::Recolour("Hood (red)".into())));
-    ui.update(avatars(A::RecolourName("Hood (dusk)".into())));
-    ui.update(avatars(A::SaveRecolour));
-    assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (dusk)"));
-    assert!(ui.skipped().is_empty(), "{:?}", ui.skipped());
+    // a pixel pet's theme, made the same way
+    let hood = settings::avatars::tiles(&ui)
+        .iter()
+        .position(|&(n, _)| n == "Hood")
+        .unwrap();
+    ui.update(Message::SelectAvatar(hood));
+    assert_eq!(
+        settings::avatars::themes(&ui),
+        [("Blue", true, false), ("Green", false, false)]
+    );
+    ui.update(avatars(A::NewTheme));
+    let t = settings::avatars::theming(&ui).unwrap();
+    let body = t.colours.iter().position(|(n, _)| n == "body").unwrap();
+    ui.update(avatars(A::ThemeColour(body, "#5A1A60".into())));
+    ui.update(avatars(A::SaveTheme));
+    assert_eq!(ui.theme(), "My theme");
+    let worn = settings::avatars::worn(&ui);
+    assert!(worn.sheets[0].pixels.contains(&0xFF5A1A60));
+    assert!(!worn.sheets[0].pixels.contains(&0xFF16285E));
+
+    // deleted: its file goes, and the pet is back in its default
+    ui.update(avatars(A::DeleteTheme("My theme".into())));
+    assert!(!themes.join("hood-my-theme.json").exists());
+    assert_eq!(ui.theme(), "Blue");
+    assert_eq!(
+        settings::avatars::themes(&ui),
+        [("Blue", true, false), ("Green", false, false)]
+    );
+    assert_eq!(Config::load_from(&config).0.avatar_theme, None);
+
+    // a bad theme file is a line saying why
+    std::fs::write(
+        themes.join("odd.json"),
+        r##"{"pet": "Hood", "theme": "Odd", "palette": {"fur": "#FF0000"}}"##,
+    )
+    .unwrap();
+    ui.update(avatars(A::Reload));
+    let skipped: Vec<_> = ui
+        .skipped()
+        .iter()
+        .map(|s| (s.file.as_str(), s.reason.as_str()))
+        .collect();
+    assert_eq!(skipped.len(), 1, "{skipped:?}");
+    assert_eq!(skipped[0].0, "themes/odd.json");
+    assert!(skipped[0].1.contains("no colour named \"fur\""), "{skipped:?}");
 }

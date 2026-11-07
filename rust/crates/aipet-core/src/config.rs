@@ -49,6 +49,8 @@ pub struct Config {
     /// Always on top.
     pub on_top: bool,
     pub avatar: Option<String>,
+    /// The avatar's colour theme (the Rust app's own): none for its default. Written only when it is set.
+    pub avatar_theme: Option<String>,
     pub music: bool,
     /// The window's height (DIPs) when the position was saved, so a taller window keeps the pet in place. A file can
     /// hold one too big for a double, which reads as infinity; then the file can't be written (as for the app).
@@ -64,6 +66,7 @@ impl Default for Config {
             toolbar: None,
             on_top: true,
             avatar: Some("Sprout".into()),
+            avatar_theme: None,
             music: true,
             window_height: 420.0,
         }
@@ -170,6 +173,7 @@ impl Fields for Config {
             "Toolbar" => self.toolbar = nullable(value, boolean)?,
             "OnTop" => self.on_top = boolean(value)?,
             "Avatar" => self.avatar = nullable(value, string)?,
+            "AvatarTheme" => self.avatar_theme = nullable(value, string)?,
             "Music" => self.music = boolean(value)?,
             "WindowHeight" => self.window_height = double(value)?,
             _ => {}
@@ -187,9 +191,11 @@ impl Fields for Config {
         if let Some(toolbar) = self.toolbar {
             fields.push(("Toolbar", Json::Bool(toolbar)));
         }
+        fields.extend([("OnTop", Json::Bool(self.on_top)), ("Avatar", Json::of(&self.avatar))]);
+        if self.avatar_theme.is_some() {
+            fields.push(("AvatarTheme", Json::of(&self.avatar_theme)));
+        }
         fields.extend([
-            ("OnTop", Json::Bool(self.on_top)),
-            ("Avatar", Json::of(&self.avatar)),
             ("Music", Json::Bool(self.music)),
             ("WindowHeight", Json::Double(self.window_height)),
         ]);
@@ -575,6 +581,28 @@ fn push_string(out: &mut String, s: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_avatar_theme_is_written_only_when_set_and_read_back() {
+        let dir = std::env::temp_dir().join(format!("aipet-config-theme-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        Config::default().save_to(&path).unwrap();
+        assert!(!fs::read_to_string(&path).unwrap().contains("AvatarTheme"));
+        let themed = Config {
+            avatar: Some("Hood".into()),
+            avatar_theme: Some("Green".into()),
+            ..Config::default()
+        };
+        themed.save_to(&path).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains(r#""Avatar":"Hood","AvatarTheme":"Green","Music""#),
+            "{text}"
+        );
+        assert_eq!(Config::load_from(&path), (themed, LoadStatus::Loaded));
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn nesting_is_counted_outside_strings() {
