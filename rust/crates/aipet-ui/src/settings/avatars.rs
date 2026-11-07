@@ -114,7 +114,17 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
         .map(|(i, avatar, still)| {
             let selected = i == pet.avatar;
             let name = row![
-                dot(argb(avatar.pack.accent | 0xFF000000), 9.0),
+                // the worn pet's dot is in the theme it wears
+                dot(
+                    argb(
+                        if selected {
+                            pet.pet.pack().accent
+                        } else {
+                            avatar.pack.accent
+                        } | 0xFF000000
+                    ),
+                    9.0,
+                ),
                 text(avatar.name())
                     .size(13)
                     .font(style::UI_SEMIBOLD)
