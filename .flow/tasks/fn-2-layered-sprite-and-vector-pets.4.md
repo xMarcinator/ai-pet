@@ -37,9 +37,12 @@ Win32 `SetWindowRgn` clips drawing to the drawn region, so the drawn region must
 - [ ] The Avatars page lists all pets with stills plus skipped packs with reasons; Pick, Reload and Open folder work; config is written only on a real change (settings tests)
 
 ## Done summary
-TBD
+The UI draws the pack's own frames. Each frame becomes an image once when the pack is put on (plus a mirror image for a mirroring layer and a halo for a glowing one), and each redraw only picks images (`sprite::Sprite`); a test checks 3 s of ticks make no new image. Pixel packs: the pixel size rounds to whole device pixels at the output's scale (100/125/150/200 % tested) and image edges snap to them; both shells pass their scale (`PetUi::set_scale`), and a scale change re-lays the art (tested). Painted and vector art is filtered linearly. Hit rects: the hit ellipse plus the hit layers' solid rows at the pack's pixel size, rows joined, coarsened into bands past 64 (tested); the region tests in aipet-desktop and aipet-wayland pass unchanged. Pacing: smooth while an on-screen animation's typical frame is shorter than the calm frame (tested; the median, so the Zs' few ms-long sampled frames don't keep a sleeping pet at 60 fps). Settings → Avatars lists skipped packs with their reasons (tested), and its help text describes packs. `PetFrame` keeps only the motion; `Pet::layers` composites the grid on demand. Checked on screen on Hyprland: the Hood at work draws as before.
 
+Not done or different: no `@2x` sheets yet (the manifest has no `sheet@2x`; painted packs come in task 5). The hit ellipse stays in the region always, as before (the spec's "fallback" reading would drop it when there is art). Two drawing differences from the old per-pixel replace, both in the UI only: a see-through pixel (the lens's glass) now shows the body under it, and a pixel drawn in a fully transparent colour no longer hides what is under it (only odd legacy avatars have one); the golden test still pins the replace through `Pet::layers`.
+
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 32ce288
+- Tests: cd rust && cargo test -p aipet-ui -p aipet-desktop -p aipet-wayland -p aipet -p aipet-sprite (passed), cargo clippy --workspace --all-targets -D warnings (clean), cargo fmt --check (clean), a screenshot of the running pet on Hyprland
 - PRs:
