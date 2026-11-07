@@ -33,8 +33,9 @@ iced's `svg` feature is off and would re-rasterise each animated frame; don't en
 - [ ] Vector parts draw at their composited placement (R18): a part's shapes around its origin, plus the pose, animation and look offsets and its rotation, scale and opacity. Pip's eyes follow the pointer and its hands animate through the same tables
 
 ## Done summary
-TBD
+Vector packs (vector.rs: SVG path parser incl. arcs, hex colours only, tiny-skia render; manifest shapes with stroke/caps/joins/opacity, one or many per value) drawn through an iced canvas (aipet-ui vector_view.rs) whose cache clears only when a value or a part's place changes (test counts rebuilds); body motion stretches the canvas. Hit mask rasterised with tiny-skia on change. Pip from pocket-sprout.html (avatars/reference/pip_gen.py, 15 layers) and painted Pip (painted.rs, 2x sheets, pixel_size 0.5, 172 KB; tests/bake.rs checks it and that it matches the vector within 4/255). Both built-in, --check-pack OK. Deviations: R8's 'bindings' are R18's tables (look, poses, part animations); painted Pip has one 2x set instead of @2x files, and pose transitions jump in it.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:
