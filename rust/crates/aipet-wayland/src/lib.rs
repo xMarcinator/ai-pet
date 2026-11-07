@@ -2,7 +2,7 @@
 //! an exact input region, dragged by its margins or over an output-sized surface, with its menu in an xdg popup and
 //! Settings in an xdg window, through iced_exwlshell. Elsewhere (GNOME, X11, Windows, macOS) the desktop shell runs.
 //!
-//! `AIPET_DRAG=margin|overlay` picks how a drag moves the pet (margin by default, see `drag`),
+//! `AIPET_DRAG=margin|overlay` picks how a drag moves the pet (overlay by default, see `drag`),
 //! `AIPET_OPEN_SETTINGS=1` opens Settings at start, and `AIPET_DEBUG=1` logs the surfaces, presses and drags.
 
 #[cfg(target_os = "linux")]

@@ -10,7 +10,10 @@
 //! What the compositor does in between matters, and Hyprland 0.56 was measured: pointer positions follow a new
 //! place of the surface at once, but with its `layers` animation on, every change of the surface's position (by its
 //! margins, or by a resize that moves its top-left corner) slides there over the animation's time. A resize that
-//! keeps the top-left corner shows the old frame, unscaled, until the new one comes.
+//! keeps the top-left corner shows the old frame, unscaled, until the new one comes. Hyprland 0.57 instead squeezes
+//! the old frame into the new size: an overlay drag's drop showed the output-sized frame, with the pet in its
+//! corner, as a small stretched copy for a frame. So the pet isn't drawn while the surface shrinks back
+//! ([`Drag::shows_pet`]).
 //!
 //! Where the pet was left ([`Place`], which either shell saves) is a home on an output, and back ([`Screen`]).
 
@@ -40,16 +43,19 @@ pub enum Strategy {
     /// simply drawn under the pointer, then shrinks it back around the pet on release. Growing and shrinking keep
     /// the surface's top-left corner. Moving that corner (to the output's, and back to the pet's) is sent right
     /// after the first frame drawn for the new corner, so the compositor takes both at once. Hyprland's animation
-    /// makes those two moves slide.
+    /// makes those two moves slide (AiPet's Hyprland rules turn it off). From the release until the surface is its
+    /// home size again, the pet isn't drawn, so a compositor that scales the last frame to the new size shows
+    /// nothing; it is gone for a frame or two.
     Overlay,
 }
 
 impl Strategy {
-    /// From `AIPET_DRAG`: `margin` (the default) or `overlay`.
+    /// From `AIPET_DRAG`: `overlay` (the default) or `margin`. Overlay follows the pointer every frame; with
+    /// Hyprland's animation off, margin moves only every other frame, which shows as jumps.
     pub fn from_env() -> Result<Strategy, String> {
         match std::env::var("AIPET_DRAG").ok().as_deref() {
-            None | Some("margin") => Ok(Strategy::Margin),
-            Some("overlay") => Ok(Strategy::Overlay),
+            None | Some("overlay") => Ok(Strategy::Overlay),
+            Some("margin") => Ok(Strategy::Margin),
             Some(other) => Err(format!("AIPET_DRAG must be margin or overlay, not {other:?}")),
         }
     }
@@ -219,6 +225,14 @@ impl Drag {
             Phase::Overlay { at, .. } => at - Point::ORIGIN,
             _ => Vector::ZERO,
         }
+    }
+
+    /// Whether the pet is drawn: not while an overlay drag's surface shrinks back around it, from the release until
+    /// the surface is its home size, so no compositor can show the output-sized frame squeezed into the home size.
+    /// A workaround for iced_exwlshell committing a shrink before the first frame at the new size: check each upgrade
+    /// of it (`rust/notes/exwlshell.md`, known bug 20), and remove this once it can commit them together.
+    pub fn shows_pet(&self) -> bool {
+        !matches!(self.phase, Phase::Returning { .. } | Phase::Settling { sent: None, .. })
     }
 
     /// What the drag is doing, for the log.
@@ -1045,10 +1059,11 @@ mod tests {
         let step = d.handle(Input::Motion(Point::new(700.5, 300.2)), t1 + 3 * FRAME);
         assert_eq!(moved(&step), Vector::new(700.5 - 1310.0, 300.2 - 1130.0));
         assert_eq!(d.offset(), Vector::new(511.0, -230.0));
-        // released: drawn at the surface's corner again, which follows the first frame drawn so, with home
+        // released: not drawn while the surface shrinks; its corner follows the first frame drawn so, with home
+        assert!(d.shows_pet());
         let t2 = t1 + 4 * FRAME;
         assert!(matches!(d.handle(Input::Release, t2).pet, Some(Pet::DragEnded)));
-        assert_eq!(d.offset(), Vector::ZERO);
+        assert!(!d.shows_pet());
         // where the drop leaves it is known at the release, before the surface gets there
         assert_eq!(
             d.destination(),
@@ -1067,10 +1082,10 @@ mod tests {
                 bottom: 830
             }
         );
-        // settles once the surface is its home size again
-        assert!(d.active());
+        // settles once the surface is its home size again, and is drawn there
+        assert!(d.active() && !d.shows_pet());
         d.handle(Input::Resized(SURFACE), t2 + 2 * FRAME);
-        assert!(!d.active());
+        assert!(!d.active() && d.shows_pet());
     }
 
     #[test]
@@ -1082,9 +1097,9 @@ mod tests {
         assert!(matches!(d.handle(Input::Release, t + FRAME).pet, Some(Pet::DragEnded)));
         let step = d.handle(Input::Resized(Size::new(1920.0, 1200.0)), t + 2 * FRAME);
         assert_eq!(step.actions, vec![Action::Home]);
-        assert_eq!(d.offset(), Vector::ZERO);
+        assert!(!d.shows_pet());
         d.handle(Input::Resized(SURFACE), t + 3 * FRAME);
-        assert!(!d.active());
+        assert!(!d.active() && d.shows_pet());
         assert_eq!(d.home, HOME);
     }
 

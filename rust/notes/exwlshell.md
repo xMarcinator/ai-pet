@@ -785,6 +785,21 @@ From grepping `todo!|unimplemented!|panic!|unreachable!|expect(|unwrap()|TODO|FI
     - `// TODO: handle callback` for blur (`EV/blur.rs:7`)
     - `// TODO: not now` for other pointer events such as gestures and frames (`EV/seat.rs:729-731`)
 19. **Upstream calls popups "only a toy"** (`REPO/README.md:13`), and the CHANGELOG contradicts the source on `NewMenu`.
+20. **A shrink reaches the compositor before the first frame at the new size** (seen on Hyprland 0.57.0,
+    2026-11-07). Each margin, anchor and size change commits at once (`EV/lib.rs:741-874`), and the viewport's
+    destination is set from the configured size (`IE/multi_window/state.rs:102`) before the next frame is drawn. So
+    between the shrink and that frame the compositor holds the old, larger buffer for the new size. Hyprland 0.57
+    squeezes it in (0.56 cropped it). At an overlay drag's drop that showed the output-sized frame as a small, stretched
+    copy of the pet for a frame. The pet's workaround is to draw nothing from the release until the surface is its home
+    size (`Drag::shows_pet` in `aipet-wayland/src/drag.rs`), which shows as a blink of about 45 ms. The user chose
+    that over patching the crate.
+
+    **To check on every iced_exwlshell upgrade:** whether a change of size, margins or anchor can now be committed
+    together with the first buffer of the new size, or the viewport's source can be set so the old buffer is cropped
+    (`EV/lib.rs:635` has `try_set_viewport_source`, but the iced layer doesn't expose it). If it can, drop the blink:
+    remove `Drag::shows_pet` and its check in `Shell::view`, and drop at the overlay drag's end with no gap. Look in
+    upstream's CHANGELOG and issues at https://github.com/waycrate/exwlshelleventloop for "viewport", "resize" and
+    "commit", and retest the drop on Hyprland.
 
 ---
 

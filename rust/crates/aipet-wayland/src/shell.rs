@@ -311,7 +311,11 @@ impl Shell {
 
     fn view(&self, id: window::Id) -> Element<'_, Message> {
         if id == self.pet {
-            // the pet's box, where the drag draws it (the surface may be the whole output)
+            // the pet's box, where the drag draws it (the surface may be the whole output), unless the surface is
+            // shrinking back around it
+            if !self.drag.shows_pet() {
+                return Space::new().into();
+            }
             let pet = container(self.ui.pet_view().map(Message::Ui))
                 .width(SURFACE.width)
                 .height(SURFACE.height);
