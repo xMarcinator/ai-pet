@@ -295,8 +295,8 @@ fn replay(case: &Value, layers: &[Vec<u32>]) -> Result<usize, String> {
         if t.to_bits() != f64_of(s, "t").to_bits() {
             return Err(format!("{at}: the C# used t = {}", f64_of(s, "t")));
         }
-        // the frame's values, owned, so the pet can be asked again
-        let drawn = [*f.body, *f.glow, *f.fx];
+        // the layers as drawn, owned, so the pet can be asked again
+        let drawn = pet.layers().map(|l| *l);
         let (changed, fx, fy, fsx, fsy, fss, fso) = (
             f.pixels_changed,
             f.x,

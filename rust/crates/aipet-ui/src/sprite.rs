@@ -1,69 +1,261 @@
-//! The sprite's bitmaps: the pet's layers as images, the glow's blurred halo, and the ground shadow.
+//! The sprite's bitmaps: the pack's frames as images, the glow's blurred halos, and the ground shadow.
 //!
-//! `Handle::from_rgba` takes straight (not premultiplied) alpha and makes a new texture on every call, so layers are
-//! converted from the pet's premultiplied pixels and turned into images only when their pixels actually change.
+//! `Handle::from_rgba` makes a new texture on every call, so every frame of the pack (and its mirror image, and for
+//! a glowing layer its halo) becomes an image once, when the pet puts the pack on ([`Art::new`]). Each redraw then
+//! only picks which images show where ([`Sprite::update`]): a frame that doesn't change makes no new image.
 
+use std::collections::BTreeMap;
+
+use aipet_sprite::compose;
 use aipet_sprite::load::LoadedPack;
-use aipet_sprite::{GH, GW, PIXELS, Pet, PetFrame, PetInput, XorShift64};
-use iced::widget::image::Handle;
+use aipet_sprite::pack::{Art as Raster, Kind, Mirror, Pack};
+use aipet_sprite::pose::{Channel, Pose};
+use aipet_sprite::{GH, GW, PIXELS, Pet, PetInput, XorShift64};
+use iced::widget::image::{FilterMethod, Handle};
+use iced::{Point, Rectangle, Size};
 
-use crate::geometry::HALO_PAD;
-
-/// The halo's bitmap: the sprite's 130 × 120 plus [`HALO_PAD`] on each side, at 1 px per logical px.
-pub const HALO_W: usize = GW as usize * 5 + 2 * HALO_PAD as usize;
-pub const HALO_H: usize = GH as usize * 5 + 2 * HALO_PAD as usize;
+use crate::geometry::{HALO_PAD, SPRITE_ORIGIN};
 
 /// The ground shadow's bitmap: 4 px per logical px of its 76 × 13, so it stays smooth when scaled.
 const SHADOW_W: usize = 76 * 4;
 const SHADOW_H: usize = 13 * 4;
 
-/// The sprite as images, with the body's solid rows for hit testing.
+/// Where a layer is drawn: with the body, or in the glow (over its halo), or with the effects on top.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    Body,
+    Glow,
+    Fx,
+}
+
+/// One frame as images, with its rows of solid pixels for hit testing.
+struct Frame {
+    image: Handle,
+    /// Its mirror image, for a layer that mirrors.
+    flipped: Option<Handle>,
+    /// Its glow's halo, and the halo's mirror image, for a layer that glows.
+    halo: Option<(Handle, Option<Handle>)>,
+    /// Rows of solid pixels: (x, y, length) in the frame's pixels.
+    runs: Vec<(i32, i32, i32)>,
+    w: u32,
+    h: u32,
+    pivot: (f64, f64),
+    ms: u32,
+}
+
+/// A pack's every frame as images, made once when the pet puts it on.
+pub struct Art {
+    /// Per layer, per value, the frames.
+    layers: Vec<BTreeMap<String, Vec<Frame>>>,
+    /// How many images it made: a redraw makes none.
+    pub made: usize,
+}
+
+/// Whether a layer of `pack` may be drawn mirrored.
+fn mirrors(pack: &Pack, layer: usize) -> bool {
+    pack.layers[layer].mirror.unwrap_or(pack.mirror) == Mirror::Flip
+}
+
+/// The frame's pixels from its sheet (straight 0xAARRGGBB), row-major `w` × `h`.
+fn cut(p: &LoadedPack, sheet: usize, x: u32, y: u32, w: u32, h: u32) -> Vec<u32> {
+    let s = &p.sheets[sheet];
+    let mut px = Vec::with_capacity((w * h) as usize);
+    for row in y..y + h {
+        let at = (row * s.width + x) as usize;
+        px.extend_from_slice(&s.pixels[at..at + w as usize]);
+    }
+    px
+}
+
+fn flip(px: &[u32], w: u32) -> Vec<u32> {
+    px.chunks(w as usize)
+        .flat_map(|row| row.iter().rev().copied())
+        .collect()
+}
+
+/// Straight 0xAARRGGBB pixels as RGBA bytes.
+fn rgba(px: &[u32]) -> Vec<u8> {
+    px.iter()
+        .flat_map(|&c| [(c >> 16) as u8, (c >> 8) as u8, c as u8, (c >> 24) as u8])
+        .collect()
+}
+
+impl Art {
+    pub fn new(p: &LoadedPack) -> Art {
+        let pack = &p.pack;
+        let mut made = 0;
+        // a glow's halo is blurred at 1 px per logical px: an art pixel is this many
+        let px = pack.pixel_size.round().max(1.0) as usize;
+        let layers = pack
+            .layers
+            .iter()
+            .enumerate()
+            .map(|(i, layer)| {
+                let flips = mirrors(pack, i);
+                layer
+                    .animations
+                    .iter()
+                    .map(|(value, a)| {
+                        let frames = a
+                            .frames
+                            .iter()
+                            .filter_map(|f| match f.art {
+                                Raster::Raster {
+                                    sheet,
+                                    x,
+                                    y,
+                                    w,
+                                    h,
+                                    pivot,
+                                } => Some((cut(p, sheet, x, y, w, h), w, h, pivot, f.ms)),
+                                Raster::Vector => None,
+                            })
+                            .map(|(pixels, w, h, pivot, ms)| {
+                                let image = Handle::from_rgba(w, h, rgba(&pixels));
+                                let flipped = flips.then(|| Handle::from_rgba(w, h, rgba(&flip(&pixels, w))));
+                                let halo = layer.glow.then(|| {
+                                    let (hw, hh, bytes) = halo(&pixels, w as usize, h as usize, px, pack.glow);
+                                    let flipped = flips.then(|| {
+                                        let (_, _, b) = halo(&flip(&pixels, w), w as usize, h as usize, px, pack.glow);
+                                        Handle::from_rgba(hw as u32, hh as u32, b)
+                                    });
+                                    (Handle::from_rgba(hw as u32, hh as u32, bytes), flipped)
+                                });
+                                made += 1
+                                    + usize::from(flipped.is_some())
+                                    + halo.as_ref().map_or(0, |h| 1 + usize::from(h.1.is_some()));
+                                Frame {
+                                    runs: runs(&pixels, w as usize),
+                                    image,
+                                    flipped,
+                                    halo,
+                                    w,
+                                    h,
+                                    pivot,
+                                    ms,
+                                }
+                            })
+                            .collect();
+                        (value.clone(), frames)
+                    })
+                    .collect()
+            })
+            .collect();
+        Art { layers, made }
+    }
+}
+
+/// An image to draw this frame: where (in the sprite, before the body's motion), how, and with which halo.
+#[derive(Clone, Debug)]
+pub struct Shown {
+    pub target: Target,
+    pub image: Handle,
+    pub rect: Rectangle,
+    pub filter: FilterMethod,
+    /// The halo, drawn [`HALO_PAD`] beyond the frame on each side.
+    pub halo: Option<Handle>,
+}
+
+/// The pack's art size for a logical px at `scale` device px: a pixel pack's pixels are a whole number of device
+/// px, so they stay crisp; painted and vector art keep their size.
+pub fn pixel_size(pack: &Pack, scale: f32) -> f32 {
+    let ps = pack.pixel_size as f32;
+    match pack.kind {
+        Kind::Pixel if scale > 0.0 => (ps * scale).round().max(1.0) / scale,
+        _ => ps,
+    }
+}
+
+/// What the sprite shows: the images of this redraw, and the art's hit rectangles.
 pub struct Sprite {
-    body: [u32; PIXELS],
-    glow: [u32; PIXELS],
-    fx: [u32; PIXELS],
-    glow_colour: u32,
-    /// The body layer.
-    pub body_image: Handle,
-    /// The glow and effects layers together: both are drawn over the halo.
-    pub top_image: Handle,
-    /// The glow's blurred halo, drawn between the body and the glow (a drop shadow sits under what casts it).
-    pub halo_image: Handle,
-    /// The body's rows of solid pixels: (x, y, length) in grid pixels.
-    pub runs: Vec<(i32, i32, i32)>,
+    pub art: Art,
+    /// The images to draw, in the pack's order.
+    pub shown: Vec<Shown>,
+    /// The hit layers' solid pixels, as rectangles in the sprite (before the body's motion).
+    pub hits: Vec<Rectangle>,
+    /// Whether an animation on screen moves faster than the calm frame rate shows (its typical frame is shorter).
+    pub fast_ms: Option<u32>,
 }
 
 impl Sprite {
-    pub fn new() -> Self {
-        let empty = [0; PIXELS];
+    pub fn new(p: &LoadedPack) -> Self {
         Sprite {
-            body: empty,
-            glow: empty,
-            fx: empty,
-            glow_colour: 0,
-            body_image: layer_image(&empty),
-            top_image: layer_image(&empty),
-            halo_image: Handle::from_rgba(HALO_W as u32, HALO_H as u32, halo(&empty, 0)),
-            runs: Vec::new(),
+            art: Art::new(p),
+            shown: Vec::new(),
+            hits: Vec::new(),
+            fast_ms: None,
         }
     }
 
-    /// Takes a frame's pixels (call it when `pixels_changed`) and remakes the images whose pixels differ.
-    pub fn update(&mut self, frame: &PetFrame, glow_colour: u32) {
-        if self.body != *frame.body {
-            self.body = *frame.body;
-            self.body_image = layer_image(&self.body);
-            self.runs = runs(&self.body);
-        }
-        let glow_changed = self.glow != *frame.glow || self.glow_colour != glow_colour;
-        if glow_changed {
-            self.glow = *frame.glow;
-            self.glow_colour = glow_colour;
-            self.halo_image = Handle::from_rgba(HALO_W as u32, HALO_H as u32, halo(&self.glow, glow_colour));
-        }
-        if glow_changed || self.fx != *frame.fx {
-            self.fx = *frame.fx;
-            self.top_image = layer_image(&over(&self.fx, &self.glow));
+    /// Picks the frames `pose` shows at `t` and lays them out at `scale` device px per logical px.
+    pub fn update(&mut self, pack: &Pack, pose: &Pose, t: f64, scale: f32) {
+        self.shown.clear();
+        self.hits.clear();
+        self.fast_ms = None;
+        let ps = pixel_size(pack, scale);
+        let filter = match pack.kind {
+            Kind::Pixel => FilterMethod::Nearest,
+            Kind::Painted | Kind::Vector => FilterMethod::Linear,
+        };
+        // the art sits with its anchor where the sprite squashes about
+        let origin = Point::new(
+            SPRITE_ORIGIN.x - pack.anchor.0 as f32 * ps,
+            SPRITE_ORIGIN.y - pack.anchor.1 as f32 * ps,
+        );
+        for pick in compose::pick(pack, pose, t) {
+            let layer = &pack.layers[pick.layer];
+            let Some(frames) = self.art.layers[pick.layer].get(pick.value) else {
+                continue;
+            };
+            let Some(f) = pick.frame.and_then(|i| frames.get(i)) else {
+                continue;
+            };
+            if frames.len() > 1 {
+                let mut ms: Vec<u32> = frames.iter().map(|f| f.ms).collect();
+                ms.sort_unstable();
+                let typical = ms[ms.len() / 2];
+                self.fast_ms = Some(self.fast_ms.map_or(typical, |m| m.min(typical)));
+            }
+            let (dx, dy) = compose::raster_offset(pack, layer, pose);
+            let at_x = (dx / pack.pixel_size).round() as f32 - f.pivot.0 as f32;
+            let at_y = (dy / pack.pixel_size).round() as f32 - f.pivot.1 as f32;
+            let mut rect = Rectangle::new(
+                Point::new(origin.x + at_x * ps, origin.y + at_y * ps),
+                Size::new(f.w as f32 * ps, f.h as f32 * ps),
+            );
+            let mirrored = pick.mirrored && f.flipped.is_some();
+            if mirrored {
+                // about the sprite's middle, as the art box is
+                rect.x = 2.0 * SPRITE_ORIGIN.x - rect.x - rect.width;
+            }
+            let target = if layer.channel == Channel::Fx {
+                Target::Fx
+            } else if layer.glow {
+                Target::Glow
+            } else {
+                Target::Body
+            };
+            let image = if mirrored { f.flipped.clone() } else { None }.unwrap_or_else(|| f.image.clone());
+            let halo = f
+                .halo
+                .as_ref()
+                .map(|(h, flipped)| if mirrored { flipped.clone() } else { None }.unwrap_or_else(|| h.clone()));
+            if layer.hit {
+                for &(x, y, len) in &f.runs {
+                    let x = if mirrored { f.w as i32 - x - len } else { x };
+                    self.hits.push(Rectangle::new(
+                        Point::new(rect.x + x as f32 * ps, rect.y + y as f32 * ps),
+                        Size::new(len as f32 * ps, ps),
+                    ));
+                }
+            }
+            self.shown.push(Shown {
+                target,
+                image,
+                rect,
+                filter,
+                halo,
+            });
         }
     }
 }
@@ -76,12 +268,9 @@ pub fn still(avatar: &LoadedPack) -> Handle {
         state: "idle".to_owned(),
         ..PetInput::default()
     };
-    let frame = pet.update(&input, 0.0);
-    layer_image(&over(frame.fx, &over(frame.glow, frame.body)))
-}
-
-fn layer_image(px: &[u32; PIXELS]) -> Handle {
-    Handle::from_rgba(GW as u32, GH as u32, straight_rgba(px))
+    pet.update(&input, 0.0);
+    let [body, glow, fx] = pet.layers();
+    Handle::from_rgba(GW as u32, GH as u32, straight_rgba(&over(fx, &over(glow, body))))
 }
 
 /// Straight-alpha RGBA bytes from premultiplied 0xAARRGGBB pixels.
@@ -110,36 +299,39 @@ fn over(top: &[u32; PIXELS], bottom: &[u32; PIXELS]) -> [u32; PIXELS] {
     out
 }
 
-/// The glow layer's halo, as Avalonia draws the C#'s `DropShadowDirectionEffect` (BlurRadius 10, Opacity 0.9): the
-/// layer's alpha at 5 px per grid pixel, blurred with σ = 0.288675 × 10 + 0.5 ≈ 3.4 px (Skia's radius-to-sigma; here
-/// three box blurs of radius 3, σ ≈ 3.46), in `colour` at 90 % of its alpha. Straight RGBA, [`HALO_W`] × [`HALO_H`].
-pub fn halo(glow: &[u32; PIXELS], colour: u32) -> Vec<u8> {
+/// A glowing frame's halo, as Avalonia draws the C#'s `DropShadowDirectionEffect` (BlurRadius 10, Opacity 0.9): the
+/// frame's alpha at `px` logical px per art pixel, [`HALO_PAD`] wider each side, blurred with σ = 0.288675 × 10 + 0.5
+/// ≈ 3.4 px (Skia's radius-to-sigma; here three box blurs of radius 3, σ ≈ 3.46), in `colour` at 90 % of its alpha.
+/// Straight RGBA; returns its width, height and bytes.
+pub fn halo(frame: &[u32], w: usize, h: usize, px: usize, colour: u32) -> (usize, usize, Vec<u8>) {
     let pad = HALO_PAD as usize;
-    let mut alpha = vec![0f32; HALO_W * HALO_H];
-    for (i, &p) in glow.iter().enumerate() {
+    let (hw, hh) = (w * px + 2 * pad, h * px + 2 * pad);
+    let mut alpha = vec![0f32; hw * hh];
+    for (i, &p) in frame.iter().enumerate() {
         let a = (p >> 24) as f32 / 255.0;
         if a == 0.0 {
             continue;
         }
-        let (gx, gy) = (i % GW as usize, i / GW as usize);
-        for y in 0..5 {
-            let row = (pad + gy * 5 + y) * HALO_W + pad + gx * 5;
-            alpha[row..row + 5].fill(a);
+        let (fx, fy) = (i % w, i / w);
+        for y in 0..px {
+            let row = (pad + fy * px + y) * hw + pad + fx * px;
+            alpha[row..row + px].fill(a);
         }
     }
     let mut line = Vec::new();
     for _ in 0..3 {
-        box_blur(&mut alpha, HALO_W, 1, HALO_H, HALO_W, &mut line);
-        box_blur(&mut alpha, HALO_H, HALO_W, HALO_W, 1, &mut line);
+        box_blur(&mut alpha, hw, 1, hh, hw, &mut line);
+        box_blur(&mut alpha, hh, hw, hw, 1, &mut line);
     }
     // the colour everywhere (so linear filtering has no dark fringe), the blur in the alpha; Avalonia's shadow alpha
     // is the colour's alpha × opacity cast to a byte
     let strength = ((colour >> 24) as f32 * 0.9).trunc();
     let [r, g, b] = [(colour >> 16) as u8, (colour >> 8) as u8, colour as u8];
-    alpha
+    let bytes = alpha
         .iter()
         .flat_map(|&a| [r, g, b, (a * strength).round().clamp(0.0, 255.0) as u8])
-        .collect()
+        .collect();
+    (hw, hh, bytes)
 }
 
 /// Box-blurs `lines` lines of `len` values in place, radius 3; values past the ends count as 0. A line starts at
@@ -164,27 +356,12 @@ fn box_blur(buf: &mut [f32], len: usize, step: usize, lines: usize, line_step: u
     }
 }
 
-/// The rows of solid (non-transparent) pixels of a layer, as (x, y, length) in grid pixels.
-pub fn runs(layer: &[u32; PIXELS]) -> Vec<(i32, i32, i32)> {
-    let mut runs = Vec::new();
-    for (y, row) in layer.chunks(GW as usize).enumerate() {
-        let mut x = 0;
-        while x < row.len() {
-            if row[x] >> 24 == 0 {
-                x += 1;
-                continue;
-            }
-            let start = x;
-            while x < row.len() && row[x] >> 24 != 0 {
-                x += 1;
-            }
-            runs.push((start as i32, y as i32, (x - start) as i32));
-        }
-    }
-    runs
+/// The rows of solid (non-transparent) pixels of a frame `w` pixels wide, as (x, y, length).
+pub fn runs(frame: &[u32], w: usize) -> Vec<(i32, i32, i32)> {
+    aipet_sprite::compose::runs_argb(frame, w)
 }
 
-/// The ground shadow: the C#'s radial gradient, #66000000 in the middle, #33000000 at 55 %, transparent at the rim.
+/// The ground shadow's soft ellipse: straight RGBA, [`SHADOW_W`] × [`SHADOW_H`].
 pub fn shadow_image() -> Handle {
     let mut px = Vec::with_capacity(SHADOW_W * SHADOW_H * 4);
     for y in 0..SHADOW_H {
@@ -197,7 +374,7 @@ pub fn shadow_image() -> Handle {
     Handle::from_rgba(SHADOW_W as u32, SHADOW_H as u32, px)
 }
 
-/// The shadow gradient's alpha at `r` (0 in the middle, 1 at the rim).
+/// The shadow's gradient: #66 at the centre, #33 at 55 %, clear at the edge.
 fn shadow_alpha(r: f32) -> u8 {
     let a = if r < 0.55 {
         0x66 as f32 + (0x33 - 0x66) as f32 * r / 0.55
@@ -210,6 +387,8 @@ fn shadow_alpha(r: f32) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aipet_sprite::Avatar;
+    use aipet_sprite::pose::{Facing, Values};
 
     #[test]
     fn straight_alpha_undoes_premultiplying() {
@@ -240,35 +419,27 @@ mod tests {
 
     #[test]
     fn halo_is_a_soft_tinted_blur_of_the_glow() {
-        let mut glow = [0u32; PIXELS];
-        glow[(10 * GW + 12) as usize] = 0xFF7FEFFF; // one eye pixel at (12, 10)
-        let rgba = halo(&glow, 0xFF3D9BFF);
-        let alpha = |x: usize, y: usize| rgba[(y * HALO_W + x) * 4 + 3];
-        // the pixel's middle, in the halo: pad + 12 × 5 + 2
+        let (w, h) = (GW as usize, GH as usize);
+        let mut glow = vec![0u32; w * h];
+        glow[10 * w + 12] = 0xFF7FEFFF; // one eye pixel at (12, 10)
+        let (hw, _, rgba) = halo(&glow, w, h, 5, 0xFF3D9BFF);
+        let alpha = |x: usize, y: usize| rgba[(y * hw + x) * 4 + 3];
         let (cx, cy) = (10 + 62, 10 + 52);
         assert!((50..70).contains(&alpha(cx, cy)), "{}", alpha(cx, cy));
         assert!(alpha(cx + 6, cy) > 0 && alpha(cx + 6, cy) < alpha(cx, cy));
-        assert_eq!(
-            alpha(cx + 12, cy),
-            0,
-            "three radius-3 passes reach 9 px past the 5 px pixel's edge"
-        );
-        assert_eq!(alpha(0, 0), 0);
-        // tinted: every pixel carries the colour, the alpha does the fading
-        assert_eq!(&rgba[..3], &[0x3D, 0x9B, 0xFF]);
-        // a fully covered area comes out at 90 % of the colour's alpha
-        let full = halo(&[0xFFFFFFFF; PIXELS], 0xFF000000);
-        assert_eq!(full[((HALO_H / 2) * HALO_W + HALO_W / 2) * 4 + 3], 229);
+        assert_eq!(alpha(cx + 12, cy), 0, "the blur reaches 9 px");
+        let (hw, hh, full) = halo(&vec![0xFFFFFFFF; w * h], w, h, 5, 0xFF000000);
+        assert_eq!(full[((hh / 2) * hw + hw / 2) * 4 + 3], 229);
     }
 
     #[test]
     fn runs_are_the_solid_stretches_of_each_row() {
-        let mut layer = [0u32; PIXELS];
+        let mut layer = vec![0u32; PIXELS];
         for x in [3, 4, 5, 9] {
             layer[(2 * GW + x) as usize] = 0xFF000000;
         }
         layer[(23 * GW + 25) as usize] = 0x40000000;
-        assert_eq!(runs(&layer), vec![(3, 2, 3), (9, 2, 1), (25, 23, 1)]);
+        assert_eq!(runs(&layer, GW as usize), vec![(3, 2, 3), (9, 2, 1), (25, 23, 1)]);
     }
 
     #[test]
@@ -277,5 +448,59 @@ mod tests {
         assert_eq!(shadow_alpha(0.55), 0x33);
         assert_eq!(shadow_alpha(1.0), 0);
         assert_eq!(shadow_alpha(1.4), 0);
+    }
+
+    fn sprout() -> LoadedPack {
+        LoadedPack::of_avatar(&Avatar::sprout())
+    }
+
+    #[test]
+    fn every_frame_is_an_image_once_and_a_redraw_makes_none() {
+        let p = sprout();
+        let mut sprite = Sprite::new(&p);
+        let made = sprite.art.made;
+        assert!(made >= p.pack.frame_count(), "{made}");
+        let pose = Pose::scripted(Values::IDLE, 0.0);
+        sprite.update(&p.pack, &pose, 0.0, 1.0);
+        let shown = sprite.shown.len();
+        sprite.update(&p.pack, &pose, 0.5, 1.0);
+        assert_eq!((sprite.art.made, sprite.shown.len()), (made, shown));
+        // the baked Sprout's body is drawn in the sprite's 130 × 120 box at scale 1
+        let body = &sprite.shown[0];
+        assert_eq!(
+            (body.target, body.rect),
+            (
+                Target::Body,
+                Rectangle::new(Point::new(0.0, SPRITE_ORIGIN.y - 110.0), Size::new(130.0, 120.0))
+            )
+        );
+        assert!(!sprite.hits.is_empty());
+    }
+
+    #[test]
+    fn a_pixel_pack_snaps_its_pixels_to_device_pixels() {
+        let p = sprout();
+        for (scale, device) in [(1.0, 5.0), (1.25, 6.0), (1.5, 8.0), (2.0, 10.0)] {
+            let ps = pixel_size(&p.pack, scale);
+            assert_eq!(ps * scale, device, "at {scale}");
+        }
+    }
+
+    #[test]
+    fn a_mirrored_layer_uses_its_mirror_image_about_the_middle() {
+        let p = sprout();
+        let mut sprite = Sprite::new(&p);
+        let left = Values {
+            facing: Facing::Left,
+            fx: aipet_sprite::pose::Fx::Dust,
+            ..Values::IDLE
+        };
+        sprite.update(&p.pack, &Pose::scripted(left, 0.0), 0.0, 1.0);
+        let dust = sprite
+            .shown
+            .iter()
+            .find(|s| s.target == Target::Fx)
+            .expect("the dust shows");
+        assert_eq!(dust.rect.x, 130.0 - dust.rect.width - 0.0);
     }
 }

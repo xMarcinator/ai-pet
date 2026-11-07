@@ -601,6 +601,7 @@ impl Shell {
                 if let Some(info) = &output {
                     self.outputs.insert(info.id, screen_of(info));
                 }
+                self.sync_scale();
                 self.set_output(output.and_then(|o| o.logical_size))
             }
             ShellEvent::OutputAdded(info) | ShellEvent::OutputUpdated(info) => {
@@ -608,6 +609,7 @@ impl Shell {
                 self.log(|| format!("output {} {:?}: {screen:?}", info.id, info.name));
                 self.outputs.insert(info.id, screen);
                 if Some(info.id) == self.output {
+                    self.sync_scale();
                     return self.set_output(info.logical_size);
                 }
                 Task::none()
@@ -621,6 +623,13 @@ impl Shell {
     }
 
     /// The drag keeps the pet on its output's size.
+    /// Tells the pet its output's scale, when the output says it: a pixel pack is drawn on whole device pixels.
+    fn sync_scale(&mut self) {
+        if let Some(Some(screen)) = self.output.and_then(|id| self.outputs.get(&id)) {
+            self.ui.set_scale(screen.scale as f32);
+        }
+    }
+
     fn set_output(&mut self, size: Option<(i32, i32)>) -> Task<Message> {
         let actions = self.drag.set_output(size);
         self.change_surface(actions, false)

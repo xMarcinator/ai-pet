@@ -326,6 +326,10 @@ pub struct PetUi {
     sprite_rects: Vec<Rect>,
     shadow: Handle,
     avatars: Vec<aipet_sprite::load::LoadedPack>,
+    /// What the avatars folder had that didn't load, and why.
+    skipped: Vec<aipet_sprite::load::Skipped>,
+    /// Device px per logical px on the pet's output, as the shell says: a pixel pack's pixels are snapped to them.
+    scale: f32,
     /// Each avatar standing still, for the picker.
     stills: Vec<Handle>,
     avatar: usize,
@@ -414,7 +418,8 @@ impl PetUi {
     /// The pet with its preferences and avatar, waiting for the core's first Board (asleep and without bubbles until
     /// then).
     pub fn new(setup: Setup) -> Self {
-        let avatars = aipet_sprite::load::all(&setup.avatars).pets;
+        let found = aipet_sprite::load::all(&setup.avatars);
+        let (avatars, skipped) = (found.pets, found.skipped);
         let avatar = setup
             .prefs
             .avatar
@@ -432,10 +437,12 @@ impl PetUi {
             start: None,
             t: 0.0,
             motion: Motion::REST,
-            sprite: Sprite::new(),
+            sprite: Sprite::new(&avatars[avatar]),
             sprite_rects: Vec::new(),
             shadow: sprite::shadow_image(),
             avatars,
+            skipped,
+            scale: 1.0,
             stills,
             avatar,
             stacks: Stacks::default(),
@@ -509,15 +516,15 @@ impl PetUi {
         }
         self.input.hover = self.hover;
         self.input.music = self.music && self.playing();
-        let glow = self.pet.pack().glow;
         let frame = self.pet.update(&self.input, t);
         if frame.pixels_changed {
-            self.sprite.update(&frame, glow);
+            let (pose, at) = self.pet.drawn();
+            self.sprite.update(self.pet.pack(), pose, at, self.scale);
         }
         let motion = motion(&frame);
         let shift = motion.shift(self.motion);
         self.motion = motion;
-        geometry::sprite_rects(self.motion, &self.sprite.runs, &mut self.sprite_rects);
+        geometry::sprite_rects(self.motion, &self.sprite.hits, &mut self.sprite_rects);
 
         self.sync_cards();
         self.stacks.animate(dt, t);
@@ -790,6 +797,7 @@ impl PetUi {
                 if let Some(avatar) = self.avatars.get(i).filter(|_| i != self.avatar) {
                     self.avatar = i;
                     self.pet.set_pack(avatar.clone());
+                    self.sprite = Sprite::new(avatar);
                     self.save_prefs();
                 }
             }
@@ -1034,7 +1042,12 @@ impl PetUi {
         if let Some(fixed) = self.fixed_frame {
             return fixed;
         }
-        let lively = self.pointer.is_some() || self.input.dragging || self.t < self.smooth_until;
+        // an animation on screen whose frames come faster than the calm rate shows them
+        let fast = self
+            .sprite
+            .fast_ms
+            .is_some_and(|ms| Duration::from_millis(u64::from(ms)) < CALM_FRAME);
+        let lively = self.pointer.is_some() || self.input.dragging || self.t < self.smooth_until || fast;
         if lively { SMOOTH_FRAME } else { CALM_FRAME }
     }
 
@@ -1054,6 +1067,27 @@ impl PetUi {
     }
 
     /// Whether the pet should stay above other windows.
+    /// The pet's output's scale (device px per logical px), from the shell: a pixel pack is drawn on whole device
+    /// pixels at it.
+    pub fn set_scale(&mut self, scale: f32) {
+        if scale.is_finite() && scale > 0.0 && scale != self.scale {
+            self.scale = scale;
+            let (pose, at) = self.pet.drawn();
+            self.sprite.update(self.pet.pack(), pose, at, scale);
+        }
+    }
+
+    /// What the avatars folder had that didn't load, and why.
+    pub fn skipped(&self) -> &[aipet_sprite::load::Skipped] {
+        &self.skipped
+    }
+
+    /// How many images the worn pack's art made when it was put on: redraws make none.
+    #[doc(hidden)]
+    pub fn images_made(&self) -> usize {
+        self.sprite.art.made
+    }
+
     pub fn on_top(&self) -> bool {
         self.on_top
     }
@@ -1934,6 +1968,48 @@ pub(crate) mod tests {
         paced(&mut ui, start, at, at + 2.0 * CALM_FRAME.as_secs_f64());
         assert_eq!(ui.pet.idle_act(), Some("hop"));
         assert_eq!(ui.frame_interval(), SMOOTH_FRAME);
+    }
+
+    #[test]
+    fn a_tick_that_changes_no_frame_makes_no_image() {
+        let mut ui = demo();
+        let start = Instant::now();
+        run(&mut ui, start, 0.0, 0.2);
+        let made = ui.images_made();
+        assert!(made > 0 && !ui.sprite.shown.is_empty());
+        // the pet sleeps, bobs, blinks and moves its Zs for 3 s: every frame is one it already has
+        run(&mut ui, start, 0.2, 3.0);
+        assert_eq!(ui.images_made(), made);
+    }
+
+    #[test]
+    fn an_animation_with_quick_frames_keeps_the_pet_smooth() {
+        let mut ui = demo();
+        ui.fixed_frame = None;
+        let start = Instant::now();
+        paced(&mut ui, start, 0.0, 1.5);
+        assert_eq!(ui.frame_interval(), CALM_FRAME);
+        // the body's frame flips every 20 ms: quicker than the calm rate shows
+        let mut quick = ui.pet.loaded();
+        let body = quick.pack.layers[0].animations.get_mut("body").unwrap();
+        body.frames = vec![body.frames[0].clone(), body.frames[0].clone()];
+        body.frames.iter_mut().for_each(|f| f.ms = 20);
+        body.mode = aipet_sprite::pack::LoopMode::Loop;
+        ui.pet.set_pack(quick.clone());
+        ui.sprite = Sprite::new(&quick);
+        paced(&mut ui, start, 1.5, 1.7);
+        assert_eq!(ui.frame_interval(), SMOOTH_FRAME);
+    }
+
+    #[test]
+    fn a_scale_change_snaps_the_pixels_again() {
+        let mut ui = demo();
+        run(&mut ui, Instant::now(), 0.0, 0.1);
+        let body = |ui: &PetUi| ui.sprite.shown[0].rect;
+        assert_eq!(body(&ui).width, 130.0);
+        ui.set_scale(1.25);
+        // 5 px at 1.25 is 6.25 device px: 6 device px, so 4.8 px a pixel
+        assert!((body(&ui).width - 26.0 * 4.8).abs() < 1e-3, "{:?}", body(&ui));
     }
 
     #[test]

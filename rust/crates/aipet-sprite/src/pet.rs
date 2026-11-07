@@ -72,13 +72,10 @@ impl Default for PetInput {
     }
 }
 
-/// Motion + the three pixel layers for one frame.
+/// One frame's motion, and whether the pet's art changes in it (it is redrawn at 24 fps): what to draw is the pose
+/// ([`Pet::pose`]) through the pack ([`Pet::pack`]), or [`Pet::layers`] for a grid pack.
 #[derive(Clone, Copy, Debug)]
-pub struct PetFrame<'a> {
-    /// Premultiplied 0xAARRGGBB, row-major GW × GH (BGRA in memory on little-endian).
-    pub body: &'a [u32; PIXELS],
-    pub glow: &'a [u32; PIXELS],
-    pub fx: &'a [u32; PIXELS],
+pub struct PetFrame {
     pub pixels_changed: bool,
     pub x: f64,
     pub y: f64,
@@ -170,8 +167,10 @@ pub struct Pet<R: PetRng = XorShift64> {
     pack: Pack,
     /// The pack's sheets, straight colours (premultiplied as they're drawn).
     sheets: Vec<Sheet>,
-    /// When the layers were last drawn.
+    /// When the layers were last drawn and with which pose, and whether [`Pet::layers`] has composited them since.
     drawn_at: f64,
+    drawn_pose: Pose,
+    composited: bool,
 }
 
 /// What the behaviour chose for one frame, in the old renderer's terms (eye names and columns), with the named poses
@@ -262,6 +261,8 @@ impl<R: PetRng> Pet<R> {
             },
             sheets: Vec::new(),
             drawn_at: 0.0,
+            drawn_pose: Pose::scripted(Values::IDLE, 0.0),
+            composited: false,
         };
         pet.set_avatar(Avatar::sprout());
         pet
@@ -498,7 +499,7 @@ impl<R: PetRng> Pet<R> {
     }
 
     /// Advance to time t (seconds) and produce the frame. Pixels are redrawn at 24 fps; motion every call.
-    pub fn update(&mut self, inp: &PetInput, t: f64) -> PetFrame<'_> {
+    pub fn update(&mut self, inp: &PetInput, t: f64) -> PetFrame {
         let dt = (t - self.last_frame).clamp(0.001, 0.05);
         self.last_frame = t;
         let pose = self.compute_pose(inp, t);
@@ -537,12 +538,10 @@ impl<R: PetRng> Pet<R> {
         self.pose = self.tracker.pose(values, motion, t);
         if redraw {
             self.drawn_at = t;
-            self.composite(t);
+            self.drawn_pose = self.pose;
+            self.composited = false;
         }
         PetFrame {
-            body: &self.body_px,
-            glow: &self.glow_px,
-            fx: &self.fx_px,
             pixels_changed,
             x: motion.x,
             y: motion.y,
@@ -565,13 +564,28 @@ impl<R: PetRng> Pet<R> {
         shifted
     }
 
+    /// The pose the art was last drawn with (at the 24 fps redraws), and when: what the UI shows until the next.
+    pub fn drawn(&self) -> (&Pose, f64) {
+        (&self.drawn_pose, self.drawn_at)
+    }
+
+    /// The body, glow and effects layers as last drawn, composited from the pack on the 26 × 24 grid (premultiplied
+    /// 0xAARRGGBB, row-major): for the golden test and the Settings stills. The UI draws the pack's own frames.
+    pub fn layers(&mut self) -> [&[u32; PIXELS]; 3] {
+        if !self.composited {
+            self.composite(self.drawn_at);
+        }
+        [&self.body_px, &self.glow_px, &self.fx_px]
+    }
+
     /// Draws the pose's layers from the pack into the body, glow and effects layers: each layer's frame, moved by its
     /// look offset and mirrored as it says, copied where it isn't transparent.
     fn composite(&mut self, t: f64) {
+        self.composited = t == self.drawn_at;
         self.body_px.fill(0);
         self.glow_px.fill(0);
         self.fx_px.fill(0);
-        for pick in compose::pick(&self.pack, &self.pose, t) {
+        for pick in compose::pick(&self.pack, &self.drawn_pose, t) {
             let layer = &self.pack.layers[pick.layer];
             let Some(Art::Raster {
                 sheet,
@@ -584,7 +598,7 @@ impl<R: PetRng> Pet<R> {
             else {
                 continue;
             };
-            let (dx, dy) = compose::raster_offset(&self.pack, layer, &self.pose);
+            let (dx, dy) = compose::raster_offset(&self.pack, layer, &self.drawn_pose);
             // the look offset in art pixels, less the frame's pivot (a trimmed frame starts inside the art box)
             let (ox, oy) = (
                 (dx / self.pack.pixel_size) as i32 - pivot.0 as i32,
@@ -722,8 +736,9 @@ mod tests {
         assert_eq!(pet.pack().name, "Sprout");
         let f = pet.update(&PetInput::default(), 0.0);
         assert!(f.pixels_changed);
-        assert!(f.body.iter().any(|&px| px != 0));
-        assert!(f.glow.iter().any(|&px| px != 0));
+        let [body, glow, _] = pet.layers();
+        assert!(body.iter().any(|&px| px != 0));
+        assert!(glow.iter().any(|&px| px != 0));
         // same 1/24 s frame: no redraw
         assert!(!pet.update(&PetInput::default(), 0.01).pixels_changed);
         // a new avatar redraws at once
@@ -887,7 +902,7 @@ mod tests {
         let f = pet.update(&run, 1.1);
         assert_eq!(f.x.to_bits(), 0x41CF_FFFF_FD80_0000);
         assert_eq!(f.x, 1_073_741_819.0);
-        assert!(f.pixels_changed && f.glow.iter().any(|&px| px != 0));
+        assert!(f.pixels_changed && pet.layers()[1].iter().any(|&px| px != 0));
         assert_eq!(pet.pose().eyes.look.dx.abs(), 2);
         for (i, facing) in [i32::MAX, i32::MIN, 1 << 30, -(1 << 30), i32::MIN + 1]
             .into_iter()

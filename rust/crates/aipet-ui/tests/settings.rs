@@ -445,6 +445,31 @@ fn reload_shows_new_avatars_and_open_folder_makes_the_folder_first() {
 }
 
 #[test]
+fn reload_lists_what_didnt_load_and_why() {
+    let pet = Pet::new("avatars-skipped");
+    let mut ui = pet.ui;
+    let folder = aipet_sprite::Avatar::custom_dir(&pet.scratch.0);
+    std::fs::create_dir_all(folder.join("half-made")).unwrap();
+    std::fs::write(folder.join("half-made").join("pack.json"), "{ not yet").unwrap();
+    std::fs::write(folder.join("note.json"), "[1, 2, 3]").unwrap();
+    assert!(ui.skipped().is_empty());
+    ui.update(Message::Settings(settings::Message::Avatars(
+        settings::avatars::Message::Reload,
+    )));
+    let skipped: Vec<(&str, &str)> = ui
+        .skipped()
+        .iter()
+        .map(|s| (s.file.as_str(), s.reason.as_str()))
+        .collect();
+    assert_eq!(skipped.len(), 2, "{skipped:?}");
+    assert_eq!(skipped[0].0, "half-made");
+    assert!(skipped[0].1.contains("manifest isn't valid"), "{skipped:?}");
+    assert_eq!(skipped[1].0, "note.json");
+    // the pets themselves are all there
+    assert_eq!(settings::avatars::tiles(&ui).len(), 3);
+}
+
+#[test]
 fn open_folder_opens_nothing_when_the_folder_cannot_be_made() {
     let mut pet = Pet::new("avatars-blocked");
     // a file where the avatars folder goes

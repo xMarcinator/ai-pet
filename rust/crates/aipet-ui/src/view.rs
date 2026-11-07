@@ -10,9 +10,10 @@ use iced::{Border, Color, ContentFit, Element, Length, Padding, Point, Rectangle
 
 use crate::cards::{Button, Card};
 use crate::geometry::{
-    BODY, CARD_GLOW_BLUR, CARD_H, CARD_RADIUS, CARD_SHADOW_BLUR, CARD_SHADOW_Y, CLOSE_SIZE, CardFrame, HALO, HEADER_H,
+    CARD_GLOW_BLUR, CARD_H, CARD_RADIUS, CARD_SHADOW_BLUR, CARD_SHADOW_Y, CLOSE_SIZE, CardFrame, HALO_PAD, HEADER_H,
     HEADER_RADIUS, INLINE_MENU,
 };
+use crate::sprite::Target;
 use crate::style::{self, AMBER, Icon, argb};
 use crate::{Message, PetUi, TIP_FADE, TIP_TEXT};
 
@@ -48,11 +49,25 @@ impl PetUi {
             .position(shadow.position())
             .into(),
         );
-        let body = self.motion.rect_to_surface(BODY);
-        let halo = self.motion.rect_to_surface(HALO);
-        layers.push(pixels(&self.sprite.body_image, body, FilterMethod::Nearest));
-        layers.push(pixels(&self.sprite.halo_image, halo, FilterMethod::Linear));
-        layers.push(pixels(&self.sprite.top_image, body, FilterMethod::Nearest));
+        // the pack's frames: the body's layers, the glow's halos, then the glow and the effects over them, each moved
+        // with the body and put on whole device pixels
+        let place = |r: Rectangle| crate::geometry::snap(self.motion.rect_to_surface(r), self.scale);
+        let shown = &self.sprite.shown;
+        for s in shown.iter().filter(|s| s.target == Target::Body) {
+            layers.push(pixels(&s.image, place(s.rect), s.filter));
+        }
+        for s in shown {
+            if let Some(halo) = &s.halo {
+                let r = Rectangle::new(
+                    Point::new(s.rect.x - HALO_PAD, s.rect.y - HALO_PAD),
+                    iced::Size::new(s.rect.width + 2.0 * HALO_PAD, s.rect.height + 2.0 * HALO_PAD),
+                );
+                layers.push(pixels(halo, place(r), FilterMethod::Linear));
+            }
+        }
+        for s in shown.iter().filter(|s| s.target != Target::Body) {
+            layers.push(pixels(&s.image, place(s.rect), s.filter));
+        }
         // the hand pointer over the sprite, as the C#'s Cursor="Hand"
         let hand = self.motion.rect_to_surface(crate::geometry::HIT_ELLIPSE);
         layers.push(

@@ -30,6 +30,7 @@ pub const HIT_ELLIPSE: Rectangle = Rectangle {
 /// How far the glow's halo reaches past the sprite on each side.
 pub const HALO_PAD: f32 = 10.0;
 /// The unscaled sprite's own box, and its halo's, in the sprite.
+#[cfg(test)]
 pub const BODY: Rectangle = Rectangle {
     x: 0.0,
     y: 0.0,
@@ -268,26 +269,73 @@ pub fn rounded(r: Rectangle, radius: f32, rects: &mut Vec<Rect>) {
     }
 }
 
-/// Sets `rects` to the sprite's input region: the hit ellipse's bounding box plus the body's solid pixels, where the
-/// sprite is drawn this frame. `runs` are the body's rows of solid pixels as (x, y, length) in grid pixels.
-pub fn sprite_rects(motion: Motion, runs: &[(i32, i32, i32)], rects: &mut Vec<Rect>) {
+/// The most rectangles the sprite's solid pixels may add to its input region: past it, rows are joined into
+/// coarser bands.
+pub const MAX_SPRITE_RECTS: usize = 64;
+
+/// Sets `rects` to the sprite's input region: the hit ellipse's bounding box plus the art's solid pixels, where the
+/// sprite is drawn this frame. `hits` are the hit layers' rows of solid pixels as rectangles in the sprite (before the
+/// body's motion). Overlapping rows join, rows of the same span join downwards, and past [`MAX_SPRITE_RECTS`] the
+/// rows are joined into ever taller bands, each as wide as its pixels reach.
+pub fn sprite_rects(motion: Motion, hits: &[Rectangle], rects: &mut Vec<Rect>) {
     let ellipse = Rect::covering(motion.rect_to_surface(HIT_ELLIPSE));
     rects.clear();
     rects.extend(ellipse);
-    for &(x, y, len) in runs {
-        let run = Rectangle {
-            x: x as f32 * 5.0,
-            y: y as f32 * 5.0,
-            width: len as f32 * 5.0,
-            height: 5.0,
-        };
-        let Some(r) = Rect::covering(motion.rect_to_surface(run)) else {
-            continue;
-        };
-        if !ellipse.is_some_and(|e| e.contains_rect(&r)) {
-            push_merged(rects, 0, r);
+    let mut rows: Vec<Rect> = hits
+        .iter()
+        .filter_map(|&r| Rect::covering(motion.rect_to_surface(r)))
+        .filter(|r| !ellipse.is_some_and(|e| e.contains_rect(r)))
+        .collect();
+    rows.sort_by_key(|r| (r.y, r.height, r.x));
+    // within a row, runs that overlap or touch are one
+    let mut joined: Vec<Rect> = Vec::with_capacity(rows.len());
+    for r in rows {
+        match joined.last_mut() {
+            Some(last) if last.y == r.y && last.height == r.height && r.x <= last.x + last.width => {
+                last.width = last.width.max(r.x + r.width - last.x);
+            }
+            _ => joined.push(r),
         }
     }
+    let mut merged: Vec<Rect> = Vec::with_capacity(joined.len());
+    for r in &joined {
+        push_merged(&mut merged, 0, *r);
+    }
+    // too many: bands of rows, twice as tall each time, each one rectangle as wide as its rows reach
+    let mut band = merged.iter().map(|r| r.height).min().unwrap_or(1).max(1) * 2;
+    while merged.len() > MAX_SPRITE_RECTS {
+        let top = merged.iter().map(|r| r.y).min().unwrap_or(0);
+        let mut bands: std::collections::BTreeMap<i32, Rect> = std::collections::BTreeMap::new();
+        for r in &merged {
+            bands
+                .entry((r.y - top) / band)
+                .and_modify(|b| {
+                    let (x0, y0) = (b.x.min(r.x), b.y.min(r.y));
+                    let (x1, y1) = ((b.x + b.width).max(r.x + r.width), b.bottom().max(r.bottom()));
+                    *b = Rect {
+                        x: x0,
+                        y: y0,
+                        width: x1 - x0,
+                        height: y1 - y0,
+                    };
+                })
+                .or_insert(*r);
+        }
+        merged = bands.into_values().collect();
+        band *= 2;
+    }
+    rects.extend(merged);
+}
+
+/// `r` with its edges on whole device px at `scale` device px per logical px, so a pixel pack's pixels land on
+/// device pixels.
+pub fn snap(r: Rectangle, scale: f32) -> Rectangle {
+    if scale <= 0.0 {
+        return r;
+    }
+    let edge = |v: f32| (v * scale).round() / scale;
+    let (x0, y0, x1, y1) = (edge(r.x), edge(r.y), edge(r.x + r.width), edge(r.y + r.height));
+    Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0))
 }
 
 #[cfg(test)]
@@ -454,7 +502,15 @@ mod tests {
     #[test]
     fn sprite_rects_are_the_ellipse_box_plus_body_runs_outside_it() {
         // one run inside the ellipse box, one sticking out left of it (an arm), two rows of a foot below it
-        let runs = [(8, 6, 4), (1, 10, 3), (10, 21, 2), (10, 22, 2)];
+        let runs: Vec<Rectangle> = [(8, 6, 4), (1, 10, 3), (10, 21, 2), (10, 22, 2)]
+            .into_iter()
+            .map(|(x, y, len)| {
+                Rectangle::new(
+                    Point::new(x as f32 * 5.0, y as f32 * 5.0),
+                    Size::new(len as f32 * 5.0, 5.0),
+                )
+            })
+            .collect();
         let mut rects = vec![Rect {
             x: 0,
             y: 0,
@@ -492,6 +548,49 @@ mod tests {
         };
         sprite_rects(up, &runs, &mut rects);
         assert_eq!(rects[0].y, 472);
+    }
+
+    #[test]
+    fn overlapping_rows_join_and_too_many_rows_coarsen_to_the_cap() {
+        // two layers' runs on one row, overlapping: one rectangle
+        let row = |x: f32, w: f32, y: f32| Rectangle::new(Point::new(x, y), Size::new(w, 5.0));
+        let mut rects = Vec::new();
+        sprite_rects(
+            Motion::REST,
+            &[row(-20.0, 10.0, 0.0), row(-15.0, 10.0, 0.0)],
+            &mut rects,
+        );
+        assert_eq!(rects[1].width, 15);
+        // a checkerboard of 1 px runs outside the ellipse: far more than the cap, coarsened to it
+        let many: Vec<Rectangle> = (0..120)
+            .flat_map(|y| {
+                (0..3).map(move |i| {
+                    Rectangle::new(
+                        Point::new(i as f32 * 4.0 + (y % 2) as f32, y as f32),
+                        Size::new(1.0, 1.0),
+                    )
+                })
+            })
+            .collect();
+        sprite_rects(Motion::REST, &many, &mut rects);
+        assert!(rects.len() - 1 <= MAX_SPRITE_RECTS, "{}", rects.len());
+        // every run is still covered
+        for r in &many {
+            let p = Motion::REST.rect_to_surface(*r).center();
+            assert!(rects.iter().any(|q| q.contains(p)), "{p:?}");
+        }
+    }
+
+    #[test]
+    fn snapping_puts_edges_on_device_pixels() {
+        let r = Rectangle::new(Point::new(10.3, 20.1), Size::new(124.8, 115.2));
+        for scale in [1.0, 1.25, 1.5, 2.0] {
+            let s = snap(r, scale);
+            for v in [s.x, s.y, s.x + s.width, s.y + s.height] {
+                let d = v * scale;
+                assert!((d - d.round()).abs() < 1e-3, "{v} at {scale}");
+            }
+        }
     }
 
     #[test]

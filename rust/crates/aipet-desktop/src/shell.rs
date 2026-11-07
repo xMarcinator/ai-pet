@@ -256,6 +256,7 @@ impl Shell {
             }
             Message::Shown(scale) => {
                 self.scale = Some(scale);
+                self.ui.set_scale(scale);
                 self.log(|| format!("pet window shown, scale factor {scale}"));
                 if std::mem::take(&mut self.open_settings) {
                     return self.open_settings();
@@ -399,6 +400,7 @@ impl Shell {
             Event::Window(window::Event::Rescaled(scale)) => {
                 self.log(|| format!("scale factor {scale}"));
                 self.scale = Some(scale);
+                self.ui.set_scale(scale);
                 return self.sync_region(Instant::now(), true);
             }
             // a click elsewhere took the focus: the menu goes, as a menu does. So does a drag: whatever took the focus

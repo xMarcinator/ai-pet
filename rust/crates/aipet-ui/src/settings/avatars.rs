@@ -132,13 +132,20 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
     .spacing(8);
     let own = button_row(
         "Your own avatars",
-        "Put an avatar .json file (a copy of a built-in one with your own colours and shape) in the avatars folder; \
-         it shows up here.",
+        "Put a pet in the avatars folder: a pack folder (pack.json and its PNG sheets, or an Aseprite json-array \
+         export), or an avatar .json file. It shows up here after Reload.",
         buttons,
     );
     let mut own = column![own].spacing(8);
     if let Some(line) = &pet.settings.avatars.folder_error {
         own = own.push(status(line.as_str(), Tone::Bad));
+    }
+    // what the folder had that didn't load, one line each with why
+    for skipped in &pet.skipped {
+        own = own.push(status(
+            format!("Skipped {}: {}", skipped.file, skipped.reason),
+            Tone::Bad,
+        ));
     }
     column![grid, card(own)]
         .spacing(16)
@@ -165,7 +172,11 @@ fn tip<'a>(line: String) -> Element<'a, crate::Message> {
 pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
     let folder = Avatar::custom_dir(&pet.settings.services.data_dir);
     match message {
-        Message::Reload => reload(pet, load::all(&folder).pets),
+        Message::Reload => {
+            let found = load::all(&folder);
+            pet.skipped = found.skipped;
+            reload(pet, found.pets);
+        }
         // the platform opens only a folder that is there: one that can't be made isn't opened, and the page says why
         Message::OpenFolder => match fs::create_dir_all(&folder) {
             Ok(()) => {
@@ -190,6 +201,7 @@ fn reload(pet: &mut PetUi, mut avatars: Vec<LoadedPack>) {
             // a pack whose art changed is worn as it is now
             if avatars[i] != pet.pet.loaded() {
                 pet.pet.set_pack(avatars[i].clone());
+                pet.sprite = crate::sprite::Sprite::new(&avatars[i]);
             }
             (i, None)
         }
