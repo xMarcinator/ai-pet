@@ -137,6 +137,12 @@ impl Platform for Linux {
         }
     }
 
+    /// KDE's animation speed at 0 (`AnimationDurationFactor` in kdeglobals), or GNOME's animations off
+    /// (`enable-animations`, through the settings portal).
+    fn reduced_motion(&self) -> bool {
+        kde_reduced_motion(&kdeglobals()) || gnome_reduced_motion(&*self.tools)
+    }
+
     fn media(&self) -> Option<&dyn MediaPlayer> {
         Some(&self.mpris)
     }
@@ -255,6 +261,50 @@ fn read_playerctl(tools: &dyn Tools) -> Said {
 }
 
 /// `ReadDbus`: the player's bus, then its `Metadata` and `PlaybackStatus`.
+/// `~/.config/kdeglobals` (or under `XDG_CONFIG_HOME`), or nothing.
+fn kdeglobals() -> String {
+    let config = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::Path::new(&h).join(".config")));
+    config
+        .and_then(|c| std::fs::read_to_string(c.join("kdeglobals")).ok())
+        .unwrap_or_default()
+}
+
+/// Whether kdeglobals turns animations off: `AnimationDurationFactor=0` in its `[KDE]` group.
+fn kde_reduced_motion(kdeglobals: &str) -> bool {
+    let mut in_kde = false;
+    for line in kdeglobals.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_kde = line == "[KDE]";
+        } else if in_kde && let Some(v) = line.strip_prefix("AnimationDurationFactor=") {
+            return v.trim().parse::<f64>().is_ok_and(|f| f == 0.0);
+        }
+    }
+    false
+}
+
+/// Whether GNOME's animations are off, read through the desktop portal's settings (no portal, no GNOME: no).
+fn gnome_reduced_motion(tools: &dyn Tools) -> bool {
+    if !tools.has("dbus-send") {
+        return false;
+    }
+    let (code, out) = tools.capture(
+        "dbus-send",
+        &[
+            "--session",
+            "--print-reply",
+            "--dest=org.freedesktop.portal.Desktop",
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.portal.Settings.ReadOne",
+            "string:org.gnome.desktop.interface",
+            "string:enable-animations",
+        ],
+    );
+    code == 0 && out.contains("boolean false")
+}
+
 fn read_dbus(tools: &dyn Tools) -> Said {
     let Some(bus) = bus(tools) else {
         return Said::default();
@@ -452,4 +502,20 @@ pub fn capture(command: &mut Command, timeout: Duration) -> (i32, String) {
     let _ = child.kill();
     let _ = child.wait();
     (-1, String::new())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kdeglobals_turns_animations_off_with_a_factor_of_zero_in_its_kde_group() {
+        assert!(kde_reduced_motion("[General]\nx=1\n[KDE]\nAnimationDurationFactor=0\n"));
+        assert!(kde_reduced_motion(
+            "[KDE]\n AnimationDurationFactor = 0 \n".replace(" = ", "=").as_str()
+        ));
+        assert!(!kde_reduced_motion("[KDE]\nAnimationDurationFactor=0.5\n"));
+        assert!(!kde_reduced_motion("[Other]\nAnimationDurationFactor=0\n"));
+        assert!(!kde_reduced_motion(""));
+    }
 }

@@ -86,7 +86,12 @@ pub fn pick<'a>(pack: &'a Pack, pose: &Pose, t: f64) -> Vec<Pick<'a>> {
                     Clock::Change => pose.since(layer.channel),
                     Clock::Pet => 0.0,
                 };
-                step(a.frames.len(), |f| a.frames[f].ms, a.mode, (t - from) * 1000.0)
+                // reduced motion holds the first frame
+                if pose.still {
+                    0
+                } else {
+                    step(a.frames.len(), |f| a.frames[f].ms, a.mode, (t - from) * 1000.0)
+                }
             });
             Some(Pick {
                 layer: i,
@@ -221,7 +226,11 @@ impl Parts {
                 {
                     let total: f64 = a.keys.iter().map(|k| f64::from(k.ms)).sum();
                     let elapsed = (t - pose.since(layer.channel)) * 1000.0 + phase * total;
-                    let k = a.keys[step(a.keys.len(), |i| a.keys[i].ms, a.mode, elapsed)];
+                    let k = a.keys[if pose.still {
+                        0
+                    } else {
+                        step(a.keys.len(), |i| a.keys[i].ms, a.mode, elapsed)
+                    }];
                     x += k.dx;
                     y += k.dy;
                     (rotate, scale, opacity) = (k.rotate, k.scale, k.opacity);

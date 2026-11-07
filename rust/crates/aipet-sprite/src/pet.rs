@@ -167,6 +167,8 @@ pub struct Pet<R: PetRng = XorShift64> {
     pack: Pack,
     /// The pack's sheets, straight colours (premultiplied as they're drawn).
     sheets: Vec<Sheet>,
+    /// Reduced motion ([`Pet::set_reduced_motion`]).
+    reduced: bool,
     /// When the layers were last drawn and with which pose, and whether [`Pet::layers`] has composited them since.
     drawn_at: f64,
     drawn_pose: Pose,
@@ -260,6 +262,7 @@ impl<R: PetRng> Pet<R> {
                 layers: Vec::new(),
             },
             sheets: Vec::new(),
+            reduced: false,
             drawn_at: 0.0,
             drawn_pose: Pose::scripted(Values::IDLE, 0.0),
             composited: false,
@@ -295,6 +298,16 @@ impl<R: PetRng> Pet<R> {
     /// while the pet is hovered or held. For tests: the golden data records the C#'s `idleAct` at every sample.
     pub fn idle_act(&self) -> Option<&'static str> {
         self.idle_act
+    }
+
+    /// Reduced motion, as the system asks: no idle acts, no bob, squash or breathing, and every animation holds its
+    /// first frame; changes of state and expression still show.
+    pub fn set_reduced_motion(&mut self, on: bool) {
+        if self.reduced != on {
+            self.reduced = on;
+            self.idle_act = None;
+            self.last_draw_frame = -1;
+        }
     }
 
     /// Wears `a`: a built-in pet's embedded pack, else the avatar baked now (once, not per frame).
@@ -362,7 +375,8 @@ impl<R: PetRng> Pet<R> {
                 p.y = (0.5 + 0.5 * (t * 2.2).sin()) * 0.6 * PF;
                 p.lx = self.look;
                 if !inp.hover && !drg {
-                    if self.idle_act.is_none() && t > self.next_idle {
+                    // reduced motion plays no idle acts
+                    if self.idle_act.is_none() && t > self.next_idle && !self.reduced {
                         let act = ["look", "hop", "stretch", "wiggle", "tap"][self.rng.next_int(5) as usize];
                         self.idle_act = Some(act);
                         self.idle_start = t;
@@ -526,16 +540,29 @@ impl<R: PetRng> Pet<R> {
         };
         self.prev_y = pose.y;
         let lift = (1.0 + pose.y / 45.0).clamp(0.5, 1.0);
-        let motion = Motion {
-            x: pose.x,
-            y: pose.y,
-            scale_x: 1.0 + self.squash - stretch * 0.5 - breathe * 0.5,
-            scale_y: 1.0 - self.squash + stretch + breathe,
-            shadow_scale: if pose.held { 0.55 } else { lift },
-            shadow_opacity: if pose.held { 0.35 } else { lift },
+        let motion = if self.reduced {
+            // reduced motion: the pet stands still, unsquashed, on its whole shadow
+            Motion {
+                x: 0.0,
+                y: 0.0,
+                scale_x: 1.0,
+                scale_y: 1.0,
+                shadow_scale: if pose.held { 0.55 } else { 1.0 },
+                shadow_opacity: if pose.held { 0.35 } else { 1.0 },
+            }
+        } else {
+            Motion {
+                x: pose.x,
+                y: pose.y,
+                scale_x: 1.0 + self.squash - stretch * 0.5 - breathe * 0.5,
+                scale_y: 1.0 - self.squash + stretch + breathe,
+                shadow_scale: if pose.held { 0.55 } else { lift },
+                shadow_opacity: if pose.held { 0.35 } else { lift },
+            }
         };
         let values = self.values(&pose, inp, t);
         self.pose = self.tracker.pose(values, motion, t);
+        self.pose.still = self.reduced;
         if redraw {
             self.drawn_at = t;
             self.drawn_pose = self.pose;
@@ -764,6 +791,37 @@ mod tests {
             state: "idle".to_owned(),
             ..PetInput::default()
         }
+    }
+
+    #[test]
+    fn reduced_motion_holds_still_but_shows_changes() {
+        use crate::pose::{Expression, Mood};
+        let mut pet = Pet::with_rng(XorShift64::new(15));
+        pet.set_reduced_motion(true);
+        let idle = idle();
+        // ten minutes idle: no idle act, no bob or squash, and every animation on its first frame
+        let mut t = 0.0;
+        while t < 600.0 {
+            let f = pet.update(&idle, t);
+            assert_eq!((f.x, f.y, f.scale_x, f.scale_y), (0.0, 0.0, 1.0, 1.0), "at {t}");
+            assert_eq!(pet.idle_act(), None);
+            assert!(pet.pose().still);
+            t += 0.25;
+        }
+        let picks = compose::pick(&pet.pack, &pet.pose, t);
+        assert!(picks.iter().all(|p| p.frame.is_none_or(|f| f == 0)));
+        // a new state and its expression still show
+        let done = PetInput {
+            state: "done".to_owned(),
+            state_since: t,
+            ..PetInput::default()
+        };
+        pet.update(&done, t + 0.1);
+        assert_eq!(
+            (pet.pose().state.mood, pet.pose().eyes.expression),
+            (Mood::Done, Expression::Happy)
+        );
+        assert!(pet.pose().sparkles);
     }
 
     #[test]

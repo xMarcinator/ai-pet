@@ -908,3 +908,23 @@ fn spotifys_window_is_its_first_chrome_window_with_a_title_and_takes_the_media_k
     player.focus();
     assert_eq!(desktop.seen().len(), 4);
 }
+
+#[test]
+fn gnome_animations_off_through_the_portal_reduce_motion() {
+    const READ: &str = "dbus-send --session --print-reply --dest=org.freedesktop.portal.Desktop \
+        /org/freedesktop/portal/desktop org.freedesktop.portal.Settings.ReadOne string:org.gnome.desktop.interface \
+        string:enable-animations";
+    let read = READ.split_whitespace().collect::<Vec<_>>().join(" ");
+    let off = Script::new(&["dbus-send"]).answer(&read, &[(0, "method return\n   variant       boolean false\n")]);
+    let (platform, _) = linux(off);
+    assert!(platform.reduced_motion());
+    let on = Script::new(&["dbus-send"]).answer(&read, &[(0, "method return\n   variant       boolean true\n")]);
+    let (platform, _) = linux(on);
+    assert!(!platform.reduced_motion(), "unless kdeglobals turns them off here");
+    // no portal (the call fails), or no dbus-send at all: no
+    let (platform, _) = linux(Script::new(&["dbus-send"]));
+    assert!(!platform.reduced_motion());
+    let (platform, script) = linux(Script::new(&[]));
+    assert!(!platform.reduced_motion());
+    assert!(script.seen().is_empty());
+}

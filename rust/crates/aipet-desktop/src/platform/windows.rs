@@ -41,6 +41,12 @@ pub trait Win32: Send + Sync {
     /// Whether the window's extended style (`GetWindowLongW(GWL_EXSTYLE)`) has `WS_EX_TOOLWINDOW`.
     fn tool_window(&self, window: Hwnd) -> bool;
 
+    /// `SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION)`: whether "Show animations in Windows" is on (yes when it
+    /// can't be read).
+    fn animations(&self) -> bool {
+        true
+    }
+
     /// `GetWindowTextW`, up to 511 characters.
     fn title(&self, window: Hwnd) -> String;
 
@@ -192,6 +198,11 @@ impl Platform for Windows {
                 ms(started)
             )
         });
+    }
+
+    /// When "Show animations in Windows" is off.
+    fn reduced_motion(&self) -> bool {
+        !self.win32.animations()
     }
 
     fn media(&self) -> Option<&dyn MediaPlayer> {
@@ -397,6 +408,14 @@ mod native {
     pub(super) struct Native;
 
     impl Win32 for Native {
+        fn animations(&self) -> bool {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{SPI_GETCLIENTAREAANIMATION, SystemParametersInfoW};
+            let mut on: BOOL = 1;
+            // SAFETY: the call writes one BOOL to the pointer, which is ours and lives through the call
+            let ok = unsafe { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, (&raw mut on).cast(), 0) };
+            ok == 0 || on != 0
+        }
+
         fn windows(&self) -> Vec<Hwnd> {
             unsafe extern "system" fn add(window: HWND, list: LPARAM) -> BOOL {
                 // SAFETY: `list` is the Vec `windows` gave EnumWindows, alive and not otherwise touched for the call

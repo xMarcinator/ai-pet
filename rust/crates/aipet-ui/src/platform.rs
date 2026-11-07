@@ -29,6 +29,11 @@ pub trait Platform: Send + Sync {
 
     /// The music player the pet listens along with, or none where this platform has none.
     fn media(&self) -> Option<&dyn MediaPlayer>;
+
+    /// Whether the system asks apps to reduce motion. A platform that can't say counts as no.
+    fn reduced_motion(&self) -> bool {
+        false
+    }
 }
 
 /// The music player (`IMediaPlayer`): Spotify through its window title on Windows, MPRIS on Linux.

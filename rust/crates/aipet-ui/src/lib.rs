@@ -414,6 +414,11 @@ impl FrameTimes {
     }
 }
 
+/// Whether the pet reduces its motion: `AIPET_REDUCE_MOTION=1`, or the system asks (as the platform reads it).
+fn reduce_motion(platform: &dyn Platform) -> bool {
+    std::env::var_os("AIPET_REDUCE_MOTION").is_some_and(|v| v == "1") || platform.reduced_motion()
+}
+
 impl PetUi {
     /// The pet with its preferences and avatar, waiting for the core's first Board (asleep and without bubbles until
     /// then).
@@ -429,6 +434,7 @@ impl PetUi {
         let stills = avatars.iter().map(sprite::still).collect();
         let mut pet = Pet::new();
         pet.set_pack(avatars[avatar].clone());
+        pet.set_reduced_motion(reduce_motion(&*setup.platform));
         PetUi {
             host: setup.host,
             platform: setup.platform,
@@ -901,6 +907,8 @@ impl PetUi {
     }
 
     fn open_settings(&mut self, page: Page) -> Effect {
+        // the system's setting may have changed: it is read again here, not every tick
+        self.pet.set_reduced_motion(reduce_motion(&*self.platform));
         self.settings.page = page;
         Effect::OpenSettings
     }

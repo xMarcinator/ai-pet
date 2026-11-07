@@ -210,7 +210,8 @@ impl Sprite {
             let Some(f) = pick.frame.and_then(|i| frames.get(i)) else {
                 continue;
             };
-            if frames.len() > 1 {
+            // a held animation (reduced motion) doesn't move
+            if frames.len() > 1 && !pose.still {
                 let mut ms: Vec<u32> = frames.iter().map(|f| f.ms).collect();
                 ms.sort_unstable();
                 let typical = ms[ms.len() / 2];

@@ -385,6 +385,8 @@ pub struct Pose {
     pub sparkles: bool,
     pub facing: Facing,
     pub motion: Motion,
+    /// Reduced motion: every animation holds its first frame (the values still change).
+    pub still: bool,
     since: [f64; 8],
 }
 
@@ -455,6 +457,7 @@ impl Values {
             sparkles: self.sparkles,
             facing: self.facing,
             motion: Motion::default(),
+            still: false,
             since: [0.0; 8],
         };
         Channel::ALL.map(|c| pose.key(c))
@@ -542,6 +545,7 @@ impl Tracker {
             sparkles: values.sparkles,
             facing: values.facing,
             motion,
+            still: false,
             since,
         }
     }
