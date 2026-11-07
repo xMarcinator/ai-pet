@@ -275,7 +275,7 @@ def pack():
                         "hold": vp.anim("arm-left", vp.keys(vp.drawn(vp.held(STYLE, "type", "type")))),
                         "lens": vp.anim("arm-right", vp.scan_keys()),
                     })
-    return {
+    return vp.named({
         "format_version": 1,
         "name": "Sprout (vector)",
         "kind": "vector",
@@ -286,7 +286,7 @@ def pack():
         "glow": C["glow"],
         "layers": [vp.feet(d, ["foot-left", "foot-right"]), body, eyes, prop, screen, phones, arms,
                    *vp.effect_layers(C["accent"], C["outline"], d.norm)],
-    }
+    }, C)
 
 
 def main():

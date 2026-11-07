@@ -261,7 +261,7 @@ def pack():
         return vp.layer(pid, "arms", "rest", hit=True, parts=[{"id": pid, "origin": poses["rest"][pid]}],
                         shapes=shapes, poses=poses, transition_ms=120, animations=animations)
 
-    return {
+    return vp.named({
         "format_version": 1,
         "name": "Hood (green, vector)",
         "kind": "vector",
@@ -274,7 +274,7 @@ def pack():
                    # the screen-left hand types; the screen-right one holds the magnifier as it scans
                    hand("hand-left", "bob-l", {"hold": typing}), hand("hand-right", "bob-r", {"lens": vp.scan_keys()}),
                    *vp.effect_layers(C["hi"], C["outline"], d.norm)],
-    }
+    }, C)
 
 
 def main():

@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::bake::Sheet;
-use crate::pack::{Animation, Art, Clock, Frame, Key, Kind, Layer, LoopMode, Mirror, Pack, Part, PartAnimation, Shape};
+use crate::pack::{
+    Animation, Art, Clock, Frame, Key, Kind, Layer, LoopMode, Mirror, Pack, Palette, Part, PartAnimation, Shape,
+};
 use crate::pose::{Channel, Look};
 use crate::vector::{self, Cap, Join};
 
@@ -30,6 +32,9 @@ struct PackJson {
     mirror: String,
     accent: String,
     glow: String,
+    /// Named colours that shapes, the accent and the glow may use as `$name` (vector packs).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    palette: BTreeMap<String, String>,
     layers: Vec<LayerJson>,
 }
 
@@ -216,6 +221,7 @@ pub fn write(pack: &Pack) -> String {
         mirror: mirror_name(pack.mirror).to_owned(),
         accent: colour(pack.accent),
         glow: colour(pack.glow),
+        palette: BTreeMap::new(),
         layers: pack
             .layers
             .iter()
@@ -352,6 +358,23 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
         ));
     }
     let kind = Kind::parse(&json.kind).ok_or_else(|| format!("unknown kind {:?}", json.kind))?;
+    let mut palette = Palette::default();
+    for (name, value) in &json.palette {
+        let c = vector::colour(value)
+            .map_err(|e| format!("palette colour {name:?}: {e}"))?
+            .ok_or_else(|| format!("palette colour {name:?} is none"))?;
+        palette.colours.insert(name.clone(), c);
+    }
+    // a colour, or a palette colour by `$name`: the colour and the name
+    let paint = |s: &str| -> Result<(Option<u32>, Option<String>), String> {
+        match s.strip_prefix('$') {
+            Some(name) => match palette.colours.get(name) {
+                Some(&c) => Ok((Some(c), Some(name.to_owned()))),
+                None => Err(format!("no palette colour named {name:?}")),
+            },
+            None => Ok((vector::colour(s)?, None)),
+        }
+    };
     let mut names: Vec<String> = Vec::new();
     let mut sheets: Vec<Sheet> = Vec::new();
     let mut layers = Vec::new();
@@ -386,11 +409,15 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
             let mut shapes = Vec::with_capacity(list.len());
             for s in list {
                 let bad = |e: String| format!("layer {:?}: shape {value:?}: {e}", layer.name);
+                let (fill, fill_name) = paint(&s.fill).map_err(bad)?;
+                let (stroke, stroke_name) = paint(&s.stroke).map_err(bad)?;
                 shapes.push(Shape {
                     path: vector::parse(&s.d).map_err(bad)?,
                     d: s.d,
-                    fill: vector::colour(&s.fill).map_err(bad)?,
-                    stroke: vector::colour(&s.stroke).map_err(bad)?,
+                    fill,
+                    stroke,
+                    fill_name,
+                    stroke_name,
                     width: s.stroke_width,
                     cap: Cap::parse(&s.linecap).map_err(bad)?,
                     join: Join::parse(&s.linejoin).map_err(bad)?,
@@ -490,9 +517,20 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
         pixel_size: json.pixel_size,
         anchor: (json.anchor[0], json.anchor[1]),
         mirror: parse_mirror(&json.mirror)?,
-        accent: parse_colour(&json.accent)?,
-        glow: parse_colour(&json.glow)?,
+        accent: match paint(&json.accent).map_err(|e| format!("the accent: {e}"))? {
+            (Some(c), name) if name.is_some() => c,
+            _ => parse_colour(&json.accent)?,
+        },
+        glow: match paint(&json.glow).map_err(|e| format!("the glow: {e}"))? {
+            (Some(c), name) if name.is_some() => c,
+            _ => parse_colour(&json.glow)?,
+        },
         layers,
+        palette: Palette {
+            accent: json.accent.strip_prefix('$').map(str::to_owned),
+            glow: json.glow.strip_prefix('$').map(str::to_owned),
+            ..palette
+        },
     };
     pack.validate()?;
     Ok((pack, sheets))

@@ -28,6 +28,8 @@ pub fn paint(vector: &Pack, name: &str, scale: f64) -> Result<Baked, String> {
         pixel_size: vector.pixel_size / scale,
         anchor: (vector.anchor.0 * scale, vector.anchor.1 * scale),
         layers: Vec::new(),
+        // painted colours are in its sheets: nothing to recolour
+        palette: Default::default(),
         ..vector.clone()
     };
     let mut sheets = Vec::new();

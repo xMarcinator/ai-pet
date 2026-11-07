@@ -75,6 +75,8 @@ pub fn all(dir: &Path) -> Found {
     };
     let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
     paths.sort();
+    // recolour files go last, so a pet in the folder can be a base
+    let mut recolours = Vec::new();
     for path in paths {
         let file = path
             .file_name()
@@ -83,20 +85,82 @@ pub fn all(dir: &Path) -> Found {
         let loaded = if path.is_dir() {
             load_folder(&path)
         } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
+            if let Some(recolour) = recolour_file(&path) {
+                recolours.push((file, recolour));
+                continue;
+            }
             load_legacy(&path)
         } else {
             continue;
         };
-        match loaded {
-            Ok(pet) if found.pets.iter().any(|p| p.name() == pet.name()) => found.skipped.push(Skipped {
-                file,
-                reason: format!("a pet named {:?} is already loaded", pet.name()),
-            }),
-            Ok(pet) => found.pets.push(pet),
-            Err(reason) => found.skipped.push(Skipped { file, reason }),
-        }
+        keep(&mut found, file, loaded);
+    }
+    for (file, recolour) in recolours {
+        let loaded = recolour.and_then(|r| recoloured(&found.pets, r));
+        keep(&mut found, file, loaded);
     }
     found
+}
+
+/// A loaded pet joins the list unless one by its name is there; what didn't load is skipped with why.
+fn keep(found: &mut Found, file: String, loaded: Result<LoadedPack, String>) {
+    match loaded {
+        Ok(pet) if found.pets.iter().any(|p| p.name() == pet.name()) => found.skipped.push(Skipped {
+            file,
+            reason: format!("a pet named {:?} is already loaded", pet.name()),
+        }),
+        Ok(pet) => found.pets.push(pet),
+        Err(reason) => found.skipped.push(Skipped { file, reason }),
+    }
+}
+
+/// A recolour file: a vector pet by name in other colours, under a name of its own.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Recolour {
+    pub base: String,
+    pub name: String,
+    pub palette: BTreeMap<String, String>,
+}
+
+/// `path` read as a recolour file, if it is one (a JSON object with a `base`); `None` for anything else.
+fn recolour_file(path: &Path) -> Option<Result<Recolour, String>> {
+    if fs::metadata(path).ok()?.len() > MAX_MANIFEST {
+        return None;
+    }
+    let text = read_all_text(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value.get("base")?;
+    Some(serde_json::from_value(value).map_err(|e| format!("the recolour file isn't valid: {e}")))
+}
+
+/// The pet `r` recolours, from `pets`, in its new colours and name.
+fn recoloured(pets: &[LoadedPack], r: Recolour) -> Result<LoadedPack, String> {
+    let base = pets
+        .iter()
+        .find(|p| p.name() == r.base)
+        .ok_or_else(|| format!("there is no pet named {:?} to recolour", r.base))?;
+    if base.pack.kind != Kind::Vector {
+        return Err(format!(
+            "{} isn't a vector pet: only vector pets can be recoloured",
+            r.base
+        ));
+    }
+    if r.name.trim().is_empty() {
+        return Err("the recolour has no name".to_owned());
+    }
+    let mut colours = BTreeMap::new();
+    for (name, value) in &r.palette {
+        let c = crate::vector::colour(value)
+            .map_err(|e| format!("colour {name:?}: {e}"))?
+            .ok_or_else(|| format!("colour {name:?} is none"))?;
+        colours.insert(name.clone(), c);
+    }
+    let mut pet = base.clone();
+    pet.pack.name = r.name;
+    pet.pack.recolour(&colours)?;
+    pet.pack.validate()?;
+    Ok(pet)
 }
 
 /// A legacy ellipse avatar, baked into a pack: exactly the drawing the pet made of it before packs.
@@ -827,6 +891,7 @@ fn build_aseprite(src: AseSource, extra: Option<&str>) -> Result<(Pack, Vec<Shee
         accent: colour("accent", 0xFF5C_FF9C)?,
         glow: colour("glow", 0xFF7F_EFFF)?,
         layers,
+        palette: Default::default(),
     };
     pack.validate()?;
     Ok((pack, vec![src.sheet]))
@@ -834,8 +899,19 @@ fn build_aseprite(src: AseSource, extra: Option<&str>) -> Result<(Pack, Vec<Shee
 
 /// `AiPet --check-pack <folder>`: the line to print and whether the pack loads.
 pub fn check(folder: &Path) -> (String, bool) {
+    // a recolour file, checked against the built-ins and the pets beside it
+    if folder.is_file()
+        && let Some(recolour) = recolour_file(folder)
+    {
+        let found = all(folder.parent().unwrap_or(Path::new(".")));
+        let loaded = recolour.and_then(|r| recoloured(&found.pets, r));
+        return match loaded {
+            Ok(p) => (format!("OK {} (a recolour of a vector pet)", p.pack.name), true),
+            Err(reason) => (reason, false),
+        };
+    }
     if !folder.is_dir() {
-        return (format!("{}: not a folder", folder.display()), false);
+        return (format!("{}: not a folder or a recolour file", folder.display()), false);
     }
     match load_folder(folder) {
         Ok(p) => {
@@ -1517,5 +1593,101 @@ mod tests {
         for dir in ["basic", "native", "grid"] {
             assert!(check(&samples.join(dir)).1, "{dir}");
         }
+    }
+
+    #[test]
+    fn a_recolour_file_is_a_vector_pet_in_other_colours_under_its_own_name() {
+        let d = dir("recolour");
+        let write = |file: &str, text: &str| fs::write(d.join(file), text).unwrap();
+        write(
+            "hood-red.json",
+            r##"{"base": "Hood (green, vector)", "name": "Hood (red)", "palette": {"body": "#4A1010", "hi": "#FF5A3C"}}"##,
+        );
+        write(
+            "bad-name.json",
+            r##"{"base": "Pip", "name": "Pip (blue)", "palette": {"fur": "#3050FF"}}"##,
+        );
+        write("bad-base.json", r##"{"base": "Nobody", "name": "X", "palette": {}}"##);
+        write(
+            "pixel.json",
+            r##"{"base": "Sprout", "name": "Sprout (blue)", "palette": {}}"##,
+        );
+        write(
+            "url.json",
+            r##"{"base": "Pip", "name": "Pip (url)", "palette": {"body": "url(http://x/y)"}}"##,
+        );
+        let found = all(&d);
+        let green = found.pets.iter().find(|p| p.name() == "Hood (green, vector)").unwrap();
+        let red = found
+            .pets
+            .iter()
+            .find(|p| p.name() == "Hood (red)")
+            .expect("the recolour loads");
+        // the named colours changed everywhere they're used, the accent with them; nothing else did
+        assert_eq!(red.pack.palette.colours["body"], 0xFF4A1010);
+        assert_eq!(red.pack.accent, 0xFFFF5A3C);
+        let fills = |p: &LoadedPack, name: &str| -> Vec<Option<u32>> {
+            p.pack
+                .layers
+                .iter()
+                .flat_map(|l| l.shapes.values())
+                .flatten()
+                .filter(|s| s.fill_name.as_deref() == Some(name))
+                .map(|s| s.fill)
+                .collect()
+        };
+        assert!(!fills(red, "body").is_empty());
+        assert!(fills(red, "body").iter().all(|&f| f == Some(0xFF4A1010)));
+        assert_eq!(fills(red, "eye"), fills(green, "eye"));
+        let reason = |file: &str| {
+            found
+                .skipped
+                .iter()
+                .find(|s| s.file == file)
+                .map(|s| s.reason.clone())
+                .unwrap_or_else(|| panic!("{file} wasn't skipped"))
+        };
+        assert!(
+            reason("bad-name.json").contains("no colour named \"fur\""),
+            "{}",
+            reason("bad-name.json")
+        );
+        assert!(reason("bad-base.json").contains("no pet named \"Nobody\""));
+        assert!(reason("pixel.json").contains("only vector pets"));
+        assert!(reason("url.json").contains("colour"));
+        // --check-pack takes the file too
+        assert_eq!(
+            check(&d.join("hood-red.json")),
+            ("OK Hood (red) (a recolour of a vector pet)".into(), true)
+        );
+        assert!(!check(&d.join("bad-name.json")).1);
+    }
+
+    #[test]
+    fn a_shape_names_a_palette_colour_the_pack_has() {
+        let pack = |palette: &str, fill: &str| {
+            format!(
+                r##"{{"format_version": 1, "name": "P", "kind": "vector", "pixel_size": 1, "anchor": [65, 110],
+                "accent": "$fur", "glow": "#FFE08A", "palette": {palette}, "layers": [
+                  {{"name": "body", "channel": "state", "default": "idle",
+                    "shapes": {{"idle": {{"d": "M0 0 L 1 1", "fill": "{fill}"}}}}}}]}}"##
+            )
+        };
+        let read = |text: String| manifest::read(&text, |_| Err("no sheets".into())).map(|(p, _)| p);
+        let p = read(pack(r##"{"fur": "#3050FF"}"##, "$fur")).unwrap();
+        assert_eq!(p.accent, 0xFF3050FF);
+        assert_eq!(p.palette.accent.as_deref(), Some("fur"));
+        assert_eq!(p.layers[0].shapes["idle"][0].fill, Some(0xFF3050FF));
+        assert!(
+            read(pack(r##"{"fur": "#3050FF"}"##, "$skin"))
+                .unwrap_err()
+                .contains("no palette colour named \"skin\"")
+        );
+        assert!(
+            read(pack(r##"{"fur": "none"}"##, "$fur"))
+                .unwrap_err()
+                .contains("palette colour \"fur\"")
+        );
+        assert!(read(pack(r##"{"fur": "url(x)"}"##, "$fur")).is_err());
     }
 }

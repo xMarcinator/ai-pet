@@ -324,7 +324,7 @@ def pack():
                         shapes=shapes, poses=poses, animations=animations)
 
     scan = vp.drawn([(vp.SCAN_MS, {"dx": s * pet_states.LENS_STEP}) for s in vp.SCAN])
-    return {
+    return vp.named({
         "format_version": 1,
         "name": "Hamster",
         "kind": "vector",
@@ -337,7 +337,7 @@ def pack():
                    # the screen-left paw types, and holds the magnifier as it scans
                    arm("arm-left", "bob-l", {"hold": typing, "lens": scan}), arm("arm-right", "bob-r", {}),
                    *vp.effect_layers(C["orange"], C["edgeDark"], d.norm)],
-    }
+    }, C)
 
 
 def main():

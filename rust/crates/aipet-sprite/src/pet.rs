@@ -260,6 +260,7 @@ impl<R: PetRng> Pet<R> {
                 accent: 0,
                 glow: 0,
                 layers: Vec::new(),
+                palette: Default::default(),
             },
             sheets: Vec::new(),
             reduced: false,

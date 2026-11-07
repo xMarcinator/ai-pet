@@ -591,3 +591,35 @@ def pack_arg(folder):
         return None
     i = sys.argv.index("--pack")
     return sys.argv[i + 1] if i + 1 < len(sys.argv) else packs_dir(folder)
+
+
+def named(pack, colours):
+    """`pack` with its colours named: every fill, stroke, accent and glow that is one of `colours` (name to hex)
+    becomes `$name`, and the pack gets a palette of the names it uses, so a recolour file can change them. Where two
+    names share a colour, the first wins."""
+    by_hex = {}
+    for name, hexc in colours.items():
+        by_hex.setdefault(hexc.upper(), name)
+    used = {}
+
+    def name_of(c):
+        name = by_hex.get(c.upper()) if isinstance(c, str) and c.startswith("#") else None
+        if name is None:
+            return c
+        used[name] = colours[name]
+        return "$" + name
+
+    for layer in pack["layers"]:
+        for drawing in layer.get("shapes", {}).values():
+            for shape in drawing if isinstance(drawing, list) else [drawing]:
+                for key in ("fill", "stroke"):
+                    if key in shape:
+                        shape[key] = name_of(shape[key])
+    for key in ("accent", "glow"):
+        pack[key] = name_of(pack[key])
+    out = {}
+    for key, value in pack.items():
+        if key == "layers":
+            out["palette"] = {name: used[name] for name in colours if name in used}
+        out[key] = value
+    return out

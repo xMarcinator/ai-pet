@@ -372,8 +372,13 @@ def dust():
                   **{v: None for v in FX_VALUES if v not in ("dust", "dust+sparkles")}})
 
 
+# the colours a recolour may change, by name
+NAMED = {"body": PET, "shade": SHADE, "belly": BELLY, "cheek": CHEEK, "leaf": LEAF, "eyes": EYE}
+
+
 def pack():
-    return {
+    import vector_pack
+    return vector_pack.named({
         "format_version": 1,
         "name": "Pip",
         "kind": "vector",
@@ -384,7 +389,7 @@ def pack():
         "glow": GLOW,
         "layers": [feet(), sprout(), body(), mouth(), eyes(), headphones(), prop(), arms(), screen(), *fx(),
                    sparkles(), dust()],
-    }
+    }, NAMED)
 
 
 def main():

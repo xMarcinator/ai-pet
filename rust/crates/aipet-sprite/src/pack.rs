@@ -128,6 +128,9 @@ pub struct Shape {
     pub cap: Cap,
     pub join: Join,
     pub opacity: f64,
+    /// The palette colours the fill and stroke name (`$robe`), which a recolour changes.
+    pub fill_name: Option<String>,
+    pub stroke_name: Option<String>,
 }
 
 impl Shape {
@@ -142,6 +145,8 @@ impl Shape {
             cap: Cap::Butt,
             join: Join::Miter,
             opacity: 1.0,
+            fill_name: None,
+            stroke_name: None,
         }
     }
 }
@@ -417,6 +422,16 @@ fn offset(layer: &str, what: &str, d: (f64, f64)) -> Result<(), String> {
     }
 }
 
+/// A vector pack's named colours (straight 0xAARRGGBB), which its shapes, accent and glow may name, and which a
+/// recolour file may change.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Palette {
+    pub colours: BTreeMap<String, u32>,
+    /// The colour the accent and the glow name, if they name one.
+    pub accent: Option<String>,
+    pub glow: Option<String>,
+}
+
 /// A pet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pack {
@@ -432,9 +447,45 @@ pub struct Pack {
     pub glow: u32,
     /// Drawn in this order.
     pub layers: Vec<Layer>,
+    pub palette: Palette,
 }
 
 impl Pack {
+    /// The same pet in other colours: each named colour in `colours` replaces the palette's, wherever the pack
+    /// names it. A name the palette lacks is the reason it can't.
+    pub fn recolour(&mut self, colours: &BTreeMap<String, u32>) -> Result<(), String> {
+        if self.palette.colours.is_empty() {
+            return Err(format!("{} has no named colours to change", self.name));
+        }
+        for (name, &c) in colours {
+            let Some(slot) = self.palette.colours.get_mut(name) else {
+                let names: Vec<&str> = self.palette.colours.keys().map(String::as_str).collect();
+                return Err(format!(
+                    "{} has no colour named {name:?} (it has {})",
+                    self.name,
+                    names.join(", ")
+                ));
+            };
+            *slot = c;
+        }
+        let pick = |name: &Option<String>| name.as_ref().and_then(|n| colours.get(n)).copied();
+        if let Some(c) = pick(&self.palette.accent) {
+            self.accent = c;
+        }
+        if let Some(c) = pick(&self.palette.glow) {
+            self.glow = c;
+        }
+        for shape in self.layers.iter_mut().flat_map(|l| l.shapes.values_mut()).flatten() {
+            if let Some(c) = pick(&shape.fill_name) {
+                shape.fill = Some(c);
+            }
+            if let Some(c) = pick(&shape.stroke_name) {
+                shape.stroke = Some(c);
+            }
+        }
+        Ok(())
+    }
+
     /// Checks the pack as the spec's limits say; the error is the reason it is skipped.
     pub fn validate(&self) -> Result<(), String> {
         if self.layers.is_empty() || self.layers.len() > MAX_LAYERS {
@@ -509,6 +560,7 @@ pub(crate) mod tests {
             accent: 0xFF5CFF9C,
             glow: 0xFF5CFF9C,
             layers,
+            palette: Default::default(),
         }
     }
 

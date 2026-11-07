@@ -1,0 +1,16 @@
+{
+  "base": "Hood (green, vector)",
+  "name": "Hood (red)",
+  "palette": {
+    "deep": "#1F0606",
+    "shade": "#310A0A",
+    "body": "#441010",
+    "hi": "#FF4A3A",
+    "rimMid": "#7A1C1C",
+    "spec": "#FFC0B0",
+    "eye": "#FFB15C",
+    "eyeHi": "#FFF3E0",
+    "eyeLo": "#E07A22",
+    "glow": "#FF5A2B"
+  }
+}

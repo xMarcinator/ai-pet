@@ -233,6 +233,7 @@ fn sample() -> (aipet_sprite::pack::Pack, Vec<aipet_sprite::bake::Sheet>) {
         accent: 0xFFB8_8CF0,
         glow: 0xFFFF_F2A8,
         layers: vec![body_layer, eyes_layer],
+        palette: Default::default(),
     };
     let sleeping = {
         let mut px = disc(0);

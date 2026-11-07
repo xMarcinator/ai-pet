@@ -1,5 +1,5 @@
 //! Draws a vector pack in every state and expression as one PNG, for looking at it while drawing:
-//! `cargo run -p aipet-sprite --example pack_sheet -- <pack folder> <out.png> [scale]`; `PACK_CASES=8,9` draws only
+//! `cargo run -p aipet-sprite --example pack_sheet -- <pack folder or recolour file> <out.png> [scale]`; `PACK_CASES=8,9` draws only
 //! those.
 
 use std::path::Path;
@@ -16,7 +16,17 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let (dir, out) = (Path::new(&args[1]), Path::new(&args[2]));
     let scale: f64 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(3.0);
-    let loaded = load::load_folder(dir).unwrap_or_else(|e| panic!("{e}"));
+    // a recolour file draws as the pet it makes, found beside it
+    let loaded = if dir.is_file() {
+        let found = load::all(dir.parent().unwrap());
+        let file = dir.file_name().unwrap().to_string_lossy();
+        if let Some(s) = found.skipped.iter().find(|s| s.file == file) {
+            panic!("{}", s.reason);
+        }
+        found.pets.last().unwrap().clone()
+    } else {
+        load::load_folder(dir).unwrap_or_else(|e| panic!("{e}"))
+    };
     let pack = &loaded.pack;
 
     let base = Values::IDLE;
@@ -110,7 +120,10 @@ fn main() {
 
     // PACK_CASES=8,9 draws only those cases (by index), bigger
     let cases: Vec<Values> = match std::env::var("PACK_CASES") {
-        Ok(list) => list.split(',').filter_map(|i| cases.get(i.trim().parse::<usize>().ok()?).copied()).collect(),
+        Ok(list) => list
+            .split(',')
+            .filter_map(|i| cases.get(i.trim().parse::<usize>().ok()?).copied())
+            .collect(),
         Err(_) => cases,
     };
     let cols = 4.min(cases.len());

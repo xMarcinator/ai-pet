@@ -654,6 +654,7 @@ pub fn bake(a: &Avatar) -> Baked {
             accent: a.accent,
             glow: a.glow,
             layers: done,
+            palette: Default::default(),
         },
         sheets,
     }
