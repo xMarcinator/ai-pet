@@ -1,12 +1,13 @@
-# Picking up flow-next on another machine (state of 2026-11-06)
+# Picking up flow-next on another machine (state of 2026-11-07)
 
 The work branch is `fn-1-migrate-aipet-from-net-to-rust` (draft PR https://github.com/xMarcinator/ai-pet/pull/1).
 Two flow-next specs are on it:
 
 | Spec | State |
 |---|---|
-| `fn-1-migrate-aipet-from-net-to-rust`: the .NET → Rust migration | 23 of 30 tasks done; next is task 22 (Linux) |
-| `fn-2-layered-sprite-and-vector-pets`: layered sprite, vector, Aseprite and Rive pets | planned (15 tasks, R1–R22); starts after fn-1 |
+| `fn-1-migrate-aipet-from-net-to-rust`: the .NET → Rust migration | 24 of 30 tasks done; task 22 closed on Hyprland; next is task 28 (performance gate) |
+| `fn-2-layered-sprite-and-vector-pets`: layered sprite, vector, Aseprite and Rive pets | 15 tasks, R1–R22; the spikes (13, 15) are done, task 14 is blocked (Rive deferred); work starts with task 1 |
+| `fn-3-linux-desktops-beyond-hyprland-hands-on`: task 22's other desktops | 5 tasks, all todo; each needs a person at that desktop |
 
 The overall picture, what's next and the decisions are in [docs/HANDOFF.md](../../docs/HANDOFF.md) under "Where the
 work stands".
@@ -14,7 +15,7 @@ work stands".
 ## 1. Restore flowctl's task state
 
 flowctl keeps each task's live status in `.git/flow-state/`, which git never pushes. `state/` here is a copy of it
-taken on 2026-11-06: the 23 done fn-1 tasks, with their evidence. fn-2 has no live state yet; all its tasks are todo.
+taken on 2026-11-07: the 24 done fn-1 tasks, fn-2's two done spikes and its blocked task 14, with their evidence.
 In a fresh clone, on the work branch, copy it back before running flow-next.
 
 In Git Bash, Linux or macOS:
@@ -23,7 +24,7 @@ In Git Bash, Linux or macOS:
 mkdir -p .git/flow-state/tasks && cp .flow/paused/state/*.state.json .git/flow-state/tasks/
 ```
 
-Check it: `flowctl show fn-1-migrate-aipet-from-net-to-rust.27` reads `done`, and `.22` reads `todo`. (flowctl is
+Check it: `flowctl show fn-1-migrate-aipet-from-net-to-rust.22` reads `done`, and `.28` reads `todo`. (flowctl is
 bundled with the flow-next plugin: `~/.claude/plugins/cache/flow-next/flow-next/<version>/scripts/flowctl`. This
 session used 9.5.1; fn-1's earlier tasks ran under 4.12.0 with the rolling-frontier work skill.)
 

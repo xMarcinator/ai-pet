@@ -1,0 +1,17 @@
+{
+  "evidence": {
+    "commits": [
+      "0261dc9",
+      "ecdb558",
+      "f06d7cf"
+    ],
+    "hands_on": "rust/proofs/linux-hands-on.md: Hyprland 0.57.0 with the user, 2026-11-07",
+    "prs": [],
+    "split_to": "fn-3-linux-desktops-beyond-hyprland-hands-on",
+    "tests": [
+      "cd rust && cargo test -p aipet-wayland (34 passed), cargo test -p aipet-ui --lib (58 passed), cargo clippy -p aipet-wayland --all-targets -D warnings (clean), cargo fmt --check (clean)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-07T11:09:02.772057Z"
+}

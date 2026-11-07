@@ -37,8 +37,8 @@ The free Rive tier reportedly adds a splash to exported files. Check how such a 
 - [ ] `AiPet --check-pack` reports the sample Rive pack OK and lists missing inputs for a mismatched manifest
 
 ## Done summary
-TBD
-
+Blocked:
+Task 13's Rive spike is a no-go (rust/proofs/rive.md), so R21 is deferred and this task waits for it to come back.
 ## Evidence
 - Commits:
 - Tests:

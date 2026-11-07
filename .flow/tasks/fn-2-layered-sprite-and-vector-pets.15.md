@@ -43,7 +43,8 @@ Aseprite is paid. The spike must show the tests need no Aseprite install (genera
 ## Done summary
 Use a direct reader, not `asefile`. The direct reader is 215 lines and needs only `flate2`, which is already in the lockfile. It checks every limit before allocating, and on the 42 files both readers accept it matches `asefile` with 0 differing pixels. `asefile` 0.3.8 adds a second `image` (0.24), rejects ping-pong reverse tags, ICC profiles and unknown chunks, aborts on a cel claiming 65535×65535, and inflates a 262 KB zlib bomb to 896 MB. A 145-line test-only writer makes the fixtures, so CI needs no Aseprite. Grid rectangles matched a generated sheet exactly. A typical pet file (32×32, 6 layers, 64 frames) reads in about 2 ms with a peak of 0.84 MB. R20 and task 11 are adjusted to match. Proof: `rust/proofs/aseprite.md`. Not covered: LibreSprite and Aseprite 1.3.x files, group opacity and blend modes, and how hidden and reference layers are treated.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits: `761e862` on `spike/aseprite` (spike code and proof; not merged, not pushed)
-- Tests: spike runs recorded in `rust/proofs/aseprite.md` (44 of 45 real files read; 19 frames compared with the reference PNGs, 0 differing pixels; fixture read-back; hostile files under a 4 GB cap)
+- Commits: 761e862, 65e27a6
+- Tests: spike runs recorded in its proof
 - PRs:
