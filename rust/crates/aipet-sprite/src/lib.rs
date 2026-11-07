@@ -14,6 +14,7 @@ mod avatar;
 pub mod bake;
 mod builtin;
 pub mod compose;
+pub mod load;
 pub mod manifest;
 pub mod pack;
 mod pet;

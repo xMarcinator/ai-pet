@@ -51,8 +51,30 @@ const X11: bool = cfg!(all(
     not(any(target_os = "macos", target_os = "ios", target_os = "android"))
 ));
 
+/// `AiPet --check-pack <folder>`: loads the pack as the pet would, with the same limits, and prints `OK <name>
+/// (<kind>, <layers> layers, <frames> frames)` (exit 0) or why it can't (exit 1). It never starts the pet or writes.
+fn check_pack(folder: Option<std::ffi::OsString>) -> ExitCode {
+    // a GUI app on Windows has no console of its own: print to the one it was started from
+    #[cfg(windows)]
+    // SAFETY: no arguments to get wrong; failing (no parent console) leaves nothing to print to, which is fine
+    unsafe {
+        windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS);
+    }
+    let Some(folder) = folder else {
+        eprintln!("usage: AiPet --check-pack <folder>");
+        return ExitCode::FAILURE;
+    };
+    let (line, ok) = aipet_sprite::load::check(std::path::Path::new(&folder));
+    println!("{line}");
+    if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+}
+
 fn main() -> ExitCode {
     updates::startup();
+    let mut args = env::args_os().skip(1);
+    if args.next().is_some_and(|a| a == "--check-pack") {
+        return check_pack(args.next());
+    }
     #[cfg(not(feature = "demo"))]
     let instance = match only_pet() {
         Ok(Some(instance)) => instance,

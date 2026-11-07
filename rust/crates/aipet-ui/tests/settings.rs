@@ -393,54 +393,54 @@ fn reload_shows_new_avatars_and_open_folder_makes_the_folder_first() {
     assert!(folder.is_dir());
     assert_eq!(pet.platform.calls(), [Call::OpenFolder(folder.clone())]);
 
-    // an avatar put in the folder shows after Reload, and picking it puts it on
-    let custom = folder.join("green.json");
-    std::fs::write(&custom, include_str!("../../../../avatars/hood-green.json")).unwrap();
-    ui.update(Message::SelectAvatar(2));
+    // an avatar put in the folder shows after Reload (after the three built-ins), and picking it puts it on
+    let green = include_str!("../../../../avatars/hood-green.json").replace("Hood (green)", "Mint");
+    let custom = folder.join("mint.json");
+    std::fs::write(&custom, &green).unwrap();
+    ui.update(Message::SelectAvatar(3));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Sprout"), "not there before Reload");
     ui.update(avatars(settings::avatars::Message::Reload));
-    ui.update(Message::SelectAvatar(2));
-    assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (green)"));
+    ui.update(Message::SelectAvatar(3));
+    assert_eq!(ui.prefs().avatar.as_deref(), Some("Mint"));
 
     // the avatar worn, edited under the same name, is worn as it is now once read again
     let read = |name: &str| {
-        aipet_sprite::Avatar::all(&folder)
+        aipet_sprite::load::all(&folder)
+            .pets
             .into_iter()
-            .find(|a| a.name == name)
+            .find(|a| a.name() == name)
             .unwrap()
     };
-    assert_eq!(settings::avatars::worn(&ui), &read("Hood (green)"));
-    let edited = include_str!("../../../../avatars/hood-green.json").replace("#0F4422", "#FF0000");
-    assert_ne!(edited, include_str!("../../../../avatars/hood-green.json"));
+    assert_eq!(settings::avatars::worn(&ui), read("Mint"));
+    let edited = green.replace("#0F4422", "#FF0000");
+    assert_ne!(edited, green);
     std::fs::write(&custom, edited).unwrap();
-    assert_ne!(settings::avatars::worn(&ui), &read("Hood (green)"), "not before Reload");
+    assert_ne!(settings::avatars::worn(&ui), read("Mint"), "not before Reload");
     ui.update(avatars(settings::avatars::Message::Reload));
-    assert_eq!(settings::avatars::worn(&ui), &read("Hood (green)"));
-    assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (green)"));
+    assert_eq!(settings::avatars::worn(&ui), read("Mint"));
+    assert_eq!(ui.prefs().avatar.as_deref(), Some("Mint"));
 
     // the avatar worn stays on when its file goes, with no tile, and the others are as the folder has them
-    let worn = settings::avatars::worn(&ui).clone();
+    let worn = settings::avatars::worn(&ui);
     std::fs::remove_file(&custom).unwrap();
     ui.update(avatars(settings::avatars::Message::Reload));
-    assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (green)"));
-    assert_eq!(settings::avatars::worn(&ui), &worn);
+    assert_eq!(ui.prefs().avatar.as_deref(), Some("Mint"));
+    assert_eq!(settings::avatars::worn(&ui), worn);
     let tiles = settings::avatars::tiles(&ui);
-    assert!(
-        tiles.iter().all(|&(name, worn)| name != "Hood (green)" && !worn),
-        "{tiles:?}"
-    );
+    assert!(tiles.iter().all(|&(name, worn)| name != "Mint" && !worn), "{tiles:?}");
     assert_eq!(
         tiles.iter().map(|&(name, _)| name).collect::<Vec<_>>(),
-        aipet_sprite::Avatar::all(&folder)
+        aipet_sprite::load::all(&folder)
+            .pets
             .iter()
-            .map(|a| a.name.as_str())
+            .map(|a| a.name())
             .collect::<Vec<_>>()
     );
     ui.update(Message::SelectAvatar(1));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood"));
     assert!(settings::avatars::tiles(&ui)[1].1, "its tile is the one worn now");
     ui.update(avatars(settings::avatars::Message::Reload));
-    ui.update(Message::SelectAvatar(2));
+    ui.update(Message::SelectAvatar(3));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood"), "its tile went with it");
 }
 

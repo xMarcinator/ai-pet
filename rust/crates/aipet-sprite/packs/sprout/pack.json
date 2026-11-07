@@ -18,7 +18,6 @@
       "default": "body",
       "animations": {
         "body": {
-          "sheet": "body.png",
           "frames": [
             [
               0,
@@ -28,7 +27,8 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "body.png"
         }
       }
     },
@@ -42,7 +42,6 @@
       },
       "animations": {
         "on": {
-          "sheet": "headphones-outline.png",
           "frames": [
             [
               0,
@@ -52,7 +51,8 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "headphones-outline.png"
         }
       }
     },
@@ -69,7 +69,6 @@
       },
       "animations": {
         "raised": {
-          "sheet": "arms.png",
           "frames": [
             [
               26,
@@ -79,10 +78,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "arms.png"
         },
         "rest": {
-          "sheet": "arms.png",
           "frames": [
             [
               0,
@@ -92,10 +91,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "arms.png"
         },
         "wave-a": {
-          "sheet": "arms.png",
           "frames": [
             [
               52,
@@ -105,10 +104,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "arms.png"
         },
         "wave-b": {
-          "sheet": "arms.png",
           "frames": [
             [
               78,
@@ -118,7 +117,8 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "arms.png"
         }
       }
     },
@@ -137,7 +137,6 @@
       },
       "animations": {
         "run-a": {
-          "sheet": "arms-run.png",
           "frames": [
             [
               0,
@@ -147,10 +146,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "arms-run.png"
         },
         "run-a@left": {
-          "sheet": "arms-run.png",
           "frames": [
             [
               52,
@@ -160,10 +159,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "arms-run.png"
         },
         "run-b": {
-          "sheet": "arms-run.png",
           "frames": [
             [
               26,
@@ -173,10 +172,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "arms-run.png"
         },
         "run-b@left": {
-          "sheet": "arms-run.png",
           "frames": [
             [
               78,
@@ -186,7 +185,8 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "arms-run.png"
         }
       }
     },
@@ -201,7 +201,6 @@
       },
       "animations": {
         "dangle-a": {
-          "sheet": "feet.png",
           "frames": [
             [
               52,
@@ -211,10 +210,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "feet.png"
         },
         "dangle-b": {
-          "sheet": "feet.png",
           "frames": [
             [
               78,
@@ -224,10 +223,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "feet.png"
         },
         "stand": {
-          "sheet": "feet.png",
           "frames": [
             [
               0,
@@ -237,10 +236,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "feet.png"
         },
         "tap": {
-          "sheet": "feet.png",
           "frames": [
             [
               26,
@@ -250,7 +249,8 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "feet.png"
         }
       }
     },
@@ -267,7 +267,6 @@
       },
       "animations": {
         "run-a": {
-          "sheet": "feet-run.png",
           "frames": [
             [
               0,
@@ -277,10 +276,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "feet-run.png"
         },
         "run-a@left": {
-          "sheet": "feet-run.png",
           "frames": [
             [
               52,
@@ -290,10 +289,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "feet-run.png"
         },
         "run-b": {
-          "sheet": "feet-run.png",
           "frames": [
             [
               26,
@@ -303,10 +302,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "feet-run.png"
         },
         "run-b@left": {
-          "sheet": "feet-run.png",
           "frames": [
             [
               78,
@@ -316,7 +315,8 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "feet-run.png"
         }
       }
     },
@@ -330,7 +330,6 @@
       },
       "animations": {
         "on": {
-          "sheet": "headphones.png",
           "frames": [
             [
               0,
@@ -340,7 +339,8 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "headphones.png"
         }
       }
     },
@@ -354,7 +354,6 @@
       },
       "animations": {
         "laptop": {
-          "sheet": "prop.png",
           "frames": [
             [
               0,
@@ -364,10 +363,11 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "prop.png"
         },
         "lens": {
-          "sheet": "prop.png",
+          "clock": "pet",
           "frames": [
             [
               26,
@@ -455,7 +455,7 @@
             ]
           ],
           "loop": "loop",
-          "clock": "pet"
+          "sheet": "prop.png"
         }
       }
     },
@@ -529,7 +529,6 @@
       },
       "animations": {
         "blink": {
-          "sheet": "eyes.png",
           "frames": [
             [
               52,
@@ -539,10 +538,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "eyes.png"
         },
         "closed": {
-          "sheet": "eyes.png",
           "frames": [
             [
               26,
@@ -552,10 +551,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "eyes.png"
         },
         "down": {
-          "sheet": "eyes.png",
           "frames": [
             [
               182,
@@ -565,10 +564,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "eyes.png"
         },
         "happy": {
-          "sheet": "eyes.png",
           "frames": [
             [
               78,
@@ -578,10 +577,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "eyes.png"
         },
         "open": {
-          "sheet": "eyes.png",
           "frames": [
             [
               0,
@@ -591,10 +590,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "eyes.png"
         },
         "squint": {
-          "sheet": "eyes.png",
           "frames": [
             [
               104,
@@ -604,10 +603,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "eyes.png"
         },
         "up": {
-          "sheet": "eyes.png",
           "frames": [
             [
               156,
@@ -617,10 +616,10 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "eyes.png"
         },
         "wide": {
-          "sheet": "eyes.png",
           "frames": [
             [
               130,
@@ -630,7 +629,8 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "eyes.png"
         }
       }
     },
@@ -646,7 +646,7 @@
       },
       "animations": {
         "laptop": {
-          "sheet": "screen.png",
+          "clock": "pet",
           "frames": [
             [
               0,
@@ -664,7 +664,7 @@
             ]
           ],
           "loop": "loop",
-          "clock": "pet"
+          "sheet": "screen.png"
         }
       }
     },
@@ -689,7 +689,7 @@
       },
       "animations": {
         "dust": {
-          "sheet": "dust.png",
+          "clock": "pet",
           "frames": [
             [
               0,
@@ -714,7 +714,7 @@
             ]
           ],
           "loop": "loop",
-          "clock": "pet"
+          "sheet": "dust.png"
         }
       }
     },
@@ -735,7 +735,6 @@
       },
       "animations": {
         "alert": {
-          "sheet": "fx.png",
           "frames": [
             [
               494,
@@ -745,10 +744,11 @@
               1000
             ]
           ],
-          "loop": "once"
+          "loop": "once",
+          "sheet": "fx.png"
         },
         "dots": {
-          "sheet": "fx.png",
+          "clock": "pet",
           "frames": [
             [
               494,
@@ -836,10 +836,10 @@
             ]
           ],
           "loop": "loop",
-          "clock": "pet"
+          "sheet": "fx.png"
         },
         "notes": {
-          "sheet": "fx.png",
+          "clock": "pet",
           "frames": [
             [
               806,
@@ -2103,10 +2103,10 @@
             ]
           ],
           "loop": "loop",
-          "clock": "pet"
+          "sheet": "fx.png"
         },
         "zs": {
-          "sheet": "fx.png",
+          "clock": "pet",
           "frames": [
             [
               0,
@@ -3139,7 +3139,7 @@
             ]
           ],
           "loop": "loop",
-          "clock": "pet"
+          "sheet": "fx.png"
         }
       }
     },
@@ -3158,7 +3158,7 @@
       },
       "animations": {
         "sparkles": {
-          "sheet": "sparkles.png",
+          "clock": "pet",
           "frames": [
             [
               0,
@@ -3176,7 +3176,7 @@
             ]
           ],
           "loop": "loop",
-          "clock": "pet"
+          "sheet": "sparkles.png"
         }
       }
     }

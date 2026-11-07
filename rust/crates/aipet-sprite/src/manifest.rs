@@ -1,16 +1,18 @@
 //! A pack's manifest (`pack.json`) and its PNG sheets: read into the in-memory [`Pack`], and written by the bake.
 //!
-//! This is the subset the baked pixel packs use: kinds, layers bound to channels, raster frames
-//! `[x, y, w, h, duration_ms]`, loop modes, the pet clock, fallbacks (a `null` one draws nothing), glow and mirror
-//! per layer, and look tables. Task 3 adds the rest of the contract (parts, poses, vector shapes, Aseprite) and the
-//! limits for packs from disk.
+//! The reader takes the whole contract: kinds; layers bound to channels, with hit, glow and mirror; raster frames
+//! `[x, y, w, h, duration_ms]` with an optional `pivot`; loop modes and the pet clock; fallbacks (a `null` one draws
+//! nothing); look tables; and part motion (R18): parts with origins, shapes, poses with `transition_ms`, and keyframe
+//! part animations with `phase`. It asks for each sheet by name ([`read`]), so a loader from disk can check the path
+//! and the size first. Unknown keys are ignored.
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::bake::Sheet;
-use crate::pack::{Animation, Art, Clock, Frame, Kind, Layer, LoopMode, Mirror, Pack};
+use crate::pack::{Animation, Art, Clock, Frame, Key, Kind, Layer, LoopMode, Mirror, Pack, Part, PartAnimation, Shape};
 use crate::pose::{Channel, Look};
 
 /// The newest `format_version` this build reads.
@@ -23,10 +25,15 @@ struct PackJson {
     kind: String,
     pixel_size: f64,
     anchor: [f64; 2],
+    #[serde(default = "flip")]
     mirror: String,
     accent: String,
     glow: String,
     layers: Vec<LayerJson>,
+}
+
+fn flip() -> String {
+    "flip".to_owned()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,18 +51,68 @@ struct LayerJson {
     fallback: BTreeMap<String, Option<String>>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     look: BTreeMap<String, [f64; 2]>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    parts: Vec<PartJson>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    shapes: BTreeMap<String, ShapeJson>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    poses: BTreeMap<String, BTreeMap<String, [f64; 2]>>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    transition_ms: u32,
+    /// Frame animations ([`AnimationJson`]) and part animations (with `keys`), by value.
     #[serde(default)]
-    animations: BTreeMap<String, AnimationJson>,
+    animations: BTreeMap<String, Value>,
+}
+
+fn is_zero(v: &u32) -> bool {
+    *v == 0
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PartJson {
+    id: String,
+    origin: [f64; 2],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    shape: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ShapeJson {
+    d: String,
+    fill: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    stroke: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AnimationJson {
     sheet: String,
     frames: Vec<[u32; 5]>,
-    #[serde(rename = "loop")]
+    #[serde(rename = "loop", default = "loop_mode")]
     mode: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     clock: Option<String>,
+    /// The frame pixel that sits on the part's origin (or the art box's top-left); one for all the frames, or one each.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pivot: Option<Value>,
+}
+
+fn loop_mode() -> String {
+    "loop".to_owned()
+}
+
+#[derive(Debug, Deserialize)]
+struct PartAnimationJson {
+    #[serde(default)]
+    part: Option<String>,
+    #[serde(default)]
+    parts: Vec<String>,
+    /// One for all the parts, or one each.
+    #[serde(default)]
+    phase: Option<Value>,
+    #[serde(rename = "loop", default = "loop_mode")]
+    mode: String,
+    keys: Vec<Value>,
 }
 
 fn colour(c: u32) -> String {
@@ -66,7 +123,7 @@ fn colour(c: u32) -> String {
     }
 }
 
-fn parse_colour(s: &str) -> Result<u32, String> {
+pub(crate) fn parse_colour(s: &str) -> Result<u32, String> {
     let hex = s
         .strip_prefix('#')
         .ok_or_else(|| format!("colour {s:?} doesn't start with #"))?;
@@ -83,17 +140,28 @@ fn sheet_name(layer: &str) -> String {
     format!("{layer}.png")
 }
 
-/// The manifest for `pack`, whose frames' sheets are by index the layers' own (`<layer>.png`), as the bake makes them.
+fn kind_name(k: Kind) -> &'static str {
+    match k {
+        Kind::Pixel => "pixel",
+        Kind::Painted => "painted",
+        Kind::Vector => "vector",
+    }
+}
+
+fn mode_name(m: LoopMode) -> &'static str {
+    match m {
+        LoopMode::Loop => "loop",
+        LoopMode::Once => "once",
+        LoopMode::PingPong => "pingpong",
+    }
+}
+
+/// The manifest for a baked `pack`, whose frames are by index the layers' own sheets (`<layer>.png`).
 pub fn write(pack: &Pack) -> String {
     let json = PackJson {
         format_version: FORMAT_VERSION,
         name: pack.name.clone(),
-        kind: match pack.kind {
-            Kind::Pixel => "pixel",
-            Kind::Painted => "painted",
-            Kind::Vector => "vector",
-        }
-        .to_owned(),
+        kind: kind_name(pack.kind).to_owned(),
         pixel_size: pack.pixel_size,
         anchor: [pack.anchor.0, pack.anchor.1],
         mirror: mirror_name(pack.mirror).to_owned(),
@@ -111,6 +179,10 @@ pub fn write(pack: &Pack) -> String {
                 default: l.default.clone(),
                 fallback: l.fallback.clone(),
                 look: l.look.iter().map(|(k, v)| (k.key().to_owned(), [v.0, v.1])).collect(),
+                parts: Vec::new(),
+                shapes: BTreeMap::new(),
+                poses: BTreeMap::new(),
+                transition_ms: 0,
                 animations: l
                     .animations
                     .iter()
@@ -126,15 +198,14 @@ pub fn write(pack: &Pack) -> String {
                         let json = AnimationJson {
                             sheet: sheet_name(&l.name),
                             frames,
-                            mode: match a.mode {
-                                LoopMode::Loop => "loop",
-                                LoopMode::Once => "once",
-                                LoopMode::PingPong => "pingpong",
-                            }
-                            .to_owned(),
+                            mode: mode_name(a.mode).to_owned(),
                             clock: (a.clock == Clock::Pet).then(|| "pet".to_owned()),
+                            pivot: None,
                         };
-                        (value.clone(), json)
+                        (
+                            value.clone(),
+                            serde_json::to_value(json).expect("an animation always serialises"),
+                        )
                     })
                     .collect(),
             })
@@ -160,9 +231,54 @@ fn parse_mirror(s: &str) -> Result<Mirror, String> {
     }
 }
 
-/// The pack a manifest describes, with its sheets named as it names them; validated. `sheets` gives each file's
-/// decoded sheet.
-pub fn read(text: &str, sheets: &BTreeMap<String, Sheet>) -> Result<(Pack, Vec<Sheet>), String> {
+/// A number from JSON, or a reason.
+fn number(v: &Value, what: &str) -> Result<f64, String> {
+    v.as_f64().ok_or_else(|| format!("{what} isn't a number"))
+}
+
+/// A whole number of ms from JSON, saturating.
+fn whole_ms(v: &Value, what: &str) -> Result<u32, String> {
+    v.as_u64()
+        .map(|ms| ms.min(u64::from(u32::MAX)) as u32)
+        .ok_or_else(|| format!("{what} isn't a whole number of ms"))
+}
+
+/// One key of a part animation: `[dx, dy, ms]`, or an object with optional `dx`, `dy`, `rotate`, `scale`,
+/// `opacity` and `ms`.
+fn key(v: &Value) -> Result<Key, String> {
+    if let Some(a) = v.as_array() {
+        let [dx, dy, ms] = a.as_slice() else {
+            return Err("a key isn't [dx, dy, ms]".to_owned());
+        };
+        return Ok(Key::offset(
+            number(dx, "a key's dx")?,
+            number(dy, "a key's dy")?,
+            whole_ms(ms, "a key's ms")?,
+        ));
+    }
+    let o = v.as_object().ok_or("a key isn't [dx, dy, ms] or an object")?;
+    let get = |k: &str, default: f64| o.get(k).map_or(Ok(default), |v| number(v, &format!("a key's {k}")));
+    Ok(Key {
+        dx: get("dx", 0.0)?,
+        dy: get("dy", 0.0)?,
+        rotate: get("rotate", 0.0)?,
+        scale: get("scale", 1.0)?,
+        opacity: get("opacity", 1.0)?,
+        ms: whole_ms(o.get("ms").ok_or("a key has no ms")?, "a key's ms")?,
+    })
+}
+
+/// A pair `[x, y]` from JSON.
+fn pair(v: &Value, what: &str) -> Result<(f64, f64), String> {
+    match v.as_array().map(Vec::as_slice) {
+        Some([x, y]) => Ok((number(x, what)?, number(y, what)?)),
+        _ => Err(format!("{what} isn't [x, y]")),
+    }
+}
+
+/// The pack a manifest describes, validated, and its sheets by index as its frames name them. `sheet` gives a file's
+/// decoded sheet, or the reason it can't.
+pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) -> Result<(Pack, Vec<Sheet>), String> {
     let json: PackJson = serde_json::from_str(text).map_err(|e| format!("the manifest isn't valid: {e}"))?;
     if json.format_version > FORMAT_VERSION {
         return Err(format!(
@@ -171,48 +287,113 @@ pub fn read(text: &str, sheets: &BTreeMap<String, Sheet>) -> Result<(Pack, Vec<S
         ));
     }
     let kind = Kind::parse(&json.kind).ok_or_else(|| format!("unknown kind {:?}", json.kind))?;
-    let mut used: Vec<String> = Vec::new();
+    let mut names: Vec<String> = Vec::new();
+    let mut sheets: Vec<Sheet> = Vec::new();
     let mut layers = Vec::new();
     for l in json.layers {
+        let name = l.name.clone();
         let channel =
-            Channel::parse(&l.channel).ok_or_else(|| format!("layer {:?}: unknown channel {:?}", l.name, l.channel))?;
-        let mut layer = Layer::new(&l.name, channel, &l.default);
+            Channel::parse(&l.channel).ok_or_else(|| format!("layer {name:?}: unknown channel {:?}", l.channel))?;
+        let mut layer = Layer::new(&name, channel, &l.default);
         layer.hit = l.hit;
         layer.glow = l.glow;
         layer.mirror = l.mirror.as_deref().map(parse_mirror).transpose()?;
         layer.fallback = l.fallback;
-        for (key, [dx, dy]) in l.look {
-            let look = Look::parse(&key).ok_or_else(|| format!("layer {:?}: unknown look {key:?}", l.name))?;
+        layer.transition_ms = l.transition_ms;
+        for (k, [dx, dy]) in l.look {
+            let look = Look::parse(&k).ok_or_else(|| format!("layer {name:?}: unknown look {k:?}"))?;
             layer.look.insert(look, (dx, dy));
         }
+        layer.parts = l
+            .parts
+            .into_iter()
+            .map(|p| Part {
+                id: p.id,
+                origin: (p.origin[0], p.origin[1]),
+                shape: p.shape,
+            })
+            .collect();
+        layer.shapes = l
+            .shapes
+            .into_iter()
+            .map(|(k, s)| {
+                let shape = Shape {
+                    d: s.d,
+                    fill: s.fill,
+                    stroke: s.stroke,
+                };
+                (k, shape)
+            })
+            .collect();
+        for (value, targets) in l.poses {
+            layer
+                .poses
+                .insert(value, targets.into_iter().map(|(id, [x, y])| (id, (x, y))).collect());
+        }
         for (value, a) in l.animations {
-            let sheet = match used.iter().position(|s| *s == a.sheet) {
+            if a.get("keys").is_some() {
+                let a: PartAnimationJson = serde_json::from_value(a)
+                    .map_err(|e| format!("layer {name:?}: animation {value:?} isn't valid: {e}"))?;
+                let ids: Vec<String> = a.part.into_iter().chain(a.parts).collect();
+                let phases: Vec<f64> = match &a.phase {
+                    None => vec![0.0; ids.len()],
+                    Some(Value::Array(each)) if each.len() == ids.len() => {
+                        each.iter().map(|p| number(p, "a phase")).collect::<Result<_, _>>()?
+                    }
+                    Some(one) => vec![number(one, "a phase")?; ids.len()],
+                };
+                let keys: Vec<Key> = a
+                    .keys
+                    .iter()
+                    .map(key)
+                    .collect::<Result<_, _>>()
+                    .map_err(|e| format!("layer {name:?}: {e}"))?;
+                let anim = PartAnimation {
+                    parts: ids.into_iter().zip(phases).collect(),
+                    mode: LoopMode::parse(&a.mode).map_err(|e| format!("layer {name:?}: {e}"))?,
+                    keys,
+                };
+                layer.part_animations.insert(value, anim);
+                continue;
+            }
+            let a: AnimationJson = serde_json::from_value(a)
+                .map_err(|e| format!("layer {name:?}: animation {value:?} isn't valid: {e}"))?;
+            let index = match names.iter().position(|s| *s == a.sheet) {
                 Some(i) => i,
                 None => {
-                    if !sheets.contains_key(&a.sheet) {
-                        return Err(format!("layer {:?}: sheet {:?} is missing", l.name, a.sheet));
-                    }
-                    used.push(a.sheet.clone());
-                    used.len() - 1
+                    sheets.push(sheet(&a.sheet).map_err(|e| format!("layer {name:?}: {}: {e}", a.sheet))?);
+                    names.push(a.sheet.clone());
+                    names.len() - 1
                 }
             };
-            let s = &sheets[&a.sheet];
+            let s = &sheets[index];
+            let pivots: Vec<(f64, f64)> = match &a.pivot {
+                None => vec![(0.0, 0.0); a.frames.len()],
+                Some(Value::Array(v)) if v.first().is_some_and(Value::is_array) => {
+                    if v.len() != a.frames.len() {
+                        return Err(format!(
+                            "layer {name:?}: {value:?} has {} pivots for {} frames",
+                            v.len(),
+                            a.frames.len()
+                        ));
+                    }
+                    v.iter().map(|p| pair(p, "a pivot")).collect::<Result<_, _>>()?
+                }
+                Some(p) => vec![pair(p, "a pivot")?; a.frames.len()],
+            };
             let mut frames = Vec::new();
-            for [x, y, w, h, ms] in a.frames {
+            for ([x, y, w, h, ms], pivot) in a.frames.into_iter().zip(pivots) {
                 if x.checked_add(w).is_none_or(|r| r > s.width) || y.checked_add(h).is_none_or(|b| b > s.height) {
-                    return Err(format!(
-                        "layer {:?}: a frame of {value:?} is outside {}",
-                        l.name, a.sheet
-                    ));
+                    return Err(format!("layer {name:?}: a frame of {value:?} is outside {}", a.sheet));
                 }
                 frames.push(Frame {
                     art: Art::Raster {
-                        sheet,
+                        sheet: index,
                         x,
                         y,
                         w,
                         h,
-                        pivot: (0.0, 0.0),
+                        pivot,
                     },
                     ms,
                 });
@@ -220,16 +401,14 @@ pub fn read(text: &str, sheets: &BTreeMap<String, Sheet>) -> Result<(Pack, Vec<S
             let clock = match a.clock.as_deref() {
                 None | Some("change") => Clock::Change,
                 Some("pet") => Clock::Pet,
-                Some(other) => return Err(format!("layer {:?}: unknown clock {other:?}", l.name)),
+                Some(other) => return Err(format!("layer {name:?}: unknown clock {other:?}")),
             };
-            layer.animations.insert(
-                value,
-                Animation {
-                    frames,
-                    mode: LoopMode::parse(&a.mode).map_err(|e| format!("layer {:?}: {e}", l.name))?,
-                    clock,
-                },
-            );
+            let anim = Animation {
+                frames,
+                mode: LoopMode::parse(&a.mode).map_err(|e| format!("layer {name:?}: {e}"))?,
+                clock,
+            };
+            layer.animations.insert(value, anim);
         }
         layers.push(layer);
     }
@@ -244,7 +423,7 @@ pub fn read(text: &str, sheets: &BTreeMap<String, Sheet>) -> Result<(Pack, Vec<S
         layers,
     };
     pack.validate()?;
-    Ok((pack, used.into_iter().map(|s| sheets[&s].clone()).collect()))
+    Ok((pack, sheets))
 }
 
 /// A sheet as an RGBA PNG.
@@ -266,7 +445,16 @@ pub fn encode_png(sheet: &Sheet) -> Vec<u8> {
     out
 }
 
-/// A PNG as a sheet of straight 0xAARRGGBB pixels: RGBA or RGB, 8 bits a channel.
+/// A PNG's width and height from its header, without decoding it.
+pub fn png_size(bytes: &[u8]) -> Result<(u32, u32), String> {
+    let reader = png::Decoder::new(std::io::Cursor::new(bytes))
+        .read_info()
+        .map_err(|e| format!("not a PNG: {e}"))?;
+    let info = reader.info();
+    Ok((info.width, info.height))
+}
+
+/// A PNG as a sheet of straight 0xAARRGGBB pixels: RGBA, RGB or grey, 8 bits a channel (palettes are expanded).
 pub fn decode_png(bytes: &[u8]) -> Result<Sheet, String> {
     let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
     dec.set_transformations(png::Transformations::EXPAND);
@@ -292,7 +480,14 @@ pub fn decode_png(bytes: &[u8]) -> Result<Sheet, String> {
             .iter()
             .map(|p| 0xFF00_0000 | (u32::from(p[0]) << 16) | (u32::from(p[1]) << 8) | u32::from(p[2]))
             .collect(),
-        other => return Err(format!("the PNG is {other:?} (RGBA or RGB expected)")),
+        png::ColorType::GrayscaleAlpha => px
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|p| (u32::from(p[1]) << 24) | (u32::from(p[0]) * 0x01_0101))
+            .collect(),
+        png::ColorType::Grayscale => px.iter().map(|&g| 0xFF00_0000 | (u32::from(g) * 0x01_0101)).collect(),
+        other => return Err(format!("the PNG is {other:?} (RGBA, RGB or grey expected)")),
     };
     Ok(Sheet {
         width: info.width,
@@ -316,16 +511,19 @@ mod tests {
     use crate::avatar::Avatar;
     use crate::bake::bake;
 
+    fn from(files: &[(String, Vec<u8>)]) -> impl FnMut(&str) -> Result<Sheet, String> + '_ {
+        move |name| {
+            let (_, bytes) = files.iter().find(|(n, _)| n == name).ok_or("missing")?;
+            decode_png(bytes)
+        }
+    }
+
     #[test]
     fn a_baked_pack_writes_and_reads_back_the_same() {
         let b = bake(&Avatar::hood());
         let files = files(&b.pack, &b.sheets);
-        let sheets: BTreeMap<String, Sheet> = files[1..]
-            .iter()
-            .map(|(name, bytes)| (name.clone(), decode_png(bytes).unwrap()))
-            .collect();
         let text = String::from_utf8(files[0].1.clone()).unwrap();
-        let (pack, read_sheets) = read(&text, &sheets).unwrap();
+        let (pack, read_sheets) = read(&text, from(&files)).unwrap();
         assert_eq!(pack, b.pack);
         assert_eq!(read_sheets, b.sheets);
     }
@@ -334,9 +532,76 @@ mod tests {
     fn a_newer_format_version_or_an_unknown_channel_is_refused() {
         let b = bake(&Avatar::sprout());
         let text = write(&b.pack);
+        let none = |_: &str| -> Result<Sheet, String> { Err("missing".into()) };
         let newer = text.replacen("\"format_version\": 1", "\"format_version\": 2", 1);
-        assert!(read(&newer, &BTreeMap::new()).unwrap_err().contains("newer"));
+        assert!(read(&newer, none).unwrap_err().contains("newer"));
         let tail = text.replacen("\"channel\": \"state\"", "\"channel\": \"tail\"", 1);
-        assert!(read(&tail, &BTreeMap::new()).unwrap_err().contains("unknown channel"));
+        assert!(read(&tail, none).unwrap_err().contains("unknown channel"));
+    }
+
+    /// A vector pack with a body shape and the given eyes layer, for the R18 fields.
+    fn read_parts(eyes: &str) -> Result<Pack, String> {
+        let text = format!(
+            r##"{{"format_version": 1, "name": "Parts", "kind": "vector", "pixel_size": 1, "anchor": [65, 110],
+            "accent": "#F4A340", "glow": "#FFE08A", "layers": [
+              {{"name": "body", "channel": "state", "default": "idle", "shapes": {{"idle": {{"d": "M0 0", "fill": "#000"}}}}}},
+              {eyes}
+            ]}}"##
+        );
+        read(&text, |_| Err("no sheets".into())).map(|(p, _)| p)
+    }
+
+    const EYES: &str = r##"{"name": "eyes", "channel": "eyes", "default": "open",
+        "parts": [{"id": "eye-left", "origin": [55.5, 63.5]}, {"id": "eye-right", "origin": [74.5, 63.5]}],
+        "shapes": {"open": {"d": "M0 0", "fill": "#5CFF9C"}},
+        "look": {"center": [0, 0], "up": [0, -2.5]},
+        "poses": {"wide": {"eye-left": [55, 62]}},
+        "transition_ms": 120,
+        "animations": {"open": {"parts": ["eye-left", "eye-right"], "phase": [0, 0.5], "loop": "loop",
+                                "keys": [[0, 0, 90], {"dy": 1.5, "opacity": 0.5, "ms": 90}]}}}"##;
+
+    #[test]
+    fn the_part_motion_fields_read() {
+        let pack = read_parts(EYES).unwrap();
+        let eyes = &pack.layers[1];
+        assert_eq!(eyes.parts.len(), 2);
+        assert_eq!(eyes.poses["wide"]["eye-left"], (55.0, 62.0));
+        assert_eq!(eyes.transition_ms, 120);
+        assert_eq!(eyes.look[&Look { dx: 0, dy: -1 }], (0.0, -2.5));
+        let a = &eyes.part_animations["open"];
+        assert_eq!(a.parts, [("eye-left".to_owned(), 0.0), ("eye-right".to_owned(), 0.5)]);
+        assert_eq!((a.keys[1].dy, a.keys[1].opacity, a.keys[1].ms), (1.5, 0.5, 90));
+    }
+
+    #[test]
+    fn each_part_motion_error_is_a_reason() {
+        let bad = [
+            (EYES.replace("[55.5, 63.5]", "[1e999, 63.5]"), "isn't valid"),
+            (EYES.replace("[55.5, 63.5]", "[500, 63.5]"), "outside the art box"),
+            (
+                EYES.replace(r#""wide": {"eye-left""#, r#""wide": {"nose""#),
+                "unknown part \"nose\"",
+            ),
+            (
+                EYES.replace(
+                    r#"{"id": "eye-right", "origin": [74.5, 63.5]}"#,
+                    r#"{"id": "eye-right", "origin": [74.5, 63.5]}, {"id": "eye-left", "origin": [60, 60]}"#,
+                ),
+                "used twice",
+            ),
+            (
+                EYES.replace("[0, 0, 90]", &vec!["[0, 0, 9]"; 65].join(", ")),
+                "keys (1 to 64)",
+            ),
+            (EYES.replace("\"ms\": 90", "\"ms\": 10001"), "lasts 10001 ms"),
+            (
+                EYES.replace("\"transition_ms\": 120", "\"transition_ms\": 10001"),
+                "transition_ms",
+            ),
+        ];
+        for (eyes, why) in bad {
+            let err = read_parts(&eyes).unwrap_err();
+            assert!(err.contains(why), "{why}: {err}");
+        }
     }
 }

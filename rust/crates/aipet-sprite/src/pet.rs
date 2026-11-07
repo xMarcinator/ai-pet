@@ -9,8 +9,9 @@ use std::f64::consts::PI;
 use std::hash::{BuildHasher, Hasher};
 
 use crate::avatar::Avatar;
-use crate::bake::{self, Sheet};
+use crate::bake::Sheet;
 use crate::compose;
+use crate::load::LoadedPack;
 use crate::pack::{Art, Pack};
 use crate::pose::{self, Expression, Facing, Fx, IdleAct, Look, Mood, Motion, Pose, Prop, StateValue, Values};
 
@@ -140,7 +141,8 @@ impl PetRng for XorShift64 {
 /// layers. Platform-neutral; the UI just blits the three layers (Glow gets a coloured blur on top).
 pub struct Pet<R: PetRng = XorShift64> {
     // ------------------------------------------------------------------ the avatar
-    avatar: Avatar,
+    /// The avatar the pack was made from, when the pet was given one ([`Pet::set_avatar`]).
+    avatar: Option<Avatar>,
 
     // ------------------------------------------------------------------ pixel buffers
     body_px: [u32; PIXELS],
@@ -229,7 +231,7 @@ impl<R: PetRng> Pet<R> {
     /// A pet wearing Sprout, with the given random source.
     pub fn with_rng(rng: R) -> Self {
         let mut pet = Pet {
-            avatar: Avatar::sprout(),
+            avatar: None,
             body_px: [0; PIXELS],
             glow_px: [0; PIXELS],
             fx_px: [0; PIXELS],
@@ -265,8 +267,22 @@ impl<R: PetRng> Pet<R> {
         pet
     }
 
-    pub fn avatar(&self) -> &Avatar {
-        &self.avatar
+    /// The avatar the pet wears, when it was given one rather than a pack.
+    pub fn avatar(&self) -> Option<&Avatar> {
+        self.avatar.as_ref()
+    }
+
+    /// The pack the pet wears: its name, colours and layers.
+    pub fn pack(&self) -> &Pack {
+        &self.pack
+    }
+
+    /// The pack the pet wears, with its sheets.
+    pub fn loaded(&self) -> LoadedPack {
+        LoadedPack {
+            pack: self.pack.clone(),
+            sheets: self.sheets.clone(),
+        }
     }
 
     /// The state the pet is animating (e.g. "listen" when music replaces idling).
@@ -280,13 +296,17 @@ impl<R: PetRng> Pet<R> {
         self.idle_act
     }
 
+    /// Wears `a`: a built-in pet's embedded pack, else the avatar baked now (once, not per frame).
     pub fn set_avatar(&mut self, a: Avatar) {
-        // a built-in pet's embedded pack, else the avatar baked now: once, not per frame
-        (self.pack, self.sheets) = crate::builtin::pack_for(&a).unwrap_or_else(|| {
-            let baked = bake::bake(&a);
-            (baked.pack, baked.sheets)
-        });
-        self.avatar = a;
+        self.set_pack(LoadedPack::of_avatar(&a));
+        self.avatar = Some(a);
+    }
+
+    /// Wears a pack.
+    pub fn set_pack(&mut self, p: LoadedPack) {
+        self.pack = p.pack;
+        self.sheets = p.sheets;
+        self.avatar = None;
         self.last_draw_frame = -1;
         self.tracker.reset();
     }
@@ -553,13 +573,23 @@ impl<R: PetRng> Pet<R> {
         self.fx_px.fill(0);
         for pick in compose::pick(&self.pack, &self.pose, t) {
             let layer = &self.pack.layers[pick.layer];
-            let Some(Art::Raster { sheet, x, y, w, h, .. }) =
-                pick.frame.map(|f| &layer.animations[pick.value].frames[f].art).cloned()
+            let Some(Art::Raster {
+                sheet,
+                x,
+                y,
+                w,
+                h,
+                pivot,
+            }) = pick.frame.map(|f| &layer.animations[pick.value].frames[f].art).cloned()
             else {
                 continue;
             };
             let (dx, dy) = compose::raster_offset(&self.pack, layer, &self.pose);
-            let (ox, oy) = ((dx / self.pack.pixel_size) as i32, (dy / self.pack.pixel_size) as i32);
+            // the look offset in art pixels, less the frame's pivot (a trimmed frame starts inside the art box)
+            let (ox, oy) = (
+                (dx / self.pack.pixel_size) as i32 - pivot.0 as i32,
+                (dy / self.pack.pixel_size) as i32 - pivot.1 as i32,
+            );
             let target = if layer.channel == pose::Channel::Fx {
                 &mut self.fx_px
             } else if layer.glow {
@@ -689,7 +719,7 @@ mod tests {
     fn a_new_pet_sleeps_as_sprout_and_draws_on_the_first_update() {
         let mut pet = Pet::with_rng(Fixed(0.5));
         assert_eq!(pet.anim_state(), "sleep");
-        assert_eq!(pet.avatar().name, "Sprout");
+        assert_eq!(pet.pack().name, "Sprout");
         let f = pet.update(&PetInput::default(), 0.0);
         assert!(f.pixels_changed);
         assert!(f.body.iter().any(|&px| px != 0));

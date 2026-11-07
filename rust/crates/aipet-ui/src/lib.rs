@@ -37,7 +37,7 @@ use std::time::{Duration, Instant};
 
 use aipet_core::board::{self, Board, Session};
 use aipet_core::config::Config;
-use aipet_sprite::{Avatar, Pet, PetFrame, PetInput};
+use aipet_sprite::{Pet, PetFrame, PetInput};
 use iced::widget::image::Handle;
 use iced::{Point, Rectangle, Size, Vector};
 
@@ -325,7 +325,7 @@ pub struct PetUi {
     /// The sprite's part of the input region, remade in place each tick.
     sprite_rects: Vec<Rect>,
     shadow: Handle,
-    avatars: Vec<Avatar>,
+    avatars: Vec<aipet_sprite::load::LoadedPack>,
     /// Each avatar standing still, for the picker.
     stills: Vec<Handle>,
     avatar: usize,
@@ -414,16 +414,16 @@ impl PetUi {
     /// The pet with its preferences and avatar, waiting for the core's first Board (asleep and without bubbles until
     /// then).
     pub fn new(setup: Setup) -> Self {
-        let avatars = Avatar::all(&setup.avatars);
+        let avatars = aipet_sprite::load::all(&setup.avatars).pets;
         let avatar = setup
             .prefs
             .avatar
             .as_deref()
-            .and_then(|name| avatars.iter().position(|a| a.name == name))
+            .and_then(|name| avatars.iter().position(|a| a.name() == name))
             .unwrap_or(0);
         let stills = avatars.iter().map(sprite::still).collect();
         let mut pet = Pet::new();
-        pet.set_avatar(avatars[avatar].clone());
+        pet.set_pack(avatars[avatar].clone());
         PetUi {
             host: setup.host,
             platform: setup.platform,
@@ -509,7 +509,7 @@ impl PetUi {
         }
         self.input.hover = self.hover;
         self.input.music = self.music && self.playing();
-        let glow = self.pet.avatar().glow;
+        let glow = self.pet.pack().glow;
         let frame = self.pet.update(&self.input, t);
         if frame.pixels_changed {
             self.sprite.update(&frame, glow);
@@ -789,7 +789,7 @@ impl PetUi {
             Message::SelectAvatar(i) => {
                 if let Some(avatar) = self.avatars.get(i).filter(|_| i != self.avatar) {
                     self.avatar = i;
-                    self.pet.set_avatar(avatar.clone());
+                    self.pet.set_pack(avatar.clone());
                     self.save_prefs();
                 }
             }
@@ -903,7 +903,7 @@ impl PetUi {
             bubbles: self.bubbles,
             on_top: self.on_top,
             music: self.music,
-            avatar: Some(self.avatars[self.avatar].name.clone()),
+            avatar: Some(self.avatars[self.avatar].name().to_owned()),
         }
     }
 
@@ -1076,7 +1076,7 @@ impl PetUi {
 
     /// The avatar's accent colour, which the menu's checks and Settings' highlights use.
     fn accent(&self) -> iced::Color {
-        style::argb(self.pet.avatar().accent | 0xFF000000)
+        style::argb(self.pet.pack().accent | 0xFF000000)
     }
 }
 
@@ -1642,7 +1642,7 @@ pub(crate) mod tests {
             },
             ..Setup::detached()
         });
-        assert_eq!(ui.avatars[ui.avatar].name, "Hood");
+        assert_eq!(ui.avatars[ui.avatar].name(), "Hood");
         assert_eq!(
             ui.prefs(),
             Prefs {

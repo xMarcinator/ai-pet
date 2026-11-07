@@ -3,7 +3,8 @@
 //! `Handle::from_rgba` takes straight (not premultiplied) alpha and makes a new texture on every call, so layers are
 //! converted from the pet's premultiplied pixels and turned into images only when their pixels actually change.
 
-use aipet_sprite::{Avatar, GH, GW, PIXELS, Pet, PetFrame, PetInput, XorShift64};
+use aipet_sprite::load::LoadedPack;
+use aipet_sprite::{GH, GW, PIXELS, Pet, PetFrame, PetInput, XorShift64};
 use iced::widget::image::Handle;
 
 use crate::geometry::HALO_PAD;
@@ -67,10 +68,10 @@ impl Sprite {
     }
 }
 
-/// One avatar standing idle, all layers in one image (for Settings' avatar picker).
-pub fn still(avatar: &Avatar) -> Handle {
+/// One pet standing idle, all layers in one image (for Settings' avatar picker).
+pub fn still(avatar: &LoadedPack) -> Handle {
     let mut pet = Pet::with_rng(XorShift64::new(1));
-    pet.set_avatar(avatar.clone());
+    pet.set_pack(avatar.clone());
     let input = PetInput {
         state: "idle".to_owned(),
         ..PetInput::default()

@@ -1,0 +1,116 @@
+{
+  "format_version": 1,
+  "name": "Sample",
+  "kind": "pixel",
+  "pixel_size": 5.0,
+  "anchor": [
+    13.0,
+    22.0
+  ],
+  "mirror": "flip",
+  "accent": "#B88CF0",
+  "glow": "#FFF2A8",
+  "layers": [
+    {
+      "name": "body",
+      "channel": "state",
+      "hit": true,
+      "default": "idle",
+      "fallback": {
+        "listen": "sleep"
+      },
+      "animations": {
+        "idle": {
+          "frames": [
+            [
+              0,
+              0,
+              26,
+              24,
+              400
+            ],
+            [
+              26,
+              0,
+              26,
+              24,
+              400
+            ]
+          ],
+          "loop": "loop",
+          "sheet": "body.png"
+        },
+        "sleep": {
+          "frames": [
+            [
+              52,
+              0,
+              26,
+              24,
+              1000
+            ]
+          ],
+          "loop": "once",
+          "sheet": "body.png"
+        }
+      }
+    },
+    {
+      "name": "eyes",
+      "channel": "eyes",
+      "hit": false,
+      "glow": true,
+      "default": "open",
+      "fallback": {
+        "blink": "closed",
+        "happy": "closed"
+      },
+      "look": {
+        "far-left": [
+          -10.0,
+          0.0
+        ],
+        "far-right": [
+          10.0,
+          0.0
+        ],
+        "left": [
+          -5.0,
+          0.0
+        ],
+        "right": [
+          5.0,
+          0.0
+        ]
+      },
+      "animations": {
+        "closed": {
+          "frames": [
+            [
+              26,
+              0,
+              26,
+              24,
+              1000
+            ]
+          ],
+          "loop": "once",
+          "sheet": "eyes.png"
+        },
+        "open": {
+          "frames": [
+            [
+              0,
+              0,
+              26,
+              24,
+              1000
+            ]
+          ],
+          "loop": "once",
+          "sheet": "eyes.png"
+        }
+      }
+    }
+  ]
+}

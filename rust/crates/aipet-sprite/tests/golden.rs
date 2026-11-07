@@ -285,7 +285,7 @@ fn replay(case: &Value, layers: &[Vec<u32>]) -> Result<usize, String> {
             }
         }
         let input = input.as_ref().unwrap_or_else(|| panic!("{name}: no input at step {i}"));
-        let outline = pm(pet.avatar().outline);
+        let outline = pm(pet.avatar().expect("the golden cases wear avatars").outline);
         let f = pet.update(input, t);
         let Some(s) = samples.next_if(|s| s["step"].as_u64() == Some(i as u64)) else {
             continue;

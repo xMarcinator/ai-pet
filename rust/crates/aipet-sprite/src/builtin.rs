@@ -1,10 +1,12 @@
 //! The built-in pets' packs, embedded in the binary: Sprout, Hood and Hood (green), baked ahead of time from their
-//! avatars (`tests/bake.rs` checks the committed files are the bake's, byte for byte).
+//! avatars (`tests/bake.rs` checks the committed files are the bake's: the manifests as text, the sheets pixel for
+//! pixel).
 
 use std::collections::BTreeMap;
 
 use crate::avatar::Avatar;
 use crate::bake::Sheet;
+use crate::load::LoadedPack;
 use crate::manifest::{decode_png, read};
 use crate::pack::Pack;
 
@@ -33,6 +35,17 @@ fn hood_green() -> Option<Avatar> {
     Avatar::parse(include_str!("../../../../avatars/hood-green.json"), "hood-green")
 }
 
+/// The built-in pets, in order.
+pub fn all() -> Vec<LoadedPack> {
+    [SPROUT, HOOD, HOOD_GREEN]
+        .into_iter()
+        .map(|files| {
+            let (pack, sheets) = load(files).expect("the embedded packs load (tests/bake.rs)");
+            LoadedPack { pack, sheets }
+        })
+        .collect()
+}
+
 /// The embedded pack for `avatar`, if it is one of the built-in pets exactly (a file that renames or recolours one
 /// is baked at load instead).
 pub fn pack_for(avatar: &Avatar) -> Option<(Pack, Vec<Sheet>)> {
@@ -49,16 +62,9 @@ pub fn pack_for(avatar: &Avatar) -> Option<(Pack, Vec<Sheet>)> {
 }
 
 fn load(files: Files) -> Result<(Pack, Vec<Sheet>), String> {
-    let mut manifest = None;
-    let mut sheets = BTreeMap::new();
-    for (name, bytes) in files {
-        if *name == "pack.json" {
-            manifest = Some(std::str::from_utf8(bytes).map_err(|e| e.to_string())?);
-        } else {
-            sheets.insert((*name).to_owned(), decode_png(bytes)?);
-        }
-    }
-    read(manifest.ok_or("no pack.json")?, &sheets)
+    let by_name: BTreeMap<&str, &[u8]> = files.iter().copied().collect();
+    let manifest = std::str::from_utf8(by_name.get("pack.json").ok_or("no pack.json")?).map_err(|e| e.to_string())?;
+    read(manifest, |name| decode_png(by_name.get(name).ok_or("missing")?))
 }
 
 #[cfg(test)]

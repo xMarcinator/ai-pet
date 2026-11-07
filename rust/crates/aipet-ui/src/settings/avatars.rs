@@ -5,6 +5,7 @@
 use std::fs;
 
 use aipet_sprite::Avatar;
+use aipet_sprite::load::{self, LoadedPack};
 use iced::widget::image::FilterMethod;
 use iced::widget::{Row, button, column, container, image, row, text, tooltip};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
@@ -27,18 +28,16 @@ pub struct Avatars {
 /// missing when its file has gone.
 #[doc(hidden)]
 pub fn tiles(pet: &PetUi) -> Vec<(&str, bool)> {
-    shown(pet)
-        .map(|(i, avatar)| (avatar.name.as_str(), i == pet.avatar))
-        .collect()
+    shown(pet).map(|(i, avatar)| (avatar.name(), i == pet.avatar)).collect()
 }
 
-/// The avatar the pet wears, as drawn.
+/// The pet worn, as drawn: its pack and sheets.
 #[doc(hidden)]
-pub fn worn(pet: &PetUi) -> &Avatar {
-    pet.pet.avatar()
+pub fn worn(pet: &PetUi) -> LoadedPack {
+    pet.pet.loaded()
 }
 
-fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &Avatar)> {
+fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &LoadedPack)> {
     let gone = pet.settings.avatars.gone;
     pet.avatars.iter().enumerate().filter(move |&(i, _)| Some(i) != gone)
 }
@@ -59,8 +58,11 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
         .map(|(i, avatar, still)| {
             let selected = i == pet.avatar;
             let name = row![
-                dot(argb(avatar.accent | 0xFF000000), 9.0),
-                text(&avatar.name).size(13).font(style::UI_SEMIBOLD).color(Color::WHITE),
+                dot(argb(avatar.pack.accent | 0xFF000000), 9.0),
+                text(avatar.name())
+                    .size(13)
+                    .font(style::UI_SEMIBOLD)
+                    .color(Color::WHITE),
             ]
             .spacing(7)
             .align_y(Alignment::Center);
@@ -95,7 +97,7 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
                     shadow: Shadow::default(),
                     snap: true,
                 });
-            tooltip(tile, tip(format!("Wear {}", avatar.name)), tooltip::Position::Bottom).into()
+            tooltip(tile, tip(format!("Wear {}", avatar.name())), tooltip::Position::Bottom).into()
         });
     let grid = Row::with_children(tiles).spacing(12).wrap().vertical_spacing(12);
     // the demo shows the repository's avatars, which aren't in a data folder: there is nothing to reload or open
@@ -163,7 +165,7 @@ fn tip<'a>(line: String) -> Element<'a, crate::Message> {
 pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
     let folder = Avatar::custom_dir(&pet.settings.services.data_dir);
     match message {
-        Message::Reload => reload(pet, Avatar::all(&folder)),
+        Message::Reload => reload(pet, load::all(&folder).pets),
         // the platform opens only a folder that is there: one that can't be made isn't opened, and the page says why
         Message::OpenFolder => match fs::create_dir_all(&folder) {
             Ok(()) => {
@@ -182,17 +184,17 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
 /// The avatars as read again (`FillAvatars`), one tile each. The worn avatar's tile is the one with its name, and
 /// when its file has changed the pet wears it as it is now (the C# reapplies a tile clicked again; here the one worn
 /// takes no click). When its file has gone, the pet keeps wearing it as it was, with no tile, until it takes another.
-fn reload(pet: &mut PetUi, mut avatars: Vec<Avatar>) {
-    let worn = pet.pet.avatar().clone();
-    let (index, gone) = match avatars.iter().position(|a| a.name == worn.name) {
+fn reload(pet: &mut PetUi, mut avatars: Vec<LoadedPack>) {
+    let (index, gone) = match avatars.iter().position(|a| a.name() == pet.pet.pack().name) {
         Some(i) => {
-            if avatars[i] != worn {
-                pet.pet.set_avatar(avatars[i].clone());
+            // a pack whose art changed is worn as it is now
+            if avatars[i] != pet.pet.loaded() {
+                pet.pet.set_pack(avatars[i].clone());
             }
             (i, None)
         }
         None => {
-            avatars.push(worn);
+            avatars.push(pet.pet.loaded());
             (avatars.len() - 1, Some(avatars.len() - 1))
         }
     };
