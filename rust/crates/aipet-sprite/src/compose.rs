@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crate::pack::{Kind, Layer, LoopMode, Mirror, Pack};
+use crate::pack::{Clock, Kind, Layer, LoopMode, Mirror, Pack};
 use crate::pose::{ANCHOR, ART_W, Channel, Facing, Look, Pose};
 
 /// Which item of a sequence plays `elapsed` ms in, by `mode`: each lasts `ms(i)`, there are `n` (at least one).
@@ -50,25 +50,44 @@ pub struct Pick<'a> {
     pub mirrored: bool,
 }
 
-/// Whether the pose's facing mirrors the pack.
-pub fn mirrored(pack: &Pack, pose: &Pose) -> bool {
-    pose.facing == Facing::Left && pack.mirror == Mirror::Flip
+/// Whether the pose's facing mirrors a layer: by its own policy, else the pack's.
+pub fn mirrored(pack: &Pack, layer: &Layer, pose: &Pose) -> bool {
+    pose.facing == Facing::Left && layer.mirror.unwrap_or(pack.mirror) == Mirror::Flip
+}
+
+/// How far a raster layer without parts is moved, in art-box px: the eyes channel's look offset, when it has a table.
+pub fn raster_offset(pack: &Pack, layer: &Layer, pose: &Pose) -> (f64, f64) {
+    if layer.channel == Channel::Eyes && layer.parts.is_empty() && !layer.look.is_empty() {
+        look_offset(pack, layer, pose.eyes.look)
+    } else {
+        (0.0, 0.0)
+    }
 }
 
 /// Each layer's value and frame at `t` (pet-clock seconds), in drawing order. A layer whose fallbacks say to draw
-/// nothing for the pose's value is left out.
+/// nothing for the pose's value is left out. Facing left, a layer's `<value>@left` frames, if it has them, are used
+/// unmirrored.
 pub fn pick<'a>(pack: &'a Pack, pose: &Pose, t: f64) -> Vec<Pick<'a>> {
-    let mirrored = mirrored(pack, pose);
     pack.layers
         .iter()
         .enumerate()
         .filter_map(|(i, layer)| {
-            let value = layer.resolve(pose.key(layer.channel))?;
-            let elapsed = (t - pose.since(layer.channel)) * 1000.0;
-            let frame = layer
-                .animations
-                .get(value)
-                .map(|a| step(a.frames.len(), |f| a.frames[f].ms, a.mode, elapsed));
+            let mut value = layer.resolve(pose.key(layer.channel))?;
+            let mut mirrored = mirrored(pack, layer, pose);
+            // a value's own frames for facing left, where the layer has them, instead of mirroring
+            if pose.facing == Facing::Left
+                && let Some((key, _)) = layer.animations.get_key_value(&format!("{value}@left") as &str)
+            {
+                value = key;
+                mirrored = false;
+            }
+            let frame = layer.animations.get(value).map(|a| {
+                let from = match a.clock {
+                    Clock::Change => pose.since(layer.channel),
+                    Clock::Pet => 0.0,
+                };
+                step(a.frames.len(), |f| a.frames[f].ms, a.mode, (t - from) * 1000.0)
+            });
             Some(Pick {
                 layer: i,
                 value,
@@ -165,10 +184,10 @@ pub struct Parts {
 impl Parts {
     /// Every part's place at `t`, layer by layer. A layer that draws nothing for the pose's value places none.
     pub fn place(&mut self, pack: &Pack, pose: &Pose, t: f64) -> Vec<Placed> {
-        let mirrored = mirrored(pack, pose);
         let m = pose.motion;
         let mut placed = Vec::new();
         for (li, layer) in pack.layers.iter().enumerate() {
+            let mirrored = mirrored(pack, layer, pose);
             let Some(value) = layer.resolve(pose.key(layer.channel)) else {
                 continue;
             };

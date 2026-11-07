@@ -53,3 +53,5 @@ wayland-client = "0.31.15"
 # Settings' file dialogs (Import defaults, avatars). Its default features: the XDG portal on Linux, waited on with
 # pollster rather than an async runtime, and Wayland parents for the dialogs.
 rfd = "0.17.2"
+# The pets' sheets (aipet-sprite): PNG decoding at load, and encoding for the bake of the built-in packs
+png = "0.18"

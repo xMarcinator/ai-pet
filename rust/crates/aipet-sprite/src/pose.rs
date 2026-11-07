@@ -139,12 +139,13 @@ impl StateValue {
     }
 }
 
-/// The eyes' expression. Blinking is `Closed`, as sleeping is; `Down` (reading the laptop) is kept apart from `Open`
-/// so a pack can draw it, and falls back like any other value.
+/// The eyes' expression. `Blink` (shut for a moment) is kept apart from `Closed` (asleep), and `Down` (reading the
+/// laptop) from `Open`, so a pack can draw them; a pack without them falls back as its manifest says.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Expression {
     Open,
     Closed,
+    Blink,
     Happy,
     Squint,
     Wide,
@@ -157,6 +158,7 @@ impl Expression {
         match self {
             Expression::Open => "open",
             Expression::Closed => "closed",
+            Expression::Blink => "blink",
             Expression::Happy => "happy",
             Expression::Squint => "squint",
             Expression::Wide => "wide",
@@ -169,7 +171,8 @@ impl Expression {
     pub(crate) fn of(eyes: &str) -> Expression {
         match eyes {
             "happy" => Expression::Happy,
-            "sleep" | "blink" => Expression::Closed,
+            "sleep" => Expression::Closed,
+            "blink" => Expression::Blink,
             "squint" => Expression::Squint,
             "wide" => Expression::Wide,
             "up" => Expression::Up,
@@ -179,8 +182,10 @@ impl Expression {
     }
 }
 
-/// Where the eyes look: one of 9 directions, the centre included. `dx` is −1 (left), 0 or 1 (right); `dy` is −1
-/// (up), 0 or 1 (down), in the unmirrored art.
+/// Where the eyes look: a direction, the centre included. `dx` is −2 (far left) to 2 (far right), the renderer's five
+/// steps; `dy` is −1 (up), 0 or 1 (down), in the unmirrored art. A pack's `look` table names the nine directions
+/// (`left`, `up-right`, …) and may add the far ones (`far-left`, `up-far-right`, …); a far one it lacks takes the
+/// near one ([`crate::compose`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Look {
     pub dx: i8,
@@ -190,8 +195,8 @@ pub struct Look {
 impl Look {
     pub const CENTER: Look = Look { dx: 0, dy: 0 };
 
-    /// All nine, the centre first.
-    pub const ALL: [Look; 9] = [
+    /// All fifteen: the centre, the eight around it, then the six far ones.
+    pub const ALL: [Look; 15] = [
         Look { dx: 0, dy: 0 },
         Look { dx: 0, dy: -1 },
         Look { dx: 1, dy: -1 },
@@ -201,6 +206,12 @@ impl Look {
         Look { dx: -1, dy: 1 },
         Look { dx: -1, dy: 0 },
         Look { dx: -1, dy: -1 },
+        Look { dx: 2, dy: -1 },
+        Look { dx: 2, dy: 0 },
+        Look { dx: 2, dy: 1 },
+        Look { dx: -2, dy: 1 },
+        Look { dx: -2, dy: 0 },
+        Look { dx: -2, dy: -1 },
     ];
 
     pub fn key(self) -> &'static str {
@@ -213,6 +224,12 @@ impl Look {
             (-1, 1) => "down-left",
             (-1, 0) => "left",
             (-1, -1) => "up-left",
+            (2, -1) => "up-far-right",
+            (2, 0) => "far-right",
+            (2, 1) => "down-far-right",
+            (-2, 1) => "down-far-left",
+            (-2, 0) => "far-left",
+            (-2, -1) => "up-far-left",
             _ => "center",
         }
     }
@@ -300,8 +317,8 @@ impl Prop {
     }
 }
 
-/// The `fx` channel: one effect at a time. Today's renderer can draw the sparkles of a poke together with the dots
-/// of thinking; a pose says sparkles then, as the poke is the reaction to show.
+/// The `fx` channel's effect. The sparkles of a poke or of being done come on top of it ([`Pose::sparkles`]), so the
+/// channel's value is the effect, `sparkles`, or both (`zs+sparkles`, …).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fx {
     None,
@@ -364,6 +381,8 @@ pub struct Pose {
     pub prop: Prop,
     pub headphones: bool,
     pub fx: Fx,
+    /// Sparkles on top of the effect: a poke, or the first moments of done.
+    pub sparkles: bool,
     pub facing: Facing,
     pub motion: Motion,
     since: [f64; 8],
@@ -385,7 +404,7 @@ impl Pose {
                     "off"
                 }
             }
-            Channel::Fx => self.fx.key(),
+            Channel::Fx => fx_key(self.fx, self.sparkles),
             Channel::Facing => self.facing.key(),
         }
     }
@@ -393,6 +412,19 @@ impl Pose {
     /// When a channel's value last changed. A channel's animation starts then.
     pub fn since(&self, channel: Channel) -> f64 {
         self.since[channel.index()]
+    }
+}
+
+/// The `fx` channel's value: the effect, with `+sparkles` when they come on top (`sparkles` alone over nothing).
+pub fn fx_key(fx: Fx, sparkles: bool) -> &'static str {
+    match (fx, sparkles) {
+        (fx, false) => fx.key(),
+        (Fx::None | Fx::Sparkles, true) => "sparkles",
+        (Fx::Zs, true) => "zs+sparkles",
+        (Fx::Dots, true) => "dots+sparkles",
+        (Fx::Notes, true) => "notes+sparkles",
+        (Fx::Alert, true) => "alert+sparkles",
+        (Fx::Dust, true) => "dust+sparkles",
     }
 }
 
@@ -406,6 +438,7 @@ pub struct Values {
     pub prop: Prop,
     pub headphones: bool,
     pub fx: Fx,
+    pub sparkles: bool,
     pub facing: Facing,
 }
 
@@ -419,6 +452,7 @@ impl Values {
             prop: self.prop,
             headphones: self.headphones,
             fx: self.fx,
+            sparkles: self.sparkles,
             facing: self.facing,
             motion: Motion::default(),
             since: [0.0; 8],
@@ -427,47 +461,59 @@ impl Values {
     }
 }
 
-/// How far (DIPs) the pointer goes past an edge between two look directions before the eyes turn, and back before
-/// they return: without it, a pointer resting near an edge would make them flicker between the two.
+/// How far (DIPs) a drifting pointer goes past the edge between two look directions before the eyes turn, and back
+/// before they return: without it, a pointer resting near an edge would make them flicker between the two.
 pub const LOOK_HYSTERESIS: f64 = 4.0;
-/// The pointer's distance from the sprite's centre (DIPs) where the eyes turn sideways: the renderer's eye-follow
-/// rounds `(x − 65) / 28` to the nearest whole step, so its first step is at 14.
-const LOOK_SIDE: f64 = 14.0;
+/// A pointer that moved more than this since the last frame (DIPs) jumped: the eyes go straight to its direction.
+const LOOK_JUMP: f64 = 2.0 * LOOK_HYSTERESIS;
 /// The pointer's height (DIPs from the sprite's top) above which the eyes look up, as the renderer's `11 * P - 40`.
 const LOOK_UP: f64 = 15.0;
+
+/// The renderer's eye-follow: `(x − 65) / 28` rounded half to even, within ±2, and up above [`LOOK_UP`].
+fn look_at(x: f64, y: f64) -> Look {
+    Look {
+        dx: ((x - ART_W * 0.5) / 28.0).round_ties_even().clamp(-2.0, 2.0) as i8,
+        dy: if y < LOOK_UP { -1 } else { 0 },
+    }
+}
 
 /// Times each channel's value, and turns the eyes towards the pointer with hysteresis. One per pet.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Tracker {
     last: Option<([&'static str; 8], [f64; 8])>,
-    pointer: Look,
+    pointer: Option<((f64, f64), Look)>,
 }
 
 impl Tracker {
-    /// The eyes' direction from a hovering pointer over the sprite (DIPs), or `None` without one.
+    /// The eyes' direction from a hovering pointer over the sprite (DIPs), or `None` without one. A pointer that
+    /// appears or jumps gets the renderer's direction at once; one that drifts must go [`LOOK_HYSTERESIS`] past an
+    /// edge to change it.
     pub fn pointer_look(&mut self, pointer: Option<(f64, f64)>) -> Option<Look> {
         let Some((x, y)) = pointer else {
-            self.pointer = Look::CENTER;
+            self.pointer = None;
             return None;
         };
-        let was = self.pointer;
-        let d = x - ART_W * 0.5;
-        let dx = if d.abs() >= LOOK_SIDE + LOOK_HYSTERESIS {
-            d.signum() as i8
-        } else if d.abs() < LOOK_SIDE - LOOK_HYSTERESIS || (was.dx != 0 && d.signum() as i8 != was.dx) {
-            0
-        } else {
-            was.dx
+        let target = look_at(x, y);
+        let look = match self.pointer {
+            Some(((px, py), was)) if (x - px).hypot(y - py) <= LOOK_JUMP => {
+                // held while the pointer, moved back by the band towards where the eyes look, still looks there
+                let back = |v: f64, to: i8, from: i8| v - f64::from((to - from).signum()) * LOOK_HYSTERESIS;
+                let dx = if target.dx != was.dx && look_at(back(x, target.dx, was.dx), y).dx == was.dx {
+                    was.dx
+                } else {
+                    target.dx
+                };
+                let dy = if target.dy != was.dy && look_at(x, back(y, target.dy, was.dy)).dy == was.dy {
+                    was.dy
+                } else {
+                    target.dy
+                };
+                Look { dx, dy }
+            }
+            _ => target,
         };
-        let dy = if y < LOOK_UP - LOOK_HYSTERESIS {
-            -1
-        } else if y >= LOOK_UP + LOOK_HYSTERESIS {
-            0
-        } else {
-            was.dy
-        };
-        self.pointer = Look { dx, dy };
-        Some(self.pointer)
+        self.pointer = Some(((x, y), look));
+        Some(look)
     }
 
     /// The pose for `values` at `t`, with each channel's time of change.
@@ -493,6 +539,7 @@ impl Tracker {
             prop: values.prop,
             headphones: values.headphones,
             fx: values.fx,
+            sparkles: values.sparkles,
             facing: values.facing,
             motion,
             since,
@@ -521,6 +568,7 @@ impl Values {
         prop: Prop::None,
         headphones: false,
         fx: Fx::None,
+        sparkles: false,
         facing: Facing::Right,
     };
 }
@@ -551,40 +599,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_look_turns_past_the_edge_and_back_with_hysteresis() {
+    fn a_pointer_that_appears_or_jumps_gets_the_renderers_direction() {
         let mut t = Tracker::default();
-        let at = |t: &mut Tracker, x: f64| t.pointer_look(Some((x, 60.0))).unwrap().dx;
-        assert_eq!(at(&mut t, 65.0), 0);
-        // across the renderer's edge at 14 px right of centre, but within the band: still centre
-        assert_eq!(at(&mut t, 65.0 + 15.0), 0);
-        assert_eq!(at(&mut t, 65.0 + 17.9), 0);
-        // past it: right, and it stays right back across the edge, until well inside
-        assert_eq!(at(&mut t, 65.0 + 18.0), 1);
-        assert_eq!(at(&mut t, 65.0 + 13.0), 1);
-        assert_eq!(at(&mut t, 65.0 + 10.1), 1);
-        assert_eq!(at(&mut t, 65.0 + 9.9), 0);
-        // to the left side at once when the pointer jumps across
-        assert_eq!(at(&mut t, 65.0 + 18.0), 1);
-        assert_eq!(at(&mut t, 65.0 - 30.0), -1);
-        // a pointer wobbling on the edge never flickers
-        let mut seen = Vec::new();
-        for i in 0..20 {
-            seen.push(at(&mut t, 65.0 - 14.0 + if i % 2 == 0 { 2.0 } else { -2.0 }));
-        }
-        assert!(seen.iter().all(|&d| d == -1), "{seen:?}");
+        let mut at = |x: f64, y: f64| t.pointer_look(Some((x, y))).unwrap();
+        // the golden data's edges: 14 px rounds half to even (centre), 42 px to two steps, 14.5 px high is up
+        assert_eq!(at(79.0, 10.0), Look { dx: 0, dy: -1 });
+        assert_eq!(at(51.0, 60.0), Look { dx: 0, dy: 0 });
+        assert_eq!(at(107.0, 15.0), Look { dx: 2, dy: 0 });
+        assert_eq!(at(23.0, 14.5), Look { dx: -2, dy: -1 });
+        assert_eq!(at(-20.0, 60.0), Look { dx: -2, dy: 0 });
     }
 
     #[test]
-    fn the_look_goes_up_above_the_line_with_hysteresis_and_centres_without_a_pointer() {
+    fn a_drifting_pointer_turns_the_eyes_past_the_edge_and_back_with_hysteresis() {
         let mut t = Tracker::default();
-        let dy = |t: &mut Tracker, y: f64| t.pointer_look(Some((65.0, y))).unwrap().dy;
-        assert_eq!(dy(&mut t, 30.0), 0);
-        assert_eq!(dy(&mut t, 12.0), 0);
-        assert_eq!(dy(&mut t, 10.9), -1);
-        assert_eq!(dy(&mut t, 17.0), -1);
-        assert_eq!(dy(&mut t, 19.0), 0);
+        let mut dx = |x: f64| t.pointer_look(Some((x, 60.0))).unwrap().dx;
+        assert_eq!(dx(65.0 + 10.0), 0);
+        // drifting across the renderer's edge at 14 px, within the band: still centre
+        assert_eq!(dx(65.0 + 15.0), 0);
+        assert_eq!(dx(65.0 + 17.0), 0);
+        // past it: right, and it stays right back across the edge, until the band is passed
+        assert_eq!(dx(65.0 + 19.0), 1);
+        assert_eq!(dx(65.0 + 13.0), 1);
+        assert_eq!(dx(65.0 + 11.0), 1);
+        assert_eq!(dx(65.0 + 9.0), 0);
+        // a pointer wobbling on the edge never flickers
+        let seen: Vec<i8> = (0..20)
+            .map(|i| dx(65.0 + 14.0 + if i % 2 == 0 { 2.0 } else { -2.0 }))
+            .collect();
+        assert!(seen.iter().all(|&d| d == 0), "{seen:?}");
+        // without a pointer it starts afresh
         assert_eq!(t.pointer_look(None), None);
-        assert_eq!(dy(&mut t, 17.0), 0, "a new hover starts from the centre");
+        assert_eq!(t.pointer_look(Some((65.0 + 15.0, 60.0))).unwrap().dx, 1);
     }
 
     #[test]

@@ -95,11 +95,23 @@ pub struct Frame {
     pub ms: u32,
 }
 
+/// Which clock an animation plays by.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Clock {
+    /// From when its channel's value last changed (the default).
+    #[default]
+    Change,
+    /// From the pet clock's start, so it stays in step however often its value comes and goes: today's effects and
+    /// the lens's scan.
+    Pet,
+}
+
 /// A layer's frames for one value of its channel.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Animation {
     pub frames: Vec<Frame>,
     pub mode: LoopMode,
+    pub clock: Clock,
 }
 
 /// A vector shape: path data in SVG `d` syntax, drawn around its part's origin (task 5 draws it).
@@ -161,6 +173,10 @@ pub struct Layer {
     pub channel: Channel,
     /// Whether its pixels take clicks.
     pub hit: bool,
+    /// Whether it glows: the UI blurs it in the pack's glow colour. An effects layer (the fx channel) never does.
+    pub glow: bool,
+    /// Its own mirror policy, where it differs from the pack's (the baked pets mirror only running limbs and dust).
+    pub mirror: Option<Mirror>,
     pub default: String,
     /// Where a value the layer lacks goes next; `None` draws nothing for it (no headphones layer when off).
     pub fallback: BTreeMap<String, Option<String>>,
@@ -184,6 +200,8 @@ impl Layer {
             name: name.to_owned(),
             channel,
             hit: false,
+            glow: false,
+            mirror: None,
             default: default.to_owned(),
             fallback: BTreeMap::new(),
             animations: BTreeMap::new(),
@@ -204,8 +222,9 @@ impl Layer {
             || self.part_animations.contains_key(value)
     }
 
-    /// The value the layer shows for `value`: itself if it has it, else its fallbacks', else the default; `None`
-    /// when a fallback says to draw nothing. [`Pack::validate`] has checked the chains end.
+    /// The value the layer shows for `value`: itself if it has it, else its fallbacks'; then, for a combined value
+    /// (`zs+sparkles`), its last part; else the default. `None` when a fallback says to draw nothing.
+    /// [`Pack::validate`] has checked the chains end.
     pub fn resolve<'a>(&'a self, value: &'a str) -> Option<&'a str> {
         let mut v = value;
         for _ in 0..=MAX_FALLBACK {
@@ -215,10 +234,13 @@ impl Layer {
             match self.fallback.get(v) {
                 Some(Some(next)) => v = next,
                 Some(None) => return None,
-                None => return Some(&self.default),
+                None => break,
             }
         }
-        Some(&self.default)
+        match value.rsplit_once('+') {
+            Some((_, last)) if last != value => self.resolve(last),
+            _ => Some(&self.default),
+        }
     }
 
     fn validate(&self) -> Result<(), String> {
@@ -320,6 +342,9 @@ impl Layer {
                 }
                 offset(name, value, (k.dx, k.dy))?;
             }
+        }
+        if self.glow && self.channel == Channel::Fx {
+            return Err(format!("layer {name:?}: an effects layer can't glow"));
         }
         if !self.look.is_empty() && self.channel != Channel::Eyes {
             return Err(format!("layer {name:?}: only the eyes channel looks around"));
@@ -445,6 +470,7 @@ pub(crate) mod tests {
                 })
                 .collect(),
             mode,
+            clock: crate::pack::Clock::Change,
         }
     }
 
@@ -575,6 +601,12 @@ pub(crate) mod tests {
         l.animations.insert("sleep".into(), frames(1, 500, LoopMode::Once));
         l.fallback.insert("listen".into(), Some("sleep".into()));
         l.fallback.insert("off".into(), None);
+        l.animations.insert("sparkles".into(), frames(2, 250, LoopMode::Loop));
+        assert_eq!(
+            l.resolve("zs+sparkles"),
+            Some("sparkles"),
+            "a combined value falls back to its last part"
+        );
         assert_eq!(l.resolve("sleep"), Some("sleep"));
         assert_eq!(l.resolve("listen"), Some("sleep"));
         assert_eq!(l.resolve("thinking"), Some("idle"));

@@ -11,7 +11,10 @@
 //! computes the frame's [`Pose`] ([`Pet::pose`]), which packs draw from.
 
 mod avatar;
+pub mod bake;
+mod builtin;
 pub mod compose;
+pub mod manifest;
 pub mod pack;
 mod pet;
 pub mod pose;

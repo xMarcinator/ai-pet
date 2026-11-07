@@ -10,6 +10,9 @@ use std::f64::consts::PI;
 use std::hash::{BuildHasher, Hasher};
 
 use crate::avatar::Avatar;
+use crate::bake::{self, Sheet};
+use crate::compose;
+use crate::pack::{Art, Pack};
 use crate::pose::{self, Expression, Facing, Fx, IdleAct, Look, Mood, Motion, Pose, Prop, StateValue, Values};
 
 /// A cell on the pixel grid: (x, y).
@@ -257,9 +260,14 @@ pub struct Pet<R: PetRng = XorShift64> {
     look: i32,
     last_draw_frame: i32,
 
-    // ------------------------------------------------------------------ the pose
+    // ------------------------------------------------------------------ the pose and the pack
     tracker: pose::Tracker,
     pose: Pose,
+    pack: Pack,
+    /// The pack's sheets, straight colours (premultiplied as they're drawn).
+    sheets: Vec<Sheet>,
+    /// When the layers were last drawn.
+    drawn_at: f64,
 }
 
 /// What one frame draws, in the renderer's terms (cells and eye names), with the named poses ([`pose`]) it chose.
@@ -347,6 +355,18 @@ impl<R: PetRng> Pet<R> {
             last_draw_frame: -1,
             tracker: pose::Tracker::default(),
             pose: Pose::scripted(Values::IDLE, 0.0),
+            pack: Pack {
+                name: String::new(),
+                kind: crate::pack::Kind::Pixel,
+                pixel_size: PF,
+                anchor: (13.0, 22.0),
+                mirror: crate::pack::Mirror::None,
+                accent: 0,
+                glow: 0,
+                layers: Vec::new(),
+            },
+            sheets: Vec::new(),
+            drawn_at: 0.0,
         };
         pet.set_avatar(Avatar::sprout());
         pet
@@ -372,6 +392,11 @@ impl<R: PetRng> Pet<R> {
         self.face = build_face(a.face_top, a.face_bottom);
         self.spec = find_spec(&self.body);
         (self.hp_band, self.hp_cups, self.hp_shine) = build_headphones(&self.body);
+        // a built-in pet's embedded pack, else the avatar baked now: once, not per frame
+        (self.pack, self.sheets) = crate::builtin::pack_for(&a).unwrap_or_else(|| {
+            let baked = bake::bake(&a);
+            (baked.pack, baked.sheets)
+        });
         self.avatar = a;
         self.last_draw_frame = -1;
         self.tracker.reset();
@@ -576,9 +601,9 @@ impl<R: PetRng> Pet<R> {
 
         let mut pixels_changed = false;
         let n = (t * 24.0) as i32;
-        if n != self.last_draw_frame {
+        let redraw = n != self.last_draw_frame;
+        if redraw {
             self.last_draw_frame = n;
-            self.draw(&pose, inp, t);
             pixels_changed = true;
         }
 
@@ -606,6 +631,10 @@ impl<R: PetRng> Pet<R> {
         };
         let values = self.values(&pose, inp, t);
         self.pose = self.tracker.pose(values, motion, t);
+        if redraw {
+            self.drawn_at = t;
+            self.composite(t);
+        }
         PetFrame {
             body: &self.body_px,
             glow: &self.glow_px,
@@ -620,6 +649,59 @@ impl<R: PetRng> Pet<R> {
         }
     }
 
+    /// The body, glow and effects layers as they'd be drawn `dt` seconds from when they last were, with the same pose;
+    /// the layers themselves are left as drawn. For the golden test: an effect on the pet clock may change frame up to
+    /// a millisecond from where the C# did.
+    #[doc(hidden)]
+    pub fn layers_shifted(&mut self, dt: f64) -> [[u32; PIXELS]; 3] {
+        let at = self.drawn_at;
+        self.composite(at + dt);
+        let shifted = [self.body_px, self.glow_px, self.fx_px];
+        self.composite(at);
+        shifted
+    }
+
+    /// Draws the pose's layers from the pack into the body, glow and effects layers: each layer's frame, moved by its
+    /// look offset and mirrored as it says, copied where it isn't transparent.
+    fn composite(&mut self, t: f64) {
+        self.body_px.fill(0);
+        self.glow_px.fill(0);
+        self.fx_px.fill(0);
+        for pick in compose::pick(&self.pack, &self.pose, t) {
+            let layer = &self.pack.layers[pick.layer];
+            let Some(Art::Raster { sheet, x, y, w, h, .. }) =
+                pick.frame.map(|f| &layer.animations[pick.value].frames[f].art).cloned()
+            else {
+                continue;
+            };
+            let (dx, dy) = compose::raster_offset(&self.pack, layer, &self.pose);
+            let (ox, oy) = ((dx / self.pack.pixel_size) as i32, (dy / self.pack.pixel_size) as i32);
+            let target = if layer.channel == pose::Channel::Fx {
+                &mut self.fx_px
+            } else if layer.glow {
+                &mut self.glow_px
+            } else {
+                &mut self.body_px
+            };
+            let sheet = &self.sheets[sheet];
+            for fy in 0..h as i32 {
+                for fx in 0..w as i32 {
+                    let src = sheet.pixels[((y as i32 + fy) * sheet.width as i32 + x as i32 + fx) as usize];
+                    // 0 is not drawn; a transparent colour that was drawn still covers (bake::COVERED)
+                    if src == 0 {
+                        continue;
+                    }
+                    let cx = fx.wrapping_add(ox);
+                    let cx = if pick.mirrored { GW - 1 - cx } else { cx };
+                    let cy = fy.wrapping_add(oy);
+                    if (0..GW).contains(&cx) && (0..GH).contains(&cy) {
+                        target[(cy * GW + cx) as usize] = pm(src);
+                    }
+                }
+            }
+        }
+    }
+
     /// The pose's channels for what `draw` draws from `p`: the same conditions, in the pose's terms.
     fn values(&mut self, p: &Figure, inp: &PetInput, t: f64) -> Values {
         let mood = Mood::of(&self.anim_state);
@@ -627,7 +709,7 @@ impl<R: PetRng> Pet<R> {
         let look = match self.tracker.pointer_look(p.pointer) {
             Some(look) => look,
             None => Look {
-                dx: p.lx.signum() as i8,
+                dx: p.lx.clamp(-2, 2) as i8,
                 dy: match expression {
                     Expression::Up => -1,
                     Expression::Down => 1,
@@ -647,8 +729,6 @@ impl<R: PetRng> Pet<R> {
         };
         let fx = if p.running {
             Fx::Dust
-        } else if (self.anim_state == "done" || p.poked) && !p.held {
-            Fx::Sparkles
         } else if p.held {
             Fx::None
         } else {
@@ -675,6 +755,7 @@ impl<R: PetRng> Pet<R> {
             prop,
             headphones: p.headphones,
             fx,
+            sparkles: (self.anim_state == "done" || p.poked) && !p.held,
             facing: if inp.facing > 0 { Facing::Right } else { Facing::Left },
         }
     }
@@ -1249,8 +1330,8 @@ mod tests {
 
     #[test]
     fn a_huge_facing_wraps_as_in_the_csharp() {
-        // running: lx = 2 * facing and x = facing * P wrap as the C#'s unchecked ints do, and so do the eye
-        // columns, so a debug build doesn't panic; the eyes fall off the grid and aren't drawn
+        // running: lx = 2 * facing and x = facing * P wrap as the C#'s unchecked ints do, so a debug build doesn't
+        // panic. The C#'s eyes then fell off the grid; the pose clamps the look, so they look far to the side
         let mut pet = Pet::with_rng(Fixed(0.5));
         let run = PetInput {
             dragging: true,
@@ -1262,7 +1343,8 @@ mod tests {
         let f = pet.update(&run, 1.1);
         assert_eq!(f.x.to_bits(), 0x41CF_FFFF_FD80_0000);
         assert_eq!(f.x, 1_073_741_819.0);
-        assert!(f.pixels_changed && f.glow.iter().all(|&px| px == 0));
+        assert!(f.pixels_changed && f.glow.iter().any(|&px| px != 0));
+        assert_eq!(pet.pose().eyes.look.dx.abs(), 2);
         for (i, facing) in [i32::MAX, i32::MIN, 1 << 30, -(1 << 30), i32::MIN + 1]
             .into_iter()
             .enumerate()
