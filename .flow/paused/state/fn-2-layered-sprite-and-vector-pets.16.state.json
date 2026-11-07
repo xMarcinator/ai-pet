@@ -2,6 +2,11 @@
   "assignee": "25668644+xMarcinator@users.noreply.github.com",
   "claim_note": "",
   "claimed_at": "2026-11-07T20:06:33.509117Z",
-  "status": "in_progress",
-  "updated_at": "2026-11-07T20:06:33.509102Z"
+  "evidence": {
+    "commits": [],
+    "prs": [],
+    "tests": []
+  },
+  "status": "done",
+  "updated_at": "2026-11-07T20:11:16.974377Z"
 }
