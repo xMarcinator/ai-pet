@@ -495,12 +495,18 @@ pub fn render(items: &[Item], view: View, keep: impl Fn(&Item) -> bool) -> Vec<u
     pixmap.take()
 }
 
-/// A vector pack standing idle, the whole art box with its halo pad at `scale` px per art-box px: (width, height,
+/// A vector pack standing idle, the art box (without its halo pad) at `scale` px per art-box px: (width, height,
 /// premultiplied RGBA).
 pub fn still(pack: &Pack, scale: f64) -> (u32, u32, Vec<u8>) {
     let pose = Pose::scripted(Values::IDLE, 0.0);
     let placed = crate::compose::Parts::default().place(pack, &pose, 0.0);
-    let view = View::of_box(scale);
+    let view = View {
+        w: (ART_W * scale).round() as u32,
+        h: (ART_H * scale).round() as u32,
+        x0: 0.0,
+        y0: 0.0,
+        scale,
+    };
     (view.w, view.h, render(&scene(pack, &placed, &pose), view, |_| true))
 }
 

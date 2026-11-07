@@ -286,7 +286,9 @@ impl Sprite {
 
 /// One pet standing idle, all layers in one image (for Settings' avatar picker).
 pub fn still(avatar: &LoadedPack) -> Handle {
-    if avatar.pack.kind == Kind::Painted {
+    // a painted pack, or a pixel one on a grid other than the legacy 26 × 24, at its own resolution
+    let grid = (aipet_sprite::pose::ART_W / avatar.pack.pixel_size).round() as i32;
+    if avatar.pack.kind == Kind::Painted || (avatar.pack.kind == Kind::Pixel && grid != GW) {
         let pose = Pose::scripted(aipet_sprite::pose::Values::IDLE, 0.0);
         let (w, h, px) = compose::flatten(&avatar.pack, &avatar.sheets, &pose, 0.0);
         return Handle::from_rgba(w, h, straight_rgba(&px));

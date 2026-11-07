@@ -189,7 +189,8 @@ impl Shell {
             drag: None,
             menu: false,
             settings: None,
-            open_settings: env_is_1("AIPET_OPEN_SETTINGS"),
+            // 1, or the page to open on
+            open_settings: std::env::var_os("AIPET_OPEN_SETTINGS").is_some_and(|v| !v.is_empty() && v != "0"),
             last_error: None,
             debug: env_is_1("AIPET_DEBUG").then_some(now),
         };

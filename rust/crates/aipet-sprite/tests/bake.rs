@@ -112,7 +112,7 @@ fn painted_pip_standing_looks_like_the_vector_pip() {
     let pose = Pose::scripted(Values::IDLE, 0.0);
     let (w, h, flat) = aipet_sprite::compose::flatten(&painted.pack, &painted.sheets, &pose, 0.0);
     let (vw, _, drawn) = aipet_sprite::vector::still(&vector, 2.0);
-    let pad = 20;
+    let pad = 0;
     let mut worst = 0;
     for y in 0..h {
         for x in 0..w {

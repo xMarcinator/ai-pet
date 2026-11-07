@@ -15,7 +15,8 @@
 //! `AIPET_BACKEND=wayland|desktop` chooses the shell; otherwise the Wayland shell runs when the session is Wayland and
 //! its compositor has layer-shell, and the desktop shell everywhere else (through XWayland in a Wayland session).
 //! `AIPET_DEBUG=1` says which shell runs and makes it log pointer events and input-region updates to stderr;
-//! `AIPET_OPEN_SETTINGS=1` opens Settings at start (both shells). The pet renders on the low-power GPU unless
+//! `AIPET_OPEN_SETTINGS=1` opens Settings at start (both shells), and `AIPET_OPEN_SETTINGS=avatars` (or another
+//! page's name) opens it on that page. The pet renders on the low-power GPU unless
 //! `WGPU_POWER_PREF` says otherwise, and through GL unless `WGPU_BACKEND` does.
 //!
 //! With the `demo` feature it plays the demo's scripted day instead, for development and screenshots: no single

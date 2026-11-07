@@ -95,9 +95,28 @@ pub fn all(dir: &Path) -> Found {
         };
         keep(&mut found, file, loaded);
     }
-    for (file, recolour) in recolours {
-        let loaded = recolour.and_then(|r| recoloured(&found.pets, r));
-        keep(&mut found, file, loaded);
+    // a recolour of a recolour waits for its base: each pass takes those whose base is there
+    let mut waiting = recolours;
+    loop {
+        let before = waiting.len();
+        let mut later = Vec::new();
+        for (file, recolour) in waiting {
+            match recolour {
+                Ok(r) if !found.pets.iter().any(|p| p.name() == r.base) => later.push((file, Ok(r))),
+                recolour => {
+                    let loaded = recolour.and_then(|r| recoloured(&found.pets, r));
+                    keep(&mut found, file, loaded);
+                }
+            }
+        }
+        if later.is_empty() || later.len() == before {
+            for (file, recolour) in later {
+                let loaded = recolour.and_then(|r| recoloured(&found.pets, r));
+                keep(&mut found, file, loaded);
+            }
+            break;
+        }
+        waiting = later;
     }
     found
 }

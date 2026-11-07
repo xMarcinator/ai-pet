@@ -45,6 +45,18 @@ pub enum Page {
 impl Page {
     pub const ALL: [Page; 4] = [Page::General, Page::Avatars, Page::Jira, Page::GitHub];
 
+    /// The page `AIPET_OPEN_SETTINGS` names (`avatars`, `jira`, …), for opening Settings on it at start; General
+    /// otherwise.
+    fn from_env() -> Page {
+        let named = std::env::var("AIPET_OPEN_SETTINGS")
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        Page::ALL
+            .into_iter()
+            .find(|p| p.title().to_ascii_lowercase() == named)
+            .unwrap_or_default()
+    }
+
     /// The page's name in the sidebar, and its title.
     pub fn title(self) -> &'static str {
         match self {
@@ -150,7 +162,7 @@ pub struct Settings {
 impl Settings {
     pub fn new(services: Services) -> Settings {
         Settings {
-            page: Page::default(),
+            page: Page::from_env(),
             services,
             general: general::General::default(),
             avatars: avatars::Avatars::default(),
@@ -410,24 +422,27 @@ pub(crate) fn field<'a>(
         .size(13)
         .font(style::UI)
         .padding([7, 10])
-        .style(|_, status| {
-            let focused = matches!(status, text_input::Status::Focused { .. });
-            text_input::Style {
-                background: argb(0xFF141416).into(),
-                border: Border {
-                    color: argb(if focused { 0x66FFFFFF } else { 0x26FFFFFF }),
-                    width: 1.0,
-                    radius: 8.0.into(),
-                },
-                icon: style::MUTED,
-                placeholder: argb(0xFF6A6A72),
-                value: Color::WHITE,
-                selection: argb(0x664C9AFF),
-            }
-        });
+        .style(input_style);
     column![text(title).size(12).font(style::UI_SEMIBOLD).color(style::ICON), input]
         .spacing(6)
         .into()
+}
+
+/// A text box's look: dark, with an edge that brightens while it has the focus.
+pub(crate) fn input_style(_: &iced::Theme, status: text_input::Status) -> text_input::Style {
+    let focused = matches!(status, text_input::Status::Focused { .. });
+    text_input::Style {
+        background: argb(0xFF141416).into(),
+        border: Border {
+            color: argb(if focused { 0x66FFFFFF } else { 0x26FFFFFF }),
+            width: 1.0,
+            radius: 8.0.into(),
+        },
+        icon: style::MUTED,
+        placeholder: argb(0xFF6A6A72),
+        value: Color::WHITE,
+        selection: argb(0x664C9AFF),
+    }
 }
 
 /// How a status line reads: fine, failed, or just news (SettingsWindow's Ok, Bad and Muted).

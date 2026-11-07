@@ -498,3 +498,82 @@ fn open_folder_opens_nothing_when_the_folder_cannot_be_made() {
     assert_eq!(pet.platform.calls(), [Call::OpenFolder(folder)]);
     assert_eq!(pet.ui.settings().avatars.folder_error, None);
 }
+
+#[test]
+fn recolour_makes_a_new_pet_from_a_vector_one_and_wears_it() {
+    let pet = Pet::new("recolour");
+    let mut ui = pet.ui;
+    let folder = aipet_sprite::Avatar::custom_dir(&pet.scratch.0);
+    let avatars = |message| Message::Settings(settings::Message::Avatars(message));
+    use settings::avatars::Message as A;
+    ui.update(avatars(A::Recolour("Hood (green, vector)".into())));
+    let r = settings::avatars::recolouring(&ui).expect("the editor opens");
+    let body = r
+        .colours
+        .iter()
+        .position(|(n, _)| n == "body")
+        .expect("the Hood names its body colour");
+    assert_eq!(r.colours[body].1, "#0F4422");
+
+    // a colour that isn't one, and a name that's taken, are said and nothing is saved
+    ui.update(avatars(A::RecolourColour(body, "red".into())));
+    ui.update(avatars(A::SaveRecolour));
+    let error = settings::avatars::recolouring(&ui).unwrap().error.clone().unwrap();
+    assert!(error.contains("isn't a colour"), "{error}");
+    ui.update(avatars(A::RecolourColour(body, "#441010".into())));
+    ui.update(avatars(A::RecolourName("Pip".into())));
+    ui.update(avatars(A::SaveRecolour));
+    assert!(
+        settings::avatars::recolouring(&ui)
+            .unwrap()
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("already a pet named Pip")
+    );
+    assert!(!folder.exists());
+
+    // saved: a file in the avatars folder with only what changed, read back as a pet, and worn
+    ui.update(avatars(A::RecolourName("Hood (red)".into())));
+    ui.update(avatars(A::SaveRecolour));
+    assert!(settings::avatars::recolouring(&ui).is_none(), "the editor closes");
+    let saved: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(folder.join("hood-red.json")).unwrap()).unwrap();
+    assert_eq!(
+        saved,
+        serde_json::json!({"base": "Hood (green, vector)", "name": "Hood (red)", "palette": {"body": "#441010"}})
+    );
+    assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (red)"));
+    let worn = settings::avatars::worn(&ui);
+    assert_eq!(worn.pack.palette.colours["body"], 0xFF441010);
+    assert!(
+        settings::avatars::tiles(&ui)
+            .iter()
+            .any(|(name, on)| *name == "Hood (red)" && *on)
+    );
+
+    // edited again under its own name, it keeps the Hood as its base
+    ui.update(avatars(A::Recolour("Hood (red)".into())));
+    let r = settings::avatars::recolouring(&ui).unwrap();
+    assert_eq!(r.colours[body].1, "#441010");
+    let hi = r.colours.iter().position(|(n, _)| n == "hi").unwrap();
+    ui.update(avatars(A::RecolourName("Hood (red)".into())));
+    ui.update(avatars(A::RecolourColour(hi, "#FF4A3A".into())));
+    ui.update(avatars(A::SaveRecolour));
+    assert!(settings::avatars::recolouring(&ui).is_none());
+    let saved: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(folder.join("hood-red.json")).unwrap()).unwrap();
+    assert_eq!(saved["base"], "Hood (green, vector)");
+    assert_eq!(
+        saved["palette"],
+        serde_json::json!({"body": "#441010", "hi": "#FF4A3A"})
+    );
+    assert_eq!(settings::avatars::worn(&ui).pack.palette.colours["hi"], 0xFFFF4A3A);
+
+    // a new pet from the red one is a recolour of it, read after it
+    ui.update(avatars(A::Recolour("Hood (red)".into())));
+    ui.update(avatars(A::RecolourName("Hood (dusk)".into())));
+    ui.update(avatars(A::SaveRecolour));
+    assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood (dusk)"));
+    assert!(ui.skipped().is_empty(), "{:?}", ui.skipped());
+}

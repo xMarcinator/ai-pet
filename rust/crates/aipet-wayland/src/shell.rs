@@ -166,7 +166,8 @@ struct Shell {
 pub fn run(connection: Connection) -> Result<(), String> {
     let launch = Launch::take().ok_or("no pet was handed over to the Wayland shell")?;
     let strategy = Strategy::from_env()?;
-    let open_settings = std::env::var_os("AIPET_OPEN_SETTINGS").is_some_and(|v| v == "1");
+    // 1, or the page to open on
+    let open_settings = std::env::var_os("AIPET_OPEN_SETTINGS").is_some_and(|v| !v.is_empty() && v != "0");
     // nothing to type anywhere (Settings has switches and buttons): spare the clipboard's worker thread
     iced_exwlshell::disable_clipboard();
     // known before the daemon starts, so the 'static redraw scope can name it
