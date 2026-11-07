@@ -1,0 +1,24 @@
+{
+  "accent": "#B88CF0",
+  "glow": "#FFF2A8",
+  "layers": [
+    {
+      "channel": "state",
+      "default": "idle",
+      "hit": true,
+      "name": "body"
+    },
+    {
+      "channel": "eyes",
+      "default": "open",
+      "fallback": {
+        "blink": "closed",
+        "happy": "closed"
+      },
+      "glow": true,
+      "name": "eyes"
+    }
+  ],
+  "name": "Sample (Aseprite)",
+  "pixel_size": 5
+}

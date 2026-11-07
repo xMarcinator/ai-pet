@@ -258,6 +258,7 @@ pub fn load_folder(folder: &Path) -> Result<LoadedPack, String> {
     let mut sheets = Sheets { folder, decoded: 0 };
     let manifest = folder.join("pack.json");
     let export = find_export(folder)?;
+    let native = if export.is_none() { find_native(folder)? } else { None };
     let (pack, sheets) = match export {
         Some(export) => {
             let extra = if manifest.exists() {
@@ -267,11 +268,27 @@ pub fn load_folder(folder: &Path) -> Result<LoadedPack, String> {
             };
             aseprite(&read_json(&export)?, extra.as_deref(), |name| sheets.read(name))?
         }
+        None if native.is_some() => {
+            let native = native.expect("just checked");
+            let file = name_of(&native);
+            let path = inside(folder, &file)?;
+            let len = fs::metadata(&path).map_err(|e| e.to_string())?.len();
+            if len > MAX_PNG {
+                return Err(format!("{file} is {len} bytes (at most {MAX_PNG})"));
+            }
+            let bytes = fs::read(&path).map_err(|e| format!("{file}: {e}"))?;
+            let extra = if manifest.exists() {
+                Some(read_json(&inside(folder, "pack.json")?)?)
+            } else {
+                None
+            };
+            aseprite_native(&bytes, &file, extra.as_deref())?
+        }
         None if manifest.exists() => {
             let text = read_json(&inside(folder, "pack.json")?)?;
             manifest::read(&text, |name| sheets.read(name))?
         }
-        None => return Err("no pack.json and no Aseprite export".to_owned()),
+        None => return Err("no pack.json, Aseprite export or .aseprite file".to_owned()),
     };
     fits(&pack)?;
     Ok(LoadedPack { pack, sheets })
@@ -321,6 +338,21 @@ fn find_export(folder: &Path) -> Result<Option<PathBuf>, String> {
     Ok(found)
 }
 
+/// The folder's native Aseprite file (`.aseprite` or `.ase`), the first by name.
+fn find_native(folder: &Path) -> Result<Option<PathBuf>, String> {
+    let mut entries: Vec<PathBuf> = fs::read_dir(folder)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("aseprite") || e.eq_ignore_ascii_case("ase"))
+        })
+        .collect();
+    entries.sort();
+    Ok(entries.into_iter().next())
+}
+
 /// The channel a layer named in an export defaults to, when no `pack.json` says.
 fn channel_for(layer: &str) -> Option<Channel> {
     match layer {
@@ -343,6 +375,55 @@ fn resting(channel: Channel) -> &'static str {
     }
 }
 
+/// A frame of an Aseprite source: its rectangle on the sheet, the art pixel it starts at, and its duration.
+#[derive(Clone, Copy, Debug)]
+struct AseFrame {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    /// Where the frame's top-left is in the sprite (a trimmed or cropped frame starts inside it).
+    at: (i64, i64),
+    ms: u32,
+}
+
+/// A tag: `<layer>:<value>`, the frames it covers, its direction, and its repeat count (none: forever).
+struct AseTag {
+    name: String,
+    from: usize,
+    to: usize,
+    direction: &'static str,
+    repeat: Option<usize>,
+}
+
+/// A slice's points by key frame: where its pivot is in the sprite.
+type SlicePoints = Vec<(String, Vec<(usize, (f64, f64))>)>;
+/// The frame a source gives for a layer at an index.
+type FrameOf = Box<dyn Fn(&str, usize) -> Result<AseFrame, String>>;
+
+/// What an Aseprite source gives a pack: a sheet, the frame a layer shows at an index, tags and slice points.
+struct AseSource {
+    sheet: Sheet,
+    image: String,
+    frames: usize,
+    tags: Vec<AseTag>,
+    /// A slice's points (key frame, then the key's pivot in the sprite), by name.
+    slices: SlicePoints,
+    frame: FrameOf,
+}
+
+impl AseSource {
+    /// A slice's point at `frame`: its last key at or before it, else its first.
+    fn slice_at(&self, name: &str, frame: usize) -> Option<(f64, f64)> {
+        let (_, keys) = self.slices.iter().find(|(n, _)| n == name)?;
+        keys.iter()
+            .rev()
+            .find(|(f, _)| *f <= frame)
+            .or(keys.first())
+            .map(|(_, p)| *p)
+    }
+}
+
 fn rect(v: &Value) -> Option<(i64, i64, i64, i64)> {
     Some((v["x"].as_i64()?, v["y"].as_i64()?, v["w"].as_i64()?, v["h"].as_i64()?))
 }
@@ -358,7 +439,7 @@ pub fn aseprite(
 ) -> Result<(Pack, Vec<Sheet>), String> {
     let v: Value = serde_json::from_str(text).map_err(|e| format!("the export isn't valid: {e}"))?;
     let frames = match &v["frames"] {
-        Value::Array(f) => f,
+        Value::Array(f) => f.clone(),
         Value::Object(_) => return Err("the export is json-hash; export it as an array (json-array)".to_owned()),
         _ => return Err("the export has no frames".to_owned()),
     };
@@ -369,12 +450,218 @@ pub fn aseprite(
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let sheet = sheet(&image)?;
+    let mut list = Vec::with_capacity(frames.len());
+    for (i, f) in frames.iter().enumerate() {
+        let (x, y, w, h) = rect(&f["frame"]).ok_or_else(|| format!("frame {i} has no rectangle"))?;
+        let (sx, sy) = rect(&f["spriteSourceSize"]).map_or((0, 0), |r| (r.0, r.1));
+        if x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > i64::from(sheet.width) || y + h > i64::from(sheet.height) {
+            return Err(format!("frame {i} is outside {image}"));
+        }
+        let ms = f["duration"].as_u64().unwrap_or(100).min(u64::from(u32::MAX)) as u32;
+        list.push(AseFrame {
+            x: x as u32,
+            y: y as u32,
+            w: w as u32,
+            h: h as u32,
+            at: (sx, sy),
+            ms,
+        });
+    }
+    let mut tags = Vec::new();
+    for tag in meta["frameTags"].as_array().cloned().unwrap_or_default() {
+        let name = tag["name"].as_str().unwrap_or_default().to_owned();
+        let (from, to) = (tag["from"].as_i64().unwrap_or(0), tag["to"].as_i64().unwrap_or(-1));
+        if from < 0 || to < from || to as usize >= list.len() {
+            return Err(format!("tag {name:?} covers frames {from} to {to}, of {}", list.len()));
+        }
+        let direction = match tag["direction"].as_str().unwrap_or("forward") {
+            "reverse" => "reverse",
+            "pingpong" => "pingpong",
+            "pingpong_reverse" => "pingpong_reverse",
+            _ => "forward",
+        };
+        // Aseprite writes repeat as a string, and leaves it out for forever
+        let repeat = tag["repeat"]
+            .as_str()
+            .and_then(|r| r.parse::<usize>().ok())
+            .filter(|&n| n > 0);
+        tags.push(AseTag {
+            name,
+            from: from as usize,
+            to: to as usize,
+            direction,
+            repeat,
+        });
+    }
+    let slices = meta["slices"]
+        .as_array()
+        .map(|ss| {
+            ss.iter()
+                .filter_map(|s| {
+                    let keys = s["keys"]
+                        .as_array()?
+                        .iter()
+                        .filter_map(|k| {
+                            let (x, y, _, _) = rect(&k["bounds"])?;
+                            let (px, py) = (
+                                k["pivot"]["x"].as_i64().unwrap_or(0),
+                                k["pivot"]["y"].as_i64().unwrap_or(0),
+                            );
+                            Some((
+                                k["frame"].as_u64().unwrap_or(0) as usize,
+                                ((x + px) as f64, (y + py) as f64),
+                            ))
+                        })
+                        .collect();
+                    Some((s["name"].as_str()?.to_owned(), keys))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let source = AseSource {
+        sheet,
+        image,
+        frames: list.len(),
+        tags,
+        slices,
+        frame: Box::new(move |_, i| Ok(list[i])),
+    };
+    build_aseprite(source, extra)
+}
+
+/// The most frames a native file may have, and layers (groups included).
+const MAX_ASE_FRAMES: u32 = 512;
+const MAX_ASE_LAYERS: usize = 64;
+
+/// A native `.aseprite` file (and an optional `pack.json`) as a pack, by the export's mapping: a tag
+/// `<layer>:<value>` takes the Aseprite layer of that name, each of its frames cropped to the opaque pixels.
+pub fn aseprite_native(bytes: &[u8], file: &str, extra: Option<&str>) -> Result<(Pack, Vec<Sheet>), String> {
+    let limits = crate::aseprite_file::Limits {
+        max_file: MAX_PNG as usize,
+        max_side: MAX_SIDE,
+        max_frames: MAX_ASE_FRAMES,
+        max_layers: MAX_ASE_LAYERS,
+        max_decoded: MAX_DECODED as usize,
+    };
+    let f = crate::aseprite_file::read(bytes, &limits).map_err(|e| format!("{file}: {e}"))?;
+    let directions = ["forward", "reverse", "pingpong", "pingpong_reverse"];
+    let tags: Vec<AseTag> = f
+        .tags
+        .iter()
+        .map(|t| AseTag {
+            name: t.name.clone(),
+            from: usize::from(t.from),
+            to: usize::from(t.to),
+            direction: directions[usize::from(t.direction.min(3))],
+            repeat: (t.repeat > 0).then_some(usize::from(t.repeat)),
+        })
+        .collect();
+    // every (layer, frame) a tag uses, cropped to its opaque box, on one sheet
+    // (layer, frame index, cropped pixels, size, where it starts in the sprite, ms)
+    type Crop = (String, usize, Vec<u32>, (u32, u32), (i64, i64), u32);
+    let mut crops: Vec<Crop> = Vec::new();
+    for t in &tags {
+        let Some((layer, _)) = t.name.split_once(':') else {
+            continue;
+        };
+        let li = f.layers.iter().position(|l| !l.group && l.name == layer);
+        for i in t.from..=t.to {
+            if crops.iter().any(|c| c.0 == layer && c.1 == i) {
+                continue;
+            }
+            let px = li.and_then(|li| f.layer_pixels(i, li)).unwrap_or_default();
+            let (w, h) = (f.width as usize, f.height as usize);
+            let solid = |x: usize, y: usize| px.get(y * w + x).is_some_and(|&p| p >> 24 != 0);
+            let xs: Vec<usize> = (0..w).filter(|&x| (0..h).any(|y| solid(x, y))).collect();
+            let ys: Vec<usize> = (0..h).filter(|&y| (0..w).any(|x| solid(x, y))).collect();
+            let (crop, size, at) = match (xs.first(), xs.last(), ys.first(), ys.last()) {
+                (Some(&x0), Some(&x1), Some(&y0), Some(&y1)) => {
+                    let (cw, ch) = (x1 - x0 + 1, y1 - y0 + 1);
+                    let mut c = Vec::with_capacity(cw * ch);
+                    for y in y0..=y1 {
+                        c.extend_from_slice(&px[y * w + x0..=y * w + x1]);
+                    }
+                    (c, (cw as u32, ch as u32), (x0 as i64, y0 as i64))
+                }
+                // nothing drawn there: one clear pixel
+                _ => (vec![0], (1, 1), (0, 0)),
+            };
+            crops.push((layer.to_owned(), i, crop, size, at, f.durations[i]));
+        }
+    }
+    // the crops in rows, at most 2048 px wide
+    let (mut x, mut y, mut row_h, mut width) = (0u32, 0u32, 0u32, 1u32);
+    let mut placed = Vec::with_capacity(crops.len());
+    for (_, _, _, (w, h), _, _) in &crops {
+        if x + w > MAX_SIDE {
+            (x, y, row_h) = (0, y + row_h, 0);
+        }
+        placed.push((x, y));
+        (x, row_h) = (x + w, row_h.max(*h));
+        width = width.max(x);
+    }
+    let height = (y + row_h).max(1);
+    if height > MAX_SIDE {
+        return Err(format!("{file}: its frames don't fit a {MAX_SIDE} px sheet"));
+    }
+    let mut pixels = vec![0u32; (width * height) as usize];
+    let mut index = std::collections::HashMap::new();
+    for ((layer, i, crop, (w, h), at, ms), (px, py)) in crops.into_iter().zip(placed) {
+        for row in 0..h {
+            let to = ((py + row) * width + px) as usize;
+            pixels[to..to + w as usize].copy_from_slice(&crop[(row * w) as usize..((row + 1) * w) as usize]);
+        }
+        index.insert(
+            (layer, i),
+            AseFrame {
+                x: px,
+                y: py,
+                w,
+                h,
+                at,
+                ms,
+            },
+        );
+    }
+    let slices = f
+        .slices
+        .iter()
+        .map(|s| {
+            let keys = s
+                .keys
+                .iter()
+                .map(|k| {
+                    let (px, py) = k.pivot.unwrap_or((0, 0));
+                    (k.frame as usize, (f64::from(k.x + px), f64::from(k.y + py)))
+                })
+                .collect();
+            (s.name.clone(), keys)
+        })
+        .collect();
+    let file_name = file.to_owned();
+    let source = AseSource {
+        sheet: Sheet { width, height, pixels },
+        image: file.to_owned(),
+        frames: f.durations.len(),
+        tags,
+        slices,
+        frame: Box::new(move |layer, i| {
+            index
+                .get(&(layer.to_owned(), i))
+                .copied()
+                .ok_or_else(|| format!("{file_name}: layer {layer:?} has no frame {i}"))
+        }),
+    };
+    build_aseprite(source, extra)
+}
+
+/// A pack from an Aseprite source and an optional `pack.json` (as text) for the rest.
+fn build_aseprite(src: AseSource, extra: Option<&str>) -> Result<(Pack, Vec<Sheet>), String> {
     let extra: Value = match extra {
         Some(t) => serde_json::from_str(t).map_err(|e| format!("pack.json isn't valid: {e}"))?,
         None => Value::Null,
     };
-    let tags = meta["frameTags"].as_array().cloned().unwrap_or_default();
-    if tags.is_empty() {
+    if src.tags.is_empty() {
         return Err("the export has no tags (name them <layer>:<value>)".to_owned());
     }
     // the pack.json's layers, by name, give the channels, defaults, fallbacks and flags
@@ -386,26 +673,10 @@ pub fn aseprite(
                 .collect()
         })
         .unwrap_or_default();
-    let slices = meta["slices"].as_array().cloned().unwrap_or_default();
-    let slice_at = |name: &str, frame: i64| -> Option<(f64, f64)> {
-        let s = slices.iter().find(|s| s["name"] == name)?;
-        let keys = s["keys"].as_array()?;
-        let key = keys
-            .iter()
-            .rev()
-            .find(|k| k["frame"].as_i64().is_some_and(|f| f <= frame))
-            .or(keys.first())?;
-        let (x, y, _, _) = rect(&key["bounds"])?;
-        let (px, py) = (
-            key["pivot"]["x"].as_i64().unwrap_or(0),
-            key["pivot"]["y"].as_i64().unwrap_or(0),
-        );
-        Some(((x + px) as f64, (y + py) as f64))
-    };
     let pixel_size = extra["pixel_size"].as_f64().unwrap_or(1.0);
     let mut layers: Vec<Layer> = Vec::new();
-    for tag in &tags {
-        let name = tag["name"].as_str().unwrap_or_default();
+    for tag in &src.tags {
+        let name = tag.name.as_str();
         let Some((layer_name, value)) = name.split_once(':') else {
             return Err(format!("tag {name:?} isn't <layer>:<value>"));
         };
@@ -418,30 +689,24 @@ pub fn aseprite(
                 format!("tag {name:?} names layer {layer_name:?}, which isn't a channel or in pack.json")
             })?,
         };
-        let (from, to) = (tag["from"].as_i64().unwrap_or(0), tag["to"].as_i64().unwrap_or(-1));
-        if from < 0 || to < from || to as usize >= frames.len() {
+        if tag.to >= src.frames {
             return Err(format!(
-                "tag {name:?} covers frames {from} to {to}, of {}",
-                frames.len()
+                "tag {name:?} covers frames {} to {}, of {}",
+                tag.from, tag.to, src.frames
             ));
         }
-        let mut order: Vec<i64> = (from..=to).collect();
-        let direction = tag["direction"].as_str().unwrap_or("forward");
-        if matches!(direction, "reverse" | "pingpong_reverse") {
+        let mut order: Vec<usize> = (tag.from..=tag.to).collect();
+        if tag.direction.ends_with("reverse") {
             order.reverse();
         }
-        let mut mode = if direction.starts_with("pingpong") {
+        let mut mode = if tag.direction.starts_with("pingpong") {
             LoopMode::PingPong
         } else {
             LoopMode::Loop
         };
-        // a repeat count plays the frames that many times, then holds the last
-        if let Some(n) = tag["repeat"]
-            .as_str()
-            .and_then(|r| r.parse::<usize>().ok())
-            .filter(|&n| n > 0)
-        {
-            let once: Vec<i64> = if mode == LoopMode::PingPong && order.len() > 1 {
+        // a repeat count plays the frames that many times (a ping-pong each way), then holds the last
+        if let Some(n) = tag.repeat {
+            let once: Vec<usize> = if mode == LoopMode::PingPong && order.len() > 1 {
                 order.iter().chain(order.iter().rev().skip(1)).copied().collect()
             } else {
                 order.clone()
@@ -451,24 +716,18 @@ pub fn aseprite(
         }
         let mut list = Vec::new();
         for i in order {
-            let f = &frames[i as usize];
-            let (x, y, w, h) = rect(&f["frame"]).ok_or_else(|| format!("frame {i} has no rectangle"))?;
-            let (sx, sy) = rect(&f["spriteSourceSize"]).map_or((0, 0), |r| (r.0, r.1));
-            let ms = f["duration"].as_u64().unwrap_or(100).min(u64::from(u32::MAX)) as u32;
-            if x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > i64::from(sheet.width) || y + h > i64::from(sheet.height) {
-                return Err(format!("frame {i} is outside {image}"));
-            }
+            let f = (src.frame)(layer_name, i)?;
             list.push(Frame {
                 art: Art::Raster {
                     sheet: 0,
-                    x: x as u32,
-                    y: y as u32,
-                    w: w as u32,
-                    h: h as u32,
-                    // a trimmed frame's pixels start this far into the sprite
-                    pivot: (-sx as f64, -sy as f64),
+                    x: f.x,
+                    y: f.y,
+                    w: f.w,
+                    h: f.h,
+                    // the frame's pixels start this far into the sprite
+                    pivot: (-f.at.0 as f64, -f.at.1 as f64),
                 },
-                ms,
+                ms: f.ms,
             });
         }
         let layer = match layers.iter_mut().position(|l| l.name == layer_name) {
@@ -493,7 +752,7 @@ pub fn aseprite(
             .map(|ps| ps.iter().filter_map(|p| p.as_str().map(str::to_owned)).collect())
             .unwrap_or_default();
         for id in ids {
-            let Some(origin) = slice_at(&id, 0) else {
+            let Some(origin) = src.slice_at(&id, 0) else {
                 return Err(format!("layer {layer_name:?}: part {id:?} has no slice"));
             };
             if !layer.parts.iter().any(|p| p.id == id) {
@@ -503,7 +762,7 @@ pub fn aseprite(
                     shape: None,
                 });
             }
-            if let Some(at) = slice_at(&id, from) {
+            if let Some(at) = src.slice_at(&id, tag.from) {
                 layer
                     .poses
                     .entry(value.to_owned())
@@ -537,14 +796,15 @@ pub fn aseprite(
             layer.hit = matches!(layer.channel, Channel::State | Channel::Arms | Channel::Feet);
         }
     }
-    let anchor = slice_at("anchor", 0)
+    let anchor = src
+        .slice_at("anchor", 0)
         .or_else(|| {
             let a = extra["anchor"].as_array()?;
             Some((a.first()?.as_f64()?, a.get(1)?.as_f64()?))
         })
         .unwrap_or((0.0, 0.0));
     let name = extra["name"].as_str().map(str::to_owned).unwrap_or_else(|| {
-        Path::new(&image)
+        Path::new(&src.image)
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default()
@@ -569,7 +829,7 @@ pub fn aseprite(
         layers,
     };
     pack.validate()?;
-    Ok((pack, vec![sheet]))
+    Ok((pack, vec![src.sheet]))
 }
 
 /// `AiPet --check-pack <folder>`: the line to print and whether the pack loads.
@@ -840,5 +1100,408 @@ mod tests {
         let (line, ok) = check(&good);
         assert!(!ok && line.contains("eyes.png") && line.contains("missing"), "{line}");
         assert!(!check(&d.join("nowhere")).1);
+    }
+
+    use crate::aseprite_file::writer::{
+        Cel, CelData, Depth, Frame as WFrame, Layer as WLayer, Slice, SliceKey, Sprite, Tag, write,
+    };
+
+    /// A two-layer, three-frame sprite: a body that bobs, eyes open then closed, an anchor slice.
+    fn sprite() -> Sprite {
+        let disc = |lift: i32| -> Vec<u8> {
+            (0..26 * 24)
+                .flat_map(|i| {
+                    let (x, y) = (i % 26, i / 26);
+                    let (dx, dy) = (x as f64 + 0.5 - 13.0, y as f64 + 0.5 - (14.0 - f64::from(lift)));
+                    if dx * dx / 64.0 + dy * dy / 56.25 <= 1.0 {
+                        [0xB8, 0x8C, 0xF0, 0xFF]
+                    } else {
+                        [0; 4]
+                    }
+                })
+                .collect()
+        };
+        let eyes = |rows: &[usize]| -> Vec<u8> {
+            (0..26 * 24)
+                .flat_map(|i| {
+                    if [9, 10, 15, 16].contains(&(i % 26)) && rows.contains(&(i / 26)) {
+                        [0xFF, 0xF2, 0xA8, 0xFF]
+                    } else {
+                        [0; 4]
+                    }
+                })
+                .collect()
+        };
+        let cel = |layer: u16, data: Vec<u8>| Cel {
+            layer,
+            x: 0,
+            y: 0,
+            w: 26,
+            h: 24,
+            data: CelData::Zlib(data),
+        };
+        Sprite {
+            width: 26,
+            height: 24,
+            depth: Depth::Rgba,
+            palette: vec![],
+            layers: vec![
+                WLayer {
+                    name: "body".into(),
+                    group: false,
+                    child_level: 0,
+                    visible: true,
+                },
+                WLayer {
+                    name: "eyes".into(),
+                    group: false,
+                    child_level: 0,
+                    visible: true,
+                },
+            ],
+            frames: vec![
+                WFrame {
+                    ms: 400,
+                    cels: vec![cel(0, disc(0)), cel(1, eyes(&[11, 12]))],
+                },
+                WFrame {
+                    ms: 400,
+                    cels: vec![
+                        cel(0, disc(1)),
+                        Cel {
+                            layer: 1,
+                            x: 0,
+                            y: 0,
+                            w: 0,
+                            h: 0,
+                            data: CelData::Linked(0),
+                        },
+                    ],
+                },
+                WFrame {
+                    ms: 1000,
+                    cels: vec![
+                        Cel {
+                            layer: 0,
+                            x: 0,
+                            y: 0,
+                            w: 0,
+                            h: 0,
+                            data: CelData::Linked(0),
+                        },
+                        cel(1, eyes(&[13])),
+                    ],
+                },
+            ],
+            tags: vec![
+                Tag {
+                    name: "body:idle".into(),
+                    from: 0,
+                    to: 1,
+                    direction: 0,
+                    repeat: 0,
+                },
+                Tag {
+                    name: "eyes:open".into(),
+                    from: 0,
+                    to: 0,
+                    direction: 0,
+                    repeat: 0,
+                },
+                Tag {
+                    name: "eyes:closed".into(),
+                    from: 2,
+                    to: 2,
+                    direction: 0,
+                    repeat: 0,
+                },
+            ],
+            slices: vec![Slice {
+                name: "anchor".into(),
+                keys: vec![SliceKey {
+                    frame: 0,
+                    x: 12,
+                    y: 21,
+                    w: 2,
+                    h: 2,
+                    pivot: Some((1, 1)),
+                }],
+            }],
+            layer_uuids: false,
+        }
+    }
+
+    /// Every frame of every layer drawn on the 26 × 24 art box, by its pivot: what a pack shows, however it is stored.
+    fn drawn(pack: &Pack, sheets: &[Sheet]) -> Vec<(String, String, Vec<u32>)> {
+        let mut out = Vec::new();
+        for layer in &pack.layers {
+            for (value, a) in &layer.animations {
+                for f in &a.frames {
+                    let Art::Raster {
+                        sheet,
+                        x,
+                        y,
+                        w,
+                        h,
+                        pivot,
+                    } = f.art
+                    else {
+                        continue;
+                    };
+                    let s = &sheets[sheet];
+                    let mut canvas = vec![0u32; 26 * 24];
+                    for fy in 0..h {
+                        for fx in 0..w {
+                            let (cx, cy) = (fx as i64 - pivot.0 as i64, fy as i64 - pivot.1 as i64);
+                            let px = s.pixels[((y + fy) * s.width + x + fx) as usize];
+                            if px != 0 && (0..26).contains(&cx) && (0..24).contains(&cy) {
+                                canvas[(cy * 26 + cx) as usize] = px;
+                            }
+                        }
+                    }
+                    out.push((layer.name.clone(), value.clone(), canvas));
+                }
+            }
+        }
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn a_native_file_and_its_json_array_export_give_the_same_pack() {
+        let native = write(&sprite());
+        let (pack, sheets) = aseprite_native(&native, "pet.aseprite", None).unwrap();
+        assert_eq!(pack.anchor, (13.0, 22.0));
+        assert_eq!(
+            pack.layers.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(),
+            ["body", "eyes"]
+        );
+        // the same art exported: untrimmed frames side by side, the frames' order as Aseprite numbers them
+        let f = crate::aseprite_file::read(
+            &native,
+            &crate::aseprite_file::Limits {
+                max_file: 1 << 20,
+                max_side: 2048,
+                max_frames: 64,
+                max_layers: 8,
+                max_decoded: 1 << 24,
+            },
+        )
+        .unwrap();
+        let mut sheet = Sheet {
+            width: 26 * 6,
+            height: 24,
+            pixels: vec![0; 26 * 6 * 24],
+        };
+        let mut frames = Vec::new();
+        for (n, (layer, frame)) in [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)].into_iter().enumerate() {
+            let px = f.layer_pixels(frame, layer).unwrap();
+            for y in 0..24 {
+                for x in 0..26 {
+                    sheet.pixels[y * 26 * 6 + n * 26 + x] = px[y * 26 + x];
+                }
+            }
+            frames.push(serde_json::json!({"frame": {"x": n * 26, "y": 0, "w": 26, "h": 24},
+                "spriteSourceSize": {"x": 0, "y": 0, "w": 26, "h": 24}, "duration": f.durations[frame]}));
+        }
+        // tags point into this export's frames: the body's are 0–2, the eyes' 3–5
+        let export = serde_json::json!({"frames": frames, "meta": {"image": "pet.png",
+            "frameTags": [{"name": "body:idle", "from": 0, "to": 1, "direction": "forward"},
+                          {"name": "eyes:open", "from": 3, "to": 3, "direction": "forward"},
+                          {"name": "eyes:closed", "from": 5, "to": 5, "direction": "forward"}],
+            "slices": [{"name": "anchor", "keys": [{"frame": 0, "bounds": {"x": 12, "y": 21, "w": 2, "h": 2}, "pivot": {"x": 1, "y": 1}}]}]}});
+        let (exported, export_sheets) = aseprite(&export.to_string(), None, |_| Ok(sheet.clone())).unwrap();
+        assert_eq!(drawn(&pack, &sheets), drawn(&exported, &export_sheets));
+        assert_eq!(
+            pack.layers[0].animations["idle"]
+                .frames
+                .iter()
+                .map(|f| f.ms)
+                .collect::<Vec<_>>(),
+            exported.layers[0].animations["idle"]
+                .frames
+                .iter()
+                .map(|f| f.ms)
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn hostile_native_files_are_refused_before_any_large_allocation() {
+        let mut bomb = sprite();
+        bomb.frames[0].cels[0] = Cel {
+            layer: 0,
+            x: 0,
+            y: 0,
+            w: 16,
+            h: 16,
+            data: CelData::Zlib(vec![0; 10_000_000]),
+        };
+        let err = aseprite_native(&write(&bomb), "bomb.aseprite", None).unwrap_err();
+        assert!(err.contains("cel data is"), "{err}");
+        let mut huge = sprite();
+        huge.frames[0].cels[0] = Cel {
+            layer: 0,
+            x: 0,
+            y: 0,
+            w: 65535,
+            h: 65535,
+            data: CelData::Raw(vec![]),
+        };
+        let err = aseprite_native(&write(&huge), "huge.aseprite", None).unwrap_err();
+        assert!(err.contains("byte limit"), "{err}");
+        let mut wide = sprite();
+        wide.width = 4096;
+        let err = aseprite_native(&write(&wide), "wide.aseprite", None).unwrap_err();
+        assert!(err.contains("outside the limits"), "{err}");
+    }
+
+    #[test]
+    fn the_editors_own_files_read_and_a_tilemap_is_refused() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/asefile");
+        let limits = crate::aseprite_file::Limits {
+            max_file: MAX_PNG as usize,
+            max_side: MAX_SIDE,
+            max_frames: 512,
+            max_layers: 64,
+            max_decoded: MAX_DECODED as usize,
+        };
+        for name in [
+            "indexed",
+            "grayscale",
+            "layers_and_tags",
+            "linked_cels",
+            "256_color_old_palette_chunk",
+        ] {
+            let bytes = fs::read(dir.join(format!("{name}.aseprite"))).unwrap();
+            let f = crate::aseprite_file::read(&bytes, &limits).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(!f.durations.is_empty() && !f.layers.is_empty(), "{name}");
+        }
+        let err = crate::aseprite_file::read(&fs::read(dir.join("tilemap.aseprite")).unwrap(), &limits)
+            .err()
+            .unwrap();
+        assert!(err.contains("tilemap") || err.contains("tileset"), "{err}");
+    }
+
+    /// A pack with one body layer on `sheet`, whose idle animation is `idle` (a manifest animation object).
+    fn grid_pack(idle: &str) -> Result<Pack, String> {
+        let text = format!(
+            r##"{{"format_version": 1, "name": "Grid", "kind": "pixel", "pixel_size": 5, "anchor": [13, 22],
+            "accent": "#B88CF0", "glow": "#FFF2A8",
+            "layers": [{{"name": "body", "channel": "state", "default": "idle", "animations": {{"idle": {idle}}}}}]}}"##
+        );
+        let sheet = Sheet {
+            width: 4 * 26 + 3 * 2,
+            height: 2 * 24 + 1,
+            pixels: vec![0xFF00_0000; (4 * 26 + 6) * 49],
+        };
+        manifest::read(&text, |_| Ok(sheet.clone())).map(|(p, _)| p)
+    }
+
+    #[test]
+    fn a_grid_animation_is_the_same_frames_given_one_by_one() {
+        let grid = grid_pack(
+            r#"{"sheet": "body.png", "grid": {"frame": [26, 24], "origin": [0, 0], "gap": [2, 1], "columns": 4},
+            "frames": [0, 5, 3], "ms": [100, 120, 140], "loop": "loop"}"#,
+        )
+        .unwrap();
+        let explicit = grid_pack(r#"{"sheet": "body.png", "frames": [[0, 0, 26, 24, 100], [28, 25, 26, 24, 120], [84, 0, 26, 24, 140]], "loop": "loop"}"#).unwrap();
+        assert_eq!(grid, explicit);
+        let one_ms = grid_pack(
+            r#"{"sheet": "body.png", "grid": {"frame": [26, 24], "columns": 4}, "frames": [1, 2], "ms": 90}"#,
+        )
+        .unwrap();
+        assert!(one_ms.layers[0].animations["idle"].frames.iter().all(|f| f.ms == 90));
+    }
+
+    #[test]
+    fn each_grid_error_gives_its_reason() {
+        let cases = [
+            (
+                r#"{"frame": [26, 24], "columns": 4}, "frames": [8], "ms": 90"#,
+                "cell 8 is outside",
+            ),
+            (
+                r#"{"frame": [0, 24], "columns": 4}, "frames": [0], "ms": 90"#,
+                "frame is 0 × 24",
+            ),
+            (
+                r#"{"frame": [26, 24], "columns": 0}, "frames": [0], "ms": 90"#,
+                "0 columns",
+            ),
+            (
+                r#"{"frame": [26, 24], "columns": 4}, "frames": [0, 1], "ms": [90]"#,
+                "1 durations for 2 frames",
+            ),
+            (
+                r#"{"frame": [26, 24], "columns": 4}, "frames": [-1], "ms": 90"#,
+                "isn't a cell",
+            ),
+            (
+                r#"{"frame": [26, 24], "origin": [-1, 0], "columns": 4}, "frames": [0], "ms": 90"#,
+                "negative",
+            ),
+        ];
+        for (grid, why) in cases {
+            let err = grid_pack(&format!(r#"{{"sheet": "body.png", "grid": {grid}}}"#)).unwrap_err();
+            assert!(err.contains(why), "{why}: {err}");
+        }
+    }
+
+    /// The samples in the repo's `avatars/samples/`: `native` is [`sprite`] as an `.aseprite` file with a `pack.json`
+    /// for the rest, and `grid` is the basic sample's sheets as grids. With `AIPET_BAKE=1` this writes them.
+    #[test]
+    fn the_native_and_grid_samples_load() {
+        let samples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../avatars/samples");
+        let extra = serde_json::json!({
+            "name": "Sample (Aseprite)", "pixel_size": 5, "accent": "#B88CF0", "glow": "#FFF2A8",
+            "layers": [
+                {"name": "body", "channel": "state", "hit": true, "default": "idle"},
+                {"name": "eyes", "channel": "eyes", "glow": true, "default": "open",
+                 "fallback": {"blink": "closed", "happy": "closed"}}
+            ]
+        });
+        let grid = serde_json::json!({
+            "format_version": 1, "name": "Sample (grid)", "kind": "pixel", "pixel_size": 5, "anchor": [13, 22],
+            "accent": "#B88CF0", "glow": "#FFF2A8",
+            "layers": [
+                {"name": "body", "channel": "state", "hit": true, "default": "idle", "fallback": {"listen": "sleep"},
+                 "animations": {
+                     "idle": {"sheet": "body.png", "grid": {"frame": [26, 24], "columns": 3}, "frames": [0, 1], "ms": 400, "loop": "loop"},
+                     "sleep": {"sheet": "body.png", "grid": {"frame": [26, 24], "columns": 3}, "frames": [2], "ms": 1000, "loop": "once"}}},
+                {"name": "eyes", "channel": "eyes", "glow": true, "default": "open", "fallback": {"blink": "closed", "happy": "closed"},
+                 "look": {"left": [-5, 0], "right": [5, 0], "far-left": [-10, 0], "far-right": [10, 0]},
+                 "animations": {
+                     "open": {"sheet": "eyes.png", "grid": {"frame": [26, 24], "columns": 2}, "frames": [0], "ms": 1000, "loop": "once"},
+                     "closed": {"sheet": "eyes.png", "grid": {"frame": [26, 24], "columns": 2}, "frames": [1], "ms": 1000, "loop": "once"}}}
+            ]
+        });
+        if std::env::var_os("AIPET_BAKE").is_some_and(|v| v == "1") {
+            let native = samples.join("native");
+            let _ = fs::remove_dir_all(&native);
+            fs::create_dir_all(&native).unwrap();
+            fs::write(native.join("sample.aseprite"), write(&sprite())).unwrap();
+            fs::write(
+                native.join("pack.json"),
+                serde_json::to_string_pretty(&extra).unwrap() + "\n",
+            )
+            .unwrap();
+            let g = samples.join("grid");
+            let _ = fs::remove_dir_all(&g);
+            fs::create_dir_all(&g).unwrap();
+            for sheet in ["body.png", "eyes.png"] {
+                fs::copy(samples.join("basic").join(sheet), g.join(sheet)).unwrap();
+            }
+            fs::write(g.join("pack.json"), serde_json::to_string_pretty(&grid).unwrap() + "\n").unwrap();
+        }
+        let native = load_folder(&samples.join("native")).unwrap();
+        assert_eq!(native.name(), "Sample (Aseprite)");
+        let grid = load_folder(&samples.join("grid")).unwrap();
+        let basic = load_folder(&samples.join("basic")).unwrap();
+        // the grid sample is the basic one, its frames given as cells
+        assert_eq!(drawn(&grid.pack, &grid.sheets), drawn(&basic.pack, &basic.sheets));
+        for dir in ["basic", "native", "grid"] {
+            assert!(check(&samples.join(dir)).1, "{dir}");
+        }
     }
 }

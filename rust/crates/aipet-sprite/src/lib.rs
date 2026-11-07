@@ -10,6 +10,7 @@
 //! squash and stretch, shadow). The glow layer gets a coloured blur on top ([`Avatar::glow`]). The same update also
 //! computes the frame's [`Pose`] ([`Pet::pose`]), which packs draw from.
 
+mod aseprite_file;
 mod avatar;
 pub mod bake;
 mod builtin;

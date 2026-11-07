@@ -87,7 +87,13 @@ struct ShapeJson {
 #[derive(Debug, Serialize, Deserialize)]
 struct AnimationJson {
     sheet: String,
-    frames: Vec<[u32; 5]>,
+    /// `[x, y, w, h, ms]` each, or with a `grid`, cell indices.
+    frames: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    grid: Option<GridJson>,
+    /// With a grid: one duration for every frame, or one each.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ms: Option<Value>,
     #[serde(rename = "loop", default = "loop_mode")]
     mode: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -95,6 +101,17 @@ struct AnimationJson {
     /// The frame pixel that sits on the part's origin (or the art box's top-left); one for all the frames, or one each.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pivot: Option<Value>,
+}
+
+/// A sheet laid out as a grid of equal cells.
+#[derive(Debug, Serialize, Deserialize)]
+struct GridJson {
+    frame: [i64; 2],
+    #[serde(default)]
+    origin: [i64; 2],
+    #[serde(default)]
+    gap: [i64; 2],
+    columns: i64,
 }
 
 fn loop_mode() -> String {
@@ -187,7 +204,7 @@ pub fn write(pack: &Pack) -> String {
                     .animations
                     .iter()
                     .map(|(value, a)| {
-                        let frames = a
+                        let frames: Vec<[u32; 5]> = a
                             .frames
                             .iter()
                             .map(|f| match f.art {
@@ -197,7 +214,9 @@ pub fn write(pack: &Pack) -> String {
                             .collect();
                         let json = AnimationJson {
                             sheet: sheet_name(&l.name),
-                            frames,
+                            frames: serde_json::to_value(frames).expect("numbers always serialise"),
+                            grid: None,
+                            ms: None,
                             mode: mode_name(a.mode).to_owned(),
                             clock: (a.clock == Clock::Pet).then(|| "pet".to_owned()),
                             pivot: None,
@@ -367,25 +386,23 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
                 }
             };
             let s = &sheets[index];
+            let count = a.frames.as_array().map_or(0, Vec::len);
             let pivots: Vec<(f64, f64)> = match &a.pivot {
-                None => vec![(0.0, 0.0); a.frames.len()],
+                None => vec![(0.0, 0.0); count],
                 Some(Value::Array(v)) if v.first().is_some_and(Value::is_array) => {
-                    if v.len() != a.frames.len() {
+                    if v.len() != count {
                         return Err(format!(
-                            "layer {name:?}: {value:?} has {} pivots for {} frames",
-                            v.len(),
-                            a.frames.len()
+                            "layer {name:?}: {value:?} has {} pivots for {count} frames",
+                            v.len()
                         ));
                     }
                     v.iter().map(|p| pair(p, "a pivot")).collect::<Result<_, _>>()?
                 }
-                Some(p) => vec![pair(p, "a pivot")?; a.frames.len()],
+                Some(p) => vec![pair(p, "a pivot")?; count],
             };
+            let rects = rects(&name, &value, &a, s)?;
             let mut frames = Vec::new();
-            for ([x, y, w, h, ms], pivot) in a.frames.into_iter().zip(pivots) {
-                if x.checked_add(w).is_none_or(|r| r > s.width) || y.checked_add(h).is_none_or(|b| b > s.height) {
-                    return Err(format!("layer {name:?}: a frame of {value:?} is outside {}", a.sheet));
-                }
+            for ([x, y, w, h, ms], pivot) in rects.into_iter().zip(pivots) {
                 frames.push(Frame {
                     art: Art::Raster {
                         sheet: index,
@@ -424,6 +441,74 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
     };
     pack.validate()?;
     Ok((pack, sheets))
+}
+
+/// An animation's frames as `[x, y, w, h, ms]` on its sheet `s`: given so, or worked out from its grid.
+fn rects(layer: &str, value: &str, a: &AnimationJson, s: &Sheet) -> Result<Vec<[u32; 5]>, String> {
+    let bad = |why: String| format!("layer {layer:?}: {value:?}: {why}");
+    let list = a.frames.as_array().ok_or_else(|| bad("frames isn't a list".into()))?;
+    let Some(g) = &a.grid else {
+        return list
+            .iter()
+            .map(|f| {
+                let f: Option<Vec<u32>> = f.as_array().and_then(|v| {
+                    v.iter()
+                        .map(|n| n.as_u64().and_then(|n| u32::try_from(n).ok()))
+                        .collect()
+                });
+                match f.as_deref() {
+                    Some(&[x, y, w, h, ms]) => {
+                        if x.checked_add(w).is_none_or(|r| r > s.width) || y.checked_add(h).is_none_or(|b| b > s.height)
+                        {
+                            return Err(bad(format!("a frame is outside {}", a.sheet)));
+                        }
+                        Ok([x, y, w, h, ms])
+                    }
+                    _ => Err(bad("a frame isn't [x, y, w, h, ms]".into())),
+                }
+            })
+            .collect();
+    };
+    let [w, h] = g.frame;
+    if w <= 0 || h <= 0 {
+        return Err(bad(format!("the grid's frame is {w} × {h}")));
+    }
+    if g.columns <= 0 {
+        return Err(bad(format!("the grid has {} columns", g.columns)));
+    }
+    if g.origin.iter().chain(&g.gap).any(|&v| v < 0) {
+        return Err(bad("the grid's origin or gap is negative".into()));
+    }
+    let ms: Vec<u32> = match &a.ms {
+        Some(Value::Array(each)) => {
+            if each.len() != list.len() {
+                return Err(bad(format!("{} durations for {} frames", each.len(), list.len())));
+            }
+            each.iter()
+                .map(|m| whole_ms(m, "a duration"))
+                .collect::<Result<_, _>>()?
+        }
+        Some(one) => vec![whole_ms(one, "the duration")?; list.len()],
+        None => return Err(bad("a grid animation needs its ms".into())),
+    };
+    list.iter()
+        .zip(ms)
+        .map(|(i, ms)| {
+            let i = i
+                .as_i64()
+                .filter(|&i| i >= 0)
+                .ok_or_else(|| bad(format!("frame index {i} isn't a cell")))?;
+            let (col, row) = (i % g.columns, i / g.columns);
+            let x = col.checked_mul(w + g.gap[0]).and_then(|v| v.checked_add(g.origin[0]));
+            let y = row.checked_mul(h + g.gap[1]).and_then(|v| v.checked_add(g.origin[1]));
+            match (x, y) {
+                (Some(x), Some(y)) if x + w <= i64::from(s.width) && y + h <= i64::from(s.height) => {
+                    Ok([x as u32, y as u32, w as u32, h as u32, ms])
+                }
+                _ => Err(bad(format!("cell {i} is outside {}", a.sheet))),
+            }
+        })
+        .collect()
 }
 
 /// A sheet as an RGBA PNG.

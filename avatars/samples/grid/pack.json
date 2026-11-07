@@ -1,0 +1,116 @@
+{
+  "accent": "#B88CF0",
+  "anchor": [
+    13,
+    22
+  ],
+  "format_version": 1,
+  "glow": "#FFF2A8",
+  "kind": "pixel",
+  "layers": [
+    {
+      "animations": {
+        "idle": {
+          "frames": [
+            0,
+            1
+          ],
+          "grid": {
+            "columns": 3,
+            "frame": [
+              26,
+              24
+            ]
+          },
+          "loop": "loop",
+          "ms": 400,
+          "sheet": "body.png"
+        },
+        "sleep": {
+          "frames": [
+            2
+          ],
+          "grid": {
+            "columns": 3,
+            "frame": [
+              26,
+              24
+            ]
+          },
+          "loop": "once",
+          "ms": 1000,
+          "sheet": "body.png"
+        }
+      },
+      "channel": "state",
+      "default": "idle",
+      "fallback": {
+        "listen": "sleep"
+      },
+      "hit": true,
+      "name": "body"
+    },
+    {
+      "animations": {
+        "closed": {
+          "frames": [
+            1
+          ],
+          "grid": {
+            "columns": 2,
+            "frame": [
+              26,
+              24
+            ]
+          },
+          "loop": "once",
+          "ms": 1000,
+          "sheet": "eyes.png"
+        },
+        "open": {
+          "frames": [
+            0
+          ],
+          "grid": {
+            "columns": 2,
+            "frame": [
+              26,
+              24
+            ]
+          },
+          "loop": "once",
+          "ms": 1000,
+          "sheet": "eyes.png"
+        }
+      },
+      "channel": "eyes",
+      "default": "open",
+      "fallback": {
+        "blink": "closed",
+        "happy": "closed"
+      },
+      "glow": true,
+      "look": {
+        "far-left": [
+          -10,
+          0
+        ],
+        "far-right": [
+          10,
+          0
+        ],
+        "left": [
+          -5,
+          0
+        ],
+        "right": [
+          5,
+          0
+        ]
+      },
+      "name": "eyes"
+    }
+  ],
+  "name": "Sample (grid)",
+  "pixel_size": 5
+}

@@ -63,7 +63,7 @@ fn the_built_in_packs_are_the_bake_of_their_avatars() {
     }
 }
 
-/// The sample pack in the repo's `avatars/sample/`: a small pack written to read, not baked from an avatar. A round
+/// The basic sample pack in the repo's `avatars/samples/basic/`: a small pack written to read, not baked from an avatar. A round
 /// pet with a two-frame idle bob and a sleep frame, and eyes that blink, close and look around.
 fn sample() -> (aipet_sprite::pack::Pack, Vec<aipet_sprite::bake::Sheet>) {
     use aipet_sprite::bake::Sheet;
@@ -187,7 +187,7 @@ fn sample() -> (aipet_sprite::pack::Pack, Vec<aipet_sprite::bake::Sheet>) {
 fn the_sample_pack_is_what_its_code_makes_and_loads_from_disk() {
     let (pack, sheets) = sample();
     assert_eq!(pack.validate(), Ok(()));
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../avatars/sample");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../avatars/samples/basic");
     let write = std::env::var_os("AIPET_BAKE").is_some_and(|v| v == "1");
     if write {
         let _ = std::fs::remove_dir_all(&dir);
