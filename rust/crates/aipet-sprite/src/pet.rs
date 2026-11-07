@@ -4,7 +4,6 @@
 //! zero and saturates (`as i32`), `%` keeps the dividend's sign (as Rust's does), and every expression keeps the C#
 //! operand order, so the doubles come out bit for bit the same.
 
-use std::collections::BTreeSet;
 use std::collections::hash_map::RandomState;
 use std::f64::consts::PI;
 use std::hash::{BuildHasher, Hasher};
@@ -137,108 +136,11 @@ impl PetRng for XorShift64 {
     }
 }
 
-// ------------------------------------------------------------------ fixed colours
-const LID: u32 = 0xFF2E3354;
-const LID_HI: u32 = 0xFF3F477A;
-const LID_IN: u32 = 0xFF14172E;
-const BASE: u32 = 0xFFC9CFE2;
-const BASE_SH: u32 = 0xFF8E95AE;
-const RING: u32 = 0xFFD5DCEB;
-const GLASS: u32 = 0x88A9E4FF;
-const HANDLE: u32 = 0xFF7A5236;
-const SPARK: u32 = 0xFFFFE27A;
-const SPARK_HI: u32 = 0xFFFFFFFF;
-const ZZ: u32 = 0xFFE3E8FF;
-const DOT: u32 = 0xFFFFFFFF;
-const BANG: u32 = 0xFFFFD24A;
-const DUSTC: u32 = 0xB0E6DED3;
-const HP_DARK: u32 = 0xFF26262C;
-const HP_CUP: u32 = 0xFF3A3A43;
-
-// ------------------------------------------------------------------ limb and effect cells
-/// Xs(21, 8, 9, 10, 15, 16, 17)
-const FEET: &[Cell] = &[(8, 21), (9, 21), (10, 21), (15, 21), (16, 21), (17, 21)];
-/// Xs(21, 8, 9, 10) + Xs(20, 16, 17, 18)
-const FOOT_TAP: &[Cell] = &[(8, 21), (9, 21), (10, 21), (16, 20), (17, 20), (18, 20)];
-const DANGLE_A: &[Cell] = &[(9, 22), (10, 22), (15, 21), (16, 21)];
-const DANGLE_B: &[Cell] = &[(9, 21), (10, 21), (15, 22), (16, 22)];
-const ARMS_DOWN: &[Cell] = &[
-    (4, 15),
-    (5, 15),
-    (4, 16),
-    (5, 16),
-    (20, 15),
-    (21, 15),
-    (20, 16),
-    (21, 16),
-];
-const ARM_L: &[Cell] = ARMS_DOWN.split_at(4).0;
-const WAVE_A: &[Cell] = &[(21, 10), (22, 10), (21, 11), (22, 11)];
-const WAVE_B: &[Cell] = &[(22, 9), (23, 9), (22, 10), (23, 10)];
-/// { (3, 10), (4, 10), (3, 11), (4, 11) } + WAVE_A
-const ARMS_UP: &[Cell] = &[
-    (3, 10),
-    (4, 10),
-    (3, 11),
-    (4, 11),
-    (21, 10),
-    (22, 10),
-    (21, 11),
-    (22, 11),
-];
-const RUN_FEET: [&[Cell]; 2] = [
-    &[(17, 21), (18, 21), (19, 21), (7, 20), (8, 20), (9, 20)],
-    &[(16, 20), (17, 20), (18, 20), (6, 21), (7, 21), (8, 21)],
-];
-const RUN_ARMS: [&[Cell]; 2] = [
-    &[
-        (21, 12),
-        (22, 12),
-        (21, 13),
-        (22, 13),
-        (4, 16),
-        (5, 16),
-        (4, 17),
-        (5, 17),
-    ],
-    &[
-        (20, 16),
-        (21, 16),
-        (20, 17),
-        (21, 17),
-        (3, 13),
-        (4, 13),
-        (3, 14),
-        (4, 14),
-    ],
-];
-const DUST: &[Cell] = &[(4, 21), (2, 20), (0, 19)];
-const ZGLYPH: &[Cell] = &[(0, 0), (1, 0), (2, 0), (1, 1), (0, 2), (1, 2), (2, 2)];
-const BLUSH_CELLS: &[Cell] = &[(6, 13), (7, 13), (18, 13), (19, 13)];
-const NOTE: &[Cell] = &[
-    (2, 0),
-    (3, 0),
-    (3, 1),
-    (2, 1),
-    (2, 2),
-    (2, 3),
-    (0, 3),
-    (1, 3),
-    (0, 4),
-    (1, 4),
-];
-
-/// The pixel pet: sprite geometry per avatar, the animation state machine, and the renderer.
-/// Platform-neutral; the UI just blits the three layers (Glow gets a coloured blur on top).
+/// The pet: its behaviour (the animation state machine), the pose it computes, and its pack, composited into three
+/// layers. Platform-neutral; the UI just blits the three layers (Glow gets a coloured blur on top).
 pub struct Pet<R: PetRng = XorShift64> {
-    // ------------------------------------------------------------------ avatar geometry
+    // ------------------------------------------------------------------ the avatar
     avatar: Avatar,
-    body: BTreeSet<Cell>,
-    face: BTreeSet<Cell>,
-    spec: Vec<Cell>,
-    hp_band: Vec<Cell>,
-    hp_cups: Vec<Cell>,
-    hp_shine: Vec<Cell>,
 
     // ------------------------------------------------------------------ pixel buffers
     body_px: [u32; PIXELS],
@@ -270,13 +172,12 @@ pub struct Pet<R: PetRng = XorShift64> {
     drawn_at: f64,
 }
 
-/// What one frame draws, in the renderer's terms (cells and eye names), with the named poses ([`pose`]) it chose.
+/// What the behaviour chose for one frame, in the old renderer's terms (eye names and columns), with the named poses
+/// ([`pose`]) the pose takes.
 struct Figure<'a> {
     eyes: &'static str,
     lx: i32,
-    arms: Vec<Cell>,
     arms_pose: pose::Arms,
-    feet: Vec<Cell>,
     feet_pose: pose::Feet,
     /// The idle act, while one plays and is shown (not while hovered or held).
     act: Option<&'static str>,
@@ -296,9 +197,7 @@ impl Default for Figure<'_> {
         Figure {
             eyes: "normal",
             lx: 0,
-            arms: ARMS_DOWN.to_vec(),
             arms_pose: pose::Arms::Rest,
-            feet: FEET.to_vec(),
             feet_pose: pose::Feet::Stand,
             act: None,
             pointer: None,
@@ -331,12 +230,6 @@ impl<R: PetRng> Pet<R> {
     pub fn with_rng(rng: R) -> Self {
         let mut pet = Pet {
             avatar: Avatar::sprout(),
-            body: BTreeSet::new(),
-            face: BTreeSet::new(),
-            spec: Vec::new(),
-            hp_band: Vec::new(),
-            hp_cups: Vec::new(),
-            hp_shine: Vec::new(),
             body_px: [0; PIXELS],
             glow_px: [0; PIXELS],
             fx_px: [0; PIXELS],
@@ -388,10 +281,6 @@ impl<R: PetRng> Pet<R> {
     }
 
     pub fn set_avatar(&mut self, a: Avatar) {
-        self.body = build_body(&a.shapes);
-        self.face = build_face(a.face_top, a.face_bottom);
-        self.spec = find_spec(&self.body);
-        (self.hp_band, self.hp_cups, self.hp_shine) = build_headphones(&self.body);
         // a built-in pet's embedded pack, else the avatar baked now: once, not per frame
         (self.pack, self.sheets) = crate::builtin::pack_for(&a).unwrap_or_else(|| {
             let baked = bake::bake(&a);
@@ -439,11 +328,12 @@ impl<R: PetRng> Pet<R> {
             self.look = [-1, 0, 0, 1][self.rng.next_int(4) as usize];
             self.look_at = t + self.r(2.5, 6.0);
         }
-        let wave = |rate: f64| -> (Vec<Cell>, pose::Arms) {
-            let mut arms = ARM_L.to_vec();
-            let a = (t * rate) as i32 % 2 == 1;
-            arms.extend_from_slice(if a { WAVE_A } else { WAVE_B });
-            (arms, if a { pose::Arms::WaveA } else { pose::Arms::WaveB })
+        let wave = |rate: f64| {
+            if (t * rate) as i32 % 2 == 1 {
+                pose::Arms::WaveA
+            } else {
+                pose::Arms::WaveB
+            }
         };
 
         match st {
@@ -468,7 +358,6 @@ impl<R: PetRng> Pet<R> {
                             p.y = -(PI * (t - self.idle_start) / (self.idle_until - self.idle_start)).sin() * 3.2 * PF
                         }
                         Some("stretch") => {
-                            p.arms = ARMS_UP.to_vec();
                             p.arms_pose = pose::Arms::Raised;
                             p.eyes = "happy";
                             p.y = -PF;
@@ -476,7 +365,6 @@ impl<R: PetRng> Pet<R> {
                         Some("wiggle") => p.x = (t * 16.0).sin() * 0.8 * PF,
                         Some("tap") => {
                             let tap = (t * 5.0) as i32 % 2 == 1;
-                            p.feet = if tap { FOOT_TAP } else { FEET }.to_vec();
                             p.feet_pose = if tap { pose::Feet::Tap } else { pose::Feet::Stand };
                             p.lx = 1;
                         }
@@ -516,7 +404,7 @@ impl<R: PetRng> Pet<R> {
                 } else {
                     0.0
                 };
-                (p.arms, p.arms_pose) = wave(3.0);
+                p.arms_pose = wave(3.0);
             }
             "done" => {
                 p.eyes = "happy";
@@ -526,7 +414,7 @@ impl<R: PetRng> Pet<R> {
                     0.0
                 };
                 if since < 4.0 {
-                    (p.arms, p.arms_pose) = wave(3.0);
+                    p.arms_pose = wave(3.0);
                 }
             }
             _ => {}
@@ -541,7 +429,7 @@ impl<R: PetRng> Pet<R> {
             }
         }
         if waving && matches!(st, "idle" | "sleep" | "done") {
-            (p.arms, p.arms_pose) = wave(5.0);
+            p.arms_pose = wave(5.0);
             p.eyes = "happy";
         }
         if p.poked {
@@ -557,8 +445,6 @@ impl<R: PetRng> Pet<R> {
         }
         if running {
             let f = ((t * 10.0) as i32 % 2) as usize;
-            p.feet = mirror(RUN_FEET[f], inp.facing);
-            p.arms = mirror(RUN_ARMS[f], inp.facing);
             (p.feet_pose, p.arms_pose) = if f == 0 {
                 (pose::Feet::RunA, pose::Arms::RunA)
             } else {
@@ -572,9 +458,7 @@ impl<R: PetRng> Pet<R> {
             p.running = true;
         } else if drg {
             let a = (t * 3.0) as i32 % 2 == 1;
-            p.feet = if a { DANGLE_A } else { DANGLE_B }.to_vec();
             p.feet_pose = if a { pose::Feet::DangleA } else { pose::Feet::DangleB };
-            p.arms = ARMS_UP.to_vec();
             p.arms_pose = pose::Arms::Raised;
             p.eyes = "wide";
             p.lx = 0;
@@ -759,328 +643,9 @@ impl<R: PetRng> Pet<R> {
             facing: if inp.facing > 0 { Facing::Right } else { Facing::Left },
         }
     }
-
-    fn draw(&mut self, p: &Figure, inp: &PetInput, t: f64) {
-        let a = &self.avatar;
-        let body_px = &mut self.body_px;
-        let glow_px = &mut self.glow_px;
-        let fx_px = &mut self.fx_px;
-        body_px.fill(0);
-        glow_px.fill(0);
-        fx_px.fill(0);
-
-        let mut shape = self.body.clone();
-        shape.extend(p.arms.iter().copied());
-        shape.extend(p.feet.iter().copied());
-        put_all(body_px, outline(&shape), a.outline);
-        let rim = a.shading.as_deref() == Some("rim");
-        for &(x, y) in &shape {
-            let below = shape.contains(&(x, y + 1));
-            let right = shape.contains(&(x + 1, y));
-            let above = shape.contains(&(x, y - 1));
-            let left = shape.contains(&(x - 1, y));
-            let col = if rim {
-                // dark figure, lit from behind: bright edge along the top and sides, darker towards the bottom
-                let edge = !below || !right || !above || !left;
-                if edge {
-                    if y < 17 { a.hi } else { a.shade }
-                } else if y >= 18 {
-                    a.deep
-                } else if y >= 14 {
-                    a.shade
-                } else {
-                    a.body
-                }
-            } else if !below || !right {
-                if y >= 19 { a.deep } else { a.shade }
-            } else if (!above || !left) && y < 15 {
-                a.hi
-            } else if y >= 19 {
-                a.shade
-            } else {
-                a.body
-            };
-            put(body_px, (x, y), col);
-        }
-        if rim {
-            for &c in shape.iter().filter(|c| !shape.contains(&(c.0, c.1 - 1)) && c.1 < 8) {
-                put(body_px, c, a.spec);
-            }
-        } else {
-            for &c in &self.spec {
-                if shape.contains(&c) {
-                    put(body_px, c, a.spec);
-                }
-            }
-        }
-        if a.blush {
-            for &c in BLUSH_CELLS {
-                if shape.contains(&c) {
-                    put(body_px, c, a.blush_c);
-                }
-            }
-        }
-
-        if p.headphones {
-            let hp: BTreeSet<Cell> = self.hp_band.iter().chain(&self.hp_cups).copied().collect();
-            for c in outline(&hp) {
-                if !shape.contains(&c) {
-                    put(body_px, c, a.outline);
-                }
-            }
-            put_all(body_px, self.hp_band.iter().copied(), HP_DARK);
-            put_all(body_px, self.hp_cups.iter().copied(), HP_CUP);
-            put_all(body_px, self.hp_shine.iter().copied(), a.accent | 0xFF000000); // cups carry the avatar's theme colour
-        }
-        for &c in &self.face {
-            let face = &self.face;
-            let edge = !face.contains(&(c.0 + 1, c.1))
-                || !face.contains(&(c.0 - 1, c.1))
-                || !face.contains(&(c.0, c.1 + 1))
-                || !face.contains(&(c.0, c.1 - 1));
-            put(body_px, c, if edge { a.bezel } else { a.screen });
-        }
-        put(body_px, (9, a.face_top.wrapping_add(1)), a.glint);
-        put(body_px, (10, a.face_top.wrapping_add(1)), a.glint);
-
-        let eyes = eye_cells(p.eyes, p.lx);
-        let eye_set: BTreeSet<Cell> = eyes.iter().copied().collect();
-        for &(x, y) in &eyes {
-            let up = eye_set.contains(&(x, y - 1));
-            let dn = eye_set.contains(&(x, y + 1));
-            put(
-                glow_px,
-                (x, y),
-                if !up && dn {
-                    a.eye_hi
-                } else if up && !dn {
-                    a.eye_lo
-                } else {
-                    a.eye
-                },
-            );
-        }
-
-        // props
-        if let Some(prop) = p.prop.filter(|_| !p.poked && t >= inp.land_until) {
-            if prop == "lens" {
-                let sx = [0, 1, 0, -1][((t * 1.5) as i32 % 4) as usize];
-                let ring: BTreeSet<Cell> = [
-                    (19, 13),
-                    (20, 13),
-                    (21, 13),
-                    (18, 14),
-                    (22, 14),
-                    (18, 15),
-                    (22, 15),
-                    (18, 16),
-                    (22, 16),
-                    (19, 17),
-                    (20, 17),
-                    (21, 17),
-                ]
-                .into_iter()
-                .map(|(x, y)| (x + sx, y))
-                .collect();
-                let glass: BTreeSet<Cell> = [19, 20, 21]
-                    .into_iter()
-                    .flat_map(|x| [14, 15, 16].into_iter().map(move |y| (x + sx, y)))
-                    .collect();
-                put_all(body_px, outline(&ring.union(&glass).copied().collect()), a.outline);
-                put_all(body_px, glass.iter().copied(), GLASS);
-                put(body_px, (19 + sx, 14), 0xCCFFFFFF);
-                put_all(body_px, ring.iter().copied(), RING);
-                outlined(body_px, [(23 + sx, 18), (24 + sx, 19)], HANDLE, a.outline);
-            } else {
-                let lid: BTreeSet<Cell> = (14..22).flat_map(|x| (15..21).map(move |y| (x, y))).collect();
-                let base_row: BTreeSet<Cell> = (12..23).map(|x| (x, 21)).collect();
-                put_all(body_px, outline(&lid.union(&base_row).copied().collect()), a.outline);
-                put_all(body_px, lid.iter().copied(), LID);
-                put_all(body_px, (14..22).map(|x| (x, 15)), LID_HI);
-                put_all(body_px, (15..21).flat_map(|x| (16..20).map(move |y| (x, y))), LID_IN);
-                put_all(body_px, base_row.iter().copied(), BASE);
-                put_all(body_px, [(21, 21), (22, 21)], BASE_SH);
-                put_all(glow_px, [(16, 16), (17, 17), (16, 18)], a.eye);
-                if (t * 2.5) as i32 % 2 == 1 {
-                    put_all(glow_px, [(18, 18), (19, 18)], a.eye);
-                }
-            }
-        }
-
-        // effects
-        let acc = a.accent | 0xFF000000;
-        if p.running {
-            let dust = mirror(DUST, inp.facing);
-            for (i, &d) in dust.iter().enumerate() {
-                if ((t * 8.0) as i32).wrapping_add(i as i32) % 3 != 0 {
-                    put(fx_px, d, DUSTC);
-                }
-            }
-        } else if self.anim_state == "thinking" && !p.held {
-            let n = (t * 3.0) as i32 % 4;
-            let dots = [(20, 5), (22, 3), (24, 1)];
-            for i in 0..n {
-                outlined(fx_px, [dots[i as usize]], DOT, a.outline);
-            }
-        } else if self.anim_state == "listen" && !p.held {
-            for i in 0..2 {
-                let ph = (t * 0.45 + i as f64 * 0.5) % 1.0;
-                let bx =
-                    (if i == 0 { 19 } else { 2 }) + (ph * if i == 0 { 3.0 } else { -2.0 }).round_ties_even() as i32;
-                let by = 7 - (ph * 7.0).round_ties_even() as i32;
-                let color = if ph > 0.7 { (acc & 0x00FFFFFF) | 0x88000000 } else { acc };
-                put_all(fx_px, NOTE.iter().map(|n| (bx + n.0, by + n.1)), color);
-            }
-        } else if self.anim_state == "sleep" && !(inp.hover || p.held) {
-            for i in 0..3 {
-                let ph = (t * 0.35 + i as f64 / 3.0) % 1.0;
-                let bx = 19 + (ph * 4.0).round_ties_even() as i32;
-                let by = 6 - (ph * 6.0).round_ties_even() as i32;
-                put_all(
-                    fx_px,
-                    ZGLYPH.iter().map(|g| (bx + g.0, by + g.1)),
-                    if ph > 0.75 { 0x99E3E8FF } else { ZZ },
-                );
-            }
-        } else if self.anim_state == "attention" && !p.held {
-            outlined(fx_px, [(24, 1), (24, 2), (24, 3), (24, 5)], BANG, a.outline);
-        }
-
-        if (self.anim_state == "done" || p.poked) && !p.held {
-            let on = (t * 4.0) as i32 % 2 == 1;
-            for (x, y) in if on { [(3, 6), (22, 3)] } else { [(2, 9), (23, 6)] } {
-                put_all(fx_px, [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)], SPARK);
-                put(fx_px, (x, y), SPARK_HI);
-            }
-        }
-    }
 }
 
-// ------------------------------------------------------------------ avatar geometry
-
-fn build_body(shapes: &[[f64; 4]]) -> BTreeSet<Cell> {
-    let mut s = BTreeSet::new();
-    for y in 0..GH {
-        for x in 0..GW {
-            let (cx, cy) = (x as f64 + 0.5, y as f64 + 0.5);
-            for e in shapes {
-                let (dx, dy) = ((cx - e[0]) / e[2], (cy - e[1]) / e[3]);
-                if dx * dx + dy * dy <= 1.0 {
-                    s.insert((x, y));
-                    break;
-                }
-            }
-        }
-    }
-    s
-}
-
-fn build_face(top: i32, bottom: i32) -> BTreeSet<Cell> {
-    let mut s = BTreeSet::new();
-    for x in 8..18 {
-        for y in top..=bottom {
-            s.insert((x, y));
-        }
-    }
-    for c in [(8, top), (17, top), (8, bottom), (17, bottom)] {
-        s.remove(&c);
-    }
-    s
-}
-
-/// Top-left-most body cells on each bump: little shine pixels for the "soft" style.
-fn find_spec(body: &BTreeSet<Cell>) -> Vec<Cell> {
-    // The C# takes the first 3 after a stable OrderBy(Y) over the HashSet, which enumerates in insertion order:
-    // row-major, as BuildBody adds the cells. So ties on Y go to the smaller X.
-    let mut cells: Vec<Cell> = body
-        .iter()
-        .copied()
-        .filter(|&(x, y)| !body.contains(&(x, y - 1)) && body.contains(&(x + 1, y + 1)) && x < 13 && y < 9)
-        .collect();
-    cells.sort_by_key(|&(x, y)| (y, x));
-    cells.into_iter().take(3).map(|(x, y)| (x + 1, y + 1)).collect()
-}
-
-/// Headphones that hug the head: ear cups at the sides of rows 9–12, a band just above the silhouette.
-/// Returns (band, cups, shine).
-fn build_headphones(body: &BTreeSet<Cell>) -> (Vec<Cell>, Vec<Cell>, Vec<Cell>) {
-    let left = |y: i32| body.iter().filter(|c| c.1 == y).map(|c| c.0).min().unwrap_or(5);
-    let right = |y: i32| body.iter().filter(|c| c.1 == y).map(|c| c.0).max().unwrap_or(20);
-    let (lx, rx) = (left(10), right(10));
-    let mut cups = Vec::new();
-    for y in 9..=12 {
-        cups.extend([(lx - 1, y), (lx, y), (rx, y), (rx + 1, y)]);
-    }
-    let mut b = BTreeSet::new();
-    let mut prev: Option<i32> = None;
-    for x in lx..=rx {
-        let col = body.iter().filter(|c| c.0 == x).map(|c| c.1).min().unwrap_or(9);
-        let y = (col - 1).min(8);
-        b.insert((x, y));
-        if let Some(py) = prev {
-            for yy in py.min(y) + 1..py.max(y) {
-                b.insert((if py < y { x - 1 } else { x }, yy));
-            }
-        }
-        prev = Some(y);
-    }
-    let top = |b: &BTreeSet<Cell>, x: i32| b.iter().filter(|c| c.0 == x).map(|c| c.1).min().unwrap_or(8);
-    for y in top(&b, lx) + 1..9 {
-        b.insert((lx, y));
-    }
-    for y in top(&b, rx) + 1..9 {
-        b.insert((rx, y));
-    }
-    let shine = vec![(lx - 1, 10), (lx - 1, 11), (rx + 1, 10), (rx + 1, 11)];
-    (b.into_iter().collect(), cups, shine)
-}
-
-fn mirror(cells: &[Cell], facing: i32) -> Vec<Cell> {
-    if facing > 0 {
-        cells.to_vec()
-    } else {
-        cells.iter().map(|&(x, y)| (GW - 1 - x, y)).collect()
-    }
-}
-
-fn outline(cells: &BTreeSet<Cell>) -> BTreeSet<Cell> {
-    let mut ring = BTreeSet::new();
-    for &(x, y) in cells {
-        for n in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
-            if !cells.contains(&n) {
-                ring.insert(n);
-            }
-        }
-    }
-    ring
-}
-
-/// The eye cells for `kind`, shifted `lx` columns. The column sums wrap as the C#'s unchecked int maths does: while
-/// the pet runs, lx is `2 * facing` (wrapped), and a huge facing must not panic a debug build. Cells that end up off
-/// the grid are skipped by `put`.
-fn eye_cells(kind: &str, lx: i32) -> Vec<Cell> {
-    let x = |dx: i32| dx.wrapping_add(lx);
-    let (l, l1, l_1) = (x(10), x(11), x(9));
-    let (r, r1, r2) = (x(14), x(15), x(16));
-    let block = |y0: i32, y1: i32| -> Vec<Cell> {
-        [l, l1, r, r1]
-            .into_iter()
-            .flat_map(|x| (y0..=y1).map(move |y| (x, y)))
-            .collect()
-    };
-    match kind {
-        "wide" => block(10, 13),
-        "squint" => vec![(l, 10), (l1, 11), (l, 12), (r1, 10), (r, 11), (r1, 12)],
-        "blink" => vec![(l, 12), (l1, 12), (r, 12), (r1, 12)],
-        "happy" => vec![(l_1, 11), (l, 10), (l1, 11), (r, 11), (r1, 10), (r2, 11)],
-        "sleep" => vec![(l_1, 12), (l, 12), (l1, 12), (r, 12), (r1, 12), (r2, 12)],
-        "up" => block(10, 11),
-        "down" => block(12, 13),
-        _ => block(10, 12),
-    }
-}
-
-// ------------------------------------------------------------------ pixel buffers
+// ------------------------------------------------------------------ pixels
 
 /// Premultiplies an 0xAARRGGBB colour by its alpha, with integer math that rounds down (as the C# `Pm`).
 pub fn pm(argb: u32) -> u32 {
@@ -1094,32 +659,9 @@ pub fn pm(argb: u32) -> u32 {
     (a << 24) | (r << 16) | (g << 8) | b
 }
 
-fn put(buf: &mut [u32; PIXELS], c: Cell, color: u32) {
-    if c.0 >= 0 && c.0 < GW && c.1 >= 0 && c.1 < GH {
-        buf[(c.1 * GW + c.0) as usize] = pm(color);
-    }
-}
-
-fn put_all(buf: &mut [u32; PIXELS], cells: impl IntoIterator<Item = Cell>, color: u32) {
-    for c in cells {
-        put(buf, c, color);
-    }
-}
-
-/// The cells in `color` with an outline (the avatar's outline colour) around them.
-fn outlined(buf: &mut [u32; PIXELS], cells: impl IntoIterator<Item = Cell>, color: u32, outline_color: u32) {
-    let set: BTreeSet<Cell> = cells.into_iter().collect();
-    put_all(buf, outline(&set), outline_color);
-    put_all(buf, set, color);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn xs(y: i32, xs: &[i32]) -> Vec<Cell> {
-        xs.iter().map(|&x| (x, y)).collect()
-    }
 
     #[test]
     fn pm_premultiplies_with_integer_math() {
@@ -1130,34 +672,6 @@ mod tests {
         assert_eq!(pm(0x01FFFFFF), 0x01010101);
         assert_eq!(pm(0xFEFFFFFF), 0xFEFEFEFE);
         assert_eq!(pm(0xFE010101), 0xFE000000);
-    }
-
-    #[test]
-    fn cell_tables_match_their_csharp_definitions() {
-        assert_eq!(FEET, xs(21, &[8, 9, 10, 15, 16, 17]));
-        assert_eq!(FOOT_TAP, [xs(21, &[8, 9, 10]), xs(20, &[16, 17, 18])].concat());
-        assert_eq!(ARM_L, &ARMS_DOWN[..4]);
-        assert_eq!(ARMS_UP, [&[(3, 10), (4, 10), (3, 11), (4, 11)][..], WAVE_A].concat());
-    }
-
-    #[test]
-    fn mirror_flips_around_the_grid_centre() {
-        assert_eq!(mirror(DUST, 1), DUST);
-        assert_eq!(mirror(DUST, -1), vec![(21, 21), (23, 20), (25, 19)]);
-        assert_eq!(mirror(DUST, 0), mirror(DUST, -1));
-    }
-
-    #[test]
-    fn eye_blocks() {
-        assert_eq!(eye_cells("normal", 0).len(), 12);
-        assert_eq!(
-            eye_cells("wide", 1),
-            [11, 12, 15, 16]
-                .iter()
-                .flat_map(|&x| (10..=13).map(move |y| (x, y)))
-                .collect::<Vec<_>>()
-        );
-        assert_eq!(eye_cells("anything", 0), eye_cells("normal", 0));
     }
 
     struct Fixed(f64);
@@ -1351,11 +865,6 @@ mod tests {
         {
             let f = pet.update(&PetInput { facing, ..run.clone() }, 1.15 + i as f64 * 0.05);
             assert!(f.pixels_changed);
-        }
-        for lx in [i32::MAX, i32::MIN, i32::MAX - 12, i32::MIN + 8] {
-            for kind in ["wide", "squint", "blink", "happy", "sleep", "up", "down", "normal"] {
-                assert!(!eye_cells(kind, lx).is_empty());
-            }
         }
     }
 

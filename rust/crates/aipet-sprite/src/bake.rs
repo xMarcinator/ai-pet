@@ -535,7 +535,6 @@ pub fn bake(a: &Avatar) -> Baked {
     let g = Geometry::of(a);
     let base = draw_body(a, &g, &[], Headphones::Off);
     let limb = |cells: &[Cell]| diff(&draw_body(a, &g, cells, Headphones::Off), &base);
-    let left = |cells: &[Cell]| -> Vec<Cell> { cells.iter().map(|&(x, y)| (GW - 1 - x, y)).collect() };
     let hp_outline = draw_body(a, &g, &[], Headphones::Outline);
     let mut wave_a = ARM_L.to_vec();
     wave_a.extend_from_slice(WAVE_A);
@@ -773,6 +772,11 @@ fn eye_cells(kind: &str, lx: i32) -> Vec<Cell> {
     }
 }
 
+/// Cells mirrored about the grid's centre, as a running limb facing left.
+fn left(cells: &[Cell]) -> Vec<Cell> {
+    cells.iter().map(|&(x, y)| (GW - 1 - x, y)).collect()
+}
+
 /// The layer names a baked pack has, in drawing order, and the buffer each goes to (0 body, 1 glow, 2 fx).
 pub fn targets(pack: &Pack) -> BTreeMap<usize, usize> {
     pack.layers
@@ -796,6 +800,46 @@ pub fn targets(pack: &Pack) -> BTreeMap<usize, usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn xs(y: i32, xs: &[i32]) -> Vec<Cell> {
+        xs.iter().map(|&x| (x, y)).collect()
+    }
+
+    #[test]
+    fn cell_tables_match_their_csharp_definitions() {
+        assert_eq!(FEET, xs(21, &[8, 9, 10, 15, 16, 17]));
+        assert_eq!(FOOT_TAP, [xs(21, &[8, 9, 10]), xs(20, &[16, 17, 18])].concat());
+        assert_eq!(ARM_L, &ARMS_DOWN[..4]);
+        assert_eq!(ARMS_UP, [&[(3, 10), (4, 10), (3, 11), (4, 11)][..], WAVE_A].concat());
+    }
+
+    #[test]
+    fn mirror_flips_around_the_grid_centre() {
+        assert_eq!(left(DUST), vec![(21, 21), (23, 20), (25, 19)]);
+        assert_eq!(left(&left(DUST)), DUST);
+    }
+
+    #[test]
+    fn eye_blocks() {
+        assert_eq!(eye_cells("normal", 0).len(), 12);
+        assert_eq!(
+            eye_cells("wide", 1),
+            [11, 12, 15, 16]
+                .iter()
+                .flat_map(|&x| (10..=13).map(move |y| (x, y)))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(eye_cells("anything", 0), eye_cells("normal", 0));
+    }
+
+    #[test]
+    fn eye_columns_wrap_without_panicking() {
+        for lx in [i32::MAX, i32::MIN, i32::MAX - 12, i32::MIN + 8] {
+            for kind in ["wide", "squint", "blink", "happy", "sleep", "up", "down", "normal"] {
+                assert!(!eye_cells(kind, lx).is_empty());
+            }
+        }
+    }
 
     #[test]
     fn a_baked_pack_validates_and_keeps_to_the_frame_limit() {
