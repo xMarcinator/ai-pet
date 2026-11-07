@@ -30,8 +30,9 @@ The reference image was shared in chat; the user saves it to `avatars/reference/
 - [ ] It matches the reference's proportions and palette (user confirms in the hands-on task)
 
 ## Done summary
-TBD
+Pixel Hamster (avatars/reference/hamster_pixel_gen.py): 28x28 cells sampled from hamster.png (pitch 5.1 px), body/arms/feet/eyes split, other poses, props, headphones and effects drawn in its palette; 10 layers, 42 frames, 52 KB; built in as 'Hamster (pixel)'; covered by the regeneration and R22 tests. The look awaits the user's confirmation in task 8.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:

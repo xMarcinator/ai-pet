@@ -43,8 +43,9 @@ The preview pages show the reference pixel art beside each vector, and 130×120 
 - [ ] The generators emit the Part motion tables (R18) from their existing numbers: eye origins and look offsets, hand poses (rest, wave, raised, type) and the typing keyframes, the hand bob with phases, the Hamster's shoulder rotations, and the caret's opacity loop
 
 ## Done summary
-TBD
+Vector Hood (green), Hamster and Sprout (commit 94c3717, by a subagent): avatars/reference/vector_pack.py reads each generator's figure() output into parts and poses; --pack on each generator; motion from the generators' CSS keyframes. tests/vector_packs.rs regenerates and diffs, and checks every pet_states value and 15 looks. Deviations: anchor (65,110) like every built-in (not 118.5); Hamster ground at the soles; Hood's glow goes out in sleep; no glow:true layers (drawings paint their own); Hamster arm transitions 0 ms (rotation is keyed); effect motion is new; compared with rsvg renders, not app screenshots.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:
