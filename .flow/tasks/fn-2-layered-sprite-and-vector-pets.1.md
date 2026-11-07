@@ -38,9 +38,12 @@ The goldens compare doubles bit-exactly (`EXACT_LIBM`, golden.rs:205). The Pose 
 - [ ] Part motion (spec: API Contracts → Part motion, R18) in the model and compositor: parts with origins, shapes or frames per value, the `look` table with nearest-direction fallback, `poses` with eased transitions, and keyframe `animations` with `phase`, applied in the stated order before whole-body motion and mirroring. Unit tests drive a pose change mid-transition, a looping keyframe animation with two phases, and a look offset, and read the parts' final positions
 
 ## Done summary
-TBD
+`Pet::update` computes a renderer-neutral `Pose` (`Pet::pose`, `pose.rs`) next to the pixels it still draws: the state with its idle act (`idle-hop`, …), the eyes' expression and one of 9 look directions (the pointer's with ±4 DIP hysteresis), named arm and foot poses (with `hold` and `lens` while working), the prop, the headphones, one effect, the facing, each channel's time of change, and the motion. It is derived from what `compute_pose` already chose, so the goldens pass unchanged. `pack.rs` holds the in-memory pack with the spec's validation (missing default, fallback cycles and depth > 8, durations, part ids, ranges); a fallback to `null` draws nothing. `compose.rs` picks each layer's value and frame (loop, once, pingpong), places parts (eased pose transitions that restart from where a part is, keyframes held per key with per-part phase, the look offset with nearest-within-45° fallback, then body motion about the anchor, then mirroring), and turns alpha into row runs.
 
+For task 2: the renderer's eyes have 5 horizontal positions (`lx` −2..2: the idle look act and running use ±2), and the Pose has 3. A bake per look direction can't reproduce the ±2 golden frames, so task 2 may need the eyes' `look` offsets to carry the ±2 steps, or a wider look channel. Also, a poke's sparkles and thinking's dots were drawn together; the Pose's single fx channel says sparkles then.
+
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: c616d5b
+- Tests: cd rust && cargo test -p aipet-sprite (44 unit, 5 golden: passed), cargo test -p aipet-ui (passed), cargo clippy --workspace --all-targets -D warnings (clean), cargo fmt --check (clean)
 - PRs:
