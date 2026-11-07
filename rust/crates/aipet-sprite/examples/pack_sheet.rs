@@ -1,5 +1,6 @@
 //! Draws a vector pack in every state and expression as one PNG, for looking at it while drawing:
-//! `cargo run -p aipet-sprite --example pack_sheet -- <pack folder> <out.png> [scale]`.
+//! `cargo run -p aipet-sprite --example pack_sheet -- <pack folder> <out.png> [scale]`; `PACK_CASES=8,9` draws only
+//! those.
 
 use std::path::Path;
 
@@ -107,7 +108,12 @@ fn main() {
         eyes(Expression::Open, Look { dx: 2, dy: 1 }),
     ];
 
-    let cols = 4;
+    // PACK_CASES=8,9 draws only those cases (by index), bigger
+    let cases: Vec<Values> = match std::env::var("PACK_CASES") {
+        Ok(list) => list.split(',').filter_map(|i| cases.get(i.trim().parse::<usize>().ok()?).copied()).collect(),
+        Err(_) => cases,
+    };
+    let cols = 4.min(cases.len());
     let (cw, ch) = (
         ((ART_W + 2.0 * HALO_PAD) * scale) as u32,
         ((ART_H + 2.0 * HALO_PAD) * scale) as u32,
