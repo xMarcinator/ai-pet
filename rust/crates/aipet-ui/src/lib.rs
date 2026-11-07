@@ -1991,7 +1991,8 @@ pub(crate) mod tests {
         assert_eq!(hovered.width, rest.width, "{rest:?} {hovered:?}");
         assert!(hovered.title.chars().count() < rest.title.chars().count());
         assert!(style::text_width(&hovered.title, 13.5, style::UI_SEMIBOLD) <= rest.width - 51.0 - row);
-        // a short one grows by its buttons
+        // a short one grows by its buttons. Its title is long enough that it grows past CARD_MIN in any font, not only
+        // Noto Sans: "Bubble Pop" grew by only 7 px, and on CI's Ubuntu runner, which installs no fonts, it didn't grow
         let three = Some(
             [Button::Previous, Button::PlayPause, Button::Next]
                 .into_iter()
@@ -1999,12 +2000,12 @@ pub(crate) mod tests {
                 .row_width(),
         );
         let (rest, hovered) = (
-            fit_card("Bubble Pop", "♫ The Pets", None),
-            fit_card("Bubble Pop", "♫ The Pets", three),
+            fit_card("Bubble Pop Electric", "♫ The Pets", None),
+            fit_card("Bubble Pop Electric", "♫ The Pets", three),
         );
         assert_eq!(
             (rest.title.as_str(), hovered.title.as_str()),
-            ("Bubble Pop", "Bubble Pop")
+            ("Bubble Pop Electric", "Bubble Pop Electric")
         );
         assert!(hovered.width > rest.width);
     }
