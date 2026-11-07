@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-07T22:19:40.775033Z",
+  "depends_on": [
+    "fn-2-layered-sprite-and-vector-pets.17"
+  ],
+  "id": "fn-2-layered-sprite-and-vector-pets.18",
+  "priority": null,
+  "spec": "fn-2-layered-sprite-and-vector-pets",
+  "spec_path": ".flow/tasks/fn-2-layered-sprite-and-vector-pets.18.md",
+  "status": "todo",
+  "title": "Sheet themes: alternate sprite sheets as a pet's themes (not editable yet)",
+  "updated_at": "2026-11-07T22:19:40.775033Z"
+}

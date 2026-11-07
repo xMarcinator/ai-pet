@@ -25,8 +25,9 @@ Colours become **themes** (owner's request, 2026-11-07): a pet ships one or more
 
 
 ## Done summary
-TBD
+Themes (commit c60ecc9 by a subagent, plus the tile-dot fix): pack palette/theme/themes; pixel themes swap exact colours in themed layers (a per-layer 'themed' key; the Hood's fx layer is themed so Green equals the old Hood (green) bake pixel for pixel, test); user themes in <data>/avatars/themes/*.json {pet, theme, palette}; AvatarTheme in config; 'Hood (green)' config wears Hood in Green (checked in the app); Settings theme pills with New/Edit/Delete; built-ins: Sprout, Hood (Blue, Green), Pip, Pip (painted), Hood (vector) (Green, Blue), Hamster, Sprout (vector), Hamster (pixel). Docs still say Hood (green) (task 9).
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:
