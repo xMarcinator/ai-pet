@@ -16,8 +16,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pet_states  # noqa: E402
+import vector_pack as vp  # noqa: E402
 
-ROOT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+ROOT = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 OUT = os.path.join(ROOT, "avatars", "reference")
 
 C = {  # sampled from the reference
@@ -276,7 +277,75 @@ STYLE = ("<style>\n"
          "  </style>")
 
 
+# ------------------------------------------------------------------ the vector pack (--pack)
+
+# The feet's soles, where the Hamster stands (GROUND above is where the preview squashes it, a little lower).
+SOLES = max(Y(r) for _, r in FEET) + 8
+
+
+def pack():
+    """The Hamster as a vector pack (vector_pack.py): its groups read back from figure() for every state. Each arm
+    is a layer of its own that hangs from its shoulder pivot: a pose lifts it, and its rotation about the pivot is
+    the value's animation, as figure() turns it."""
+    d = vp.Drawing(figure, SOLES)
+    a = vp.ANCHOR
+    hold, lens = vp.ARMS["hold"], vp.ARMS["lens"]
+    phones = {"headphones": True}
+    ears = vp.layer("ears", "state", "idle", hit=True, shapes={"idle": vp.drawing(d.art({}, "ears"))})
+    back = vp.layer("headphones-back", "headphones", "on", hit=True,
+                    shapes={"on": vp.drawing(d.art(phones, "headphones-back"))}, fallback={"off": None})
+    body = vp.layer("body", "state", "idle", hit=True, shapes={"idle": vp.drawing(d.art({}, "body", "face"))})
+    eyes = vp.eyes(d, lambda expr: {"expr": expr})
+    prop = vp.layer("prop", "prop", "laptop", parts=[{"id": "prop", "origin": list(a)}],
+                    shapes={"laptop": vp.drawing(vp.relative(d.art(hold, "prop", skip=("caret",)), a)),
+                            "lens": vp.drawing(vp.relative(d.art(lens, "prop"), a))},
+                    animations={"lens": vp.anim("prop", vp.scan_keys())},
+                    fallback={"none": None})
+    at, cursor = vp.caret(d, hold)
+    screen = vp.layer("screen", "prop", "laptop",
+                      parts=[{"id": "caret", "origin": list(at), "shape": "caret"}], shapes={"caret": cursor},
+                      animations={"laptop": vp.anim("caret", vp.keys(vp.held(STYLE, "caret", "caret")))},
+                      fallback={"lens": None, "none": None})
+    front = vp.layer("headphones", "headphones", "on", hit=True,
+                     shapes={"on": vp.drawing(d.art(phones, "headphones"))}, fallback={"off": None})
+    bob = vp.drawn(vp.eased(STYLE, "bob-l", "bob", 16))
+    typing = vp.drawn(vp.held(STYLE, "type", "type"))
+
+    def arm(pid, bob_class, motion):
+        poses, shapes, animations = {}, {}, {}
+        for value, pose in vp.ARMS.items():
+            (x, y), turn = d.at(pose, pid)
+            poses[value] = {pid: [x, y]}
+            shapes[value] = vp.drawing(d.inner(pose, pid))
+            frames = motion.get(value) or (bob if value == "rest" else [(1000, {})])
+            ph = vp.phase(STYLE, bob_class) if value == "rest" else 0
+            animations[value] = vp.anim([(pid, ph)], vp.keys(frames, {"rotate": turn} if turn else None))
+        return vp.layer(pid, "arms", "rest", hit=True, parts=[{"id": pid, "origin": poses["rest"][pid]}],
+                        shapes=shapes, poses=poses, animations=animations)
+
+    scan = vp.drawn([(vp.SCAN_MS, {"dx": s * pet_states.LENS_STEP}) for s in vp.SCAN])
+    return {
+        "format_version": 1,
+        "name": "Hamster",
+        "kind": "vector",
+        "pixel_size": 1,
+        "anchor": list(a),
+        "mirror": "flip",
+        "accent": C["orange"],
+        "glow": "#7FEFFF",
+        "layers": [ears, vp.feet(d, ["foot-1", "foot-2", "foot-3"]), back, body, eyes, prop, screen, front,
+                   # the screen-left paw types, and holds the magnifier as it scans
+                   arm("arm-left", "bob-l", {"hold": typing, "lens": scan}), arm("arm-right", "bob-r", {}),
+                   *vp.effect_layers(C["orange"], C["edgeDark"], d.norm)],
+    }
+
+
 def main():
+    folder = vp.pack_arg("hamster-vector")
+    if folder:
+        vp.write(folder, pack())
+        return
+
     def write(name, text):
         with open(os.path.join(OUT, name), "w", encoding="utf-8", newline="\n") as f:
             f.write(text)

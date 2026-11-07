@@ -11,8 +11,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pet_states  # noqa: E402
+import vector_pack as vp  # noqa: E402
 
-ROOT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+ROOT = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 OUT = os.path.join(ROOT, "avatars", "reference")
 
 C = {  # avatars/hood-green.json
@@ -224,7 +225,64 @@ STYLE = ("<style>\n"
          "  </style>")
 
 
+# ------------------------------------------------------------------ the vector pack (--pack)
+
+def pack():
+    """The green Hood as a vector pack (vector_pack.py): its groups read back from figure() for every state. It has
+    no feet. The preview's "glow off" becomes sleep: asleep, the back aura goes out."""
+    d = vp.Drawing(figure, GROUND)
+    a = vp.ANCHOR
+    hold, lens = vp.ARMS["hold"], vp.ARMS["lens"]
+    body = vp.layer("body", "state", "idle", hit=True,
+                    shapes={"idle": vp.drawing(d.art({}, "aura", "body", "face")),
+                            "sleep": vp.drawing(d.art({"glow": False}, "body", "face"))})
+    eyes = vp.eyes(d, lambda expr: {"expr": expr})
+    prop = vp.layer("prop", "prop", "laptop",
+                    parts=[{"id": "prop", "origin": list(a)}],
+                    shapes={"laptop": vp.drawing(vp.relative(d.art(hold, "prop", skip=("caret",)), a)),
+                            "lens": vp.drawing(vp.relative(d.art(lens, "prop"), a))},
+                    animations={"lens": vp.anim("prop", vp.scan_keys())},
+                    fallback={"none": None})
+    at, cursor = vp.caret(d, hold)
+    screen = vp.layer("screen", "prop", "laptop",
+                      parts=[{"id": "caret", "origin": list(at), "shape": "caret"}], shapes={"caret": cursor},
+                      animations={"laptop": vp.anim("caret", vp.keys(vp.held(STYLE, "caret", "caret")))},
+                      fallback={"lens": None, "none": None})
+    phones = vp.layer("headphones", "headphones", "on", hit=True,
+                      shapes={"on": vp.drawing(d.art({"headphones": True}, "headphones"))}, fallback={"off": None})
+    bob = vp.keys(vp.drawn(vp.eased(STYLE, "bob-l", "bob", 16)))
+    typing = vp.keys(vp.drawn(vp.held(STYLE, "type", "type")))
+
+    def hand(pid, bob_class, motion):
+        poses = {value: {pid: list(d.at(pose, pid)[0])} for value, pose in vp.ARMS.items()}
+        shapes = {value: vp.drawing(d.inner(pose, pid)) for value, pose in vp.ARMS.items()}
+        animations = {"rest": vp.anim([(pid, vp.phase(STYLE, bob_class))], bob)}
+        animations.update({value: vp.anim(pid, k) for value, k in motion.items()})
+        return vp.layer(pid, "arms", "rest", hit=True, parts=[{"id": pid, "origin": poses["rest"][pid]}],
+                        shapes=shapes, poses=poses, transition_ms=120, animations=animations)
+
+    return {
+        "format_version": 1,
+        "name": "Hood (green, vector)",
+        "kind": "vector",
+        "pixel_size": 1,
+        "anchor": list(a),
+        "mirror": "flip",
+        "accent": C["hi"],
+        "glow": C["glow"],
+        "layers": [body, eyes, prop, screen, phones,
+                   # the screen-left hand types; the screen-right one holds the magnifier as it scans
+                   hand("hand-left", "bob-l", {"hold": typing}), hand("hand-right", "bob-r", {"lens": vp.scan_keys()}),
+                   *vp.effect_layers(C["hi"], C["outline"], d.norm)],
+    }
+
+
 def main():
+    folder = vp.pack_arg("hood-green-vector")
+    if folder:
+        vp.write(folder, pack())
+        return
+
     def write(name, text):
         with open(os.path.join(OUT, name), "w", encoding="utf-8", newline="\n") as f:
             f.write(text)

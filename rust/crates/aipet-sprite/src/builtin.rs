@@ -1,6 +1,8 @@
 //! The built-in pets' packs, embedded in the binary: Sprout, Hood and Hood (green), baked ahead of time from their
 //! avatars (`tests/bake.rs` checks the committed files are the bake's: the manifests as text, the sheets pixel for
-//! pixel); and the vector Pip (`avatars/reference/pip_gen.py` writes it) with its painting (`tests/bake.rs` again).
+//! pixel); the vector Pip (`avatars/reference/pip_gen.py` writes it) with its painting (`tests/bake.rs` again); and
+//! the vector Hood (green), Hamster and Sprout, which their reference generators write (`tests/vector_packs.rs`
+//! checks they still do).
 
 use std::collections::BTreeMap;
 
@@ -33,6 +35,9 @@ const PIP: Files = pack!("pip": "pack.json");
 const PIP_PAINTED: Files = pack!("pip-painted": "pack.json", "feet.png", "sprout.png", "body.png", "mouth.png", "eyes.png",
     "headphones.png", "prop.png", "arms.png", "screen.png", "zs.png", "notes.png", "dots.png", "alert.png",
     "sparkles.png", "dust.png");
+const HOOD_GREEN_VECTOR: Files = pack!("hood-green-vector": "pack.json");
+const HAMSTER_VECTOR: Files = pack!("hamster-vector": "pack.json");
+const SPROUT_VECTOR: Files = pack!("sprout-vector": "pack.json");
 
 /// The green Hood's avatar, as the repo's `avatars/hood-green.json` gives it.
 fn hood_green() -> Option<Avatar> {
@@ -41,13 +46,22 @@ fn hood_green() -> Option<Avatar> {
 
 /// The built-in pets, in order.
 pub fn all() -> Vec<LoadedPack> {
-    [SPROUT, HOOD, HOOD_GREEN, PIP, PIP_PAINTED]
-        .into_iter()
-        .map(|files| {
-            let (pack, sheets) = load(files).expect("the embedded packs load (tests/bake.rs)");
-            LoadedPack { pack, sheets }
-        })
-        .collect()
+    [
+        SPROUT,
+        HOOD,
+        HOOD_GREEN,
+        PIP,
+        PIP_PAINTED,
+        HOOD_GREEN_VECTOR,
+        HAMSTER_VECTOR,
+        SPROUT_VECTOR,
+    ]
+    .into_iter()
+    .map(|files| {
+        let (pack, sheets) = load(files).expect("the embedded packs load (tests/bake.rs)");
+        LoadedPack { pack, sheets }
+    })
+    .collect()
 }
 
 /// The embedded pack for `avatar`, if it is one of the built-in pets exactly (a file that renames or recolours one

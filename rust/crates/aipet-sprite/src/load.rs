@@ -897,7 +897,17 @@ mod tests {
         let names: Vec<&str> = found.pets.iter().map(LoadedPack::name).collect();
         assert_eq!(
             names,
-            ["Sprout", "Hood", "Hood (green)", "Pip", "Pip (painted)", "Other"]
+            [
+                "Sprout",
+                "Hood",
+                "Hood (green)",
+                "Pip",
+                "Pip (painted)",
+                "Hood (green, vector)",
+                "Hamster",
+                "Sprout (vector)",
+                "Other"
+            ]
         );
         assert_eq!(
             found.skipped,

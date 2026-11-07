@@ -16,8 +16,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pet_states  # noqa: E402
+import vector_pack as vp  # noqa: E402
 
-ROOT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+ROOT = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 OUT = os.path.join(ROOT, "avatars", "reference")
 
 C = {  # Avatar::sprout's palette
@@ -240,7 +241,60 @@ STYLE = ("<style>\n"
          "  </style>")
 
 
+# ------------------------------------------------------------------ the vector pack (--pack)
+
+def pack():
+    """Sprout as a vector pack (vector_pack.py): its groups read back from figure() for every state. The arms are
+    one drawing each, moved to where figure() puts them."""
+    d = vp.Drawing(figure, GROUND)
+    a = vp.ANCHOR
+    hold, lens = vp.ARMS["hold"], vp.ARMS["lens"]
+    body = vp.layer("body", "state", "idle", hit=True, shapes={"idle": vp.drawing(d.art({}, "body", "face"))})
+    eyes = vp.eyes(d, lambda expr: {"expr": expr})
+    prop = vp.layer("prop", "prop", "laptop", parts=[{"id": "prop", "origin": list(a)}],
+                    shapes={"laptop": vp.drawing(vp.relative(d.art(hold, "prop", skip=("caret",)), a)),
+                            "lens": vp.drawing(vp.relative(d.art(lens, "prop"), a))},
+                    animations={"lens": vp.anim("prop", vp.scan_keys())},
+                    fallback={"none": None})
+    at, cursor = vp.caret(d, hold)
+    screen = vp.layer("screen", "prop", "laptop",
+                      parts=[{"id": "caret", "origin": list(at), "shape": "caret"}], shapes={"caret": cursor},
+                      animations={"laptop": vp.anim("caret", vp.keys(vp.held(STYLE, "caret", "caret")))},
+                      fallback={"lens": None, "none": None})
+    phones = vp.layer("headphones", "headphones", "on", hit=True,
+                      shapes={"on": vp.drawing(d.art({"headphones": True}, "headphones"))}, fallback={"off": None})
+    ids = ["arm-left", "arm-right"]
+    poses = {value: {pid: list(d.at(pose, pid)[0]) for pid in ids} for value, pose in vp.ARMS.items()}
+    bob = vp.keys(vp.drawn(vp.eased(STYLE, "bob-l", "bob", 16)))
+    arms = vp.layer("arms", "arms", "rest", hit=True,
+                    parts=[{"id": pid, "origin": poses["rest"][pid], "shape": "arm"} for pid in ids],
+                    shapes={"arm": vp.drawing(d.inner({}, "arm-left"))}, poses=poses, transition_ms=120,
+                    animations={
+                        "rest": vp.anim([(pid, vp.phase(STYLE, c)) for pid, c in zip(ids, ["bob-l", "bob-r"])], bob),
+                        # the screen-left arm types; the screen-right one holds the magnifier as it scans
+                        "hold": vp.anim("arm-left", vp.keys(vp.drawn(vp.held(STYLE, "type", "type")))),
+                        "lens": vp.anim("arm-right", vp.scan_keys()),
+                    })
+    return {
+        "format_version": 1,
+        "name": "Sprout (vector)",
+        "kind": "vector",
+        "pixel_size": 1,
+        "anchor": list(a),
+        "mirror": "flip",
+        "accent": C["accent"],
+        "glow": C["glow"],
+        "layers": [vp.feet(d, ["foot-left", "foot-right"]), body, eyes, prop, screen, phones, arms,
+                   *vp.effect_layers(C["accent"], C["outline"], d.norm)],
+    }
+
+
 def main():
+    folder = vp.pack_arg("sprout-vector")
+    if folder:
+        vp.write(folder, pack())
+        return
+
     def write(name, text):
         with open(os.path.join(OUT, name), "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
