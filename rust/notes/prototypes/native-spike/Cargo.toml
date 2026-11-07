@@ -1,0 +1,37 @@
+[package]
+name = "native-spike"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+
+[dependencies]
+iced = { version = "0.14", default-features = false, features = ["tiny-skia", "x11", "wayland", "thread-pool"] }
+# the same 0.6.2 iced/winit use (iced::window::raw_window_handle re-exports it too)
+raw-window-handle = "0.6"
+
+[target.'cfg(all(unix, not(any(target_os = "macos", target_os = "ios", target_os = "android"))))'.dependencies]
+# already in iced's tree via winit/softbuffer (0.13.2, with "shape" enabled); pure-Rust RustConnection, no libxcb
+x11rb = { version = "0.13", features = ["shape"] }
+
+[target.'cfg(windows)'.dependencies]
+# the version winit 0.30 uses, so nothing new is compiled
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# the versions winit 0.30 uses, so nothing new is compiled
+objc2 = "0.5.2"
+objc2-foundation = { version = "0.2.2", features = ["NSGeometry", "NSThread"] }
+objc2-app-kit = { version = "0.2.2", features = [
+    "NSApplication",
+    "NSEvent",
+    "NSGraphics",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSView",
+    "NSWindow",
+] }

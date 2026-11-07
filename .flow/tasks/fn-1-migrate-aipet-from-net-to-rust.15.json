@@ -1,0 +1,19 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.242977Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.9",
+    "fn-1-migrate-aipet-from-net-to-rust.10",
+    "fn-1-migrate-aipet-from-net-to-rust.12",
+    "fn-1-migrate-aipet-from-net-to-rust.13"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.15",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.15.md",
+  "status": "todo",
+  "title": "Pet app wiring: real data from the core, the shared single-instance lock, demo as a dev feature",
+  "updated_at": "2026-09-28T18:32:14.516849Z"
+}

@@ -1,0 +1,42 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-29T11:46:38.264170Z",
+  "evidence": {
+    "base_commit": "3bc7a88ef6508fab841b48d1d63a5984dab8b5df",
+    "commits": [
+      "60d5a5f678ca8e03bb05b45e075097065fef872d"
+    ],
+    "integrated": {
+      "base": "3bc7a88",
+      "head": "60d5a5f",
+      "merges": [
+        "167fb45"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "SHIP: correctness, contracts and integration reviewers, 0 findings",
+      "fix_commits": [],
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-6ddd24ad6d18-fn-1-migrate-aipet-from-net-to-rust.8.json",
+      "rounds": 1,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green (cd rust && cargo test --workspace -- --skip credential_manager_tokens_are_the_apps, cargo clippy --workspace --all-targets -- -D warnings, cargo fmt --all -- --check at 3bc7a88; dotnet test tests/AiPet.Tests -p:UseAppHost=false --filter FullyQualifiedName~OrderingTests: 46 passed)",
+      "cd rust && cargo test --workspace -- --skip credential_manager_tokens_are_the_apps: 182 passed, 0 failed (tests/sessions.rs: 46 passed, including every_claude_case_matches_the_csharp, every_codex_case_matches_the_csharp, the_golden_data_covers_the_codex_path and 29 ported CodexOrderingTests)",
+      "cd rust && cargo clippy --workspace --all-targets -- -D warnings: clean",
+      "cd rust && cargo fmt --all -- --check: clean",
+      "dotnet build AiPet.slnx -p:UseAppHost=false: 0 warnings, 0 errors; dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped, 0 failed",
+      "golden: dotnet build rust/golden -c Release -p:UseAppHost=false && dotnet rust/golden/bin/Release/net10.0/aipet-golden.dll sessions: codex.json 79 cases, 1889 envelopes (every outcome including error:FormatException); claude.json regenerated 64 cases / 1831 envelopes, replays green, not recommitted (only its times change)",
+      "mutation checks on the Codex port (27 mutations: spread, past 16, calls 64, lag rounding and digits, ordinal casing, ToLowerInvariant, v7 clock guard, regex whitespace, 256 KB and 4 MB windows, empty names, patch dedupe, manual compact thread, late prompt, stamp when late, marker removal, cwd prefix, rule 4, rule 2, when names are read, the tie on equal times, FormatException, duplicate keys): every observable one fails the tests; 2 are unobservable in the C# too (originator read while where is set)",
+      "gate receipts not written: parallel wave, the conductor owns shared Flow state",
+      "integrated verify (Windows, work branch 7819186 with tasks 3 and 8 merged): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green (sessions: 46 passed), clippy --workspace --all-targets -D warnings and fmt --check clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped",
+      "review note: two of the three Codex reviewers ran aipet-core's whole suite, including credential_manager_tokens_are_the_apps, which writes and deletes a throwaway AiPet:GoldenTest:<pid>-<nanos> entry in the real Credential Manager; it passed. The conductor then made that test opt-in (AIPET_TEST_CREDENTIAL_MANAGER, set by CI)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-29T13:39:06.675778Z"
+}

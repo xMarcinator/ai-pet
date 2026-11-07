@@ -1,0 +1,44 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claimed_at": "2026-09-29T09:06:32.801128Z",
+  "evidence": {
+    "base_commit": "242d7cc81060a125e38c083d0a09fe934cdd25a4",
+    "commits": [
+      "018b9d92af7f4cba4f06c97d9f9c55009f5287bd",
+      "fbc663220d6b6c4f0a816a110c14196042c07445"
+    ],
+    "integrated": {
+      "base": "242d7cc",
+      "head": "fbc6632",
+      "merges": [
+        "d2b48ac",
+        "0ccb70c"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK (R8): call_key hashed serde_json's text of a whole tool input, which sorts keys and rewrites numbers, so it paired calls the C# would not",
+      "fix_commits": [
+        "fbc6632"
+      ],
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-37fcdc098b57-fn-1-migrate-aipet-from-net-to-rust.7.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check at 242d7cc; dotnet test tests/AiPet.Tests -p:UseAppHost=false --filter FullyQualifiedName~OrderingTests: 46 passed)",
+      "cd rust && cargo test -p aipet-core: 18 passed (every_golden_case_matches_the_csharp over 63 cases / 1796 envelopes incl. the os_specific Windows path case, the_golden_data_covers_the_claude_path, 13 ported ClaudeOrderingTests, 3 unit tests)",
+      "cd rust && cargo test --workspace --no-fail-fast: every test binary green except aipet-ipc connect::tests::windows::a_silent_pet_times_out (INHERITED FLAKE, not in this diff: aipet-ipc is untouched; cargo test -p aipet-ipc --lib fails 2 of 4 runs at HEAD with took 1.9977s < 2s)",
+      "cd rust && cargo clippy --workspace --all-targets: rc 0 (warnings only in aipet-sprite and aipet-ui, as at baseline); cargo clippy -p aipet-core --all-targets --locked -- -D warnings: clean",
+      "cd rust && cargo fmt --all -- --check: clean",
+      "dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx -p:UseAppHost=false --no-build: 160 passed, 42 skipped, 0 failed (no apphost: this machine blocks freshly built exes; plain dotnet test AiPet.slnx does not build AiPet.UI, which fails 6 ResourceTests/VelopackTests for a missing AiPet.dll)",
+      "golden: dotnet build rust/golden -c Release -p:UseAppHost=false && dotnet rust/golden/bin/Release/net10.0/aipet-golden.dll sessions: 63 cases, 1796 envelopes",
+      "mutation checks on the replay (pair window, dotless i, duplicate keys, depth 64, log width, 512 KB window, ts clock rule, pruning tombstones): each fails the golden test; peek-always-read and stamp max are unobservable on the Claude path",
+      "integrated verify (Windows, work branch 0ccb70c): cargo test -p aipet-core green (15 + 16 + 7), cargo test --workspace green, clippy --workspace --all-targets -D warnings and fmt --check clean; the flaky aipet-ipc test the worker hit is fixed on the target in 7bac145"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-29T11:27:45.231265Z"
+}

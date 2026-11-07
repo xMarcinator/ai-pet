@@ -282,14 +282,20 @@ public sealed class RegistrationTests : IDisposable
 
     // ------------------------------------------------------------------ aipet-hook as a program
     /// `dotnet aipet-hook.dll --install` would register dotnet itself: it refuses and writes nothing. --uninstall
-    /// works from there.
+    /// works from there. With AIPET_TEST_HOOK, a copy of that hook under another name stands in for dotnet.
     [Fact]
     public void Install_UnderDotnet_Refuses()
     {
         var home = TestEnv.NewDir("home");
+        string renamed = null;
+        if (TestEnv.TestHook != null)
+        {
+            renamed = Path.Combine(TestEnv.NewDir("renamed"), "hook" + Path.GetExtension(TestEnv.TestHook));
+            File.Copy(TestEnv.TestHook, renamed);
+        }
         foreach (var agent in new[] { "claude", "codex" })
         {
-            var r = RunHook(home, "--install", agent);
+            var r = RunHookAs(renamed, home, "--install", agent);
             Assert.Equal(1, r.Exit);
             Assert.Contains("not aipet-hook", r.Err);
             Assert.Contains("Nothing was changed", r.Err);
@@ -448,19 +454,17 @@ public sealed class RegistrationTests : IDisposable
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
-    /// `dotnet aipet-hook.dll <args>` with everything it could read or write in home: the agents' config folders,
-    /// the data and temp folders, and an endpoint no pet listens on. PATH is home/bin (a fake codex, if any) and the
-    /// system's programs, never the user's codex.
-    static (int Exit, string Out, string Err) RunHook(string home, params string[] args)
+    /// The hook (TestEnv.HookStartInfo) with `args` and everything it could read or write in home: the agents' config
+    /// folders, the data and temp folders, and an endpoint no pet listens on. PATH is home/bin (a fake codex, if any)
+    /// and the system's programs, never the user's codex.
+    static (int Exit, string Out, string Err) RunHook(string home, params string[] args) => RunHookAs(null, home, args);
+
+    /// RunHook, with `program` (AIPET_TEST_HOOK's hook under another name) in the hook's place when given.
+    static (int Exit, string Out, string Err) RunHookAs(string program, string home, params string[] args)
     {
-        Assert.True(File.Exists(TestEnv.HookDll), "the hook isn't built at " + TestEnv.HookDll);
-        var psi = new ProcessStartInfo(TestEnv.Dotnet)
-        {
-            UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
-        };
-        psi.ArgumentList.Add(TestEnv.HookDll);
-        foreach (var a in args) psi.ArgumentList.Add(a);
+        var psi = TestEnv.HookStartInfo(args);
+        if (program != null) psi.FileName = program;
+        psi.StandardOutputEncoding = psi.StandardErrorEncoding = Encoding.UTF8;
         var bin = Path.Combine(home, "bin");
         var tmp = Directory.CreateDirectory(Path.Combine(TestEnv.Root, "tmp-" + Guid.NewGuid().ToString("N")[..8])).FullName;
         foreach (var (name, value) in new[]

@@ -8,7 +8,7 @@
 #   ./scripts/install-from-source.sh --uninstall   remove it again (your settings and logs stay)
 #
 # Uses artifacts/<rid> from build.sh or build.ps1; rebuilds them first when they're missing or older than the source
-# (that needs the .NET 10 SDK).
+# (that needs the .NET 10 SDK for the app and Rust for the hook, as build.sh does).
 # App:   ~/.local/share/AiPet/app      (+ menu entry)
 # Hook:  ~/.local/share/AiPet/hooks/aipet-hook, registered in ~/.claude/settings.json and ~/.codex/config.toml
 #        (Codex then asks you to trust it: run `codex` once and choose Review hooks; see aipet-hook --doctor codex)
@@ -54,22 +54,24 @@ if [ "$UNINSTALL" = 1 ]; then
 fi
 
 # Build when there's no build yet, the source changed since the last one, or --rebuild (never install stale binaries).
+# The app is built from src/, the hook from rust/.
 stale=0
 if [ ! -f "$art/app/AiPet" ] || [ ! -f "$art/hook/aipet-hook" ]; then stale=1
-elif [ -n "$(find "$root/src" -type f -not -path '*/bin/*' -not -path '*/obj/*' \
+elif [ -n "$(find "$root/src" "$root/rust/crates" "$root/rust/Cargo.toml" "$root/rust/Cargo.lock" -type f \
+          -not -path '*/bin/*' -not -path '*/obj/*' -not -path '*/target/*' \
           \( -newer "$art/app/AiPet" -o -newer "$art/hook/aipet-hook" \) -print -quit)" ]; then stale=1
 fi
 if [ "$stale" = 1 ] || [ "$REBUILD" = 1 ]; then
-  if command -v dotnet >/dev/null && dotnet --list-sdks | grep -q '^10\.'; then
-    step "Building for $rid"
-    dotnet publish "$root/src/AiPet.UI" -c Release -r "$rid" --self-contained -o "$art/app" -p:DebugType=none --nologo -v quiet
-    dotnet publish "$root/src/AiPet.Hook" -c Release -r "$rid" --self-contained -p:PublishAot=false \
-      -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=none -o "$art/hook" --nologo -v quiet
-  else
-    echo "The build in artifacts/$rid is missing or older than the source, and there's no .NET 10 SDK here to" >&2
-    echo "rebuild it. Run build.sh (or build.ps1) first." >&2
+  if ! command -v dotnet >/dev/null || ! dotnet --list-sdks | grep -q '^10\.' || ! command -v cargo >/dev/null; then
+    echo "The build in artifacts/$rid is missing or older than the source, and there's no .NET 10 SDK or no Rust" >&2
+    echo "(cargo) here to rebuild it. Run build.sh (or build.ps1) first." >&2
     exit 1
   fi
+  step "Building for $rid"
+  dotnet publish "$root/src/AiPet.UI" -c Release -r "$rid" --self-contained -o "$art/app" -p:DebugType=none --nologo -v quiet
+  cargo build -p aipet-hook --release --locked --manifest-path "$root/rust/Cargo.toml"
+  mkdir -p "$art/hook"
+  cp "$root/rust/target/release/aipet-hook" "$art/hook/aipet-hook"
 fi
 
 step "Stopping the running pet"

@@ -20,15 +20,20 @@ with Velopack, and how to check a package by hand.
 
 1. It publishes the app self-contained, so users need no .NET:
    `dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r win-x64 --self-contained -p:Version=<version>`.
-2. It publishes the hook with NativeAOT:
-   `dotnet publish src/AiPet.Hook/AiPet.Hook.csproj -c Release -r win-x64 -p:PublishAot=true -p:Version=<version>`.
+2. It builds the hook, the Rust `aipet-hook` (`rust/crates/aipet-hook`), with cargo in `rust/`:
+   `cargo build -p aipet-hook --release --locked --target x86_64-pc-windows-msvc`, with `AIPET_VERSION=<version>`
+   and `RUSTFLAGS=-C target-feature=+crt-static`.
    - The hook runs on every agent event, so it has to start in milliseconds.
-   - The job fails rather than fall back to a managed build, as `build.ps1` does.
-   - NativeAOT needs the Visual Studio C++ tools. The `windows-2022` runner has them.
-3. It checks both exes' version resources (release.yml:151, and [below](#version-resources)).
+   - `+crt-static` links the C runtime in, so the hook needs only Windows' own DLLs, not the Visual C++ runtime's,
+     which a Windows install may lack. The step fails if the exe names a C runtime DLL (`vcruntime*.dll`,
+     `msvcp*.dll`, `api-ms-win-crt-*`).
+   - Its build script embeds the icon, the manifest and a version resource with the release's version
+     ([below](#version-resources)).
+   - It needs the Visual Studio C++ tools and the Windows SDK's `rc.exe`. The `windows-2022` runner has them.
+3. It checks both exes' version resources (release.yml:169, and [below](#version-resources)).
 4. It copies `aipet-hook.exe` next to `AiPet.exe`, adds `LICENSE` and `THIRD-PARTY-NOTICES.md`, and deletes every
    `*.pdb`. The native libraries' symbols alone come to about 100 MiB.
-5. It runs Velopack's CLI, `vpk`, at the version set by `VPK_VERSION` in the workflow (release.yml:47):
+5. It runs Velopack's CLI, `vpk`, at the version set by `VPK_VERSION` in the workflow (release.yml:57):
 
    ```
    dotnet tool install vpk --version <VPK_VERSION> --tool-path out/tools
@@ -47,9 +52,10 @@ with Velopack, and how to check a package by hand.
    in their own releases.
 8. It zips `out/app` into the portable zip.
 
-The `publish` job uploads all of these to the GitHub release with `gh release create`. It doesn't use
-`vpk upload`, so that one job creates the release, only after every build has passed. Velopack's `RELEASES` and
-`assets.win.json` aren't uploaded:
+The `plugin` job writes `SHA256SUMS` over these files and the Linux tarballs before it pushes the plugin. The
+`publish` job checks the files against it, then uploads them and `SHA256SUMS` to the GitHub release with
+`gh release create`. It doesn't use `vpk upload`, so that one job creates the release, only after every build has
+passed. Velopack's `RELEASES` and `assets.win.json` aren't uploaded:
 - `RELEASES` only serves apps migrating from Squirrel, and AiPet never used Squirrel.
 - `assets.win.json` is the list that `vpk upload` reads.
 
@@ -114,25 +120,32 @@ The `publish` job uploads all of these to the GitHub release with `gh release cr
 
 ## Version resources
 
-Both exes carry the icon and a version resource that names the exe. The compiler's own version resource would name
-the `.dll`, and antivirus heuristics dislike an `.exe` that says it's a `.dll`.
+Both exes carry the icon and a version resource that names the exe. The C# compiler's own version resource would
+name the `.dll`, a Rust exe has none, and antivirus heuristics dislike an `.exe` that says it's a `.dll` or has no
+version.
 
 - [build/Win32Resources.targets](../../build/Win32Resources.targets) writes the `.res` file itself, on every OS and
   without `rc.exe`, before the compiler runs, and gives the compiler only that. It holds the icons from
-  `ApplicationIcon`, the manifest (the project's, or `build/default.win32manifest` for the hook), and a version
+  `ApplicationIcon`, the manifest (the project's, or `build/default.win32manifest` for the .NET hook), and a version
   resource. The version resource has `CompanyName`, `FileDescription` (the project's `AssemblyTitle`),
   `FileVersion`, `InternalName` and `OriginalFilename` (`AiPet.exe`, `aipet-hook.exe`), `LegalCopyright`,
   `ProductName` (`AiPet`) and `ProductVersion` (the version as released).
 - Both projects set `AssemblyTitle` and `ApplicationIcon` and import the targets
   ([AiPet.UI.csproj](../../src/AiPet.UI/AiPet.UI.csproj):11-14, 33;
   [AiPet.Hook.csproj](../../src/AiPet.Hook/AiPet.Hook.csproj):11-13, 26).
-- The versions come from `-p:Version` through [Directory.Build.props](../../Directory.Build.props): with
-  `-p:Version=1.2.3-rc.4`, `FileVersion` is `1.2.3.0` and `ProductVersion` is `1.2.3-rc.4`.
-- The SDK copies the dll's resources into the apphost (`AiPet.exe`), and NativeAOT into the native exe
-  (`aipet-hook.exe`). The release's check step reads them as Windows does and fails unless each exe's
+- The hook that ships is the Rust one. Its build script
+  ([rust/crates/aipet-hook/build.rs](../../rust/crates/aipet-hook/build.rs)) gives `aipet-hook.exe` the resources
+  the targets give the .NET hook, byte for byte: the icon, `build/default.win32manifest` and the same version
+  resource. It compiles them with the Windows SDK's `rc.exe`, through the `winresource` crate.
+- The app's version comes from `-p:Version` through [Directory.Build.props](../../Directory.Build.props), and the
+  hook's from `AIPET_VERSION`, which the release sets to the same version (`0.0.0-dev` without it). With
+  `1.2.3-rc.4`, `FileVersion` is `1.2.3.0` and `ProductVersion` is `1.2.3-rc.4`.
+- The SDK copies the dll's resources into the apphost (`AiPet.exe`), and cargo links the hook's into
+  `aipet-hook.exe`. The release's check step reads them as Windows does and fails unless each exe's
   `OriginalFilename` and `InternalName` are its own name, `ProductName` is `AiPet` and `ProductVersion` is the
   release's version.
-- `ResourceTests` checks the same fields in the built dlls on every OS.
+- `ResourceTests` checks the same fields in the built dlls on every OS. On Windows, CI also checks that the Rust
+  hook's resources are the .NET hook's, byte for byte (`RustHook_CarriesTheDotnetHooksResources`).
 
 ## Checking a package by hand
 

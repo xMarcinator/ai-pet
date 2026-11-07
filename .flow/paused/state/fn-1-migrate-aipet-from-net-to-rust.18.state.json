@@ -1,0 +1,45 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-10-01T12:37:20.777144Z",
+  "evidence": {
+    "base_commit": "e3c3e826cee625e2307fee6dbb8a5cf5863e5857",
+    "commits": [
+      "dfcb86098df9686aed7449ba0a27d3e6ca48b526",
+      "4c10519"
+    ],
+    "integrated": {
+      "base": "e3c3e82",
+      "head": "4c10519",
+      "merges": [
+        "1b15f28",
+        "73c1310"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from all three draws (P2, R12): on Linux MediaPlayer::name() was always 'Spotify' and PetUi read it once, so Settings didn't name the player the polls followed",
+      "fix_commits": [
+        "4c10519"
+      ],
+      "note": "the conductor allowed aipet-ui/src/platform.rs and lib.rs for the fix; flowctl 6.7.0 pinned to codex:gpt-5.6-sol:high, no transport failures",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-0757dc89cb65-fn-1-migrate-aipet-from-net-to-rust.18.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green at e3c3e82, no receipt, so both gates ran (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: 337 passed, 1 ignored, clippy and fmt clean; dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: 160 passed, 52 skipped)",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: green at dfcb860, CARGO_NET_OFFLINE=true (351 passed, 0 failed, 2 ignored: the baseline one and the tool helper; tests/platform.rs ran its 14; green receipt dfcb8609-unittest)",
+      "dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: green at dfcb860 (160 passed, 52 skipped; green receipt dfcb8609-dotnet)",
+      "cd rust && cargo clippy --workspace --all-targets --locked -- -D warnings: clean at dfcb860",
+      "cd rust && cargo clippy --offline -p aipet-wayland -p aipet-desktop -p aipet-ui --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu -- -D warnings (task 15 stand-ins, RUSTC_BOOTSTRAP=1): clean at dfcb860",
+      "cd rust && cargo clippy --offline -p aipet-desktop -p aipet-ui --all-targets -Zbuild-std --target aarch64-apple-darwin -- -D warnings (task 15 stand-ins, RUSTC_BOOTSTRAP=1): clean at dfcb860",
+      "mutation checks on dfcb860 sources: 32 mutations of linux.rs, windows.rs and mod.rs each fail a test in tests/platform.rs; the one not caught: the quotes in status.contains(\"\\\"Playing\\\"\")",
+      "integrated verify (Windows, work branch 1d84482 with tasks 16, 17 and 18 and their review fixes merged): cargo test --workspace --no-fail-fast -- --skip credential_manager_tokens_are_the_apps green, clippy -D warnings and fmt clean; at fd770c6: dotnet build and test 160 passed, 53 skipped, and AIPET_TEST_HOOK=<.NET hook dll> cargo test -p aipet-core --test server green; the full gate's antivirus failures under load (two C# RegistrationTests with 'Access to the path is denied', the live registration and doctor replays, claude_registration_is_the_csharps) all passed when rerun alone at 73c1310 and f0ebc65"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-02T08:57:14.915782Z"
+}

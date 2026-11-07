@@ -1,0 +1,51 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-29T11:28:35.527921Z",
+  "evidence": {
+    "base_commit": "82bb3847a336776d10172d41b4dd0fc6e66c9162",
+    "commits": [
+      "edd13712ddc4df602f0ff1b7fc9e508298072fdc",
+      "9af86c4",
+      "4a53d2d"
+    ],
+    "integrated": {
+      "base": "82bb384",
+      "head": "4a53d2d",
+      "merges": [
+        "4b2b72e",
+        "434c23f"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "earlier_attempt": "6649f46f, cut short by a usage limit (transport failure, refunded); its one finished draw (contracts) also flagged that RegistrationTests' Unix doctor cases go to AIPET_TEST_HOOK before task 5 ports --doctor, recorded for tasks 5 and 9",
+      "first_round": "NEEDS_WORK from a fresh three-draw fan-out: P2 the golden replay's 3-attempt retry and the generator's two-in-a-row loop could hide nondeterminism (all three draws); P2 Unix full_path dropped a leading .. under a relative CLAUDE_CONFIG_DIR (integration)",
+      "fix_commits": [
+        "9af86c4",
+        "4a53d2d"
+      ],
+      "note": "flowctl's default /tmp receipt path reads as C:\tmp in Windows Python, so review-route without --receipt falsely reports lost_receipt",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-9fc62ea5c4c9-fn-1-migrate-aipet-from-net-to-rust.3.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: rc 0; dotnet test AiPet.slnx after dotnet build AiPet.slnx -p:UseAppHost=false: 160 passed, 42 skipped)",
+      "cd rust && cargo test --workspace -- --skip credential_manager_tokens_are_the_apps && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check (rc 0, final tree)",
+      "dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build (160 passed, 42 skipped, final tree)",
+      "AIPET_GOLDEN=<abs>/rust/golden/bin/Release/net10.0/aipet-golden.dll cargo test -p aipet-hook --test registration (5 passed: committed golden replayed, and a live C# run on Windows replayed; json.json identical)",
+      "AIPET_TEST_HOOK=<worktree>/rust/target/debug/aipet-hook.exe dotnet test tests/AiPet.Tests --no-build --filter PluginHooksTests|RegistrationTests (14 passed, 10 skipped as Unix-only; Install_UnderDotnet_Refuses and PrintPluginHooks_* ran the Rust hook, checked by a bogus AIPET_TEST_HOOK failing them)",
+      "dotnet test tests/AiPet.Tests --no-build --filter PluginHooksTests|RegistrationTests without AIPET_TEST_HOOK (14 passed, 10 skipped)",
+      "RUSTC_BOOTSTRAP=1 cargo clippy -p aipet-hook --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu -- -D warnings (clean: the Unix-only code and tests type-check and lint; not run)",
+      "dotnet rust/golden/bin/Release/net10.0/aipet-golden.dll registration run twice: claude.json byte-identical (deterministic)",
+      "mutation: keeping 2 backups instead of 3 fails claude_registration_is_the_csharps (hooks-empty step 2, files)",
+      "integrated verify (Windows, work branch 434c23f with the review fixes merged): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green, clippy --workspace --all-targets -D warnings and fmt --check clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped; AIPET_GOLDEN=<golden dll> cargo test -p aipet-hook --test registration: 6 passed (live C# replay included); RUSTC_BOOTSTRAP=1 cargo clippy -p aipet-hook --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu -- -D warnings: clean (4a53d2d's Unix-only code is linted, not run)",
+      "AIPET_TEST_HOOK=<rust hook> dotnet test --filter PluginHooksTests|RegistrationTests: 14 passed in 4 of 4 runs. The 3 runs right after the rebuild each failed 1-2 in-process C# cases (ClaudeConfig.Install -> Install.Save -> File.Move: UnauthorizedAccessException) while the freshly built unsigned hook was new to the antivirus; RegistrationTests alone, the two failing cases alone, and the pair without AIPET_TEST_HOOK passed every time, and the same exe (sha256 639017c884ba4b76...) then passed 4 of 4"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-30T08:54:08.213816Z"
+}

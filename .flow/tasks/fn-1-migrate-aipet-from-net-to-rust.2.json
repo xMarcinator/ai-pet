@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.242727Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.1"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.2",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.2.md",
+  "status": "todo",
+  "title": "Rust hook event path, trace log and panic safety, run against the C# black-box suites",
+  "updated_at": "2026-09-28T18:25:22.223038Z"
+}

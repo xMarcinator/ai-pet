@@ -1,0 +1,46 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-10-01T12:37:04.487738Z",
+  "evidence": {
+    "base_commit": "e3c3e826cee625e2307fee6dbb8a5cf5863e5857",
+    "commits": [
+      "58813e8d5058c5d69aeffc79d946aa8574b1b3da",
+      "cb7c0075d657ec0189b6516232e499daa093e294",
+      "758bb86"
+    ],
+    "integrated": {
+      "base": "e3c3e82",
+      "head": "758bb86",
+      "merges": [
+        "fd770c6",
+        "1d84482"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from all three draws: on Wayland, outputs with mixed scales got desktop px origins unlike the desktop shell's, and still-visible saved places were clamped inward (R11); Reset position was dropped while the surface was opening or dragged, and a drop on an unknown output left a stale place (R10/R11)",
+      "fix_commits": [
+        "758bb86"
+      ],
+      "note": "the xwayland:force_zero_scaling-off case stays a documented limit (the shells disagree by the scale there); flowctl 6.7.0 pinned to codex:gpt-5.6-sol:high, no transport failures",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/claude/C--Users-MJE-Documents-projects-ai-pet/f87b5d6a-45b2-4527-b181-ebc7e0bf4a67/scratchpad/impl-review-fn-1.16.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green at e3c3e82 (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check stopped twice on aipet-core server tests that time out under the sibling builds; they passed alone, and cargo test --workspace --no-fail-fast with clippy -D warnings and fmt --check gave 337 passed, clean; dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build gave 160 passed, 52 skipped)",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: green at cb7c007, 343 passed, 0 failed, 1 ignored (green receipt cb7c0075-unittest)",
+      "dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: green at cb7c007, 160 passed, 52 skipped (green receipt cb7c0075-dotnet)",
+      "aipet-wayland drag.rs through a scratch crate on Windows (cargo test --offline, [lib] path = the worktree drag.rs): 18 passed",
+      "cross-target clippy -D warnings --locked --offline with the real crates (task 15 cc/ar/pkg-config stand-ins only): x86_64-unknown-linux-gnu -p aipet-wayland -p aipet-desktop -p aipet-ui -p aipet --all-targets clean; aarch64-apple-darwin -p aipet-desktop -p aipet-ui -p aipet --all-targets clean",
+      "mutation checks: 12 of 12 caught (aipet-desktop shell 5, drag.rs 7); placement and config earlier: 5 of 6 tests failed as intended",
+      "not run here: aipet-wayland shell.rs tests (Linux only; 4 new, compiled by the Linux cross clippy) and the manual AIPET_BACKEND switch check (task 22)",
+      "integrated verify (Windows, work branch 1d84482 with tasks 16, 17 and 18 and their review fixes merged): cargo test --workspace --no-fail-fast -- --skip credential_manager_tokens_are_the_apps green, clippy -D warnings and fmt clean; at fd770c6: dotnet build and test 160 passed, 53 skipped, and AIPET_TEST_HOOK=<.NET hook dll> cargo test -p aipet-core --test server green; the full gate's antivirus failures under load (two C# RegistrationTests with 'Access to the path is denied', the live registration and doctor replays, claude_registration_is_the_csharps) all passed when rerun alone at 73c1310 and f0ebc65"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-02T08:56:58.963476Z"
+}

@@ -8,8 +8,9 @@ using Xunit;
 namespace AiPet.Tests;
 
 /// The Windows resources build/Win32Resources.targets gives AiPet.dll and aipet-hook.dll: the icon, the manifest, and
-/// a version resource that names the .exe. Windows copies them into AiPet.exe (the apphost) and aipet-hook.exe
-/// (NativeAOT); that part only happens on Windows, where FileVersionInfo also reads them the way Windows does.
+/// a version resource that names the .exe. Windows copies AiPet.dll's into AiPet.exe (the apphost); that part only
+/// happens on Windows, where FileVersionInfo also reads them the way Windows does. The aipet-hook.exe that ships is
+/// the Rust one, whose build script (rust/crates/aipet-hook/build.rs) embeds the same resources.
 public class ResourceTests
 {
     const int RT_ICON = 3, RT_GROUP_ICON = 14, RT_VERSION = 16, RT_MANIFEST = 24;
@@ -106,6 +107,36 @@ public class ResourceTests
             Assert.Equal(title, v.FileDescription);
             Assert.Equal("AiPet", v.ProductName);
             Assert.Equal(Attributes(dll)["AssemblyInformationalVersionAttribute"], v.ProductVersion);
+        }
+    }
+
+    /// The Rust hook (AIPET_TEST_HOOK) carries the .NET hook's resources byte for byte: the icon group and its images,
+    /// the manifest and the version resource, at the version both were built with (0.0.0-dev, unless AIPET_VERSION
+    /// and -p:Version say otherwise). Windows reads its version resource as it reads the .NET hook's.
+    [RustHookFact]
+    public void RustHook_CarriesTheDotnetHooksResources()
+    {
+        var rust = Resources(TestEnv.TestHook);
+        var dotnet = Resources(TestEnv.HookDll);
+        Assert.Equal(dotnet.Keys.Order(), rust.Keys.Order());
+        foreach (var key in dotnet.Keys) Assert.True(dotnet[key].SequenceEqual(rust[key]), $"resource {key} differs");
+
+        var v = FileVersionInfo.GetVersionInfo(TestEnv.TestHook);
+        Assert.Equal("aipet-hook.exe", v.OriginalFilename);
+        Assert.Equal("aipet-hook.exe", v.InternalName);
+        Assert.Equal("AiPet hook", v.FileDescription);
+        Assert.Equal("AiPet", v.ProductName);
+        Assert.Equal(Attributes(TestEnv.HookDll)["AssemblyInformationalVersionAttribute"], v.ProductVersion);
+    }
+
+    /// Windows, with AIPET_TEST_HOOK naming a Rust-built aipet-hook.exe (ci.yml); skipped elsewhere.
+    sealed class RustHookFactAttribute : FactAttribute
+    {
+        public RustHookFactAttribute()
+        {
+            if (!OperatingSystem.IsWindows()) Skip = "Windows only";
+            else if (TestEnv.TestHook?.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) != true)
+                Skip = "AIPET_TEST_HOOK doesn't name a Rust-built aipet-hook.exe";
         }
     }
 

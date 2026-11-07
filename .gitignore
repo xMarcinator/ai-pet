@@ -23,3 +23,10 @@ TestResults/
 *.log
 *.tmp
 .claude/settings.local.json
+
+# The Rust spike's build output (rust/)
+rust/target/
+# the research prototypes in rust/notes build on their own; their sources in src/bin are kept
+rust/notes/prototypes/*/target/
+rust/notes/prototypes/*/Cargo.lock
+!rust/notes/prototypes/*/src/bin/

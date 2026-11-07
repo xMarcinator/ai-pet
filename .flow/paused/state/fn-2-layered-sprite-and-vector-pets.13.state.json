@@ -1,0 +1,14 @@
+{
+  "evidence": {
+    "commits": [
+      "e0b5d5d",
+      "65e27a6"
+    ],
+    "prs": [],
+    "tests": [
+      "spike runs recorded in its proof"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-07T11:09:16.333655Z"
+}

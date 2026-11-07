@@ -1,0 +1,51 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-10-01T09:56:00.171046Z",
+  "evidence": {
+    "base_commit": "34a79e45487ad8dbc76fbccff83638a5dfe112d4",
+    "commits": [
+      "465b425c9375b3a7c2a903b189e026cacc2785af",
+      "2b6315a591b1b5a8390a96b606c7c5ca1a140902"
+    ],
+    "integrated": {
+      "base": "34a79e4",
+      "head": "2b6315a",
+      "merges": [
+        "c324cd4",
+        "50b5ee2"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from all three draws: the .NET pet's fail-open lock (with a broken lock file two .NET pets in different sessions could both start, while the Rust pet refuses); the contracts draw also found that the XDG_RUNTIME_DIR cases never reached the default lock because AIPET_PIPE overrides it. All three found the dry run's push, tag, release and marketplace-pin steps gated",
+      "fix_commits": [
+        "2b6315a"
+      ],
+      "note": "flow-next 6.7.0's flowctl pinned to codex:gpt-5.6-sol:high; round 1 finalized with --merged-file after flowctl couldn't parse one draw's pre-existing bullet; no transport failures",
+      "open": "pre-existing: the plugin job pushes the plugin branch and tag (release.yml:477) before the publish job computes SHA256SUMS, so a failure after that push still leaves the plugin published",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-2855562e7dce-fn-1-migrate-aipet-from-net-to-rust.6.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green at 34a79e4 (cd rust && cargo test --workspace -- --skip credential_manager_tokens_are_the_apps && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check: 311 passed; dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped)",
+      "cd rust && cargo test --workspace -- --skip credential_manager_tokens_are_the_apps && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check: green (Windows, rust 1.98.1; 311 passed, as at baseline; build.rs linted) - green receipt 465b425c unittest-rust",
+      "dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: green (Windows; 160 passed, 51 skipped: the 9 new skips are the Linux/Unix-only SingleInstanceTests and ReleaseWorkflowTests entries and RustHook_CarriesTheDotnetHooksResources without AIPET_TEST_HOOK) - green receipt 465b425c unittest",
+      "AIPET_TEST_HOOK=rust/target/debug/aipet-hook.exe dotnet test tests/AiPet.Tests --no-build --filter <cross-runtime.yml's 10 hook classes + ResourceTests>: 42 passed, 21 skipped (Unix-only), 0 failed",
+      "AIPET_TEST_HOOK=<aipet-hook.exe built with RUSTFLAGS=-C target-feature=+crt-static --target x86_64-pc-windows-msvc> dotnet test --filter ResourceTests.RustHook: passed (resources byte-identical to the .NET hook's; imports only OS DLLs, no VCRUNTIME140.dll/api-ms-win-crt-*)",
+      "Linux (WSL Ubuntu 24.04, .NET 10.0.12 from the local runtime pack, WSL SDK 8 vstest.console; tests built from LF sources) on 465b425: SingleInstanceTests 7 + ReleaseWorkflowTests 24 + PluginHooksTests 6 = 37 passed, 0 failed",
+      "mutation checks (WSL Linux): lock path from XDG_RUNTIME_DIR -> 6 of 7 SingleInstanceTests fail (two pets run, the contract lock doesn't keep the pet out, the path isn't next to the socket); open without O_NOFOLLOW -> ASymlinkAtTheLocksPath_IsNotFollowed fails (target made); release.yml without the dry-run gates -> Check_ReleasesFromMain_DryRunsFromAnyBranch(branch, true) and DryRun_PushesAndPublishesNothing(true) fail; Windows: hook built with AIPET_VERSION=9.8.7-rc.1 -> RustHook_CarriesTheDotnetHooksResources fails on resource (16, 1)",
+      "bash -n build.sh scripts/install-from-source.sh scripts/check-plugin.sh, and of all 40 bash run steps of release.yml and ci.yml: clean; YAML parse of both workflows: ok; shellcheck not installed here (CI's scripts job runs it)",
+      "bash scripts/check-plugin.sh --marketplaces . plugins/aipet --hook rust/target/debug/aipet-hook (and --hook cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook --): Plugin files OK",
+      "ci.yml hook-startup script logic dry-run locally with the debug Rust hook on both sides (20 runs): runs and summarises; this machine's antivirus adds ~300 ms per start, so it can't measure the budget - CI only",
+      "CI only, not run here: release.yml dry run (cargo zigbuild with ziglang 0.13.0 / cargo-zigbuild 0.19.8 pins, the glibc gate on the zigbuild hooks, the Windows hook build, the pwsh resource check), ci.yml's new steps (Rust hook resources on windows-2022, check-plugin with the Rust hook, the hook-startup benchmark), the PowerShell 7 / 5.1 parse of build.ps1 and install-from-source.ps1, shellcheck",
+      "integrated verify (Windows, work branch c324cd4, then 50b5ee2 with the review fix): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green, clippy -D warnings and fmt clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 52 skipped (the Linux-only SingleInstanceTests among them); AIPET_TEST_HOOK=<rust hook> dotnet test --filter PluginHooksTests|RegistrationTests|ResourceTests: 23 passed, 10 Unix-only skipped; AIPET_TEST_HOOK=<.NET hook dll> cargo test -p aipet-core --test server: 15 passed; with AIPET_GOLDEN every live replay green when run alone. In the full gate right after the hook's rebuild, the server test claude_hook_forwards_the_event_and_its_environment_silently, one C# test on the Rust hook and the codex live replay each failed once (a fresh unsigned exe under the antivirus); each passed on rerun",
+      "only CI confirms: the release dry run (zigbuild with the ziglang 0.13.0 and cargo-zigbuild 0.19.8 pins, the glibc gate, the Windows build and its resource check), ci.yml's hook-startup benchmark, the PowerShell parse of build.ps1 and install-from-source.ps1, and shellcheck; the worker and the reviewers ran the Linux SingleInstanceTests (11, three of them in unshare namespaces) in WSL on a .NET 10.0.12 runtime assembled from the local NuGet runtime pack"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-01T12:29:46.545527Z"
+}

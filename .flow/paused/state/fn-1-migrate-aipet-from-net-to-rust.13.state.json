@@ -1,0 +1,52 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-29T10:47:26.997153Z",
+  "evidence": {
+    "base_commit": "b42341d35a417f303556c6d98cdf8f3bf624aa1c",
+    "commits": [
+      "db3db70e652c0d500ffd5e18188ff8c08e290a79",
+      "d0ba9b58fff7769e4acf14bf1a9765d52154195b",
+      "1618f3d",
+      "8fcac16",
+      "565162e",
+      "58c81a4"
+    ],
+    "integrated": {
+      "base": "b42341d",
+      "head": "58c81a4",
+      "merges": [
+        "6bffb8a",
+        "74c7e76"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "earlier_attempts": "899d7578 abandoned when a session ended; 666a9402 hit a 540 s timeout override and hung on an orphaned Codex hook pwsh until the user ended it; both refunded as transport failures, reset to 0 on SHIP",
+      "first_round": "NEEDS_WORK: P2 the AIPET_DEBUG GPU probe resolved Auto alpha by the surface's list order where wgpu prefers Opaque (contracts); correctness and integration SHIP",
+      "fix_commits": [
+        "565162e"
+      ],
+      "post_review": "58c81a4 (conductor): the re-run section builds the spike in a subshell so its paths hold from the root, a P3 found by an abandoned draw",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-d886d8130374-fn-1-migrate-aipet-from-net-to-rust.13.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check; 144 passed, pre-edit)",
+      "cd rust && cargo test --workspace -- --skip credential_manager_tokens_are_the_apps && cargo clippy --workspace --all-targets && cargo fmt --all -- --check (at d0ba9b5: 145 passed, 1 filtered, clippy and fmt clean; green receipt d0ba9b58-unittest)",
+      "dotnet build AiPet.slnx -p:UseAppHost=false; dotnet test AiPet.slnx -p:UseAppHost=false (at d0ba9b5: 160 passed, 42 skipped, 0 failed; green receipt d0ba9b58-dotnet)",
+      "red first: cargo test -p aipet-ui --lib style:: failed with Windows has no \"Noto Sans\" before the font change",
+      "red first: cargo test -p aipet-desktop --lib focus failed (assertion shell.drag.is_none()) before the focus-loss change",
+      "hands-on (user, 2026-09-29, runbook .flow/tmp/wave-2026-09-29/task-13-runbook.md on db3db70 release): logs .flow/tmp/wave-2026-09-29/task-13-logs/, screenshots C:/Users/MJE/Pictures/aipet-task-13/; results in rust/proofs/windows.md",
+      "INCONCLUSIVE: the lost-release fix and the moved GPU probe (d0ba9b5) are unit-tested only, not re-run by hand",
+      "proof check (conductor workflow, 2026-09-29): two independent checkers compared rust/proofs/windows.md with the raw logs, the runbook, the code and the user's reports (200 claims); a skeptic tried to refute each of the 28 discrepancies raised: 18 confirmed, 10 refuted; all 18 corrected in 8fcac16 (for example, the second monitor is to the right, not above; click-through was reported with the default backend only; the drag onto the other monitor at 100 % and the menu at 150 % were not shown)",
+      "integrated verify (Windows, work branch 74c7e76 with the review work merged): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green, clippy --workspace --all-targets -D warnings and fmt --check clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped",
+      "INCONCLUSIVE (hands-on): d0ba9b5's lost-release fix and moved GPU probe, the menu at 150 %, the drag onto the other monitor at 100 %, and click-through with each backend were not shown by hand; recorded in the proof's Limits and in task 27"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-30T09:30:42.314577Z"
+}

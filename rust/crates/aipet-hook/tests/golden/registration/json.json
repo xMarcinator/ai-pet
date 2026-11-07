@@ -1,0 +1,2669 @@
+{
+  "about": "Written by rust/golden (dotnet run --project rust/golden -c Release -- registration) with System.Text.Json; replayed by rust/crates/aipet-hook (src/json_out.rs). Don't edit by hand.",
+  "escaped": {
+    "relaxed": [
+      [
+        0,
+        31
+      ],
+      [
+        34,
+        34
+      ],
+      [
+        92,
+        92
+      ],
+      [
+        127,
+        160
+      ],
+      [
+        888,
+        889
+      ],
+      [
+        896,
+        899
+      ],
+      [
+        907,
+        907
+      ],
+      [
+        909,
+        909
+      ],
+      [
+        930,
+        930
+      ],
+      [
+        1328,
+        1328
+      ],
+      [
+        1367,
+        1368
+      ],
+      [
+        1419,
+        1420
+      ],
+      [
+        1424,
+        1424
+      ],
+      [
+        1480,
+        1487
+      ],
+      [
+        1515,
+        1518
+      ],
+      [
+        1525,
+        1535
+      ],
+      [
+        1806,
+        1806
+      ],
+      [
+        1867,
+        1868
+      ],
+      [
+        1970,
+        1983
+      ],
+      [
+        2043,
+        2044
+      ],
+      [
+        2094,
+        2095
+      ],
+      [
+        2111,
+        2111
+      ],
+      [
+        2140,
+        2141
+      ],
+      [
+        2143,
+        2143
+      ],
+      [
+        2155,
+        2159
+      ],
+      [
+        2191,
+        2191
+      ],
+      [
+        2194,
+        2198
+      ],
+      [
+        2436,
+        2436
+      ],
+      [
+        2445,
+        2446
+      ],
+      [
+        2449,
+        2450
+      ],
+      [
+        2473,
+        2473
+      ],
+      [
+        2481,
+        2481
+      ],
+      [
+        2483,
+        2485
+      ],
+      [
+        2490,
+        2491
+      ],
+      [
+        2501,
+        2502
+      ],
+      [
+        2505,
+        2506
+      ],
+      [
+        2511,
+        2518
+      ],
+      [
+        2520,
+        2523
+      ],
+      [
+        2526,
+        2526
+      ],
+      [
+        2532,
+        2533
+      ],
+      [
+        2559,
+        2560
+      ],
+      [
+        2564,
+        2564
+      ],
+      [
+        2571,
+        2574
+      ],
+      [
+        2577,
+        2578
+      ],
+      [
+        2601,
+        2601
+      ],
+      [
+        2609,
+        2609
+      ],
+      [
+        2612,
+        2612
+      ],
+      [
+        2615,
+        2615
+      ],
+      [
+        2618,
+        2619
+      ],
+      [
+        2621,
+        2621
+      ],
+      [
+        2627,
+        2630
+      ],
+      [
+        2633,
+        2634
+      ],
+      [
+        2638,
+        2640
+      ],
+      [
+        2642,
+        2648
+      ],
+      [
+        2653,
+        2653
+      ],
+      [
+        2655,
+        2661
+      ],
+      [
+        2679,
+        2688
+      ],
+      [
+        2692,
+        2692
+      ],
+      [
+        2702,
+        2702
+      ],
+      [
+        2706,
+        2706
+      ],
+      [
+        2729,
+        2729
+      ],
+      [
+        2737,
+        2737
+      ],
+      [
+        2740,
+        2740
+      ],
+      [
+        2746,
+        2747
+      ],
+      [
+        2758,
+        2758
+      ],
+      [
+        2762,
+        2762
+      ],
+      [
+        2766,
+        2767
+      ],
+      [
+        2769,
+        2783
+      ],
+      [
+        2788,
+        2789
+      ],
+      [
+        2802,
+        2808
+      ],
+      [
+        2816,
+        2816
+      ],
+      [
+        2820,
+        2820
+      ],
+      [
+        2829,
+        2830
+      ],
+      [
+        2833,
+        2834
+      ],
+      [
+        2857,
+        2857
+      ],
+      [
+        2865,
+        2865
+      ],
+      [
+        2868,
+        2868
+      ],
+      [
+        2874,
+        2875
+      ],
+      [
+        2885,
+        2886
+      ],
+      [
+        2889,
+        2890
+      ],
+      [
+        2894,
+        2900
+      ],
+      [
+        2904,
+        2907
+      ],
+      [
+        2910,
+        2910
+      ],
+      [
+        2916,
+        2917
+      ],
+      [
+        2936,
+        2945
+      ],
+      [
+        2948,
+        2948
+      ],
+      [
+        2955,
+        2957
+      ],
+      [
+        2961,
+        2961
+      ],
+      [
+        2966,
+        2968
+      ],
+      [
+        2971,
+        2971
+      ],
+      [
+        2973,
+        2973
+      ],
+      [
+        2976,
+        2978
+      ],
+      [
+        2981,
+        2983
+      ],
+      [
+        2987,
+        2989
+      ],
+      [
+        3002,
+        3005
+      ],
+      [
+        3011,
+        3013
+      ],
+      [
+        3017,
+        3017
+      ],
+      [
+        3022,
+        3023
+      ],
+      [
+        3025,
+        3030
+      ],
+      [
+        3032,
+        3045
+      ],
+      [
+        3067,
+        3071
+      ],
+      [
+        3085,
+        3085
+      ],
+      [
+        3089,
+        3089
+      ],
+      [
+        3113,
+        3113
+      ],
+      [
+        3130,
+        3131
+      ],
+      [
+        3141,
+        3141
+      ],
+      [
+        3145,
+        3145
+      ],
+      [
+        3150,
+        3156
+      ],
+      [
+        3159,
+        3159
+      ],
+      [
+        3163,
+        3164
+      ],
+      [
+        3166,
+        3167
+      ],
+      [
+        3172,
+        3173
+      ],
+      [
+        3184,
+        3190
+      ],
+      [
+        3213,
+        3213
+      ],
+      [
+        3217,
+        3217
+      ],
+      [
+        3241,
+        3241
+      ],
+      [
+        3252,
+        3252
+      ],
+      [
+        3258,
+        3259
+      ],
+      [
+        3269,
+        3269
+      ],
+      [
+        3273,
+        3273
+      ],
+      [
+        3278,
+        3284
+      ],
+      [
+        3287,
+        3292
+      ],
+      [
+        3295,
+        3295
+      ],
+      [
+        3300,
+        3301
+      ],
+      [
+        3312,
+        3312
+      ],
+      [
+        3316,
+        3327
+      ],
+      [
+        3341,
+        3341
+      ],
+      [
+        3345,
+        3345
+      ],
+      [
+        3397,
+        3397
+      ],
+      [
+        3401,
+        3401
+      ],
+      [
+        3408,
+        3411
+      ],
+      [
+        3428,
+        3429
+      ],
+      [
+        3456,
+        3456
+      ],
+      [
+        3460,
+        3460
+      ],
+      [
+        3479,
+        3481
+      ],
+      [
+        3506,
+        3506
+      ],
+      [
+        3516,
+        3516
+      ],
+      [
+        3518,
+        3519
+      ],
+      [
+        3527,
+        3529
+      ],
+      [
+        3531,
+        3534
+      ],
+      [
+        3541,
+        3541
+      ],
+      [
+        3543,
+        3543
+      ],
+      [
+        3552,
+        3557
+      ],
+      [
+        3568,
+        3569
+      ],
+      [
+        3573,
+        3584
+      ],
+      [
+        3643,
+        3646
+      ],
+      [
+        3676,
+        3712
+      ],
+      [
+        3715,
+        3715
+      ],
+      [
+        3717,
+        3717
+      ],
+      [
+        3723,
+        3723
+      ],
+      [
+        3748,
+        3748
+      ],
+      [
+        3750,
+        3750
+      ],
+      [
+        3774,
+        3775
+      ],
+      [
+        3781,
+        3781
+      ],
+      [
+        3783,
+        3783
+      ],
+      [
+        3791,
+        3791
+      ],
+      [
+        3802,
+        3803
+      ],
+      [
+        3808,
+        3839
+      ],
+      [
+        3912,
+        3912
+      ],
+      [
+        3949,
+        3952
+      ],
+      [
+        3992,
+        3992
+      ],
+      [
+        4029,
+        4029
+      ],
+      [
+        4045,
+        4045
+      ],
+      [
+        4059,
+        4095
+      ],
+      [
+        4294,
+        4294
+      ],
+      [
+        4296,
+        4300
+      ],
+      [
+        4302,
+        4303
+      ],
+      [
+        4681,
+        4681
+      ],
+      [
+        4686,
+        4687
+      ],
+      [
+        4695,
+        4695
+      ],
+      [
+        4697,
+        4697
+      ],
+      [
+        4702,
+        4703
+      ],
+      [
+        4745,
+        4745
+      ],
+      [
+        4750,
+        4751
+      ],
+      [
+        4785,
+        4785
+      ],
+      [
+        4790,
+        4791
+      ],
+      [
+        4799,
+        4799
+      ],
+      [
+        4801,
+        4801
+      ],
+      [
+        4806,
+        4807
+      ],
+      [
+        4823,
+        4823
+      ],
+      [
+        4881,
+        4881
+      ],
+      [
+        4886,
+        4887
+      ],
+      [
+        4955,
+        4956
+      ],
+      [
+        4989,
+        4991
+      ],
+      [
+        5018,
+        5023
+      ],
+      [
+        5110,
+        5111
+      ],
+      [
+        5118,
+        5119
+      ],
+      [
+        5760,
+        5760
+      ],
+      [
+        5789,
+        5791
+      ],
+      [
+        5881,
+        5887
+      ],
+      [
+        5910,
+        5918
+      ],
+      [
+        5943,
+        5951
+      ],
+      [
+        5972,
+        5983
+      ],
+      [
+        5997,
+        5997
+      ],
+      [
+        6001,
+        6001
+      ],
+      [
+        6004,
+        6015
+      ],
+      [
+        6110,
+        6111
+      ],
+      [
+        6122,
+        6127
+      ],
+      [
+        6138,
+        6143
+      ],
+      [
+        6170,
+        6175
+      ],
+      [
+        6265,
+        6271
+      ],
+      [
+        6315,
+        6319
+      ],
+      [
+        6390,
+        6399
+      ],
+      [
+        6431,
+        6431
+      ],
+      [
+        6444,
+        6447
+      ],
+      [
+        6460,
+        6463
+      ],
+      [
+        6465,
+        6467
+      ],
+      [
+        6510,
+        6511
+      ],
+      [
+        6517,
+        6527
+      ],
+      [
+        6572,
+        6575
+      ],
+      [
+        6602,
+        6607
+      ],
+      [
+        6619,
+        6621
+      ],
+      [
+        6684,
+        6685
+      ],
+      [
+        6751,
+        6751
+      ],
+      [
+        6781,
+        6782
+      ],
+      [
+        6794,
+        6799
+      ],
+      [
+        6810,
+        6815
+      ],
+      [
+        6830,
+        6831
+      ],
+      [
+        6863,
+        6911
+      ],
+      [
+        6989,
+        6989
+      ],
+      [
+        7156,
+        7163
+      ],
+      [
+        7224,
+        7226
+      ],
+      [
+        7242,
+        7244
+      ],
+      [
+        7307,
+        7311
+      ],
+      [
+        7355,
+        7356
+      ],
+      [
+        7368,
+        7375
+      ],
+      [
+        7419,
+        7423
+      ],
+      [
+        7958,
+        7959
+      ],
+      [
+        7966,
+        7967
+      ],
+      [
+        8006,
+        8007
+      ],
+      [
+        8014,
+        8015
+      ],
+      [
+        8024,
+        8024
+      ],
+      [
+        8026,
+        8026
+      ],
+      [
+        8028,
+        8028
+      ],
+      [
+        8030,
+        8030
+      ],
+      [
+        8062,
+        8063
+      ],
+      [
+        8117,
+        8117
+      ],
+      [
+        8133,
+        8133
+      ],
+      [
+        8148,
+        8149
+      ],
+      [
+        8156,
+        8156
+      ],
+      [
+        8176,
+        8177
+      ],
+      [
+        8181,
+        8181
+      ],
+      [
+        8191,
+        8202
+      ],
+      [
+        8232,
+        8233
+      ],
+      [
+        8239,
+        8239
+      ],
+      [
+        8287,
+        8287
+      ],
+      [
+        8293,
+        8293
+      ],
+      [
+        8306,
+        8307
+      ],
+      [
+        8335,
+        8335
+      ],
+      [
+        8349,
+        8351
+      ],
+      [
+        8385,
+        8399
+      ],
+      [
+        8433,
+        8447
+      ],
+      [
+        8588,
+        8591
+      ],
+      [
+        9258,
+        9279
+      ],
+      [
+        9291,
+        9311
+      ],
+      [
+        11124,
+        11125
+      ],
+      [
+        11158,
+        11158
+      ],
+      [
+        11508,
+        11512
+      ],
+      [
+        11558,
+        11558
+      ],
+      [
+        11560,
+        11564
+      ],
+      [
+        11566,
+        11567
+      ],
+      [
+        11624,
+        11630
+      ],
+      [
+        11633,
+        11646
+      ],
+      [
+        11671,
+        11679
+      ],
+      [
+        11687,
+        11687
+      ],
+      [
+        11695,
+        11695
+      ],
+      [
+        11703,
+        11703
+      ],
+      [
+        11711,
+        11711
+      ],
+      [
+        11719,
+        11719
+      ],
+      [
+        11727,
+        11727
+      ],
+      [
+        11735,
+        11735
+      ],
+      [
+        11743,
+        11743
+      ],
+      [
+        11870,
+        11903
+      ],
+      [
+        11930,
+        11930
+      ],
+      [
+        12020,
+        12031
+      ],
+      [
+        12246,
+        12271
+      ],
+      [
+        12288,
+        12288
+      ],
+      [
+        12352,
+        12352
+      ],
+      [
+        12439,
+        12440
+      ],
+      [
+        12544,
+        12548
+      ],
+      [
+        12592,
+        12592
+      ],
+      [
+        12687,
+        12687
+      ],
+      [
+        12774,
+        12782
+      ],
+      [
+        12831,
+        12831
+      ],
+      [
+        42125,
+        42127
+      ],
+      [
+        42183,
+        42191
+      ],
+      [
+        42540,
+        42559
+      ],
+      [
+        42744,
+        42751
+      ],
+      [
+        42958,
+        42959
+      ],
+      [
+        42962,
+        42962
+      ],
+      [
+        42964,
+        42964
+      ],
+      [
+        42973,
+        42993
+      ],
+      [
+        43053,
+        43055
+      ],
+      [
+        43066,
+        43071
+      ],
+      [
+        43128,
+        43135
+      ],
+      [
+        43206,
+        43213
+      ],
+      [
+        43226,
+        43231
+      ],
+      [
+        43348,
+        43358
+      ],
+      [
+        43389,
+        43391
+      ],
+      [
+        43470,
+        43470
+      ],
+      [
+        43482,
+        43485
+      ],
+      [
+        43519,
+        43519
+      ],
+      [
+        43575,
+        43583
+      ],
+      [
+        43598,
+        43599
+      ],
+      [
+        43610,
+        43611
+      ],
+      [
+        43715,
+        43738
+      ],
+      [
+        43767,
+        43776
+      ],
+      [
+        43783,
+        43784
+      ],
+      [
+        43791,
+        43792
+      ],
+      [
+        43799,
+        43807
+      ],
+      [
+        43815,
+        43815
+      ],
+      [
+        43823,
+        43823
+      ],
+      [
+        43884,
+        43887
+      ],
+      [
+        44014,
+        44015
+      ],
+      [
+        44026,
+        44031
+      ],
+      [
+        55204,
+        55215
+      ],
+      [
+        55239,
+        55242
+      ],
+      [
+        55292,
+        63743
+      ],
+      [
+        64110,
+        64111
+      ],
+      [
+        64218,
+        64255
+      ],
+      [
+        64263,
+        64274
+      ],
+      [
+        64280,
+        64284
+      ],
+      [
+        64311,
+        64311
+      ],
+      [
+        64317,
+        64317
+      ],
+      [
+        64319,
+        64319
+      ],
+      [
+        64322,
+        64322
+      ],
+      [
+        64325,
+        64325
+      ],
+      [
+        64451,
+        64466
+      ],
+      [
+        64912,
+        64913
+      ],
+      [
+        64968,
+        64974
+      ],
+      [
+        64976,
+        65007
+      ],
+      [
+        65050,
+        65055
+      ],
+      [
+        65107,
+        65107
+      ],
+      [
+        65127,
+        65127
+      ],
+      [
+        65132,
+        65135
+      ],
+      [
+        65141,
+        65141
+      ],
+      [
+        65277,
+        65280
+      ],
+      [
+        65471,
+        65473
+      ],
+      [
+        65480,
+        65481
+      ],
+      [
+        65488,
+        65489
+      ],
+      [
+        65496,
+        65497
+      ],
+      [
+        65501,
+        65503
+      ],
+      [
+        65511,
+        65511
+      ],
+      [
+        65519,
+        65528
+      ],
+      [
+        65534,
+        1114111
+      ]
+    ],
+    "default": [
+      [
+        0,
+        31
+      ],
+      [
+        34,
+        34
+      ],
+      [
+        38,
+        39
+      ],
+      [
+        43,
+        43
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        92,
+        92
+      ],
+      [
+        96,
+        96
+      ],
+      [
+        127,
+        1114111
+      ]
+    ]
+  },
+  "escapes": [
+    {
+      "char": 0,
+      "relaxed": "\"\\u0000\"",
+      "default": "\"\\u0000\""
+    },
+    {
+      "char": 1,
+      "relaxed": "\"\\u0001\"",
+      "default": "\"\\u0001\""
+    },
+    {
+      "char": 2,
+      "relaxed": "\"\\u0002\"",
+      "default": "\"\\u0002\""
+    },
+    {
+      "char": 3,
+      "relaxed": "\"\\u0003\"",
+      "default": "\"\\u0003\""
+    },
+    {
+      "char": 4,
+      "relaxed": "\"\\u0004\"",
+      "default": "\"\\u0004\""
+    },
+    {
+      "char": 5,
+      "relaxed": "\"\\u0005\"",
+      "default": "\"\\u0005\""
+    },
+    {
+      "char": 6,
+      "relaxed": "\"\\u0006\"",
+      "default": "\"\\u0006\""
+    },
+    {
+      "char": 7,
+      "relaxed": "\"\\u0007\"",
+      "default": "\"\\u0007\""
+    },
+    {
+      "char": 8,
+      "relaxed": "\"\\b\"",
+      "default": "\"\\b\""
+    },
+    {
+      "char": 9,
+      "relaxed": "\"\\t\"",
+      "default": "\"\\t\""
+    },
+    {
+      "char": 10,
+      "relaxed": "\"\\n\"",
+      "default": "\"\\n\""
+    },
+    {
+      "char": 11,
+      "relaxed": "\"\\u000B\"",
+      "default": "\"\\u000B\""
+    },
+    {
+      "char": 12,
+      "relaxed": "\"\\f\"",
+      "default": "\"\\f\""
+    },
+    {
+      "char": 13,
+      "relaxed": "\"\\r\"",
+      "default": "\"\\r\""
+    },
+    {
+      "char": 14,
+      "relaxed": "\"\\u000E\"",
+      "default": "\"\\u000E\""
+    },
+    {
+      "char": 15,
+      "relaxed": "\"\\u000F\"",
+      "default": "\"\\u000F\""
+    },
+    {
+      "char": 16,
+      "relaxed": "\"\\u0010\"",
+      "default": "\"\\u0010\""
+    },
+    {
+      "char": 17,
+      "relaxed": "\"\\u0011\"",
+      "default": "\"\\u0011\""
+    },
+    {
+      "char": 18,
+      "relaxed": "\"\\u0012\"",
+      "default": "\"\\u0012\""
+    },
+    {
+      "char": 19,
+      "relaxed": "\"\\u0013\"",
+      "default": "\"\\u0013\""
+    },
+    {
+      "char": 20,
+      "relaxed": "\"\\u0014\"",
+      "default": "\"\\u0014\""
+    },
+    {
+      "char": 21,
+      "relaxed": "\"\\u0015\"",
+      "default": "\"\\u0015\""
+    },
+    {
+      "char": 22,
+      "relaxed": "\"\\u0016\"",
+      "default": "\"\\u0016\""
+    },
+    {
+      "char": 23,
+      "relaxed": "\"\\u0017\"",
+      "default": "\"\\u0017\""
+    },
+    {
+      "char": 24,
+      "relaxed": "\"\\u0018\"",
+      "default": "\"\\u0018\""
+    },
+    {
+      "char": 25,
+      "relaxed": "\"\\u0019\"",
+      "default": "\"\\u0019\""
+    },
+    {
+      "char": 26,
+      "relaxed": "\"\\u001A\"",
+      "default": "\"\\u001A\""
+    },
+    {
+      "char": 27,
+      "relaxed": "\"\\u001B\"",
+      "default": "\"\\u001B\""
+    },
+    {
+      "char": 28,
+      "relaxed": "\"\\u001C\"",
+      "default": "\"\\u001C\""
+    },
+    {
+      "char": 29,
+      "relaxed": "\"\\u001D\"",
+      "default": "\"\\u001D\""
+    },
+    {
+      "char": 30,
+      "relaxed": "\"\\u001E\"",
+      "default": "\"\\u001E\""
+    },
+    {
+      "char": 31,
+      "relaxed": "\"\\u001F\"",
+      "default": "\"\\u001F\""
+    },
+    {
+      "char": 34,
+      "relaxed": "\"\\\"\"",
+      "default": "\"\\u0022\""
+    },
+    {
+      "char": 38,
+      "relaxed": "\"&\"",
+      "default": "\"\\u0026\""
+    },
+    {
+      "char": 39,
+      "relaxed": "\"'\"",
+      "default": "\"\\u0027\""
+    },
+    {
+      "char": 43,
+      "relaxed": "\"+\"",
+      "default": "\"\\u002B\""
+    },
+    {
+      "char": 47,
+      "relaxed": "\"/\"",
+      "default": "\"/\""
+    },
+    {
+      "char": 60,
+      "relaxed": "\"<\"",
+      "default": "\"\\u003C\""
+    },
+    {
+      "char": 62,
+      "relaxed": "\">\"",
+      "default": "\"\\u003E\""
+    },
+    {
+      "char": 92,
+      "relaxed": "\"\\\\\"",
+      "default": "\"\\\\\""
+    },
+    {
+      "char": 96,
+      "relaxed": "\"`\"",
+      "default": "\"\\u0060\""
+    },
+    {
+      "char": 127,
+      "relaxed": "\"\\u007F\"",
+      "default": "\"\\u007F\""
+    },
+    {
+      "char": 133,
+      "relaxed": "\"\\u0085\"",
+      "default": "\"\\u0085\""
+    },
+    {
+      "char": 160,
+      "relaxed": "\"\\u00A0\"",
+      "default": "\"\\u00A0\""
+    },
+    {
+      "char": 173,
+      "relaxed": "\"­\"",
+      "default": "\"\\u00AD\""
+    },
+    {
+      "char": 233,
+      "relaxed": "\"é\"",
+      "default": "\"\\u00E9\""
+    },
+    {
+      "char": 888,
+      "relaxed": "\"\\u0378\"",
+      "default": "\"\\u0378\""
+    },
+    {
+      "char": 8232,
+      "relaxed": "\"\\u2028\"",
+      "default": "\"\\u2028\""
+    },
+    {
+      "char": 12288,
+      "relaxed": "\"\\u3000\"",
+      "default": "\"\\u3000\""
+    },
+    {
+      "char": 57344,
+      "relaxed": "\"\\uE000\"",
+      "default": "\"\\uE000\""
+    },
+    {
+      "char": 65279,
+      "relaxed": "\"\\uFEFF\"",
+      "default": "\"\\uFEFF\""
+    },
+    {
+      "char": 65533,
+      "relaxed": "\"�\"",
+      "default": "\"\\uFFFD\""
+    },
+    {
+      "char": 65535,
+      "relaxed": "\"\\uFFFF\"",
+      "default": "\"\\uFFFF\""
+    },
+    {
+      "char": 128512,
+      "relaxed": "\"\\uD83D\\uDE00\"",
+      "default": "\"\\uD83D\\uDE00\""
+    },
+    {
+      "char": 65536,
+      "relaxed": "\"\\uD800\\uDC00\"",
+      "default": "\"\\uD800\\uDC00\""
+    },
+    {
+      "char": 1114111,
+      "relaxed": "\"\\uDBFF\\uDFFF\"",
+      "default": "\"\\uDBFF\\uDFFF\""
+    }
+  ],
+  "writes": [
+    {
+      "text": "{}",
+      "lf": "{}",
+      "crlf": "{}"
+    },
+    {
+      "text": "[]",
+      "lf": "[]",
+      "crlf": "[]"
+    },
+    {
+      "text": "0",
+      "lf": "0",
+      "crlf": "0"
+    },
+    {
+      "text": "\"x\"",
+      "lf": "\"x\"",
+      "crlf": "\"x\""
+    },
+    {
+      "text": "true",
+      "lf": "true",
+      "crlf": "true"
+    },
+    {
+      "text": "{\"a\":1,\"b\":[1,2,{\"c\":[]}],\"d\":{},\"e\":[[],[{}]],\"f\":\"é\uD83D\uDE00\\u00a0<'>\\\"\\\\/\",\"g\":-0.0e-0,\"h\":1E+2}",
+      "lf": "{\n  \"a\": 1,\n  \"b\": [\n    1,\n    2,\n    {\n      \"c\": []\n    }\n  ],\n  \"d\": {},\n  \"e\": [\n    [],\n    [\n      {}\n    ]\n  ],\n  \"f\": \"é\\uD83D\\uDE00\\u00A0<'>\\\"\\\\/\",\n  \"g\": -0.0e-0,\n  \"h\": 1E+2\n}",
+      "crlf": "{\r\n  \"a\": 1,\r\n  \"b\": [\r\n    1,\r\n    2,\r\n    {\r\n      \"c\": []\r\n    }\r\n  ],\r\n  \"d\": {},\r\n  \"e\": [\r\n    [],\r\n    [\r\n      {}\r\n    ]\r\n  ],\r\n  \"f\": \"é\\uD83D\\uDE00\\u00A0<'>\\\"\\\\/\",\r\n  \"g\": -0.0e-0,\r\n  \"h\": 1E+2\r\n}"
+    },
+    {
+      "text": "[{\"\":\"\"},{\"a\":{\"b\":{\"c\":{\"d\":[1]}}}}]",
+      "lf": "[\n  {\n    \"\": \"\"\n  },\n  {\n    \"a\": {\n      \"b\": {\n        \"c\": {\n          \"d\": [\n            1\n          ]\n        }\n      }\n    }\n  }\n]",
+      "crlf": "[\r\n  {\r\n    \"\": \"\"\r\n  },\r\n  {\r\n    \"a\": {\r\n      \"b\": {\r\n        \"c\": {\r\n          \"d\": [\r\n            1\r\n          ]\r\n        }\r\n      }\r\n    }\r\n  }\r\n]"
+    },
+    {
+      "text": "{\"key \\\"quoted\\\" é\\u0001\":\"v\"}",
+      "lf": "{\n  \"key \\\"quoted\\\" é\\u0001\": \"v\"\n}",
+      "crlf": "{\r\n  \"key \\\"quoted\\\" é\\u0001\": \"v\"\r\n}"
+    },
+    {
+      "text": "{\"a\":1,\"a\":2}",
+      "lf": "{\n  \"a\": 1,\n  \"a\": 2\n}",
+      "crlf": "{\r\n  \"a\": 1,\r\n  \"a\": 2\r\n}"
+    },
+    {
+      "text": " {\"spaced\" : [ 1 , 2 ] } ",
+      "lf": "{\n  \"spaced\": [\n    1,\n    2\n  ]\n}",
+      "crlf": "{\r\n  \"spaced\": [\r\n    1,\r\n    2\r\n  ]\r\n}"
+    }
+  ],
+  "to_string": [
+    {
+      "text": "{}",
+      "string": "{}"
+    },
+    {
+      "text": "[]",
+      "string": "[]"
+    },
+    {
+      "text": "0",
+      "string": "0"
+    },
+    {
+      "text": "\"x\"",
+      "string": "x"
+    },
+    {
+      "text": "true",
+      "string": "true"
+    },
+    {
+      "text": "{\"a\":1,\"b\":[1,2,{\"c\":[]}],\"d\":{},\"e\":[[],[{}]],\"f\":\"é\uD83D\uDE00\\u00a0<'>\\\"\\\\/\",\"g\":-0.0e-0,\"h\":1E+2}",
+      "string": "{\n  \"a\": 1,\n  \"b\": [\n    1,\n    2,\n    {\n      \"c\": []\n    }\n  ],\n  \"d\": {},\n  \"e\": [\n    [],\n    [\n      {}\n    ]\n  ],\n  \"f\": \"\\u00E9\\uD83D\\uDE00\\u00A0\\u003C\\u0027\\u003E\\u0022\\\\/\",\n  \"g\": -0.0e-0,\n  \"h\": 1E+2\n}"
+    },
+    {
+      "text": "[{\"\":\"\"},{\"a\":{\"b\":{\"c\":{\"d\":[1]}}}}]",
+      "string": "[\n  {\n    \"\": \"\"\n  },\n  {\n    \"a\": {\n      \"b\": {\n        \"c\": {\n          \"d\": [\n            1\n          ]\n        }\n      }\n    }\n  }\n]"
+    },
+    {
+      "text": "{\"key \\\"quoted\\\" é\\u0001\":\"v\"}",
+      "string": "{\n  \"key \\u0022quoted\\u0022 \\u00E9\\u0001\": \"v\"\n}"
+    },
+    {
+      "text": "{\"a\":1,\"a\":2}",
+      "string": "{\n  \"a\": 1,\n  \"a\": 2\n}"
+    },
+    {
+      "text": " {\"spaced\" : [ 1 , 2 ] } ",
+      "string": "{\n  \"spaced\": [\n    1,\n    2\n  ]\n}"
+    },
+    {
+      "text": "\"a 'q' é\"",
+      "string": "a 'q' é"
+    },
+    {
+      "text": "[\"/x/.claude/pet/hook.py'\"]",
+      "string": "[\n  \"/x/.claude/pet/hook.py\\u0027\"\n]"
+    },
+    {
+      "text": "5.50",
+      "string": "5.50"
+    },
+    {
+      "text": "false",
+      "string": "false"
+    },
+    {
+      "text": "[\"a\\nb\"]",
+      "string": "[\n  \"a\\nb\"\n]"
+    }
+  ],
+  "deep_equals": [
+    {
+      "a": "{}",
+      "b": "{}",
+      "equal": true
+    },
+    {
+      "a": "{\"a\":1,\"b\":2}",
+      "b": "{\"b\":2,\"a\":1}",
+      "equal": true
+    },
+    {
+      "a": "[1,2]",
+      "b": "[2,1]",
+      "equal": false
+    },
+    {
+      "a": "{\"a\":1}",
+      "b": "{\"a\":1,\"b\":2}",
+      "equal": false
+    },
+    {
+      "a": "1",
+      "b": "1.0",
+      "equal": true
+    },
+    {
+      "a": "1",
+      "b": "1e0",
+      "equal": true
+    },
+    {
+      "a": "100",
+      "b": "1e2",
+      "equal": true
+    },
+    {
+      "a": "10",
+      "b": "1e1",
+      "equal": true
+    },
+    {
+      "a": "0.5",
+      "b": "5e-1",
+      "equal": true
+    },
+    {
+      "a": "0",
+      "b": "-0",
+      "equal": true
+    },
+    {
+      "a": "0",
+      "b": "0.0e5",
+      "equal": true
+    },
+    {
+      "a": "-0",
+      "b": "-0.0",
+      "equal": true
+    },
+    {
+      "a": "1.5",
+      "b": "15e-1",
+      "equal": true
+    },
+    {
+      "a": "123456789012345678901234567890",
+      "b": "1.2345678901234567890123456789e29",
+      "equal": true
+    },
+    {
+      "a": "1",
+      "b": "2",
+      "equal": false
+    },
+    {
+      "a": "-1",
+      "b": "1",
+      "equal": false
+    },
+    {
+      "a": "0.10",
+      "b": "0.1",
+      "equal": true
+    },
+    {
+      "a": "1e400",
+      "b": "1e400",
+      "equal": true
+    },
+    {
+      "a": "1e400",
+      "b": "10e399",
+      "equal": true
+    },
+    {
+      "a": "12",
+      "b": "1.2",
+      "equal": false
+    },
+    {
+      "a": "0.0001",
+      "b": "1e-4",
+      "equal": true
+    },
+    {
+      "a": "-0.0",
+      "b": "0e7",
+      "equal": true
+    },
+    {
+      "a": "\"é\"",
+      "b": "\"\\u00e9\"",
+      "equal": true
+    },
+    {
+      "a": "\"a\"",
+      "b": "\"b\"",
+      "equal": false
+    },
+    {
+      "a": "true",
+      "b": "true",
+      "equal": true
+    },
+    {
+      "a": "true",
+      "b": "false",
+      "equal": false
+    },
+    {
+      "a": "null",
+      "b": "null",
+      "equal": true
+    },
+    {
+      "a": "null",
+      "b": "{}",
+      "equal": false
+    },
+    {
+      "a": "1",
+      "b": "\"1\"",
+      "equal": false
+    },
+    {
+      "a": "[]",
+      "b": "{}",
+      "equal": false
+    },
+    {
+      "a": "[[]]",
+      "b": "[[]]",
+      "equal": true
+    },
+    {
+      "a": "{\"a\":[1,{\"b\":null}]}",
+      "b": "{\"a\":[1.0,{\"b\":null}]}",
+      "equal": true
+    },
+    {
+      "a": "{\"a\":1,\"a\":2}",
+      "b": "{\"a\":1,\"a\":2}",
+      "error": "ArgumentException: An item with the same key has already been added. Key: a (Parameter 'key')"
+    },
+    {
+      "a": "{\"x\":{\"a\":1,\"a\":2}}",
+      "b": "{\"x\":{\"a\":1,\"a\":2}}",
+      "error": "ArgumentException: An item with the same key has already been added. Key: a (Parameter 'key')"
+    },
+    {
+      "a": "{\"x\":{\"a\":1,\"a\":2}}",
+      "b": "{\"x\":{\"a\":1}}",
+      "error": "ArgumentException: An item with the same key has already been added. Key: a (Parameter 'key')"
+    },
+    {
+      "a": "{\"x\":{\"a\":1}}",
+      "b": "{\"x\":{\"a\":1,\"a\":2}}",
+      "error": "ArgumentException: An item with the same key has already been added. Key: a (Parameter 'key')"
+    },
+    {
+      "a": "[{\"a\":1,\"a\":2}]",
+      "b": "[{\"a\":1,\"a\":2}]",
+      "error": "ArgumentException: An item with the same key has already been added. Key: a (Parameter 'key')"
+    },
+    {
+      "a": "{\"a\":null}",
+      "b": "{\"b\":null}",
+      "equal": false
+    }
+  ],
+  "parse": [
+    {
+      "text": "",
+      "parsed": false,
+      "error": "JsonReaderException: The input does not contain any JSON tokens. Expected the input to start with a valid JSON token, when isFinalBlock is true. LineNumber: 0 | BytePositionInLine: 0."
+    },
+    {
+      "text": " ",
+      "parsed": false,
+      "error": "JsonReaderException: The input does not contain any JSON tokens. Expected the input to start with a valid JSON token, when isFinalBlock is true. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "{",
+      "parsed": false,
+      "error": "JsonReaderException: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "[",
+      "parsed": false,
+      "error": "JsonReaderException: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 0."
+    },
+    {
+      "text": "]",
+      "parsed": false,
+      "error": "JsonReaderException: ']' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 0."
+    },
+    {
+      "text": "{\"a\":1,}",
+      "parsed": false,
+      "error": "JsonReaderException: The JSON object contains a trailing comma at the end which is not supported in this mode. Change the reader options. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "[1,]",
+      "parsed": false,
+      "error": "JsonReaderException: The JSON array contains a trailing comma at the end which is not supported in this mode. Change the reader options. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "[1,,2]",
+      "parsed": false,
+      "error": "JsonReaderException: ',' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "{,}",
+      "parsed": false,
+      "error": "JsonReaderException: ',' is an invalid start of a property name. Expected a '\"'. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "{\"a\":}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 5."
+    },
+    {
+      "text": "{\"a\" 1}",
+      "parsed": false,
+      "error": "JsonReaderException: '1' is invalid after a property name. Expected a ':'. LineNumber: 0 | BytePositionInLine: 5."
+    },
+    {
+      "text": "{\"a\":1 \"b\":2}",
+      "parsed": false,
+      "error": "JsonReaderException: '\"' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{'a':1}",
+      "parsed": false,
+      "error": "JsonReaderException: ''' is an invalid start of a property name. Expected a '\"'. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "{a:1}",
+      "parsed": false,
+      "error": "JsonReaderException: 'a' is an invalid start of a property name. Expected a '\"'. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "{\"a\":1}}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is invalid after a single JSON value. Expected end of data. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{\"a\":1} x",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is invalid after a single JSON value. Expected end of data. LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "{} {}",
+      "parsed": false,
+      "error": "JsonReaderException: '{' is invalid after a single JSON value. Expected end of data. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "[1] 2",
+      "parsed": false,
+      "error": "JsonReaderException: '2' is invalid after a single JSON value. Expected end of data. LineNumber: 0 | BytePositionInLine: 4."
+    },
+    {
+      "text": "// c\n{}",
+      "parsed": false,
+      "error": "JsonReaderException: '/' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 0."
+    },
+    {
+      "text": "{}// c",
+      "parsed": false,
+      "error": "JsonReaderException: '/' is invalid after a single JSON value. Expected end of data. LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "/* c */{}",
+      "parsed": false,
+      "error": "JsonReaderException: '/' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 0."
+    },
+    {
+      "text": "{\"a\":1/*c*/}",
+      "parsed": false,
+      "error": "JsonReaderException: '/' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 6."
+    },
+    {
+      "text": "{\"a\":01}",
+      "parsed": false,
+      "error": "JsonReaderException: Invalid leading zero before '1'. LineNumber: 0 | BytePositionInLine: 6."
+    },
+    {
+      "text": "{\"a\":-}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 6."
+    },
+    {
+      "text": "{\"a\":1.}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is invalid within a number, immediately after a decimal point ('.'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{\"a\":.5}",
+      "parsed": false,
+      "error": "JsonReaderException: '.' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 5."
+    },
+    {
+      "text": "{\"a\":1e}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{\"a\":1e+}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "{\"a\":+1}",
+      "parsed": false,
+      "error": "JsonReaderException: '+' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 5."
+    },
+    {
+      "text": "{\"a\":NaN}",
+      "parsed": false,
+      "error": "JsonReaderException: 'N' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 5."
+    },
+    {
+      "text": "{\"a\":-Infinity}",
+      "parsed": false,
+      "error": "JsonReaderException: 'I' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 6."
+    },
+    {
+      "text": "{\"a\":tru}",
+      "parsed": false,
+      "error": "JsonReaderException: 'tru}' is an invalid JSON literal. Expected the literal 'true'. LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "{\"a\":nul}",
+      "parsed": false,
+      "error": "JsonReaderException: 'nul}' is an invalid JSON literal. Expected the literal 'null'. LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "{\"a\":falsey}",
+      "parsed": false,
+      "error": "JsonReaderException: 'y' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 10."
+    },
+    {
+      "text": "{\"a\":truex}",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 9."
+    },
+    {
+      "text": "{\"a\":t}",
+      "parsed": false,
+      "error": "JsonReaderException: 't}' is an invalid JSON literal. Expected the literal 'true'. LineNumber: 0 | BytePositionInLine: 6."
+    },
+    {
+      "text": "tru",
+      "parsed": false,
+      "error": "JsonReaderException: 'tru' is an invalid JSON literal. Expected the literal 'true'. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "nul",
+      "parsed": false,
+      "error": "JsonReaderException: 'nul' is an invalid JSON literal. Expected the literal 'null'. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "fals",
+      "parsed": false,
+      "error": "JsonReaderException: 'fals' is an invalid JSON literal. Expected the literal 'false'. LineNumber: 0 | BytePositionInLine: 4."
+    },
+    {
+      "text": "-",
+      "parsed": false,
+      "error": "JsonReaderException: Expected a digit ('0'-'9'), but instead reached end of data. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "1.",
+      "parsed": false,
+      "error": "JsonReaderException: Expected a digit ('0'-'9'), but instead reached end of data. LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "01",
+      "parsed": false,
+      "error": "JsonReaderException: Invalid leading zero before '1'. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "1 2",
+      "parsed": false,
+      "error": "JsonReaderException: '2' is invalid after a single JSON value. Expected end of data. LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "{\"a\":\"x\\x\"}",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is an invalid escapable character within a JSON string. The string should be correctly escaped. LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "{\"a\":\"\\u12\"}",
+      "parsed": false,
+      "error": "JsonReaderException: '\"' is not a hex digit following '\\u' within a JSON string. The string should be correctly escaped. LineNumber: 0 | BytePositionInLine: 10."
+    },
+    {
+      "text": "{\"a\":\"\\u12g4\"}",
+      "parsed": false,
+      "error": "JsonReaderException: 'g' is not a hex digit following '\\u' within a JSON string. The string should be correctly escaped. LineNumber: 0 | BytePositionInLine: 10."
+    },
+    {
+      "text": "{\"a\":\"a\u0001b\"}",
+      "parsed": false,
+      "error": "JsonReaderException: '0x01' is invalid within a JSON string. The string should be correctly escaped. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{\"a\":\"a\tb\"}",
+      "parsed": false,
+      "error": "JsonReaderException: '0x09' is invalid within a JSON string. The string should be correctly escaped. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{\"a\":\"open",
+      "parsed": false,
+      "error": "JsonReaderException: Expected end of string, but instead reached end of data. LineNumber: 0 | BytePositionInLine: 10."
+    },
+    {
+      "text": "\"x",
+      "parsed": false,
+      "error": "JsonReaderException: Expected end of string, but instead reached end of data. LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "{\"a\":\"\\",
+      "parsed": false,
+      "error": "JsonReaderException: Expected end of string, but instead reached end of data. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{\"a",
+      "parsed": false,
+      "error": "JsonReaderException: Expected end of string, but instead reached end of data. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "{\"a\"",
+      "parsed": false,
+      "error": "JsonReaderException: Expected a value, but instead reached end of data. LineNumber: 0 | BytePositionInLine: 4."
+    },
+    {
+      "text": "{\"a\":",
+      "parsed": false,
+      "error": "JsonReaderException: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 5."
+    },
+    {
+      "text": "{\"a\":1",
+      "parsed": false,
+      "error": "JsonReaderException: '1' is an invalid end of a number. Expected a delimiter. LineNumber: 0 | BytePositionInLine: 6."
+    },
+    {
+      "text": "{\"a\":1,",
+      "parsed": false,
+      "error": "JsonReaderException: Expected start of a property name or value, but instead reached end of data. LineNumber: 0 | BytePositionInLine: 6."
+    },
+    {
+      "text": "[1",
+      "parsed": false,
+      "error": "JsonReaderException: '1' is an invalid end of a number. Expected a delimiter. LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "[1,",
+      "parsed": false,
+      "error": "JsonReaderException: Expected start of a property name or value, but instead reached end of data. LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "[\"a\"",
+      "parsed": false,
+      "error": "JsonReaderException: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 4."
+    },
+    {
+      "text": "[\"a",
+      "parsed": false,
+      "error": "JsonReaderException: Expected end of string, but instead reached end of data. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "{\"a\":[}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 6."
+    },
+    {
+      "text": "[}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "{]",
+      "parsed": false,
+      "error": "JsonReaderException: ']' is an invalid start of a property name. Expected a '\"'. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "{\n  \"model\": \"opus\",\n}",
+      "parsed": false,
+      "error": "JsonReaderException: The JSON object contains a trailing comma at the end which is not supported in this mode. Change the reader options. LineNumber: 2 | BytePositionInLine: 0."
+    },
+    {
+      "text": "{\n  \"a\": 1,\n  \"b\": x\n}",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is an invalid start of a value. LineNumber: 2 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{\r\n  \"a\": 1,\r\n}",
+      "parsed": false,
+      "error": "JsonReaderException: The JSON object contains a trailing comma at the end which is not supported in this mode. Change the reader options. LineNumber: 2 | BytePositionInLine: 0."
+    },
+    {
+      "text": "{\"é\":1,}",
+      "parsed": false,
+      "error": "JsonReaderException: The JSON object contains a trailing comma at the end which is not supported in this mode. Change the reader options. LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "{\"a\":\"é\"x}",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 9."
+    },
+    {
+      "text": "{\"\uD83D\uDE00\":1 x}",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 10."
+    },
+    {
+      "text": "\uFEFF{}",
+      "parsed": false,
+      "error": "JsonReaderException: '0xEF' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 0."
+    },
+    {
+      "text": "{}\uFEFF",
+      "parsed": false,
+      "error": "JsonReaderException: '0xEF' is invalid after a single JSON value. Expected end of data. LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "\u00A0{}",
+      "parsed": false,
+      "error": "JsonReaderException: '0xC2' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 0."
+    },
+    {
+      "text": "{\"a\":1}\u0000",
+      "parsed": false,
+      "error": "JsonReaderException: '0x00' is invalid after a single JSON value. Expected end of data. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "\u0000",
+      "parsed": false,
+      "error": "JsonReaderException: '0x00' is an invalid start of a value. LineNumber: 0 | BytePositionInLine: 0."
+    },
+    {
+      "text": "{\"a\":[1,2]]",
+      "parsed": false,
+      "error": "JsonReaderException: ']' is invalid without a matching open. LineNumber: 0 | BytePositionInLine: 10."
+    },
+    {
+      "text": "[1,2}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is invalid without a matching open. LineNumber: 0 | BytePositionInLine: 4."
+    },
+    {
+      "text": "{\"a\":{}]",
+      "parsed": false,
+      "error": "JsonReaderException: ']' is invalid without a matching open. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+      "parsed": true,
+      "x_error": "InvalidOperationException: The node must be of type 'JsonObject'."
+    },
+    {
+      "text": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+      "parsed": false,
+      "error": "JsonReaderException: The maximum configured depth of 64 has been exceeded. Cannot read next JSON array. LineNumber: 0 | BytePositionInLine: 64."
+    },
+    {
+      "text": "{\"a\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "{\"a\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "parsed": false,
+      "error": "JsonReaderException: The maximum configured depth of 64 has been exceeded. Cannot read next JSON array. LineNumber: 0 | BytePositionInLine: 68."
+    },
+    {
+      "text": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}",
+      "parsed": false,
+      "error": "JsonReaderException: The maximum configured depth of 64 has been exceeded. Cannot read next JSON object. LineNumber: 0 | BytePositionInLine: 320."
+    },
+    {
+      "text": "{\"a\":tru, \"b\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}",
+      "parsed": false,
+      "error": "JsonReaderException: 'tru, \"b\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}' is an invalid JSON literal. Expected the literal 'true'. LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "{\"a\":nulé}",
+      "parsed": false,
+      "error": "JsonReaderException: 'nulé}' is an invalid JSON literal. Expected the literal 'null'. LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "{\"a\":faé}",
+      "parsed": false,
+      "error": "JsonReaderException: 'faé}' is an invalid JSON literal. Expected the literal 'false'. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{\"a\":1x}",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is an invalid end of a number. Expected a delimiter. LineNumber: 0 | BytePositionInLine: 6."
+    },
+    {
+      "text": "1.5x",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is an invalid end of a number. Expected 'E' or 'e'. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "1.5.5",
+      "parsed": false,
+      "error": "JsonReaderException: '.' is an invalid end of a number. Expected 'E' or 'e'. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "1e5x",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is an invalid end of a number. Expected a delimiter. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "0x10",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is an invalid end of a number. Expected a delimiter. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "00",
+      "parsed": false,
+      "error": "JsonReaderException: Invalid leading zero before '0'. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "-01",
+      "parsed": false,
+      "error": "JsonReaderException: Invalid leading zero before '1'. LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "1.e5",
+      "parsed": false,
+      "error": "JsonReaderException: 'e' is invalid within a number, immediately after a decimal point ('.'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "-a",
+      "parsed": false,
+      "error": "JsonReaderException: 'a' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "[-]",
+      "parsed": false,
+      "error": "JsonReaderException: ']' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 2."
+    },
+    {
+      "text": "{\"a\":1.5e}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is invalid within a number, immediately after a sign character ('+' or '-'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 9."
+    },
+    {
+      "text": "123abc",
+      "parsed": false,
+      "error": "JsonReaderException: 'a' is an invalid end of a number. Expected a delimiter. LineNumber: 0 | BytePositionInLine: 3."
+    },
+    {
+      "text": "{\"a\":0.}",
+      "parsed": false,
+      "error": "JsonReaderException: '}' is invalid within a number, immediately after a decimal point ('.'). Expected a digit ('0'-'9'). LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "{\"a\":\"\\u00e9\\uZZZZ\"}",
+      "parsed": false,
+      "error": "JsonReaderException: 'Z' is not a hex digit following '\\u' within a JSON string. The string should be correctly escaped. LineNumber: 0 | BytePositionInLine: 14."
+    },
+    {
+      "text": "{\"a\":1,\n\n\t}",
+      "parsed": false,
+      "error": "JsonReaderException: The JSON object contains a trailing comma at the end which is not supported in this mode. Change the reader options. LineNumber: 2 | BytePositionInLine: 1."
+    },
+    {
+      "text": "{\"a\":1}\n\n x",
+      "parsed": false,
+      "error": "JsonReaderException: 'x' is invalid after a single JSON value. Expected end of data. LineNumber: 2 | BytePositionInLine: 1."
+    },
+    {
+      "text": "{\"a\":\"x\ny\"}",
+      "parsed": false,
+      "error": "JsonReaderException: '0x0A' is invalid within a JSON string. The string should be correctly escaped. LineNumber: 0 | BytePositionInLine: 7."
+    },
+    {
+      "text": "\"\u0000\"",
+      "parsed": false,
+      "error": "JsonReaderException: '0x00' is invalid within a JSON string. The string should be correctly escaped. LineNumber: 0 | BytePositionInLine: 1."
+    },
+    {
+      "text": "{\"a\":1,\r}",
+      "parsed": false,
+      "error": "JsonReaderException: The JSON object contains a trailing comma at the end which is not supported in this mode. Change the reader options. LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "[1,\n  2,\n  ]",
+      "parsed": false,
+      "error": "JsonReaderException: The JSON array contains a trailing comma at the end which is not supported in this mode. Change the reader options. LineNumber: 2 | BytePositionInLine: 2."
+    },
+    {
+      "text": "{\"a\":1e5}",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "-0",
+      "parsed": true,
+      "x_error": "InvalidOperationException: The node must be of type 'JsonObject'."
+    },
+    {
+      "text": "[0.5e+10]",
+      "parsed": true,
+      "x_error": "InvalidOperationException: The node must be of type 'JsonObject'."
+    },
+    {
+      "text": "{\"a\" : 1 }",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "{\"a\":[1,\"b\",{\"c\":true}],\"d\":fals}",
+      "parsed": false,
+      "error": "JsonReaderException: 'fals}' is an invalid JSON literal. Expected the literal 'false'. LineNumber: 0 | BytePositionInLine: 32."
+    },
+    {
+      "text": "[\"\\/\"]",
+      "parsed": true,
+      "x_error": "InvalidOperationException: The node must be of type 'JsonObject'."
+    },
+    {
+      "text": "\t\r\n {}",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "{\"a\":\"x\"\"b\"}",
+      "parsed": false,
+      "error": "JsonReaderException: '\"' is invalid after a value. Expected either ',', '}', or ']'. LineNumber: 0 | BytePositionInLine: 8."
+    },
+    {
+      "text": "{\"a\"1}",
+      "parsed": false,
+      "error": "JsonReaderException: '1' is invalid after a property name. Expected a ':'. LineNumber: 0 | BytePositionInLine: 4."
+    },
+    {
+      "text": "{\"x\":1,\"x\":2}",
+      "parsed": true,
+      "x_error": "ArgumentException: An item with the same key has already been added. Key: x (Parameter 'key')"
+    },
+    {
+      "text": "{\"x\":{\"a\":1,\"a\":2}}",
+      "parsed": true,
+      "x": "{\"a\":1,\"a\":2}"
+    },
+    {
+      "text": "[{\"a\":1,\"a\":2}]",
+      "parsed": true,
+      "x_error": "InvalidOperationException: The node must be of type 'JsonObject'."
+    },
+    {
+      "text": "5",
+      "parsed": true,
+      "x_error": "InvalidOperationException: The node must be of type 'JsonObject'."
+    },
+    {
+      "text": "\"s\"",
+      "parsed": true,
+      "x_error": "InvalidOperationException: The node must be of type 'JsonObject'."
+    },
+    {
+      "text": "null",
+      "parsed": true
+    },
+    {
+      "text": "[1]",
+      "parsed": true,
+      "x_error": "InvalidOperationException: The node must be of type 'JsonObject'."
+    },
+    {
+      "text": "{\"x\":null}",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "{\"x\":[1]}",
+      "parsed": true,
+      "x": "[1]"
+    },
+    {
+      "text": "{\"a\":\"\\ud800\"}",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "{\"a\":\"\\udc00\\ud800\"}",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "{\"a\":1e400}",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "{\"a\":-0}",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "  {  }  ",
+      "parsed": true,
+      "x": "(none)"
+    },
+    {
+      "text": "{\"a\":\"\u007F\u0080\"}",
+      "parsed": true,
+      "x": "(none)"
+    }
+  ]
+}

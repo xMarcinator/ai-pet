@@ -1,0 +1,25 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-28T18:53:34.768984Z",
+  "evidence": {
+    "base_commit": "74fa11d6c272f7152b2db5757f9aeae0c902b582",
+    "commits": [
+      "03b1404d0af2c262c39f6d65afb117c416b3b990"
+    ],
+    "prs": [],
+    "tests": [
+      "baseline: green (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check; dotnet test AiPet.slnx: 234 passed, 1 skipped)",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check",
+      "dotnet test AiPet.slnx",
+      "AIPET_GOLDEN=rust/golden/bin/Release/net10.0/aipet-golden.dll cargo test --workspace --locked (C# cross-check of endpoint and paths)",
+      "unshare -r env AIPET_GOLDEN=... <aipet-ipc test binary> (endpoint rules without /run/user/<uid>)",
+      "cargo clippy --workspace --all-targets --locked -- -D warnings",
+      "cargo clippy -p aipet-ipc -p aipet-hook -p aipet-sprite -p aipet-ui -p aipet-desktop -p aipet-spike -p aipet-wayland --all-targets --target x86_64-pc-windows-msvc -- -D warnings",
+      "cargo check -p aipet-ipc -p aipet-hook --all-targets --target aarch64-apple-darwin",
+      "dotnet run --project rust/golden -c Release (sprite: frames.json sha256 d2eed203... unchanged, git diff empty)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-28T19:46:25.492047Z"
+}

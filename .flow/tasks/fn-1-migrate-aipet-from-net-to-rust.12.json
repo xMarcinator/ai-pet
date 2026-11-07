@@ -1,0 +1,17 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.242928Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.8",
+    "fn-1-migrate-aipet-from-net-to-rust.11"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.12",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.12.md",
+  "status": "todo",
+  "title": "Codex log watcher and the Board",
+  "updated_at": "2026-09-28T18:25:25.549098Z"
+}

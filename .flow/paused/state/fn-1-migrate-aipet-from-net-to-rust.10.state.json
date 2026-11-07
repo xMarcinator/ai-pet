@@ -1,0 +1,45 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-29T09:48:44.698433Z",
+  "evidence": {
+    "base_commit": "f9bfa3cef3af40d6e7b7d3f9412cd8105ad25e47",
+    "commits": [
+      "5ad6b8ad5210f17d5a4bb11881fb165588fee4c2",
+      "d8c80ae"
+    ],
+    "integrated": {
+      "base": "f9bfa3c",
+      "head": "d8c80ae",
+      "merges": [
+        "b42341d",
+        "952d0c3"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK: P2 cleanup.rs hook matching not .NET's case/letter rules (could remove another install's hook or miss this one's); P3 log.rs time separator not the culture's",
+      "fix_commits": [
+        "d8c80ae"
+      ],
+      "fix_outside_touches": "rust/crates/aipet-core/Cargo.toml (windows-sys feature Win32_Globalization; Cargo.lock unchanged)",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-4a5e2451993c-fn-1-migrate-aipet-from-net-to-rust.10.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check",
+      "dotnet test AiPet.slnx",
+      "AIPET_GOLDEN=<repo>/rust/golden/bin/Release/net10.0/aipet-golden.dll cargo test -p aipet-core",
+      "dotnet run --project rust/golden -c Release -- data (regenerated: no diff)",
+      "RUSTC_BOOTSTRAP=1 cargo clippy --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu|aarch64-apple-darwin -- -D warnings (aipet-core via scratch manifest)",
+      "baseline: cargo green; dotnet test AiPet.slnx red pre-edit on the fresh worktree (6 tests need AiPet.UI built; green after dotnet build AiPet.slnx)",
+      "integrated verify (Windows, work branch 952d0c3): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green (that test writes a test entry into the real Credential Manager; it first runs in Windows CI), clippy --workspace --all-targets -D warnings and fmt --check clean, rust/golden builds (0 warnings)",
+      "not run anywhere yet: the Linux-only tests (stand-in secret-tool, 0600 file, Unix Run tests, a_locale_names_its_culture) - first in Linux CI"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-29T11:45:46.716432Z"
+}

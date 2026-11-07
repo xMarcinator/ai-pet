@@ -254,13 +254,7 @@ static class HookRun
 {
     public static Process Start(string agent, string pipe, string temp)
     {
-        var psi = new ProcessStartInfo(TestEnv.Dotnet)
-        {
-            UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
-        };
-        psi.ArgumentList.Add(TestEnv.HookDll);
-        psi.ArgumentList.Add("--agent");
-        psi.ArgumentList.Add(agent);
+        var psi = TestEnv.HookStartInfo("--agent", agent);
         foreach (var name in Ipc.ClaudeEnv) psi.Environment.Remove(name);
         foreach (var (name, value) in new[] { ("AIPET_PIPE", pipe), ("AIPET_DATA_DIR", TestEnv.DataDir), ("TMPDIR", temp), ("TMP", temp),
                                               ("TEMP", temp), ("CODEX_HOME", TestEnv.CodexHome) })

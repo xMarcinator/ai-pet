@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Writes the golden data the Rust port's tests replay, with the real AiPet.Core and the hook's registration code;
+       Program.cs lists the modes and says how to run them. Not part of AiPet.slnx, and it changes neither project. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AiPet.Golden</RootNamespace>
+    <AssemblyName>aipet-golden</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/AiPet.Core/AiPet.Core.csproj" />
+  </ItemGroup>
+
+  <!-- The hook's registration code, compiled in as the tests do (tests/AiPet.Tests/AiPet.Tests.csproj): Install.Run
+       refers to CodexConfig, and PluginHooks to both, so they come together. Of the hook's linked files they need only
+       Paths, which Core has. Doctor.cs needs the rest of the hook, so the doctor mode runs the built hook instead. -->
+  <ItemGroup>
+    <Compile Include="../../src/AiPet.Hook/Install.cs" Link="Hook/Install.cs" />
+    <Compile Include="../../src/AiPet.Hook/CodexConfig.cs" Link="Hook/CodexConfig.cs" />
+    <Compile Include="../../src/AiPet.Hook/PluginHooks.cs" Link="Hook/PluginHooks.cs" />
+  </ItemGroup>
+
+</Project>

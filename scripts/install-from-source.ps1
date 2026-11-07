@@ -17,11 +17,13 @@ $appDir = Join-Path $env:LOCALAPPDATA 'Programs\AiPet'
 $hookDir = Join-Path $env:LOCALAPPDATA 'AiPet\hooks'
 function Step($text) { Write-Host "→ $text" -ForegroundColor Cyan }
 
-# Build when there's no build yet, or the source changed since the last one (never install stale binaries).
+# Build when there's no build yet, or the source changed since the last one (never install stale binaries). The app is
+# built from src\, the hook from rust\ (with cargo: that needs Rust, see build.ps1).
 $built = @("$art\app\AiPet.exe", "$art\hook\aipet-hook.exe") | Where-Object { Test-Path $_ } |
     ForEach-Object { (Get-Item $_).LastWriteTimeUtc } | Sort-Object | Select-Object -First 1
-$stale = $built -and (Get-ChildItem "$root\src" -Recurse -File | Where-Object {
-    $_.FullName -notmatch '\\(bin|obj)\\' -and $_.LastWriteTimeUtc -gt $built } | Select-Object -First 1)
+$sources = @(Get-ChildItem "$root\src", "$root\rust\crates" -Recurse -File) + @(Get-Item "$root\rust\Cargo.toml", "$root\rust\Cargo.lock")
+$stale = $built -and ($sources | Where-Object {
+    $_.FullName -notmatch '\\(bin|obj|target)\\' -and $_.LastWriteTimeUtc -gt $built } | Select-Object -First 1)
 if ($Rebuild -or -not (Test-Path "$art\app\AiPet.exe") -or -not (Test-Path "$art\hook\aipet-hook.exe") -or $stale) {
     Step 'Building'
     & "$root\build.ps1" -Only win-x64

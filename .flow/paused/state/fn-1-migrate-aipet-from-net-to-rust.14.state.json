@@ -1,0 +1,37 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-28T19:47:47.986928Z",
+  "evidence": {
+    "base_commit": "88b528fb14c628ff0f13d0381fa8a0652ac63454",
+    "commits": [
+      "e0bdff0bb6de9d99f112309028599edd5ec50a0f",
+      "332291677a1ba19f17d7ace3a8984d463d20eaf2"
+    ],
+    "integrated": {
+      "base": "242d7cc81060a125e38c083d0a09fe934cdd25a4",
+      "commits_unchanged": true,
+      "head": "332291677a1ba19f17d7ace3a8984d463d20eaf2",
+      "method": "fast-forward of wave/fn-1.14 onto fn-1-migrate-aipet-from-net-to-rust"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "base": "242d7cc",
+      "fix_commits": [],
+      "head": "3322916",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-94c2e4e203d9-fn-1-migrate-aipet-from-net-to-rust.14.json",
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green (cargo) per the paused run's pre-edit baseline on Linux; dotnet test AiPet.slnx was an inherited env red there (5 ResourceTests/VelopackTests need src/AiPet.UI/bin), green after dotnet build AiPet.slnx",
+      "gate classify --base 88b528fb14c628ff0f13d0381fa8a0652ac63454: FULL (unmatched: .gitattributes, from the merged work-branch commit 242d7cc)",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check (Windows, first run red: aipet-sprite golden tests, avatars/hood-green.json checked out CRLF before the merge brought 242d7cc's eol=lf attribute; re-checked out that file, no content change, then green: 91 tests passed, fmt clean, clippy exit 0 with pre-existing warnings in aipet-sprite/aipet-ui; receipt 33229167-unittest)",
+      "dotnet build AiPet.slnx -p:UseAppHost=false --nologo -v q && dotnet test AiPet.slnx --no-build --nologo (Windows: 160 passed, 42 skipped = the Unix/Linux-only tests, 0 failed; receipt 33229167-dotnet-test)",
+      "proof run https://github.com/xMarcinator/ai-pet/actions/runs/36477504598 at e0bdff0: success (pack, Update full, Update delta)",
+      "integrated verify (Windows, work branch 42c4d13 = tasks 14 + 2 + the Rust 1.98 upgrade): cd rust && cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all -- --check green; dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped, 0 failed"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-29T09:48:00.095313Z"
+}

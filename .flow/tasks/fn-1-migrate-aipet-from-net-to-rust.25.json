@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.243147Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.24"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.25",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.25.md",
+  "status": "todo",
+  "title": "Cutover: remove .NET and cut the milestone 3 release",
+  "updated_at": "2026-09-28T18:25:30.141786Z"
+}

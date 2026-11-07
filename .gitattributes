@@ -1,3 +1,5 @@
 * text=auto
 # Shell scripts run under sh on Linux and in Git Bash: keep LF even in a Windows checkout
 *.sh text eol=lf
+# Avatar files are data: rust/golden records their bytes, and the Rust golden tests check them byte for byte
+avatars/*.json text eol=lf

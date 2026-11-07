@@ -1,0 +1,47 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-10-01T12:37:12.629096Z",
+  "evidence": {
+    "base_commit": "e3c3e826cee625e2307fee6dbb8a5cf5863e5857",
+    "commits": [
+      "87cfb37f211db780d149b2d7870c85363f7fc807",
+      "d362ded",
+      "72a4fb9"
+    ],
+    "integrated": {
+      "base": "e3c3e82",
+      "head": "72a4fb9",
+      "merges": [
+        "b4c69d4",
+        "f0ebc65"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "contracts and integration said SHIP; correctness found a P2: the tooltip is in drawn_rects, which Win32's SetWindowRgn makes clickable, so it caught clicks on Windows (round 2 kept it: the region updates a frame late)",
+      "fix_commits": [
+        "d362ded",
+        "72a4fb9"
+      ],
+      "note": "the conductor allowed aipet-desktop/src/native/win32.rs (task 27's, not started) for the fix; the layered click-through style still has to be seen on screen in task 27; flowctl 6.7.0 pinned to codex:gpt-5.6-sol:high, no transport failures",
+      "receipt": "C:/Users/MJE/Documents/projects/ai-pet/.flow/tmp/wave-2026-09-29/task-17-impl-review-receipt.json",
+      "rounds": 3,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "baseline: green at e3c3e82 (cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: 337 passed, 1 ignored; dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: 160 passed, 52 skipped)",
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check: green at 87cfb37 (347 passed, 1 ignored; aipet-ui 51 unit + 7 in tests/actions.rs) - green receipt 87cfb37f-unittest",
+      "dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build: green at 87cfb37 (160 passed, 52 skipped; no C# change) - green receipt 87cfb37f-dotnet",
+      "cargo clippy --offline -p aipet-ui -p aipet-wayland -p aipet-desktop --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu -- -D warnings (task 15 stand-ins in %TEMP%\t15x, RUSTC_BOOTSTRAP=1): clean at 87cfb37",
+      "cd rust && cargo clippy --workspace --all-targets -- -D warnings: clean; cargo clippy -p aipet-ui [--features demo] --all-targets -- -D warnings: clean",
+      "mutation checks (15, each reverted): every one failed a test",
+      "offscreen renders of pet_view through iced headless wgpu (no window): C:/Users/MJE/Documents/projects/ai-pet/.flow/tmp/wave-2026-09-29/task-17-shots/*.png",
+      "integrated verify (Windows, work branch 1d84482 with tasks 16, 17 and 18 and their review fixes merged): cargo test --workspace --no-fail-fast -- --skip credential_manager_tokens_are_the_apps green, clippy -D warnings and fmt clean; at fd770c6: dotnet build and test 160 passed, 53 skipped, and AIPET_TEST_HOOK=<.NET hook dll> cargo test -p aipet-core --test server green; the full gate's antivirus failures under load (two C# RegistrationTests with 'Access to the path is denied', the live registration and doctor replays, claude_registration_is_the_csharps) all passed when rerun alone at 73c1310 and f0ebc65"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-02T08:57:07.906590Z"
+}

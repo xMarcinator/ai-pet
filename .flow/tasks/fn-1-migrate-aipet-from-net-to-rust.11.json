@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-09-28T18:09:42.242910Z",
+  "depends_on": [
+    "fn-1-migrate-aipet-from-net-to-rust.10"
+  ],
+  "id": "fn-1-migrate-aipet-from-net-to-rust.11",
+  "priority": null,
+  "spec": "fn-1-migrate-aipet-from-net-to-rust",
+  "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.11.md",
+  "status": "todo",
+  "title": "Jira and GitHub watchers and presets",
+  "updated_at": "2026-09-28T18:25:25.248467Z"
+}

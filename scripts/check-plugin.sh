@@ -8,11 +8,12 @@
 #
 # <plugin-dir> is plugins/aipet by default.
 # --release also requires the hook binaries in native/<rid>/: the release workflow checks the plugin it's about to push.
-# --hook takes the rest of the arguments, so it comes last: a command that runs aipet-hook (e.g. --hook dotnet
-# <dir>/aipet-hook.dll).
+# --hook takes the rest of the arguments, so it comes last: a command that runs aipet-hook, the Rust one that ships,
+# e.g. --hook rust/target/release/aipet-hook, or, to build it first,
+# --hook cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook --
 # hooks/hooks.json and hooks/codex.json must be what it prints with --print-plugin-hooks claude and codex, byte for
-# byte, which it makes from ClaudeConfig.Events (src/AiPet.Hook/Install.cs) and CodexConfig.PluginEvents
-# (src/AiPet.Hook/CodexConfig.cs). Without --hook they're only checked to be JSON.
+# byte, which it makes from its event tables (rust/crates/aipet-hook/src/claude.rs and plugin_hooks.rs). Without
+# --hook they're only checked to be JSON.
 # Needs jq.
 set -euo pipefail
 
@@ -33,7 +34,7 @@ while [ $# -gt 0 ]; do
         case "$a" in --marketplaces|--release|--hook|-h|--help) echo "--hook takes the rest of the arguments: put $a before it" >&2; exit 2 ;; esac
       done
       break ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) plugin="$1"; shift ;;
   esac

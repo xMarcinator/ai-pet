@@ -1,0 +1,12 @@
+[package]
+name = "iced-check"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+
+[dependencies]
+iced = { version = "=0.14.0", features = ["image-without-codecs", "canvas", "advanced", "tokio"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.13", features = ["shape"] }

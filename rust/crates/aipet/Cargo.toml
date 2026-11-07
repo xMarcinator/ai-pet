@@ -1,0 +1,37 @@
+[package]
+name = "aipet"
+description = "The pet: one pet per user, the core on a thread of its own, and the Wayland (layer-shell) or the desktop (winit) shell."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+# Velopack's main exe, the desktop entry's Exec and StartupWMClass: the .NET pet's name
+[[bin]]
+name = "AiPet"
+path = "src/main.rs"
+
+[features]
+# The demo's scripted day in place of the core (aipet-ui's `demo`): for development and screenshots,
+# `cargo run -p aipet --features demo`. Never in a release build.
+demo = ["aipet-ui/demo"]
+
+[dependencies]
+aipet-core = { path = "../aipet-core" }
+aipet-desktop = { path = "../aipet-desktop" }
+aipet-ipc = { path = "../aipet-ipc" }
+aipet-sprite = { path = "../aipet-sprite" }
+aipet-ui = { path = "../aipet-ui" }
+aipet-wayland = { path = "../aipet-wayland" }
+# Velopack's Rust SDK (src/updates.rs), at the version of the pinned vpk (release.yml's VPK_VERSION) and of the .NET
+# app's Velopack package
+velopack = "=1.2.158"
+
+# the single-instance lock (src/single.rs): flock on a file opened without following links
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+# the single-instance mutex (src/single.rs)
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }

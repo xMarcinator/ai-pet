@@ -1,0 +1,14 @@
+[package]
+name = "aipet-wayland"
+description = "The pet on Wayland compositors with layer-shell (Hyprland, Sway, KDE): a layer surface with an exact input region, built on iced_exwlshell."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+aipet-ui = { path = "../aipet-ui" }
+iced.workspace = true
+iced_exwlshell.workspace = true
+wayland-client.workspace = true

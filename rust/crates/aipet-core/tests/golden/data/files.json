@@ -1,0 +1,597 @@
+{
+  "config_class": "sealed class Config\n{\npublic int? Left { get; set; }\npublic int? Top { get; set; }\npublic bool Pills { get; set; } = true;\n/// Only in files from before the toolbar under the pet was removed: whether it showed when the position was\n/// saved (see PlaceWindow). Never written again.\n[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]\npublic bool? Toolbar { get; set; }\npublic bool OnTop { get; set; } = true;\npublic string Avatar { get; set; } = \"Sprout\";\npublic bool Music { get; set; } = true;\n/// Window height (DIPs) the saved position was taken with, so a taller window keeps the pet in place.\npublic double WindowHeight { get; set; } = 420;\n}",
+  "cases": [
+    {
+      "name": "missing",
+      "kind": "config",
+      "input": null,
+      "input_hex": null,
+      "status": "missing",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "empty object",
+      "kind": "config",
+      "input": "{}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "every field",
+      "kind": "config",
+      "input": "{\"Left\":1200,\"Top\":640,\"Pills\":false,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":false,\"WindowHeight\":420}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":1200,\"Top\":640,\"Pills\":false,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":false,\"WindowHeight\":420}"
+    },
+    {
+      "name": "legacy toolbar",
+      "kind": "config",
+      "input": "{\"Left\":10,\"Top\":20,\"Pills\":true,\"Toolbar\":true,\"OnTop\":false,\"Avatar\":\"Moss\",\"Music\":true,\"WindowHeight\":462}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":10,\"Top\":20,\"Pills\":true,\"Toolbar\":true,\"OnTop\":false,\"Avatar\":\"Moss\",\"Music\":true,\"WindowHeight\":462}"
+    },
+    {
+      "name": "legacy toolbar off",
+      "kind": "config",
+      "input": "{\"Left\":10,\"Top\":20,\"Toolbar\":false}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":10,\"Top\":20,\"Pills\":true,\"Toolbar\":false,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "toolbar null",
+      "kind": "config",
+      "input": "{\"Toolbar\":null,\"Left\":3}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":3,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "position null",
+      "kind": "config",
+      "input": "{\"Left\":null,\"Top\":null,\"Pills\":true}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "negative position",
+      "kind": "config",
+      "input": "{\"Left\":-1920,\"Top\":-5}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":-1920,\"Top\":-5,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "int extremes",
+      "kind": "config",
+      "input": "{\"Left\":2147483647,\"Top\":-2147483648}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":2147483647,\"Top\":-2147483648,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "negative zero int",
+      "kind": "config",
+      "input": "{\"Left\":-0,\"Top\":0}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":0,\"Top\":0,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "fractional height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":419.5}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":419.5}"
+    },
+    {
+      "name": "whole double height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":420.0}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "tiny height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":1e-7}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":1E-07}"
+    },
+    {
+      "name": "small height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":0.0001}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":0.0001}"
+    },
+    {
+      "name": "huge height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":1e20}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":1E+20}"
+    },
+    {
+      "name": "long height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":0.30000000000000004}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":0.30000000000000004}"
+    },
+    {
+      "name": "big integer height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":12345678901234567890}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":1.2345678901234567E+19}"
+    },
+    {
+      "name": "negative zero height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":-0}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":-0}"
+    },
+    {
+      "name": "exponent height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":4.2E+2}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "unknown fields",
+      "kind": "config",
+      "input": "{\"Left\":1,\"Extra\":{\"nested\":[1,2,{\"x\":null}],\"s\":\"\\u00e9\"},\"Theme\":\"dark\",\"Top\":2,\"Big\":1e400}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":1,\"Top\":2,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "case differs",
+      "kind": "config",
+      "input": "{\"left\":5,\"TOP\":6,\"pills\":false}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "duplicate",
+      "kind": "config",
+      "input": "{\"Left\":1,\"Avatar\":\"A\",\"Left\":2,\"Avatar\":\"B\"}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":2,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"B\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "escaped name",
+      "kind": "config",
+      "input": "{\"\\u004Ceft\":7,\"Av\\u0061tar\":\"x\"}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":7,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"x\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "special avatar",
+      "kind": "config",
+      "input": "{\"Avatar\":\"Ünï <&> '+' \\\"q\\\" \\\\ / ` = ! \\n \\r \\t \\b \\f \\u0001 \\u001f \\u007f ~ é \uD83D\uDE00 \\u2028\"}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"\\u00DCn\\u00EF \\u003C\\u0026\\u003E \\u0027\\u002B\\u0027 \\u0022q\\u0022 \\\\ / \\u0060 = ! \\n \\r \\t \\b \\f \\u0001 \\u001F \\u007F ~ \\u00E9 \\uD83D\\uDE00 \\u2028\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "printable ascii avatar",
+      "kind": "config",
+      "input": "{\"Avatar\":\" !\\\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\"}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\" !\\u0022#$%\\u0026\\u0027()*\\u002B,-./0123456789:;\\u003C=\\u003E?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_\\u0060abcdefghijklmnopqrstuvwxyz{|}~\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "avatar null",
+      "kind": "config",
+      "input": "{\"Avatar\":null}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":null,\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "indented with CRLF",
+      "kind": "config",
+      "input": "{\r\n  \"Left\": 5,\r\n  \"Top\": 6,\r\n  \"Music\": false\r\n}\r\n",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":5,\"Top\":6,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":false,\"WindowHeight\":420}"
+    },
+    {
+      "name": "whitespace around",
+      "kind": "config",
+      "input": " \t\n{\"Left\":5}\n\n",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":5,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "top-level null",
+      "kind": "config",
+      "input": "null",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "lone surrogate in an unknown field",
+      "kind": "config",
+      "input": "{\"Extra\":\"\\ud800\",\"Left\":4}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":4,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "unknown nested 62",
+      "kind": "config",
+      "input": "{\"Left\":1,\"Deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":1,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "unknown nested 63",
+      "kind": "config",
+      "input": "{\"Left\":1,\"Deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\"Left\":1,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "unknown nested 64",
+      "kind": "config",
+      "input": "{\"Left\":1,\"Deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "utf-8 BOM",
+      "kind": "config",
+      "input": null,
+      "input_hex": "EFBBBF7B224C656674223A382C22417661746172223A22C3A9227D",
+      "status": "loaded",
+      "written": "{\"Left\":8,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"\\u00E9\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "utf-16 LE BOM",
+      "kind": "config",
+      "input": null,
+      "input_hex": "FFFE7B0022004C0065006600740022003A0039002C00220041007600610074006100720022003A002200E9003DD800DE22007D00",
+      "status": "loaded",
+      "written": "{\"Left\":9,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"\\u00E9\\uD83D\\uDE00\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "utf-16 BE BOM",
+      "kind": "config",
+      "input": null,
+      "input_hex": "FEFF007B0022004C0065006600740022003A00310030007D",
+      "status": "loaded",
+      "written": "{\"Left\":10,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "utf-32 LE BOM",
+      "kind": "config",
+      "input": null,
+      "input_hex": "FFFE00007B000000220000004C000000650000006600000074000000220000003A00000031000000310000007D000000",
+      "status": "loaded",
+      "written": "{\"Left\":11,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "invalid utf-8",
+      "kind": "config",
+      "input": null,
+      "input_hex": "7B22417661746172223A2261FFC362227D",
+      "status": "loaded",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"a\\uFFFD\\uFFFDb\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "empty",
+      "kind": "config",
+      "input": "",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "whitespace only",
+      "kind": "config",
+      "input": "  \n",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "array",
+      "kind": "config",
+      "input": "[]",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "number",
+      "kind": "config",
+      "input": "5",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "string int",
+      "kind": "config",
+      "input": "{\"Left\":\"5\"}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "fractional int",
+      "kind": "config",
+      "input": "{\"Left\":1.5}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "whole fractional int",
+      "kind": "config",
+      "input": "{\"Left\":1.0}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "exponent int",
+      "kind": "config",
+      "input": "{\"Left\":1e2}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "int overflow",
+      "kind": "config",
+      "input": "{\"Left\":2147483648}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "null bool",
+      "kind": "config",
+      "input": "{\"Pills\":null}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "number bool",
+      "kind": "config",
+      "input": "{\"Toolbar\":1}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "number string",
+      "kind": "config",
+      "input": "{\"Avatar\":5}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "string height",
+      "kind": "config",
+      "input": "{\"WindowHeight\":\"420\"}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "height overflow",
+      "kind": "config",
+      "input": "{\"WindowHeight\":1e400}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": null
+    },
+    {
+      "name": "lone surrogate in the avatar",
+      "kind": "config",
+      "input": "{\"Avatar\":\"\\ud800\"}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "trailing comma",
+      "kind": "config",
+      "input": "{\"Left\":1,}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "comment",
+      "kind": "config",
+      "input": "{\"Left\":1} // saved",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "trailing text",
+      "kind": "config",
+      "input": "{\"Left\":1} x",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "two objects",
+      "kind": "config",
+      "input": "{\"Left\":1}{\"Left\":2}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "truncated",
+      "kind": "config",
+      "input": "{\"Left\":1",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "unknown nested 65",
+      "kind": "config",
+      "input": "{\"Left\":1,\"Deep\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\"Left\":null,\"Top\":null,\"Pills\":true,\"OnTop\":true,\"Avatar\":\"Sprout\",\"Music\":true,\"WindowHeight\":420}"
+    },
+    {
+      "name": "missing",
+      "kind": "jira",
+      "input": null,
+      "input_hex": null,
+      "status": "missing",
+      "written": "{\n  \"Enabled\": false,\n  \"Site\": \"\",\n  \"Email\": \"\",\n  \"Jql\": \"assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC\",\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "every field",
+      "kind": "jira",
+      "input": "{\"Enabled\":true,\"Site\":\"acme.atlassian.net\",\"Email\":\"ann@acme.example\",\"Jql\":\"project = ABC AND statusCategory != Done ORDER BY updated DESC\",\"PollSeconds\":30}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\n  \"Enabled\": true,\n  \"Site\": \"acme.atlassian.net\",\n  \"Email\": \"ann@acme.example\",\n  \"Jql\": \"project = ABC AND statusCategory != Done ORDER BY updated DESC\",\n  \"PollSeconds\": 30\n}"
+    },
+    {
+      "name": "as the app writes it",
+      "kind": "jira",
+      "input": "{\n  \"Enabled\": false,\n  \"Site\": \"\",\n  \"Email\": \"\",\n  \"Jql\": \"assignee = currentUser()\",\n  \"PollSeconds\": 120\n}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\n  \"Enabled\": false,\n  \"Site\": \"\",\n  \"Email\": \"\",\n  \"Jql\": \"assignee = currentUser()\",\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "nulls",
+      "kind": "jira",
+      "input": "{\"Site\":null,\"Email\":null,\"Jql\":null}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\n  \"Enabled\": false,\n  \"Site\": null,\n  \"Email\": null,\n  \"Jql\": null,\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "special jql",
+      "kind": "jira",
+      "input": "{\"Jql\":\"text ~ \\\"a&b\\\" AND summary ~ '<x>' + é\"}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\n  \"Enabled\": false,\n  \"Site\": \"\",\n  \"Email\": \"\",\n  \"Jql\": \"text ~ \\u0022a\\u0026b\\u0022 AND summary ~ \\u0027\\u003Cx\\u003E\\u0027 \\u002B \\u00E9\",\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "unknown fields",
+      "kind": "jira",
+      "input": "{\"Enabled\":true,\"Token\":\"secret\",\"PollSeconds\":60}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\n  \"Enabled\": true,\n  \"Site\": \"\",\n  \"Email\": \"\",\n  \"Jql\": \"assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC\",\n  \"PollSeconds\": 60\n}"
+    },
+    {
+      "name": "string poll",
+      "kind": "jira",
+      "input": "{\"PollSeconds\":\"120\"}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\n  \"Enabled\": false,\n  \"Site\": \"\",\n  \"Email\": \"\",\n  \"Jql\": \"assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC\",\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "empty",
+      "kind": "jira",
+      "input": "",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\n  \"Enabled\": false,\n  \"Site\": \"\",\n  \"Email\": \"\",\n  \"Jql\": \"assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC\",\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "missing",
+      "kind": "github",
+      "input": null,
+      "input_hex": null,
+      "status": "missing",
+      "written": "{\n  \"Enabled\": false,\n  \"Host\": \"github.com\",\n  \"Orgs\": [],\n  \"JiraProjects\": [],\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "every field",
+      "kind": "github",
+      "input": "{\"Enabled\":true,\"Host\":\"github.example.com\",\"Orgs\":[\"acme\",\"beta\"],\"JiraProjects\":[\"ABC\"],\"PollSeconds\":300}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\n  \"Enabled\": true,\n  \"Host\": \"github.example.com\",\n  \"Orgs\": [\n    \"acme\",\n    \"beta\"\n  ],\n  \"JiraProjects\": [\n    \"ABC\"\n  ],\n  \"PollSeconds\": 300\n}"
+    },
+    {
+      "name": "empty lists",
+      "kind": "github",
+      "input": "{\"Orgs\":[],\"JiraProjects\":[]}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\n  \"Enabled\": false,\n  \"Host\": \"github.com\",\n  \"Orgs\": [],\n  \"JiraProjects\": [],\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "nulls",
+      "kind": "github",
+      "input": "{\"Host\":null,\"Orgs\":null,\"JiraProjects\":[null,\"X\"]}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\n  \"Enabled\": false,\n  \"Host\": null,\n  \"Orgs\": null,\n  \"JiraProjects\": [\n    null,\n    \"X\"\n  ],\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "unknown fields",
+      "kind": "github",
+      "input": "{\"Enabled\":true,\"Repos\":[\"a/b\"]}",
+      "input_hex": null,
+      "status": "loaded",
+      "written": "{\n  \"Enabled\": true,\n  \"Host\": \"github.com\",\n  \"Orgs\": [],\n  \"JiraProjects\": [],\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "string orgs",
+      "kind": "github",
+      "input": "{\"Orgs\":\"acme\"}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\n  \"Enabled\": false,\n  \"Host\": \"github.com\",\n  \"Orgs\": [],\n  \"JiraProjects\": [],\n  \"PollSeconds\": 120\n}"
+    },
+    {
+      "name": "number in orgs",
+      "kind": "github",
+      "input": "{\"Orgs\":[1]}",
+      "input_hex": null,
+      "status": "corrupt",
+      "written": "{\n  \"Enabled\": false,\n  \"Host\": \"github.com\",\n  \"Orgs\": [],\n  \"JiraProjects\": [],\n  \"PollSeconds\": 120\n}"
+    }
+  ]
+}

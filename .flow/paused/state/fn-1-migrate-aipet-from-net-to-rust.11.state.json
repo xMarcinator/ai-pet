@@ -1,0 +1,41 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-09-30T10:01:31.654862Z",
+  "evidence": {
+    "base_commit": "c66df24d4f9b5de7a7683cc5ba49e4be877c88f1",
+    "commits": [
+      "55b4f3c3c4737ab07c30b5188f9b4663342e99f1",
+      "9593292"
+    ],
+    "integrated": {
+      "base": "c66df24",
+      "head": "9593292",
+      "merges": [
+        "f95c653",
+        "2a670c4"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from all three draws: P2 Http::local checked only the first URL's host, so a stub's redirect could take a test off this computer; P2 the standard reason phrase instead of the server's; P3 serde_json's text for rarer JSON syntax errors",
+      "fix_commits": [
+        "9593292"
+      ],
+      "note": "the first fan-out failed within seconds on flow-next 6.7.0's default Codex model, which this account rejects (a refunded transport failure); the draws then ran pinned to codex:gpt-5.6-sol:high",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/impl-review-receipt-e0451e0e6b29-fn-1-migrate-aipet-from-net-to-rust.11.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "cd rust && cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --all -- --check",
+      "dotnet test AiPet.slnx",
+      "cd rust && cargo clippy -p aipet-core --all-targets -- -D warnings",
+      "integrated verify (Windows, work branch 0a5517b with tasks 9 and 11 and their review fixes merged): cargo test --workspace -- --skip credential_manager_tokens_are_the_apps green, clippy --workspace --all-targets -D warnings and fmt --check clean; dotnet build AiPet.slnx -p:UseAppHost=false, dotnet test AiPet.slnx --no-build: 160 passed, 42 skipped; AIPET_TEST_HOOK=<Debug aipet-hook.dll> cargo test -p aipet-core --test server: 15 passed (the .NET hook against the Rust server); AIPET_TEST_HOOK=<rust hook> dotnet test --filter PluginHooksTests|RegistrationTests: 14 passed, 10 Unix-only skipped"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-09-30T12:30:30.890211Z"
+}

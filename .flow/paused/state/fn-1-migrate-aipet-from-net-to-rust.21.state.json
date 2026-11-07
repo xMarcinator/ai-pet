@@ -1,0 +1,45 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-10-02T09:59:59.428276Z",
+  "evidence": {
+    "base_commit": "2d6f460e4fae84e5b8562822d1ae60984aac0b4d",
+    "commits": [
+      "d4e2f600dd8f792c5f6b7f3c75ce2e1f480c0b3f",
+      "446003f"
+    ],
+    "integrated": {
+      "base": "2d6f460",
+      "head": "446003f",
+      "merges": [
+        "1952361",
+        "a26906d"
+      ],
+      "method": "merge commits on fn-1-migrate-aipet-from-net-to-rust (task commits keep their IDs)"
+    },
+    "prs": [],
+    "review": {
+      "backend": "codex",
+      "first_round": "NEEDS_WORK from the correctness draw (P2, R14): Velopack's GithubSource sets no HTTP timeout, so a stalled check or download left Settings busy for good",
+      "fix_commits": [
+        "446003f"
+      ],
+      "note": "the conductor moved the two CI-level acceptance items to task 23 (073bb9c), which owns the workflows; flowctl 6.7.0 pinned to codex:gpt-5.6-sol:high",
+      "receipt": "C:/Users/MJE/AppData/Local/Temp/claude/C--Users-MJE-Documents-projects-ai-pet/f87b5d6a-45b2-4527-b181-ebc7e0bf4a67/scratchpad/impl-review-fn-1.21.receipt.json",
+      "rounds": 2,
+      "verdict": "SHIP"
+    },
+    "tests": [
+      "cd rust && cargo test --workspace --offline && cargo clippy --workspace --all-targets --offline && cargo fmt --all -- --check (385 passed, 0 failed, 3 ignored; green receipt d4e2f600-unittest)",
+      "dotnet build AiPet.slnx -p:UseAppHost=false && dotnet test AiPet.slnx --no-build (161 passed, 53 skipped)",
+      "cargo clippy --offline --locked -p aipet -p aipet-ui --all-targets -Zbuild-std --target x86_64-unknown-linux-gnu -- -D warnings (clean)",
+      "same for aarch64-apple-darwin (clean)",
+      "cargo clippy --offline -p aipet --features demo --all-targets -- -D warnings (clean)",
+      "mutation: uninstall callback dropped -> the_uninstaller_runs_the_hook_cleanup fails; a statement before updates::startup() in main -> velopack_runs_before_anything_else_in_main fails",
+      "baseline: green (371 Rust tests, C# 161 passed / 53 skipped at 2d6f460)",
+      "integrated verify (Windows, work branch 4ff23c3 with tasks 19, 20 and 21 and their review fixes merged): cargo test --workspace --no-fail-fast -- --skip credential_manager_tokens_are_the_apps green, clippy -D warnings and fmt clean; at 436d693: dotnet build and test 161 passed, 53 skipped, C# hook tests on the Rust hook 23 passed, Rust server with the .NET hook green; the live doctor replay, which failed in the full gate under load (the antivirus flake), passed alone at 4ff23c3"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-10-02T12:16:05.983893Z"
+}
