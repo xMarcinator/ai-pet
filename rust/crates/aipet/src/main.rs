@@ -17,7 +17,8 @@
 //! `AIPET_DEBUG=1` says which shell runs and makes it log pointer events and input-region updates to stderr;
 //! `AIPET_OPEN_SETTINGS=1` opens Settings at start (both shells), and `AIPET_OPEN_SETTINGS=avatars` (or another
 //! page's name) opens it on that page. The pet renders on the low-power GPU unless
-//! `WGPU_POWER_PREF` says otherwise, and through GL unless `WGPU_BACKEND` does.
+//! `WGPU_POWER_PREF` says otherwise, and through GL unless `WGPU_BACKEND` does; on Linux, with only Mesa's EGL driver
+//! loaded when an Intel or AMD GPU drives the screen ([`mesa`]), unless `__EGL_VENDOR_LIBRARY_FILENAMES` says otherwise.
 //!
 //! With the `demo` feature it plays the demo's scripted day instead, for development and screenshots: no single
 //! instance, no core, and nothing read or written in the data folder.
@@ -29,6 +30,8 @@
 mod config;
 #[cfg(not(feature = "demo"))]
 mod core_thread;
+#[cfg(target_os = "linux")]
+mod mesa;
 #[cfg(not(feature = "demo"))]
 mod placement;
 #[cfg(not(feature = "demo"))]
@@ -146,6 +149,11 @@ fn set_gpu_defaults() {
         // (`only_pet`)
         unsafe { env::set_var("WGPU_BACKEND", "gl") };
     }
+    // SAFETY: as above
+    #[cfg(target_os = "linux")]
+    unsafe {
+        mesa::load_only_mesa()
+    };
 }
 
 /// Whether the Wayland shell runs, and why.
