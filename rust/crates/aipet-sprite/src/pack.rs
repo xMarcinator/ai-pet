@@ -256,13 +256,30 @@ impl Layer {
             || self.part_animations.contains_key(value)
     }
 
+    /// Whether the layer draws something of its own for `value`: frames or shapes, not only a pose or a part
+    /// animation.
+    pub fn draws(&self, value: &str) -> bool {
+        self.animations.contains_key(value) || self.shapes.contains_key(value)
+    }
+
     /// The value the layer shows for `value`: itself if it has it, else its fallbacks'; then, for a combined value
     /// (`zs+sparkles`), its last part; else the default. `None` when a fallback says to draw nothing.
-    /// [`Pack::validate`] has checked the chains end.
+    /// [`Pack::validate`] has checked the chains end. This is the value whose poses and part animations apply; what
+    /// it draws is [`Layer::resolve_art`]'s.
     pub fn resolve<'a>(&'a self, value: &'a str) -> Option<&'a str> {
+        self.resolve_by(value, &|v| self.has(v))
+    }
+
+    /// The value whose frames or shapes the layer draws for `value`: as [`Layer::resolve`], past values that only
+    /// move parts. A value with a pose and no drawing of its own draws its fallback's (else the default's) at its pose.
+    pub fn resolve_art<'a>(&'a self, value: &'a str) -> Option<&'a str> {
+        self.resolve_by(value, &|v| self.draws(v))
+    }
+
+    fn resolve_by<'a>(&'a self, value: &'a str, has: &dyn Fn(&str) -> bool) -> Option<&'a str> {
         let mut v = value;
         for _ in 0..=MAX_FALLBACK {
-            if self.has(v) {
+            if has(v) {
                 return Some(v);
             }
             match self.fallback.get(v) {
@@ -272,7 +289,7 @@ impl Layer {
             }
         }
         match value.rsplit_once('+') {
-            Some((_, last)) if last != value => self.resolve(last),
+            Some((_, last)) if last != value => self.resolve_by(last, has),
             _ => Some(&self.default),
         }
     }

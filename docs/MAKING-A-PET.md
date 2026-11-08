@@ -321,7 +321,8 @@ painted pack by logical px. A raster layer with two or more parts skips the pack
 two ways; give each moving part a layer of its own (`hand-left` and `hand-right`, say, both on the `arms` channel).
 An eyes layer without parts still moves by its `look` table.
 
-A raster layer draws the frames of the value it shows, so give each value it poses frames of its own. In an
+A value may only move parts: give it a pose or a part animation and no frames, and the layer draws its fallback's
+frames (else its default's) where the pose puts the part. A vector layer does the same with shapes. In an
 Aseprite file the part's slice gives the poses: draw the part in the same place on every tag, and move the slice
 on each tag's first frame to where the part should go, since the pet moves the frame by the slice's move.
 

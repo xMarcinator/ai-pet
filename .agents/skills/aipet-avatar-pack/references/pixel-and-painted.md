@@ -59,8 +59,8 @@ A raster layer moves **as one piece**:
 - Keys take `dx` and `dy` only; `rotate`, `scale` and `opacity` are vector-only (draw rotated frames instead).
 - A pixel pack moves by whole art pixels, a painted pack by logical px. Part positions are logical px.
 - An eyes layer without parts still moves by its `look` table (logical px, whole art pixels).
-- The layer draws the frames of the value it shows: give each value it poses frames of its own (they may be the same
-  rectangle).
+- A value may only move parts: with a pose or part animation and no frames, the layer draws its fallback's frames
+  (else the default's) at the pose. Give it frames of its own only when it should look different.
 
 ## The pixel generator
 

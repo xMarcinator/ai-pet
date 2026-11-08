@@ -26,6 +26,9 @@ For the value the pose asks for, a layer shows:
 3. else, for a combined effect (`zs+sparkles`), the same for its last part (`sparkles`);
 4. else the layer's `default`.
 
+The pose and part animation come from that value; the drawing from the first value along the same chain that has
+frames or shapes. So a value with only a pose moves the default's drawing (or its fallback's) to the pose.
+
 So a layer the pet doesn't need for a value must say `null`, or it shows its default. That is the usual mistake with
 headphones (`"fallback": {"off": null}`), props (`{"none": null}`) and effects layers (every other effect `null`).
 

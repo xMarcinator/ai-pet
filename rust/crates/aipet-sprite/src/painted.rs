@@ -208,7 +208,9 @@ fn frame(pack: &Pack, li: usize, value: &str, at: f64, scale: f64) -> (Vec<u32>,
             opacity,
             mirrored: false,
         };
-        items.extend(vector::item(pack, &placed, Some(value), (1.0, 1.0)));
+        // a value that only moves parts draws its fallback's shapes at its pose
+        let layer = &pack.layers[li];
+        items.extend(vector::item(pack, &placed, layer.resolve_art(value), (1.0, 1.0)));
     }
     let view = View::of_box(scale);
     let rgba = vector::render(&items, view, |_| true);

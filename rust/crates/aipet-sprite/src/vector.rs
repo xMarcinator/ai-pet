@@ -396,7 +396,7 @@ pub fn scene<'a>(pack: &'a Pack, placed: &[Placed], pose: &Pose) -> Vec<Item<'a>
         .iter()
         .filter_map(|p| {
             let layer = &pack.layers[p.layer];
-            item(pack, p, layer.resolve(pose.key(layer.channel)), squash)
+            item(pack, p, layer.resolve_art(pose.key(layer.channel)), squash)
         })
         .collect()
 }

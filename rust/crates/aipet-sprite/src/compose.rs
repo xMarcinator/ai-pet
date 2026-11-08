@@ -72,7 +72,7 @@ pub fn pick<'a>(pack: &'a Pack, pose: &Pose, t: f64) -> Vec<Pick<'a>> {
         .iter()
         .enumerate()
         .filter_map(|(i, layer)| {
-            let mut value = layer.resolve(pose.key(layer.channel))?;
+            let mut value = layer.resolve_art(pose.key(layer.channel))?;
             let mut mirrored = mirrored(pack, layer, pose);
             // a value's own frames for facing left, where the layer has them, instead of mirroring
             if pose.facing == Facing::Left
@@ -690,6 +690,37 @@ mod tests {
         let at = parts.raster_offsets(&painted, &arms(Arms::WaveA, 1.0), 1.05)[1];
         assert!((at.0 - 1.25).abs() < 1e-9 && (at.1 + 1.875).abs() < 1e-9, "{at:?}");
         assert_eq!(Parts::default().raster_offsets(&painted, &hold, 2.15)[1], (1.0, 5.0));
+    }
+
+    #[test]
+    fn a_value_that_only_moves_a_part_draws_its_fallbacks_frames_at_its_pose() {
+        // the hand has frames for `rest` only: waving moves the rest frame, a fallback moves its own target's
+        let mut p = hand_pack(Kind::Pixel);
+        let hand = &mut p.layers[1];
+        hand.animations.retain(|v, _| v == "rest");
+        hand.fallback.insert("wave-b".into(), Some("wave-a".into()));
+        assert_eq!(p.validate(), Ok(()));
+        let hand = &p.layers[1];
+        assert_eq!(
+            (hand.resolve("wave-a"), hand.resolve_art("wave-a")),
+            (Some("wave-a"), Some("rest"))
+        );
+        assert_eq!(
+            (hand.resolve("wave-b"), hand.resolve_art("wave-b")),
+            (Some("wave-a"), Some("rest"))
+        );
+        assert_eq!(
+            hand.resolve_art("hold"),
+            Some("rest"),
+            "a part animation alone draws the default"
+        );
+        let wave = arms(Arms::WaveA, 1.0);
+        let drawn = pick(&p, &wave, 1.3);
+        assert_eq!((drawn[1].value, drawn[1].frame), ("rest", Some(0)));
+        let mut parts = Parts::default();
+        parts.raster_offsets(&p, &arms(Arms::Rest, 0.0), 0.0);
+        parts.raster_offsets(&p, &wave, 1.0);
+        assert_eq!(parts.raster_offsets(&p, &wave, 1.3)[1], (20.0, -30.0));
     }
 
     #[test]
