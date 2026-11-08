@@ -211,8 +211,8 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
     .spacing(8);
     let own = button_row(
         "Your own avatars",
-        "Put a pet in the avatars folder: a pack folder (pack.json and its PNG sheets, or an Aseprite json-array \
-         export), or an avatar .json file. It shows up here after Reload.",
+        "Put a pet in the avatars folder: a pack folder (a pack.json with its sheets or shapes, or Aseprite art), \
+         or a legacy avatar .json file. Theme files go in its themes folder. They show up here after Reload.",
         buttons,
     );
     let mut own = column![own].spacing(8);

@@ -37,12 +37,32 @@ The .NET runtime includes third-party code as well. Its notices are in
 [THIRD-PARTY-NOTICES.TXT](https://github.com/dotnet/runtime/blob/main/THIRD-PARTY-NOTICES.TXT) in the dotnet/runtime
 repository, and in the `Microsoft.NETCore.App.Runtime.<rid>` packages.
 
+## The Rust pet's packs
+
+The Rust pet in `rust/`, which the packages don't ship yet, reads and draws its pets with these crates. The versions
+are the ones `rust/Cargo.lock` resolves to, and the licenses and notices are the ones the crates declare. Where a
+crate offers a choice of licenses, AiPet uses it under the MIT License.
+
+| Component | Version | What it's for | License | Copyright |
+|---|---|---|---|---|
+| [png](https://github.com/image-rs/image-png) | 0.18.1 | Reading the pets' PNG sheets, and writing the built-in pets' sheets | MIT OR Apache-2.0 | Copyright (c) 2015 nwin |
+| [flate2](https://github.com/rust-lang/flate2-rs) | 1.1.10 | Inflating the compressed cels of native Aseprite files | MIT OR Apache-2.0 | Copyright (c) 2014-2026 Alex Crichton |
+| [tiny-skia](https://github.com/RazrFalcon/tiny-skia) (tiny-skia and tiny-skia-path) | 0.11.4 | Drawing vector pets for their hit masks and stills, and painting the painted Pip | BSD-3-Clause | Copyright (c) 2011 Google Inc.; Copyright (c) 2020 Yevhenii Reizner |
+
+These bring in small crates of their own: fdeflate, miniz_oxide, crc32fast, simd-adler32, adler2 and bitflags
+(png and flate2), and arrayref, arrayvec, bytemuck, strict-num, cfg-if and log (tiny-skia), each under the MIT
+License or a choice that includes it, except arrayref (BSD-2-Clause) and zlib-rs (Zlib), which `rust/Cargo.lock` also
+lists for flate2.
+
+The Aseprite files in `rust/crates/aipet-sprite/tests/fixtures/asefile/` (MIT, Copyright (c) 2020 Alpine Alpaca
+Games) are test data only: nothing of them is built into AiPet. Their license is beside them.
+
 ## License texts
 
 ### MIT License
 
-Used by Avalonia, SkiaSharp, HarfBuzzSharp, MicroCom.Runtime, Tmds.DBus.Protocol, the .NET runtime and
-Velopack, each with the copyright notice given in the table above.
+Used by Avalonia, SkiaSharp, HarfBuzzSharp, MicroCom.Runtime, Tmds.DBus.Protocol, the .NET runtime, Velopack,
+png and flate2, each with the copyright notice given in the tables above.
 
 ```
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -99,4 +119,39 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
+```
+
+### BSD 3-Clause License (tiny-skia)
+
+```
+Copyright (c) 2011 Google Inc. All rights reserved.
+Copyright (c) 2020 Yevhenii Reizner All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+  * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the
+    distribution.
+
+  * Neither the name of the copyright holder nor the names of its
+    contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```

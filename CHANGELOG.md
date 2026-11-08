@@ -5,7 +5,32 @@ app, `aipet-hook` and the plugin share one version number.
 
 ## [Unreleased]
 
-The first step of AiPet's move to Rust: the hook is now written in Rust, and the pet is still the .NET one.
+The first step of AiPet's move to Rust: the hook is now written in Rust, and the pet is still the .NET one. The Rust
+pet, which the packages don't ship yet, draws its pets from layered packs, listed under Added.
+
+### Added
+- Pets are layered packs: a folder with a `pack.json` and its art, in the data folder's `avatars/`. Each layer
+  follows one part of the pet (its mood, eyes, arms, feet, prop, headphones or effects), so every pet keeps
+  eye-follow, idle acts, blinking, the laptop and the magnifier, headphones and its effects. A pack's art is pixel-art
+  sheets (crisp at every scale), smooth painted sheets, or vector shapes in the manifest, with parts that move, look
+  around and animate. [docs/MAKING-A-PET.md](docs/MAKING-A-PET.md) explains how to make one, and `avatars/samples/`
+  has small examples. Rive packs aren't supported yet.
+- Packs can come straight from Aseprite: the `.aseprite` file itself, or a `json-array` export with its PNG. Tags
+  name the animations and slices place the anchor and the parts. Plain sprite sheets can be described as a grid of
+  frames.
+- `AiPet --check-pack <folder or theme file>` loads a pack or a theme file as the pet would and prints `OK` or what
+  is wrong, without starting the pet.
+- Packs load completely or not at all, within limits on file sizes, image sizes, frames and numbers, and only from
+  inside their own folder. Settings → Avatars lists each one that didn't load with the reason.
+- Six new built-in pets: Pip (a vector pet) and Pip (painted), drawn from it; Hood (vector), Hamster and Sprout
+  (vector); and Hamster (pixel). Sprout and Hood are baked from the pixel pets and look and behave as before.
+- Themes: a pet can come in several colours (the Hood in Blue or Green, Pip in Peach or Lilac) or, for a painted
+  pet, several sets of sheets. Settings → Avatars shows the worn pet's themes, and New theme makes your own from any
+  pet with named colours, saved as a file in `avatars/themes/` that Edit and Delete change or remove. The theme you
+  pick is saved as `AvatarTheme` in `config.json`.
+- Settings → General has Pet size (75 to 200 %) and Bubble size (80 to 120 %), saved as `PetSize` and `BubbleSize`.
+- The pet holds still when the system asks for reduced motion, or when `AIPET_REDUCE_MOTION=1` is set: no bobbing,
+  squash or idle acts, though its expressions still change.
 
 ### Changed
 - `aipet-hook` is the Rust one, in the plugin and in the Windows and Linux packages. Its command line, what it sends
@@ -18,6 +43,9 @@ The first step of AiPet's move to Rust: the hook is now written in Rust, and the
   When it can't take that lock (something else is at its path, say), the pet doesn't start, and `aipet.log` says why.
 - Building from source needs Rust for the hook: `build.sh`, `build.ps1` and `install-from-source` build it with
   cargo.
+- Settings → Avatars shows one tile per pet. The green Hood is now the Hood's Green theme, and a `config.json` that
+  names "Hood (green)" wears it. The avatar `.json` files of earlier versions still load, `avatars/hood-green.json`
+  among them.
 
 ## [0.1.0] - 2026-09-25
 

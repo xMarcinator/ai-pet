@@ -191,12 +191,21 @@ Right-click the pet for its menu:
   - Show chat bubbles, Always on top, and "Listen along with Spotify" (or your player): the music bubble, and the
     pet bops along.
   - Position: puts the pet back in the bottom-right corner of the screen.
+  - Pet size (75 to 200 %) and Bubble size (80 to 120 %): how big the pet and the chat bubbles are drawn.
   - Data folder: where AiPet keeps its settings and logs.
   - Team defaults: **Import defaults…** reads a preset file (below).
   - About: the version, and whether this copy updates itself. The installed Windows app shows the state of its
     updates here, with **Check for updates**.
-- **Avatars**: the built-in avatars, and your own. For your own, put an avatar `.json` file (a copy of a built-in
-  one with your own colours and shape) in the avatars folder and click **Reload**.
+- **Avatars**: the pets, one tile each. Click one to wear it. Eight are built in: Sprout, Hood, Pip and Pip (painted),
+  Hood (vector), Hamster, Sprout (vector) and Hamster (pixel).
+  - Themes: under the tiles, the worn pet's themes (the Hood in Blue or Green, say). **New theme** makes one of your
+    own from any pet with named colours: pick its colours and save it. **Edit** and **Delete** change or remove your
+    own themes.
+  - Your own pets: put a pack folder in the avatars folder (**Open folder**) and click **Reload**. A pack is a
+    `pack.json` with its art: pixel-art or painted PNG sheets, vector shapes, or straight from Aseprite. An older
+    avatar `.json` file still works too. Anything that doesn't load is listed with the reason, and
+    `AiPet --check-pack <folder>` checks a pack without starting the pet. [docs/MAKING-A-PET.md](docs/MAKING-A-PET.md)
+    explains how to make one, and [avatars/samples/](avatars/samples/) has small examples.
 - **Jira**: your Jira Cloud site, your email, an API token and a JQL search. The default search finds your own open
   issues (assigned to you and not done). For reviews, use something like
   `Reviewer = currentUser() AND status = Review ORDER BY updated DESC`.
@@ -269,11 +278,11 @@ keeps nothing.
 
 **The pet** keeps the chats in memory only, and forgets them when it closes. It also reads Codex's own session files
 (`~/.codex/session_index.jsonl` and `~/.codex/sessions/`), and never writes to them. In its data folder it stores:
-- `config.json`: the pet's position, avatar and switches.
+- `config.json`: the pet's position, avatar and its theme, sizes and switches.
 - `jira.json` and `github.json`: your Jira and GitHub settings (site, email, search, host, organisations), without
   the tokens.
 - `aipet.log` and `hook-events.log`. The event log has no prompt text.
-- `avatars/`: your own avatars.
+- `avatars/`: your own pets (pack folders and avatar `.json` files), and in `avatars/themes/` your own themes.
 
 **Tokens.** The Jira and GitHub tokens are only ones you paste into Settings, and Settings can remove them again.
 They're kept in Windows Credential Manager, or on Linux in your keyring through `secret-tool`. Without a keyring,
@@ -353,6 +362,7 @@ the shell scripts run only on Linux.
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how it all fits together, from the pet's animation to how the hooks
   feed it.
+- [docs/MAKING-A-PET.md](docs/MAKING-A-PET.md): how to make your own pet, and its themes.
 - [plugins/aipet/README.md](plugins/aipet/README.md): the plugin for Claude Code and Codex.
 - [packaging/windows/README.md](packaging/windows/README.md): the Windows packages and updates.
 

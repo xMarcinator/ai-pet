@@ -70,171 +70,153 @@ graph LR
 | [build.ps1](../build.ps1), [build.sh](../build.sh) | Builds per RID into `artifacts/`, bundles the hook into the plugin and makes a local marketplace to try it. |
 | [scripts/](../scripts/) | `install-from-source.sh` and `install-from-source.ps1` (install a build from a clone, with direct hooks), and `check-plugin.sh` (the plugin and marketplace files are consistent, and the hook files match the code). |
 | [.github/](../.github/) | `workflows/ci.yml` (build and tests on Windows and Linux, the Rust workspace, the plugin check, the hook's start-up time, the scripts), `workflows/release.yml` (check, win, linux-hook, linux, plugin, publish) and `dependabot.yml` (updates for the pinned actions). |
-| [avatars/](../avatars/) | A sample custom avatar (`hood-green.json`). The app does not read this folder (see §3.7). |
+| [avatars/](../avatars/) | A legacy sample avatar (`hood-green.json`), the built-in pets' reference drawings and generators (`reference/`), and sample packs and a sample theme file (`samples/`). The app does not read this folder (see §3.7). |
 | `web/` | An earlier prototype. Not built or installed, and not covered here. |
 
 ---
 
-## 3. The pet: animation and rendering
+## 3. The pet: behaviour, packs and drawing
 
-Files: [Pet.cs](../src/AiPet.Core/Pet.cs), [Avatar.cs](../src/AiPet.Core/Avatar.cs), [MainWindow.axaml](../src/AiPet.UI/MainWindow.axaml), [MainWindow.axaml.cs](../src/AiPet.UI/MainWindow.axaml.cs).
+Files: [pet.rs](../rust/crates/aipet-sprite/src/pet.rs) (behaviour), [pose.rs](../rust/crates/aipet-sprite/src/pose.rs) (the Pose), [pack.rs](../rust/crates/aipet-sprite/src/pack.rs) (the pack model and its checks), [manifest.rs](../rust/crates/aipet-sprite/src/manifest.rs) (reading `pack.json`), [load.rs](../rust/crates/aipet-sprite/src/load.rs) (finding and loading pets, the limits, Aseprite, theme files, `--check-pack`), [compose.rs](../rust/crates/aipet-sprite/src/compose.rs) (the compositor), [vector.rs](../rust/crates/aipet-sprite/src/vector.rs) (path data and the tiny-skia rasteriser), [builtin.rs](../rust/crates/aipet-sprite/src/builtin.rs) (the embedded pets), and in the UI crate [sprite.rs](../rust/crates/aipet-ui/src/sprite.rs), [vector_view.rs](../rust/crates/aipet-ui/src/vector_view.rs) and [settings/avatars.rs](../rust/crates/aipet-ui/src/settings/avatars.rs).
 
-### 3.1 Grid and pipeline
+This section describes the Rust pet. The behaviour in `pet.rs` is a port of `src/AiPet.Core/Pet.cs` that keeps its numbers bit for bit; what the pet looks like comes from a **pack**. The authoring side (the manifest, every key, the limits and the checker) is in [MAKING-A-PET.md](MAKING-A-PET.md).
 
-The pet is a pixel-art sprite of 26x24 cells (`Pet.GW=26`, `Pet.GH=24`), drawn at 5 DIPs per cell (`Pet.P=5`). The `Sprite` panel is therefore 130x120 DIPs (Pet.cs:37, MainWindow.axaml:39). All animation logic is in the platform-neutral class `AiPet.Pet`. The UI only feeds input and copies pixels.
+### 3.1 Pipeline: Pose → compositor → renderers
 
+The behaviour never draws. Each frame it computes a **Pose**, a renderer-neutral description of what each part of the pet shows. The compositor turns the Pose and the worn pack into what each layer draws, and the UI draws it.
+
+```mermaid
+flowchart LR
+  In["PetInput + time + RNG"] --> B["Pet::update<br/>(behaviour)"]
+  B --> P["Pose: channels, when each changed, motion"]
+  Packs[("built-in packs<br/>(embedded)")] --> L["load: packs, Aseprite,<br/>legacy .json, theme files"]
+  Disk[("DataDir/avatars/")] --> L
+  L --> M["LoadedPack: layers, animations,<br/>parts, sheets, themes"]
+  P --> C["compose: value per layer (fallbacks),<br/>frame by time, parts placed, mirroring"]
+  M --> C
+  C --> R1["sprite.rs: raster frames as images<br/>(pixel: nearest, painted: linear)"]
+  C --> R2["vector_view.rs: shapes on an iced canvas"]
+  C --> H["hit-layer alpha → row runs → rectangles"]
 ```
-MainWindow.OnFrame (every compositor frame)
-  -> fill PetInput (state, prop, hover, drag, one-shot timers, music)
-  -> Pet.Update(input, t)
-       ComputePose(input, t)          every call
-       Draw(pose, ...)                only when (int)(t*24) changes  -> PixelsChanged
-       squash / stretch / breathe     every call
-       shadow scale / opacity         every call
-  -> if PixelsChanged: Blit Body, Glow, Fx into three WriteableBitmaps
-  -> apply ScaleTransform / TranslateTransform to Sprite and Shadow
-```
 
-- **Frame loop.** The constructor calls `RequestAnimationFrame(OnFrame)` (MainWindow.axaml.cs:142), and each `OnFrame` requests the next frame at its end (:677). There is no timer; the pet ticks once per compositor or vsync frame. The clock is a `Stopwatch`, and `Now` is seconds since the window was created (:38-39).
-- **Two rates.** `ComputePose` and the transforms run at display rate, so movement is smooth at sub-pixel DIP offsets. Pixels are redrawn only at 24 fps (Pet.cs:339-345). The result is deliberately smooth motion with choppy pixel-art frames. `dt` is clamped to 0.001-0.05 s (Pet.cs:334).
-- **`PetInput`** (Pet.cs:6-22):
-  - `State`: `sleep`, `idle`, `thinking`, `working`, `attention` or `done`.
-  - `StateSince`, `Prop` (`laptop` or `lens`), `Hover`, `Mouse` (sprite DIPs or null), `Dragging`, `Moved`, `LastMove`, `Facing` (±1).
-  - One-shot deadlines: `PokeUntil`, `LandUntil`, `WaveUntil`, `AlertUntil`.
-  - `Music`.
+- **Frame loop.** The shell ticks the UI, and the UI the pet, at the smooth rate (60 fps) while the pointer is on the pet's surface, during a drag, for a second after anything moved fast, and while an animation on screen has frames shorter than the calm interval; at the calm rate (30 fps) otherwise (`PetUi::frame_interval`). `Pet::update(input, t)` clamps `dt` to 0.001-0.05 s, computes the pose, and returns the frame's motion. The art is redrawn at 24 fps (`(int)(t*24)` changes) and motion every call, as in the C#: smooth movement, stepped animation frames.
+- **`PetInput`** is what the UI tells the pet: `state` (`sleep`, `idle`, `thinking`, `working`, `attention` or `done`), `state_since`, `prop` (`laptop` or `lens`), `hover`, `mouse`, `dragging`, `moved`, `last_move`, `facing` (±1), the one-shot deadlines `poke_until`, `land_until`, `wave_until` and `alert_until`, and `music`.
+- **The Pose** ([pose.rs](../rust/crates/aipet-sprite/src/pose.rs)) is a set of channels, each with the time its value last changed, plus `motion` (offset, squash and stretch about the anchor, shadow scale and opacity) and `still` (reduced motion):
 
-  MainWindow owns the single instance (`input`, MainWindow.axaml.cs:29).
-- **`PetFrame`** (Pet.cs:25-31) holds the `Body`, `Glow` and `Fx` buffers as `uint[GW*GH]` premultiplied BGRA (`0xAARRGGBB`, which matches `PixelFormat.Bgra8888` in little-endian memory), plus `PixelsChanged`, `X`/`Y`, `ScaleX`/`ScaleY`, `ShadowScale` and `ShadowOpacity`. The arrays are the pet's own reused buffers, not copies (Pet.cs:169).
+  | Channel | Values |
+  |---|---|
+  | `state` | `idle`, `idle-look`, `idle-hop`, `idle-stretch`, `idle-wiggle`, `idle-tap`, `sleep`, `thinking`, `working`, `attention`, `done`, `listen` |
+  | `eyes` | `open`, `closed`, `blink`, `happy`, `squint`, `wide`, `up`, `down`, plus a look direction (`Look`: `dx` −2..2, `dy` −1..1, with hysteresis on the pointer) |
+  | `arms` | `rest`, `raised`, `wave-a`, `wave-b`, `run-a`, `run-b`, `hold` (at the laptop), `lens` |
+  | `feet` | `stand`, `tap`, `dangle-a`, `dangle-b`, `run-a`, `run-b` |
+  | `prop` | `none`, `laptop`, `lens` |
+  | `headphones` | `on`, `off` |
+  | `fx` | `none`, `zs`, `dots`, `notes`, `alert`, `sparkles`, `dust`, and `<effect>+sparkles` when sparkles come on top |
+  | `facing` | `left`, `right` |
+
+- **Randomness** (idle acts, glances, blink times) goes through the injectable `PetRng`, so the tests pin it down.
 
 ### 3.2 Where the state comes from
 
-`MainWindow.Refresh` (every 250 ms and on watcher events) copies `board.State` into `input.State`. It resets `StateSince` only when the state changes, and it copies `input.Prop` every time (MainWindow.axaml.cs:292-303). §5 explains how `Board.State` is derived. Inside `ComputePose` (Pet.cs:219-231):
+The UI copies the board's state into `input.state` and resets `state_since` only when it changes; §5 explains how the board's state is derived. Inside `Pet::compute_pose`:
 
-- `st = t < AlertUntil ? "attention" : inp.State`. A new Jira or GitHub review sets `AlertUntil = Now + 6` (MainWindow.axaml.cs:125, 129).
-- While music is playing (`input.Music = cfg.Music && Media.Playing`), `idle` or `sleep` of any age, or `done` older than 4 s, becomes the synthetic state `listen` (Pet.cs:222; MainWindow.axaml.cs:638).
-- `idleAct` is cleared on a state change (Pet.cs:223).
-- The prop is used only while working: `Prop = working ? (inp.Prop ?? "laptop") : null`.
-- The random look offset is re-rolled from {-1, 0, 0, 1} every 2.5-6 s (Pet.cs:233).
+- The mood is `attention` while `t < alert_until`. A new Jira or GitHub review sets `alert_until = t + 6`.
+- While music is playing, `idle` or `sleep` of any age, or `done` older than 4 s, becomes the synthetic mood `listen`. `headphones` is `on` whenever music plays.
+- The idle act is cleared on a mood change.
+- The prop is used only while working: `lens` when the input says so, else `laptop`. It is hidden while poked or landing. With a prop and resting arms, the arms channel is `hold` (laptop) or `lens`.
+- The random glance is re-rolled from {−1, 0, 0, 1} every 2.5-6 s.
 
 ### 3.3 States and poses
 
-Y is in DIPs (negative is up) and `P = 5` (Pet.cs:236-290). `Wave(rate)` is `ARM_L` plus `WAVE_A`/`WAVE_B`, alternating every `1/rate` s (Pet.cs:234).
+Y is in DIPs (negative is up) and `P = 5`. `Wave(rate)` alternates `wave-a` and `wave-b` every `1/rate` s.
 
-| State | Motion | Eyes | Arms / feet | Fx layer |
+| Mood | Motion | Eyes | Arms / feet | `fx` |
 |---|---|---|---|---|
-| `idle` | Bob `Y=(0.5+0.5 sin 2.2t)*0.6P`. After `nextIdle` (first at 6 s, then every 5-11 s), when not hovered or dragged, picks an idle act: `look` (Lx sweeps −2..2 at 4 steps/s), `hop` (0.9 s, up to 3.2P), `stretch` (`ARMS_UP`, happy eyes, Y=−P), `wiggle` (X=sin(16t)*0.8P) or `tap` (`FOOT_TAP` at 5 Hz, Lx=1). Other acts last 1.6-2.6 s. | normal, `Lx=look` | down | none |
-| `sleep` | `Y=(0.5+0.5 sin 1.2t)*0.5P` | sleep (flat lines) | down | 3 rising Z glyphs (hidden while hovered or held) |
-| `thinking` | Floats up, `Y=-(0.5+0.5 sin 2.4t)*0.7P` | up, Lx=1 | down | 0-3 thought dots cycling at 3 Hz |
-| `working` | Quick bounce, `Y=-abs(sin 6.3t)*0.6P` | lens: scan Lx [−1,0,1,0] at 1.5 steps/s. Laptop: down, Lx=1. | down | none |
-| `attention` | 1.2 s cycle with a 0.6 s hop to 3P | normal | `Wave(3)` | outlined `!` at x 24 |
-| `done` | One 0.7 s hop to 3P | happy | `Wave(3)` for the first 4 s | sparkles |
-| `listen` (music) | Beat 60/112 s; nod `Y=-abs(sin(πt/beat))*1.2P`; sway `X=sin(πt/(2·beat))*0.6P` | happy for 6 of every 8 beats | down, plus headphones | 2 rising notes in the accent colour |
+| `idle` | Bob `Y=(0.5+0.5 sin 2.2t)*0.6P`. After the next idle time (first at 6 s, then every 5-11 s), when not hovered or dragged, plays an idle act, which is also the `state` value: `look` (the look sweeps −2..2 at 4 steps/s), `hop` (0.9 s, up to 3.2P), `stretch` (`raised`, happy eyes, Y=−P), `wiggle` (X=sin(16t)*0.8P) or `tap` (feet `tap` at 5 Hz, looking right). Other acts last 1.6-2.6 s. | `open`, glancing | `rest` / `stand` | `none` |
+| `sleep` | `Y=(0.5+0.5 sin 1.2t)*0.5P` | `closed` | `rest` / `stand` | `zs` (not while hovered) |
+| `thinking` | Floats up, `Y=-(0.5+0.5 sin 2.4t)*0.7P` | `up`, looking right | `rest` / `stand` | `dots` |
+| `working` | Quick bounce, `Y=-abs(sin 6.3t)*0.6P` | Lens: `open`, scanning [−1, 0, 1, 0] at 1.5 steps/s. Laptop: `down`, looking right. | `lens` or `hold` | `none` |
+| `attention` | 1.2 s cycle with a 0.6 s hop to 3P | `open` | `Wave(3)` | `alert` |
+| `done` | One 0.7 s hop to 3P | `happy` | `Wave(3)` for the first 4 s | `sparkles` |
+| `listen` | Beat 60/112 s; nod `Y=-abs(sin(πt/beat))*1.2P`; sway `X=sin(πt/(2·beat))*0.6P` | `happy` for 6 of every 8 beats | `rest` / `stand`, headphones `on` | `notes` |
 
-**Overrides.** These apply after the base pose, in this fixed order (Pet.cs:292-327):
+**Overrides.** These apply after the base pose, in this fixed order:
 
-1. **Hover tracking** (mouse over the sprite, not dragging, not working): `Lx = clamp(round((m.X-65)/28), -2, 2)`; eyes are up if `m.Y < 15`. A sleeping pet stops bobbing and opens its eyes.
-2. **Wave** (`t < WaveUntil`, only in idle, sleep or done): `Wave(5)` with happy eyes. On pointer enter, `WaveUntil = Now + 1.4` unless the last wave ended less than 3 s ago (MainWindow.axaml.cs:112-116).
-3. **Poke** (click without drag, `PokeUntil = Now + 1.2`): squint eyes, then happy eyes; hop `Y=-sin(pp·π)*3P`.
-4. **Landing** (after a drag, `LandUntil = Now + 0.45`): hop `2.5P` with happy eyes.
-5. **Running** (dragging, and the last move was under 0.25 s ago): `RUN_FEET`/`RUN_ARMS` at 10 Hz mirrored by `Facing`, a lean of `X=Facing*P`, `Lx=2*Facing`, no prop. Otherwise, **held** (the drag has passed the 4 px threshold, so `Moved` is set, but the last move was 0.25 s or more ago; a press that hasn't moved yet shows no held pose): feet dangle at 3 Hz, `ARMS_UP`, wide eyes, no prop.
-6. **Blink**: when the eyes are normal, up or down and `t > blinkAt`, they blink for 0.13 s. The next blink comes 2.5-5.5 s later; the first is at t=3.
+1. **Hover tracking** (pointer over the sprite, not dragging, not working): the eyes look towards the pointer, up when it is above them. A sleeping pet stops bobbing and opens its eyes.
+2. **Wave** (`t < wave_until`, only in idle, sleep or done): `Wave(5)` with happy eyes. On pointer enter, `wave_until = t + 1.4` unless the last wave ended less than 3 s ago.
+3. **Poke** (a click without a drag, `poke_until = t + 1.2`): squint, then happy eyes; a hop of `Y=-sin(pp·π)*3P`; sparkles on top of the effect.
+4. **Landing** (after a drag, `land_until = t + 0.45`): a hop of `2.5P` with happy eyes.
+5. **Running** (dragging, and the last move was under 0.25 s ago): `run-a`/`run-b` arms and feet at 10 Hz, a lean of `X=facing*P`, looking far towards `facing`, no prop, `fx` `dust`. Otherwise **held** (the drag has passed its threshold but the last move was 0.25 s or more ago): feet `dangle-a`/`dangle-b` at 3 Hz, arms `raised`, `wide` eyes, no prop, no effect.
+6. **Blink**: when the eyes are open, up or down and `t > blink_at`, they `blink` for 0.13 s. The next blink comes 2.5-5.5 s later; the first is at t=3.
 
-Props are hidden while poked or landing (Pet.cs:421). The eyes never mirror: `Facing` is applied through `Mirror()` only to the running limbs and the dust (Pet.cs:138-139, 313, 454).
+`facing` is the drag's direction. Whether that mirrors anything is up to the pack (§3.6).
 
 ### 3.4 Squash, stretch, breathing, shadow
 
-These run on every call (Pet.cs:348-360):
+These run on every call and become the Pose's `motion`:
 
 - `v = (pose.Y - prevY)/dt`.
 - **Landing** (`prevY < -2 && pose.Y >= -0.4 && v > 0`): `squash = 0.13`, decaying as `squash *= exp(-11 dt)`.
 - `stretch = clamp(-v/2600, 0, 0.06)`, applied only while rising.
-- `breathe = 0.012*sin(1.2t)` when sleeping or `sin(2.2t)` when idle, and 0 while the pet is pressed or dragged (`inp.Dragging`). It keys off the raw `inp.State`, so a listening pet still breathes.
-- `ScaleX = 1+squash-0.5 stretch-0.5 breathe` and `ScaleY = 1-squash+stretch+breathe`, which roughly preserves volume.
-- Shadow: `lift = clamp(1+Y/45, 0.5, 1)`. `ShadowScale = Held ? 0.55 : lift` and `ShadowOpacity = Held ? 0.35 : lift`.
+- `breathe = 0.012*sin(1.2t)` when sleeping or `sin(2.2t)` when idle, and 0 while the pet is pressed or dragged. It keys off the raw input state, so a listening pet still breathes.
+- `scale_x = 1+squash-0.5 stretch-0.5 breathe` and `scale_y = 1-squash+stretch+breathe`, which roughly preserves volume.
+- Shadow: `lift = clamp(1+Y/45, 0.5, 1)`; the shadow's scale and opacity are 0.55 and 0.35 while held, else `lift`.
+- **Reduced motion** (the system's setting, or `AIPET_REDUCE_MOTION=1`): no offset, squash or idle acts, and `Pose::still`, so every animation holds its first frame. Values still change, so expressions and states still show.
 
-The sprite's `RenderTransformOrigin="50%,91.7%"` (110/120 DIPs, the bottom of feet row 21) keeps the feet planted (MainWindow.axaml:39). The transform groups are `Sprite = {Squash, Move}` and `Shadow = {ShadowScale, ShadowMove}` (MainWindow.axaml.cs:88-89). The shadow follows X only, never Y (:646-650).
+The squash is about the pack's anchor, which the UI puts at the sprite's ground point (50 %, 91.7 % of the 130×120 box), so the feet stay planted. The ground shadow is the app's, drawn under every pet; it follows X only, never Y.
 
-### 3.5 Rendering: three layers
+### 3.5 Packs
 
-`Pet.Draw` (Pet.cs:364-494) clears the three buffers and paints in painter's order. `Put()` premultiplies with `Pm()` and **overwrites** the pixel; it never blends, and out-of-grid cells are dropped (Pet.cs:171-182).
+A pack ([pack.rs](../rust/crates/aipet-sprite/src/pack.rs)) is a manifest plus art: a kind (`pixel`, `painted` or `vector`), a pixel size in logical px, an anchor (the art pixel on the ground shadow), a mirror policy (`flip` or `none`), accent and glow colours, a palette with themes, and 1-16 **layers** drawn in order. Each layer is bound to one Pose channel and has:
 
-| Layer | Contents | UI element |
-|---|---|---|
-| **Body** | The silhouette, arms and feet (`shape = body ∪ Arms ∪ Feet`, so the limbs share one outline) with a 4-neighbour `Outline` ring. Then the shaded fill, spec, blush, headphones (when `Music` is on), the face panel (bezel, screen, glint at (9, FaceTop+1) and (10, FaceTop+1)) and the props. | `BodyImg` |
-| **Glow** | The eyes (`EyeHi` on a column's top cell, `EyeLo` on its bottom cell, `Eye` elsewhere) and the laptop screen's `>` prompt and 2.5 Hz cursor. | `GlowImg` with `DropShadowDirectionEffect` (depth 0, blur 10, opacity 0.9) |
-| **Fx** | An else-if chain, so only the first match draws: running dust > thinking dots > listen notes > sleep Zs > attention `!`. Sparkles for done or poked are drawn separately and can stack. Most Fx are hidden while held (Pet.cs:451-493). | `FxImg` |
+- animations per value: raster frames `[x, y, w, h, ms]` on a sheet with a loop mode (`loop`, `once`, `pingpong`), a clock (from the channel's change, or the pet clock) and pivots; or keyframe part animations;
+- for vector layers, shapes per value or by name (path data, fill, stroke, width, caps, joins, opacity);
+- part motion: `parts` with ids and origins, a `look` offset table (eyes only), `poses` with an eased `transition_ms`;
+- a `default` and a `fallback` chain. `Layer::resolve` walks the chain (at most 8 steps, no cycles), then for a combined value such as `zs+sparkles` its last part, then the default; a `null` fallback draws nothing;
+- `hit` (part of the hit mask), `glow` (drawn into the glow), its own `mirror`, and `themed` (a pixel theme recolours it).
 
-**Fill styles:**
-- `soft`: a cell missing its bottom or right neighbour gets `Deep` (y≥19) or `Shade`; a cell missing its top or left neighbour with y<15 gets `Hi`; any other cell gets `Shade` (y≥19) or `Body`.
-- `rim`: edge cells get `Hi` (y<17) or `Shade`; interior cells get `Deep` (y≥18), `Shade` (y≥14) or `Body`.
-- Spec: `rim` puts `Spec` on every top-edge cell with y<8; `soft` uses the `FindSpec` cells (Pet.cs:369-448).
+`Pack::validate` and `manifest::read` check everything at load: the defaults exist, the chains end, durations and numbers are in range, part ids are known and unique, positions stay in the art box and its 10 px halo pad, and art fits the box. A pack that fails is skipped with one reason line.
 
-**Props:**
-- Lens: a magnifier swinging at 1.5 Hz, made of a `RING`, translucent `GLASS 0x88A9E4FF`, a highlight and a 2-cell `HANDLE`.
-- Laptop: an 8x6 lid at x 14-21, y 15-20, and an 11-cell base on row 21.
+**Where pets come from** (`load::all`, on startup and on Reload):
 
-Because `Put()` overwrites, the lens glass replaces the body pixel under it, and the desktop shows through the lens.
+1. The built-in pets, embedded in the binary ([builtin.rs](../rust/crates/aipet-sprite/src/builtin.rs), the files in [packs/](../rust/crates/aipet-sprite/packs/)), in this order: Sprout and Hood (pixel packs baked once from the pixel pets by `bake.rs`; the Hood in Blue with a Green theme), Pip (vector, written by `avatars/reference/pip_gen.py`) and Pip (painted) (painted from it by `painted.rs`), Hood (vector), Hamster and Sprout (vector) (written by the reference generators through `vector_pack.py`), and Hamster (pixel) (`hamster_pixel_gen.py`). `tests/bake.rs` and `tests/vector_packs.rs` check the committed files are what the bake and the generators make, and the golden tests replay the C#'s frames against the baked Sprout and Hood.
+2. Every entry of `DataDir/avatars/` in sorted order: a folder with a `pack.json`, an Aseprite `json-array` export with its PNG, or a native `.aseprite` file (with an optional `pack.json` for the rest) is a pack; a `.json` file is a legacy ellipse avatar, baked into a pixel pack when it loads (`load_legacy`). The `themes/` folder is skipped here.
+3. The theme files in `DataDir/avatars/themes/`, each put on its pet by name (§3.7).
 
-**Why a separate glow layer.** `DropShadowDirectionEffect` blurs the whole Image it is attached to. Keeping only the eyes and screen glyphs on their own layer gives a coloured halo without blurring the outline. `GlowImg` and `FxImg` are `IsHitTestVisible=False`. An 86x88 ellipse filled `#01FFFFFF` (alpha 1) gives the sprite a solid hit target, so gaps between pixels still catch drags and boops (MainWindow.axaml:39-47).
+Built-ins win a name; a later pet with a name already taken is skipped. Every pack loads completely or not at all, within the limits (manifest 256 KB and 64 deep, each PNG 8 MB and 2048 px a side checked from its header before decoding, 64 MB decoded per pack, 512 frames, an `.aseprite` file 8 MB with every cel's size checked before it is inflated). Files must stay inside the pack's folder: absolute paths, `..`, links, junctions and device names are rejected. Vector path data loads nothing from outside the manifest.
 
-**Blit** (MainWindow.axaml.cs:743-752):
-- The bitmaps are 26x24 `WriteableBitmap`s at 96 DPI, `Bgra8888`, `AlphaFormat.Premul` (:64-65).
-- `Lock()`, then a row-by-row `Marshal.Copy` that honours `RowBytes`, then `InvalidateVisual()`.
-- `(int[])(object)px` reinterprets the `uint[]` for `Marshal.Copy`, which relies on CLR array variance.
-- The Images use `Stretch=Fill` and `BitmapInterpolationMode=None`, so each cell is drawn as a nearest-neighbour 5x5 block.
+**Aseprite.** Both sources go through `build_aseprite`. Tags `<layer>:<value>` become animations; the tag's direction and repeat count give the loop mode (a repeat plays the frames n times, then holds the last); frames keep their durations; a slice named `anchor` gives the anchor and a slice named after a part gives its origin and, on each tag's first frame, its pose position. An export's trimmed frames keep their place through `spriteSourceSize`. The native reader ([aseprite_file.rs](../rust/crates/aipet-sprite/src/aseprite_file.rs), our own rather than a crate; see `rust/proofs/aseprite.md`) reads frames, normal and group layers, raw, linked and zlib cels in RGBA, greyscale or indexed colour, tags and slices, crops each tagged layer's frames to what is drawn, and lays them out on one sheet. It rejects tilemaps, tilesets, external files and non-square pixels.
 
-### 3.6 Fixed anchors
+**`AiPet --check-pack <folder or theme file>`** runs the same loader (`load::check`) and prints `OK <name> (<kind>, <layers> layers, <frames> frames[, themes …])` with exit 0, or the reason with exit 1. It never starts the pet or writes anything.
 
-Every avatar shares the same anchor cells, so every animation works with every avatar (Pet.cs:46-64, 150-166, 426-444):
+Rive packs aren't supported (the spike's measurements are in `rust/proofs/rive.md`).
 
-| Element | Cells |
-|---|---|
-| Face panel | columns 8-17, rows `FaceTop..FaceBottom` with the four corners removed |
-| Eyes | 2 columns wide at `L=10+lx` and `R=14+lx` (`lx` −2..2), rows 10-13. Shapes: normal 10-12, wide 10-13, up 10-11, down 12-13, blink row 12, squint `> <`, happy `^ ^`, sleep row 12. |
-| Arms | x 4-5 and 20-21, rows 15-16 |
-| Feet | row 21, x 8-10 and 15-17 |
-| Blush | (6,13), (7,13), (18,13), (19,13) |
-| Props | x 12-25, rows 13-21 (the lens handle reaches x 25 when the lens swings right; the outline goes one cell further) |
+### 3.6 The compositor and the renderers
 
-Headphones and spec are derived from the silhouette:
-- `BuildHeadphones` uses the leftmost and rightmost body cells on row 10. The cups are 2 columns wide over rows 9-12, and the band hugs the silhouette top at `y=min(topmost-1, 8)` (Pet.cs:113-136).
-- `FindSpec` takes up to 3 top-edge body cells (x<13, y<9, with a body cell diagonally below-right of each; topmost first) and puts each spec pixel one cell down and one cell right of that edge cell (Pet.cs:108-110).
+`compose::pick` gives, for each layer in order, the value it shows (through `resolve`), the frame of that value's animation at the time since its channel changed (or on the pet clock), and whether it is mirrored: when the Pose faces left and the layer's mirror policy, else the pack's, is `flip`. A layer's `<value>@left` frames, where it has them, are used unmirrored instead. `compose::Parts` places the movable parts: each part's pose target, eased from where it was when the value changed, plus its keyframe (with its `phase`), plus the look offset for the eyes; then the body's motion, then the mirroring, so parts ride with the body.
 
-### 3.7 Avatars
+- **Raster packs** ([sprite.rs](../rust/crates/aipet-ui/src/sprite.rs)): every frame of the pack, its mirror image, and for a glowing layer its blurred halo in the glow colour, becomes an iced image once, when the pet puts the pack on. Each redraw only picks which images show where, so a tick that changes nothing uploads nothing. The art is placed with its anchor on the sprite's ground point, each frame at the art box's origin less its pivot, moved by the eyes' look offset in whole art pixels. Pixel packs use nearest filtering and snap their position and pixel size to whole device pixels at every scale; painted packs use linear filtering. Part motion moves vector parts only: a raster frame is placed by its pivot and the look table.
+- **Vector packs** ([vector_view.rs](../rust/crates/aipet-ui/src/vector_view.rs)): the parts' shapes are drawn on an iced canvas, with the geometry cached until what is drawn changes (a value, a part's place) or the sprite's snapped rectangle changes size by a device pixel. The body's breathing and squash stretch the canvas's rectangle rather than rebuilding the geometry. A glowing layer gets halo strokes along its shapes.
+- **Layers' targets.** A layer bound to `fx` is drawn with the effects on top; a `glow` layer into the glow; every other layer with the body.
+- **Hit mask.** The hit layers' solid pixels become row runs: worked out per frame at load for raster packs, and rasterised with tiny-skia at art resolution when the drawing changes for vector packs. `geometry::sprite_rects` adds them to the hit ellipse's box (86x88, always there), joins rows, and past 64 rectangles merges them into coarser bands. The result goes to each shell's input region (§4.3).
+- **Stills.** The Avatars page's tiles and the theme editor's preview are drawn from the same Pose at rest (`sprite::still`): raster packs flattened from their frames (`compose::flatten`), vector packs rasterised with tiny-skia.
 
-An `Avatar` ([Avatar.cs](../src/AiPet.Core/Avatar.cs):13-120) defines the look:
+### 3.7 Avatars, themes and the Avatars page
 
-- **Shape and face:** `Name`, `Shapes` (ellipses `[cx,cy,rx,ry]` in grid cells), `Shading` (`soft` by default, or `rim`), `Blush` (default true), `FaceTop` (default 9) and `FaceBottom` (default 14).
-- **`Palette`:** read from JSON and resolved into the public `uint` fields `Outline`, `Deep`, `Shade`, `Body`, `Hi`, `Spec`, `BlushC`, `Screen`, `Bezel`, `Glint`, `Eye`, `EyeHi`, `EyeLo`, `Glow` and `Accent`.
+**Identity.** An avatar is found by its name: `config.json` keeps `Avatar` (the name) and `AvatarTheme` (the theme, left out when it is the pet's default). An unknown name shows the first pet, and an unknown theme the pet's default, without rewriting config. An older name of the form "<pet> (<theme>)", such as "Hood (green)", wears that pet in that theme when no pet has that exact name (`choose`, [lib.rs](../rust/crates/aipet-ui/src/lib.rs)). Config is written only on a real change.
 
-**Rasterising.** `Pet.SetAvatar` rasterises the avatar into cell sets. `BuildBody` includes a cell when its centre lies inside any ellipse. `BuildFace` makes the face rectangle. `SetAvatar` also sets `lastDrawFrame=-1` to force a redraw (Pet.cs:73-136).
+**Themes** ([pack.rs](../rust/crates/aipet-sprite/src/pack.rs) `Palette`, `Theme`; [load.rs](../rust/crates/aipet-sprite/src/load.rs) `LoadedPack::in_theme`). A pack's `palette` names colours, which are its default theme (named by `theme`, else "Default"); `themes` are the others. A colour theme changes some named colours: a vector pack's shapes, accent and glow name them as `$name`, and `Pack::recolour` swaps them; a pixel pack's names are exact colours in its sheets, and `LoadedPack::recoloured` swaps those pixels, keeping their alpha, in every themed layer (all but the effects, unless a layer says). A sheet theme draws some of a raster pack's sheets from other files of the same size; the painted Pip's Lilac theme is one, since a painted pack's blended colours can't be swapped. A theme changes colours or sheets, never both; a pet has at most 64.
 
-**Built-in avatars:**
-- `Sprout`: a 4-ellipse orange `soft` blob with blush, accent `#E27A52` (Avatar.cs:29-40).
-- `Hood`: a 3-ellipse `rim`-lit blue hood with `FaceTop` 8, `FaceBottom` 15, no blush, glow `#3D9BFF` and accent `#4A8CFF` (Avatar.cs:43-59).
+**Theme files.** The user's own themes are `DataDir/avatars/themes/*.json`, each `{"pet", "theme", "palette"}`: a pet by name (a built-in one or the user's), a new theme name, and some of its named colours. `load::all` puts each on its pet after the pets load, in file order; one that doesn't fit (no such pet, a painted pet, a colour the pet doesn't name, a name it already has) is skipped with its reason, as `themes/<file>`.
 
-**Custom avatars.** `Avatar.All()` returns the built-ins plus every `*.json` file in `Avatar.CustomDir = Paths.DataDir/avatars` (Avatar.cs:63-89). Property names are case-insensitive, and `name` defaults to the file name.
+**The Avatars page** ([settings/avatars.rs](../rust/crates/aipet-ui/src/settings/avatars.rs)):
+- One tile per pet, each a still with its accent's dot. A click wears it: the pet takes it on, the accent colours Settings and the menu, and the config is saved.
+- Under the tiles, the worn pet's themes as pills. **New theme** (for a pet with named colours) opens an editor with a preview, the name and each named colour, and **Save** writes a theme file with the colours that differ from the pet's default, named `<pet>-<theme>.json`. **Edit** and **Delete** appear for the user's own themes only. Sheet themes can't be edited.
+- "Your own avatars": **Reload** reruns `load::all`; **Open folder** opens `DataDir/avatars`, making it first if it is missing. Every pack, legacy file or theme file that didn't load is listed with its reason. Reload keeps the worn pet on its previously loaded frames when its folder has gone or now fails to load, but draws no tile for it.
 
-- **Validation.** A file is used only when the pet can draw it (`Drawable`, Avatar.cs:93-96): `shapes` is non-empty, every shape has at least 4 finite numbers with `rx` and `ry` above 0, and `0 ≤ faceTop ≤ faceBottom < 24`. A file that doesn't parse or fails the check is skipped, so a hand-edited file with a missing number can't take the pet down. Settings also skips, and logs, any avatar whose preview throws (SettingsWindow.axaml.cs:227-230).
-- Palette values are `#RRGGBB` or `#AARRGGBB`.
-- The palette `Dictionary` is case-sensitive, so `eyeHi` and `eyeLo` must be spelled exactly.
-- Missing keys fall back to **Sprout's** colours, not the avatar's own, so a partial palette gives a mixed look.
-- `glow` defaults to `eye`, and `accent` defaults to `hi` (Avatar.cs:108-119).
+**Sizes.** Settings → General has Pet size (75-200 %) and Bubble size (80-120 %), saved as `PetSize` and `BubbleSize`. The bubbles stay as far above the pet's head at every pet size. A pack's art box is the same at every size, so packs need nothing for it.
 
-The repo's `avatars/hood-green.json` is a sample only. Nothing copies it into `DataDir/avatars`.
-
-**Applying an avatar.** `ApplyAvatar` (MainWindow.axaml.cs:205-214):
-- calls `pet.SetAvatar(a)`;
-- sets the glow effect colour to `a.Glow`;
-- sets the application's `Accent` brush and `SystemAccentColor`, and the window's own `Accent` brush, to `a.Accent`;
-- sets `cfg.Avatar = a.Name`.
-
-The accent colours the Save buttons, the menu check marks, Fluent's accent (toggle switches, focus rings, text selection), the headphone shine and the music notes. The Settings window keeps its own copy (`SetAccent`, SettingsWindow.axaml.cs:76-81) for its sidebar dot, the selected page's icon and the selected avatar tile.
-
-**Where avatars are picked.**
-- At startup: `cfg.Avatar`, falling back to `avatars[0]` (Sprout) (MainWindow.axaml.cs:93-94).
-- The context menu's "Avatars…" opens Settings on the Avatars page (:247-249).
-- Settings → Avatars runs `All()` again whenever it fills its tiles (when the window opens, and on Reload). A click on a tile applies the avatar and saves the config (MainWindow.axaml.cs:273). The previews are drawn by a throwaway `Pet` updated at t=0.05, 0.10 and 0.15, before the first blink or look change, using the Body and Glow layers only (SettingsWindow.axaml.cs:264-272).
+The repository's [avatars/](../avatars/) folder is not read by the app: it holds the legacy sample `hood-green.json`, the reference drawings and generators in `reference/`, and sample packs and a sample theme file in `samples/` ([avatars/README.md](../avatars/README.md)).
 
 ---
 
@@ -1187,7 +1169,8 @@ On Linux, `Sh.Which` caches tool lookups for the process lifetime, misses includ
 | `DataDir/config.json` | `MainWindow.SaveConfig` | MainWindow | Window and pet preferences. `Left`/`Top` (physical px) are the whole 380x600 window's position, also while a fitted window is smaller, and `WindowHeight` is its height (MainWindow.axaml.cs:185-195) |
 | `DataDir/jira.json`, `github.json` | Settings Save, Import defaults… | watchers | Watcher settings |
 | `DataDir/secrets.json` | Linux `SecretTool` fallback | same | Tokens (0600), only without a keyring |
-| `DataDir/avatars/*.json` | user | `Avatar.All()` | Custom avatars |
+| `DataDir/avatars/` | user, Settings' Open folder | `load::all` (the Rust pet), `Avatar.All()` (the .NET pet) | The user's pets: pack folders and legacy `*.json` avatars (the .NET pet reads only these) |
+| `DataDir/avatars/themes/*.json` | user, Settings → Avatars (New theme, Edit, Delete) | `load::all` | The user's themes for pets (Rust pet) |
 | `DataDir/aipet.log` | app (`Log.Write`) | user | App log, including updates and the uninstaller's `HookCleanup`; deleted past 256 KB |
 | `DataDir/hook-events.log` | the pet (`HookServer.Record`) | user (the doctor shows the in-memory copy of its tail) | One line per hook event the pet got; halved past 64 KB (§6.9) |
 | `%TEMP%\aipet-hook.log` (Windows), `$TMPDIR/aipet-hook-<euid>.log` (Unix, default `/tmp`) | hooks, only after reaching the pet | user | Hook errors; deleted past 64 KB. On Unix it is created 0600, and the hook writes only to a file of mode 0600 opened under that name (Program.cs:193-218) |
