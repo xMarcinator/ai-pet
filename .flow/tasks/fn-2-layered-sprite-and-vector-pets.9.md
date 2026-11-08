@@ -11,7 +11,7 @@ Document the new pet model: a new `docs/MAKING-A-PET.md` authoring guide, the pe
 **Touches:** [docs/**, README.md, CHANGELOG.md, THIRD-PARTY-NOTICES.md, rust/crates/aipet-ui/src/settings/avatars.rs, avatars/**]
 
 ### Approach
-- The authoring guide covers the manifest (with the spec's example), layers and channels with every key, the three kinds, pixel size and the art box, Part motion (parts, origins, `look`, `poses`, keyframe animations; R18), Aseprite (native `.aseprite` files and `json-array` exports, tags, the `anchor` and part slices) grid sprite sheets (R20), Rive packs and their input mapping (R21, including the free-tier splash finding from task 14), the limits, `--check-pack`, legacy avatars and Reload.
+- The authoring guide covers the manifest (with the spec's example), layers and channels with every key, the three kinds, pixel size and the art box, Part motion (parts, origins, `look`, `poses`, keyframe animations; R18), Aseprite (native `.aseprite` files and `json-array` exports, tags, the `anchor` and part slices) grid sprite sheets (R20), that Rive packs aren't supported yet (R21 moved to fnt-67-rive-packs), the limits, `--check-pack`, legacy avatars and Reload.
 - ARCHITECTURE: replace the procedural-renderer text (pipeline, layers, anchors, avatars) with the Pose → compositor → renderers model, keeping the numbered-section style.
 - Notices: follow how fn-1 task 26 generates them (cargo-about).
 

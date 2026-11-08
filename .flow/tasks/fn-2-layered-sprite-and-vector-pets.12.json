@@ -6,8 +6,7 @@
   "depends_on": [
     "fn-2-layered-sprite-and-vector-pets.9",
     "fn-2-layered-sprite-and-vector-pets.10",
-    "fn-2-layered-sprite-and-vector-pets.11",
-    "fn-2-layered-sprite-and-vector-pets.14"
+    "fn-2-layered-sprite-and-vector-pets.11"
   ],
   "id": "fn-2-layered-sprite-and-vector-pets.12",
   "priority": null,

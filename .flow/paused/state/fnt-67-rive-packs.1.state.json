@@ -1,0 +1,5 @@
+{
+  "blocked_reason": "Parked: fn-2's Rive spike was a no-go (rust/proofs/rive.md). Unblock when the spec's condition holds: a GPU render path that shares iced's device, a runtime that builds with text and layout and survives damaged files, or calm-CPU headroom from fn-1 task 28.",
+  "status": "blocked",
+  "updated_at": "2026-11-08T08:27:27.713892Z"
+}

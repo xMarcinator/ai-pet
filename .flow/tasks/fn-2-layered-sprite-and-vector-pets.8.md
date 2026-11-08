@@ -25,7 +25,6 @@ Measure calm CPU and RSS for every built-in pet (Sprout, Hood, Hood (green) pixe
 Windows rules: Git Bash only, never PowerShell; GUI checks need the user present.
 
 ## Acceptance
-- [ ] The sample Rive pack (task 14) meets the same budgets
 - [ ] All nine built-in pets meet the calm-CPU and RSS budgets on Windows and Linux, recorded with numbers
 - [ ] Embedded art adds ≤ 3 MB to the release binary
 - [ ] Windows hands-on pass recorded with the user, covering looks, behaviours, click-through, crispness, reduced motion and Settings
