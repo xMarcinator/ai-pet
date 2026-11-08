@@ -30,8 +30,9 @@ Keep CHANGELOG's keep-a-changelog style and 120-column wrapping.
 - [ ] Third-party notices list the new crates
 
 ## Done summary
-TBD
+Docs (bb8a70b): docs/MAKING-A-PET.md (its Blob example and theme-file example pass --check-pack), ARCHITECTURE section 3 rewritten (Pose -> compositor -> renderers, packs, themes, sizes), README Avatars/General/data folder, CHANGELOG Unreleased, third-party notices (png, flate2, tiny-skia), avatars/README.md, Settings help text (built and tested with the workspace). Gaps found went to task 19.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:
