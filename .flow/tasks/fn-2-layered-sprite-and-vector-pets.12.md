@@ -48,8 +48,9 @@ The copy under `.agents/skills/` keeps Codex in step; a test or script should ch
 - [ ] A fresh agent, given only the skill and a reference image, produces a pack that passes `--check-pack` without opening Rust files (one dry run recorded in the task's evidence)
 
 ## Done summary
-TBD
+Skill .claude/skills/aipet-avatar-pack (f0c3a90): SKILL.md workflow plus references per technology (pixel and painted, vector, Aseprite, Rive: not supported, FNT-67) and shared ones (manifest, channels, themes, limits and every reason line, design conventions, review, worked example); identical Codex copy in .agents/skills, checked by scripts/check-skill-copies.sh in CI; worked example avatars/samples/skill-example (Dewdrop) passes --check-pack. Dry run: a fresh agent given only the skill and avatars/reference/sprout-pixel.png made a vector 'Sprout (dry run)' that passed --check-pack on its first try (OK Sprout (dry run) (vector, 3 layers, 0 frames)), opening no Rust files; its six gaps were fixed in the skill.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:
