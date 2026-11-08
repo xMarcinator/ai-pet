@@ -50,6 +50,16 @@ pub const SHADOW_CENTER: Point = Point::new(CENTER_X, SPRITE.y + 103.0 + SHADOW.
 
 /// The bottom of the bubble stacks: Sections' 8 px margin above the pet's row.
 pub const STACKS_BOTTOM: f32 = SPRITE.y - 8.0;
+
+/// How big the pet can be drawn, and the bubbles, in percent: the pet stays within the surface, and the widest
+/// bubble (about 310 px) within its 380 px.
+pub const PET_SIZES: std::ops::RangeInclusive<i32> = 75..=200;
+pub const BUBBLE_SIZES: std::ops::RangeInclusive<i32> = 80..=120;
+
+/// Where the bubble stacks' bottom is for a pet `size` times as big: as far above its head as at 1.
+pub fn stacks_bottom(size: f32) -> f32 {
+    STACKS_BOTTOM - SPRITE_ORIGIN.y * (size - 1.0)
+}
 /// A bubble's height and corner radius.
 pub const CARD_H: f32 = 50.0;
 pub const CARD_RADIUS: f32 = 25.0;
@@ -98,6 +108,17 @@ impl Motion {
         shadow_scale: 1.0,
         shadow_opacity: 1.0,
     };
+
+    /// The same motion for a pet drawn `size` times as big: its scale, its moves and its shadow grow with it, around
+    /// the same origin, so its feet stay on the ground.
+    pub fn sized(self, size: f32) -> Motion {
+        Motion {
+            offset: self.offset * size,
+            scale: Vector::new(self.scale.x * size, self.scale.y * size),
+            shadow_scale: self.shadow_scale * size,
+            ..self
+        }
+    }
 
     /// A point of the unscaled sprite (0..130 × 0..120) on the surface: scaled around the origin, then moved.
     /// (Written so that at scale 1 no rounding creeps in.)
@@ -591,6 +612,20 @@ mod tests {
                 assert!((d - d.round()).abs() < 1e-3, "{v} at {scale}");
             }
         }
+    }
+
+    #[test]
+    fn a_bigger_pet_grows_from_its_feet_and_the_stacks_clear_its_head() {
+        let big = Motion::REST.sized(1.5);
+        // the squash origin, where the feet are, stays put; the head goes up by half the sprite's height above it
+        let feet = Point::new(SPRITE_ORIGIN.x, SPRITE_ORIGIN.y);
+        assert_eq!(big.to_surface(feet), Motion::REST.to_surface(feet));
+        let top = big.rect_to_surface(Rectangle::new(Point::ORIGIN, SPRITE.size()));
+        assert_eq!(top.size(), SPRITE.size() * 1.5);
+        assert_eq!(STACKS_BOTTOM - stacks_bottom(1.5), SPRITE.y - top.y);
+        assert_eq!(stacks_bottom(1.0), STACKS_BOTTOM);
+        // the shadow grows with it
+        assert_eq!(big.shadow().size(), SHADOW * 1.5);
     }
 
     #[test]

@@ -322,6 +322,8 @@ impl Host for ConfigFile {
         config.music = prefs.music;
         config.avatar = prefs.avatar.clone();
         config.avatar_theme = prefs.avatar_theme.clone();
+        config.pet_size = (prefs.pet_size != 100).then_some(prefs.pet_size);
+        config.bubble_size = (prefs.bubble_size != 100).then_some(prefs.bubble_size);
         config.save_to(&self.0).unwrap();
         *self.1.lock().unwrap() += 1;
     }
@@ -361,7 +363,10 @@ fn the_switches_and_the_avatar_persist_through_config_json() {
     ui.update(Message::SetOnTop(false));
     ui.update(Message::SetMusic(false));
     ui.update(Message::SelectAvatar(1));
-    assert_eq!(*writes.lock().unwrap(), 4, "each change is written");
+    // the sizes, kept within their limits
+    ui.update(Message::SetPetSize(400));
+    ui.update(Message::SetBubbleSize(90));
+    assert_eq!(*writes.lock().unwrap(), 6, "each change is written");
     let wanted = ui.prefs();
     assert_eq!(
         wanted,
@@ -371,16 +376,19 @@ fn the_switches_and_the_avatar_persist_through_config_json() {
             music: false,
             avatar: Some("Hood".into()),
             avatar_theme: None,
+            pet_size: 200,
+            bubble_size: 90,
         }
     );
     // the next start reads them back
     let (config, _) = Config::load_from(&file);
     let ui = start(Prefs::from(&config));
     assert_eq!(ui.prefs(), wanted);
-    // a switch set to what it is writes nothing
+    // a switch or a size set to what it is writes nothing
     let mut ui = ui;
     ui.update(Message::SetBubbles(false));
-    assert_eq!(*writes.lock().unwrap(), 4);
+    ui.update(Message::SetPetSize(200));
+    assert_eq!(*writes.lock().unwrap(), 6);
 }
 
 #[test]

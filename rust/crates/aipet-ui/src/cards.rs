@@ -250,6 +250,10 @@ pub struct Stacks {
     target: [f32; 3],
     /// The bubble the pointer is on.
     hovered: Option<Arc<str>>,
+    /// How much bigger than at rest the bubbles are drawn (0 at their own size), and how far their stacks' bottom is
+    /// raised above [`STACKS_BOTTOM`] (to clear a bigger pet).
+    grow: f32,
+    lift: f32,
 }
 
 impl Stacks {
@@ -447,7 +451,23 @@ impl Stacks {
 
     /// Where the reviews header's bottom edge is: 8 px above the reviews stack.
     pub fn header_bottom(&self) -> f32 {
-        self.bottom(Section::Reviews) - self.height[Section::Reviews.index()] - HEADER_GAP
+        self.place(self.bottom(Section::Reviews) - self.height[Section::Reviews.index()] - HEADER_GAP)
+    }
+
+    /// Draws the bubbles `size` times as big, their stacks standing on `bottom`.
+    pub fn set_size(&mut self, size: f32, bottom: f32) {
+        self.grow = size - 1.0;
+        self.lift = STACKS_BOTTOM - bottom;
+    }
+
+    /// The bubbles' size.
+    pub fn size(&self) -> f32 {
+        1.0 + self.grow
+    }
+
+    /// A height in the stacks as laid out at size 1 on [`STACKS_BOTTOM`], where it is drawn.
+    fn place(&self, y: f32) -> f32 {
+        STACKS_BOTTOM - self.lift + (y - STACKS_BOTTOM) * self.size()
     }
 
     /// Whether a review bubble is staying (the header shows while one is).
@@ -460,9 +480,9 @@ impl Stacks {
         self.order.iter().map(|&i| {
             let c = &self.cards[i];
             let frame = CardFrame {
-                bottom_center: Point::new(CENTER_X, self.bottom(c.section) + c.y),
+                bottom_center: Point::new(CENTER_X, self.place(self.bottom(c.section) + c.y)),
                 width: c.width(),
-                scale: c.s,
+                scale: c.s * self.size(),
             };
             (c, frame)
         })
@@ -527,6 +547,27 @@ mod tests {
 
     fn frame(stacks: &Stacks, id: &str) -> CardFrame {
         stacks.frames().find(|(c, _)| *c.id == *id).unwrap().1
+    }
+
+    #[test]
+    fn bigger_bubbles_stand_on_the_raised_bottom_and_grow_from_it() {
+        let mut stacks = Stacks::default();
+        let mut t = 0.0;
+        let show = [
+            bubble("a", Section::Chats, "working"),
+            bubble("b", Section::Chats, "working"),
+        ];
+        stacks.sync(&show, t, false, fit);
+        run(&mut stacks, &mut t, 2.0);
+        let (a, b) = (frame(&stacks, "a"), frame(&stacks, "b"));
+        stacks.set_size(1.2, STACKS_BOTTOM - 30.0);
+        let (a2, b2) = (frame(&stacks, "a"), frame(&stacks, "b"));
+        // each bubble is 1.2 times as big, and the gaps between them grow with them, from the raised bottom
+        assert_eq!(a2.scale, a.scale * 1.2);
+        let lifted = |y: f32| STACKS_BOTTOM - 30.0 + (y - STACKS_BOTTOM) * 1.2;
+        assert!((a2.bottom_center.y - lifted(a.bottom_center.y)).abs() < 1e-3);
+        assert!((b2.bottom_center.y - lifted(b.bottom_center.y)).abs() < 1e-3);
+        assert_eq!(a2.bottom_center.x, a.bottom_center.x);
     }
 
     #[test]

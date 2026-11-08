@@ -282,6 +282,9 @@ impl aipet_ui::Host for App {
             config.music = prefs.music;
             config.avatar = prefs.avatar.clone();
             config.avatar_theme = prefs.avatar_theme.clone();
+            // a size at 100 % is the default, which the file leaves out
+            config.pet_size = (prefs.pet_size != 100).then_some(prefs.pet_size);
+            config.bubble_size = (prefs.bubble_size != 100).then_some(prefs.bubble_size);
         });
         if let Err(e) = written {
             aipet_core::log::write(&format!("config: can't write config.json: {e}"));

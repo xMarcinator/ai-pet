@@ -52,6 +52,10 @@ pub struct Config {
     /// The avatar's colour theme (the Rust app's own): none for its default. Written only when it is set.
     pub avatar_theme: Option<String>,
     pub music: bool,
+    /// How big the pet is drawn and how big the bubbles are, in percent (the Rust app's own): none for 100. Written
+    /// only when set; the app keeps them within its own limits.
+    pub pet_size: Option<i32>,
+    pub bubble_size: Option<i32>,
     /// The window's height (DIPs) when the position was saved, so a taller window keeps the pet in place. A file can
     /// hold one too big for a double, which reads as infinity; then the file can't be written (as for the app).
     pub window_height: f64,
@@ -68,6 +72,8 @@ impl Default for Config {
             avatar: Some("Sprout".into()),
             avatar_theme: None,
             music: true,
+            pet_size: None,
+            bubble_size: None,
             window_height: 420.0,
         }
     }
@@ -175,6 +181,8 @@ impl Fields for Config {
             "Avatar" => self.avatar = nullable(value, string)?,
             "AvatarTheme" => self.avatar_theme = nullable(value, string)?,
             "Music" => self.music = boolean(value)?,
+            "PetSize" => self.pet_size = nullable(value, int)?,
+            "BubbleSize" => self.bubble_size = nullable(value, int)?,
             "WindowHeight" => self.window_height = double(value)?,
             _ => {}
         }
@@ -195,10 +203,14 @@ impl Fields for Config {
         if self.avatar_theme.is_some() {
             fields.push(("AvatarTheme", Json::of(&self.avatar_theme)));
         }
-        fields.extend([
-            ("Music", Json::Bool(self.music)),
-            ("WindowHeight", Json::Double(self.window_height)),
-        ]);
+        fields.push(("Music", Json::Bool(self.music)));
+        if let Some(size) = self.pet_size {
+            fields.push(("PetSize", Json::Int(size)));
+        }
+        if let Some(size) = self.bubble_size {
+            fields.push(("BubbleSize", Json::Int(size)));
+        }
+        fields.push(("WindowHeight", Json::Double(self.window_height)));
         fields
     }
 }
@@ -601,6 +613,28 @@ mod tests {
             "{text}"
         );
         assert_eq!(Config::load_from(&path), (themed, LoadStatus::Loaded));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_sizes_are_written_only_when_set_and_read_back() {
+        let dir = std::env::temp_dir().join(format!("aipet-config-sizes-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        Config::default().save_to(&path).unwrap();
+        assert!(!fs::read_to_string(&path).unwrap().contains("Size"));
+        let sized = Config {
+            pet_size: Some(150),
+            bubble_size: Some(90),
+            ..Config::default()
+        };
+        sized.save_to(&path).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains(r#""Music":true,"PetSize":150,"BubbleSize":90,"WindowHeight""#),
+            "{text}"
+        );
+        assert_eq!(Config::load_from(&path), (sized, LoadStatus::Loaded));
         let _ = fs::remove_dir_all(&dir);
     }
 

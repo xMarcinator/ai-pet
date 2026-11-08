@@ -120,6 +120,10 @@ pub enum Message {
     SelectAvatar(usize),
     /// Wear the worn pet in its theme by this name.
     SelectTheme(String),
+    /// Draw the pet this big, in percent (kept within [`geometry::PET_SIZES`]).
+    SetPetSize(i32),
+    /// Draw the bubbles this big, in percent (kept within [`geometry::BUBBLE_SIZES`]).
+    SetBubbleSize(i32),
     SetBubbles(bool),
     SetOnTop(bool),
     SetMusic(bool),
@@ -184,6 +188,10 @@ pub struct Prefs {
     pub avatar: Option<String>,
     /// The avatar's colour theme; its default when none or one it hasn't.
     pub avatar_theme: Option<String>,
+    /// How big the pet and the bubbles are drawn, in percent, within [`geometry::PET_SIZES`] and
+    /// [`geometry::BUBBLE_SIZES`].
+    pub pet_size: i32,
+    pub bubble_size: i32,
 }
 
 impl From<&Config> for Prefs {
@@ -194,6 +202,14 @@ impl From<&Config> for Prefs {
             music: config.music,
             avatar: config.avatar.clone(),
             avatar_theme: config.avatar_theme.clone(),
+            pet_size: config
+                .pet_size
+                .unwrap_or(100)
+                .clamp(*geometry::PET_SIZES.start(), *geometry::PET_SIZES.end()),
+            bubble_size: config
+                .bubble_size
+                .unwrap_or(100)
+                .clamp(*geometry::BUBBLE_SIZES.start(), *geometry::BUBBLE_SIZES.end()),
         }
     }
 }
@@ -342,6 +358,9 @@ pub struct PetUi {
     avatar: usize,
     /// The worn avatar's theme: one it has.
     theme: String,
+    /// How big the pet and the bubbles are drawn, in percent.
+    pet_size: i32,
+    bubble_size: i32,
     stacks: Stacks,
     /// The core's last Board, if one came.
     board: Option<Arc<Board>>,
@@ -470,7 +489,7 @@ impl PetUi {
         let mut pet = Pet::new();
         pet.set_pack(worn.clone());
         pet.set_reduced_motion(reduce_motion(&*setup.platform));
-        PetUi {
+        let mut ui = PetUi {
             host: setup.host,
             platform: setup.platform,
             pet,
@@ -487,6 +506,8 @@ impl PetUi {
             stills,
             avatar,
             theme,
+            pet_size: setup.prefs.pet_size,
+            bubble_size: setup.prefs.bubble_size,
             stacks: Stacks::default(),
             board: None,
             show: Vec::new(),
@@ -513,7 +534,9 @@ impl PetUi {
                 .is_some_and(|v| v == "1")
                 .then(FrameTimes::default),
             settings: Settings::new(setup.services),
-        }
+        };
+        ui.sized();
+        ui
     }
 
     /// The pet playing the demo's scripted day (`demo`), through a Board of its own, in place of the core's: for
@@ -561,9 +584,10 @@ impl PetUi {
         let frame = self.pet.update(&self.input, t);
         if frame.pixels_changed {
             let (pose, at) = self.pet.drawn();
-            self.sprite.update(self.pet.pack(), pose, at, self.scale);
+            self.sprite
+                .update(self.pet.pack(), pose, at, self.scale * self.pet_factor());
         }
-        let motion = motion(&frame);
+        let motion = motion(&frame).sized(self.pet_factor());
         let shift = motion.shift(self.motion);
         self.motion = motion;
         geometry::sprite_rects(self.motion, &self.sprite.hits, &mut self.sprite_rects);
@@ -859,6 +883,22 @@ impl PetUi {
             }
             Message::SetOnTop(on) if on != self.on_top => return self.set_on_top(on),
             Message::SetOnTop(_) => {}
+            Message::SetPetSize(size) => {
+                let size = size.clamp(*geometry::PET_SIZES.start(), *geometry::PET_SIZES.end());
+                if size != self.pet_size {
+                    self.pet_size = size;
+                    self.sized();
+                    self.save_prefs();
+                }
+            }
+            Message::SetBubbleSize(size) => {
+                let size = size.clamp(*geometry::BUBBLE_SIZES.start(), *geometry::BUBBLE_SIZES.end());
+                if size != self.bubble_size {
+                    self.bubble_size = size;
+                    self.sized();
+                    self.save_prefs();
+                }
+            }
             Message::SetMusic(on) => {
                 if self.music != on {
                     self.music = on;
@@ -966,7 +1006,29 @@ impl PetUi {
             music: self.music,
             avatar: Some(avatar.name().to_owned()),
             avatar_theme: (self.theme != avatar.pack.palette.theme).then(|| self.theme.clone()),
+            pet_size: self.pet_size,
+            bubble_size: self.bubble_size,
         }
+    }
+
+    /// How big the pet and the bubbles are drawn, in percent.
+    pub fn sizes(&self) -> (i32, i32) {
+        (self.pet_size, self.bubble_size)
+    }
+
+    /// The pet's size as a factor.
+    fn pet_factor(&self) -> f32 {
+        self.pet_size as f32 / 100.0
+    }
+
+    /// Lays the sprite and the bubbles out at their sizes: the sprite's pixels again on whole device pixels, and the
+    /// stacks above the pet's head.
+    fn sized(&mut self) {
+        let pet = self.pet_factor();
+        self.stacks
+            .set_size(self.bubble_size as f32 / 100.0, geometry::stacks_bottom(pet));
+        let (pose, at) = self.pet.drawn();
+        self.sprite.update(self.pet.pack(), pose, at, self.scale * pet);
     }
 
     /// The worn avatar's theme.
@@ -1153,8 +1215,7 @@ impl PetUi {
     pub fn set_scale(&mut self, scale: f32) {
         if scale.is_finite() && scale > 0.0 && scale != self.scale {
             self.scale = scale;
-            let (pose, at) = self.pet.drawn();
-            self.sprite.update(self.pet.pack(), pose, at, scale);
+            self.sized();
         }
     }
 
@@ -1755,6 +1816,8 @@ pub(crate) mod tests {
                 music: true,
                 avatar: Some("Hood".into()),
                 avatar_theme: None,
+                pet_size: 100,
+                bubble_size: 100,
             },
             ..Setup::detached()
         });
@@ -1767,6 +1830,8 @@ pub(crate) mod tests {
                 music: true,
                 avatar: Some("Hood".into()),
                 avatar_theme: None,
+                pet_size: 100,
+                bubble_size: 100,
             }
         );
         assert_eq!(ui.update(Message::SetOnTop(true)), Some(Effect::OnTop(true)));
@@ -1783,6 +1848,8 @@ pub(crate) mod tests {
                 music: true,
                 avatar: Some("Sprout".into()),
                 avatar_theme: None,
+                pet_size: 100,
+                bubble_size: 100,
             })
         );
         // an avatar it doesn't know: the first

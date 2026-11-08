@@ -14,7 +14,7 @@ use std::{fmt, thread};
 
 use aipet_core::presets::Preset;
 use iced::Element;
-use iced::widget::{column, row};
+use iced::widget::{column, row, slider, text};
 
 use super::{Action, Tone, button_row, card, label, pill, section, status, switch_row};
 use crate::{Effect, PetUi};
@@ -90,6 +90,22 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
             crate::Message::SetMusic,
         ));
     }
+    let (pet_size, bubble_size) = pet.sizes();
+    switches = switches
+        .push(size_row(
+            "Pet size",
+            "How big the pet is drawn.",
+            crate::geometry::PET_SIZES,
+            pet_size,
+            crate::Message::SetPetSize,
+        ))
+        .push(size_row(
+            "Bubble size",
+            "How big the chat bubbles are, apart from the pet.",
+            crate::geometry::BUBBLE_SIZES,
+            bubble_size,
+            crate::Message::SetBubbleSize,
+        ));
     let action = |label, action| pill(label, false, accent).on_press(send(action));
     let general = &pet.settings.general;
     let mut team = column![label(
@@ -303,6 +319,26 @@ fn import_preset(pet: &PetUi, file: &Path) -> (String, Tone) {
         ),
         Tone::Muted,
     )
+}
+
+/// A size in percent: a title and a hint, then a slider in steps of 5 % and the size it is at.
+fn size_row<'a>(
+    title: &'a str,
+    hint: &'a str,
+    range: std::ops::RangeInclusive<i32>,
+    value: i32,
+    message: fn(i32) -> crate::Message,
+) -> Element<'a, crate::Message> {
+    let control = row![
+        slider(range, value, message).step(5).width(170),
+        text(format!("{value} %")).size(13).font(crate::style::UI).width(48),
+    ]
+    .spacing(10)
+    .align_y(iced::Alignment::Center);
+    row![label(title, hint), control]
+        .spacing(12)
+        .align_y(iced::Alignment::Center)
+        .into()
 }
 
 #[cfg(test)]
