@@ -1,0 +1,470 @@
+{
+ "format_version": 1,
+ "name": "Dewdrop (example)",
+ "kind": "vector",
+ "pixel_size": 1,
+ "anchor": [
+  65,
+  110
+ ],
+ "mirror": "flip",
+ "accent": "$accent",
+ "glow": "$glow",
+ "palette": {
+  "outline": "#123C4A",
+  "body": "#5CC8E0",
+  "shade": "#3A9FBF",
+  "rim": "#C8F4FF",
+  "eyes": "#0E2530",
+  "accent": "#3A9FBF",
+  "glow": "#9FEAFF"
+ },
+ "theme": "Rain",
+ "themes": {
+  "Dusk": {
+   "outline": "#2E1F4A",
+   "body": "#B08CE0",
+   "shade": "#8A66C2",
+   "rim": "#EBDDFF",
+   "accent": "#8A66C2",
+   "glow": "#E0C8FF"
+  }
+ },
+ "layers": [
+  {
+   "name": "body",
+   "channel": "state",
+   "hit": true,
+   "default": "idle",
+   "shapes": {
+    "idle": [
+     {
+      "d": "M 65 30 C 80 50 95 60 95 80 A 30 30 0 1 1 35 80 C 35 60 50 50 65 30 Z",
+      "fill": "$body"
+     },
+     {
+      "d": "M 36.81 90.26 A 30 30 0 0 0 90.98 95 Q 66 101.9 36.81 90.26 Z",
+      "fill": "$shade"
+     },
+     {
+      "d": "M 72 42 C 81.5 54 89.9 66 89.9 76",
+      "stroke": "$rim",
+      "stroke_width": 3,
+      "linecap": "round"
+     },
+     {
+      "d": "M 47 72 A 3 5 0 1 0 53 72 A 3 5 0 1 0 47 72 Z",
+      "fill": "$rim",
+      "opacity": 0.9
+     },
+     {
+      "d": "M 65 30 C 80 50 95 60 95 80 A 30 30 0 1 1 35 80 C 35 60 50 50 65 30 Z",
+      "stroke": "$outline",
+      "stroke_width": 4,
+      "linejoin": "round"
+     }
+    ],
+    "sleep": [
+     {
+      "d": "M 65 44 C 82 64 99 65 99 85 A 34 25 0 1 1 31 85 C 31 65 48 64 65 44 Z",
+      "fill": "$body"
+     },
+     {
+      "d": "M 33.05 93.55 A 34 25 0 0 0 94.44 97.5 Q 66 103.25 33.05 93.55 Z",
+      "fill": "$shade"
+     },
+     {
+      "d": "M 72 56 C 83.7 68 93.22 71 93.22 81",
+      "stroke": "$rim",
+      "stroke_width": 3,
+      "linecap": "round"
+     },
+     {
+      "d": "M 45 77 A 3 5 0 1 0 51 77 A 3 5 0 1 0 45 77 Z",
+      "fill": "$rim",
+      "opacity": 0.9
+     },
+     {
+      "d": "M 65 44 C 82 64 99 65 99 85 A 34 25 0 1 1 31 85 C 31 65 48 64 65 44 Z",
+      "stroke": "$outline",
+      "stroke_width": 4,
+      "linejoin": "round"
+     }
+    ]
+   }
+  },
+  {
+   "name": "eyes",
+   "channel": "eyes",
+   "hit": true,
+   "glow": false,
+   "default": "open",
+   "fallback": {
+    "blink": "closed",
+    "squint": "happy",
+    "up": "open",
+    "down": "open"
+   },
+   "parts": [
+    {
+     "id": "eye-left",
+     "origin": [
+      56,
+      80
+     ]
+    },
+    {
+     "id": "eye-right",
+     "origin": [
+      74,
+      80
+     ]
+    }
+   ],
+   "shapes": {
+    "open": [
+     {
+      "d": "M -3.5 0 A 3.5 5 0 1 0 3.5 0 A 3.5 5 0 1 0 -3.5 0 Z",
+      "fill": "$eyes"
+     },
+     {
+      "d": "M -2.45 -2 A 1.22 1.22 0 1 0 0 -2 A 1.22 1.22 0 1 0 -2.45 -2 Z",
+      "fill": "#FFFFFF"
+     }
+    ],
+    "wide": [
+     {
+      "d": "M -4.5 0 A 4.5 6 0 1 0 4.5 0 A 4.5 6 0 1 0 -4.5 0 Z",
+      "fill": "$eyes"
+     },
+     {
+      "d": "M -3.15 -2.4 A 1.57 1.57 0 1 0 0 -2.4 A 1.57 1.57 0 1 0 -3.15 -2.4 Z",
+      "fill": "#FFFFFF"
+     }
+    ],
+    "closed": {
+     "d": "M -4 1 Q 0 3 4 1",
+     "stroke": "$eyes",
+     "stroke_width": 2.2,
+     "linecap": "round"
+    },
+    "happy": {
+     "d": "M -4 2 Q 0 -3 4 2",
+     "stroke": "$eyes",
+     "stroke_width": 2.2,
+     "linecap": "round"
+    }
+   },
+   "look": {
+    "center": [
+     0,
+     0
+    ],
+    "left": [
+     -3,
+     0
+    ],
+    "right": [
+     3,
+     0
+    ],
+    "up": [
+     0,
+     -2
+    ],
+    "down": [
+     0,
+     2
+    ],
+    "up-left": [
+     -3,
+     -2
+    ],
+    "up-right": [
+     3,
+     -2
+    ],
+    "down-left": [
+     -3,
+     2
+    ],
+    "down-right": [
+     3,
+     2
+    ],
+    "far-left": [
+     -5,
+     0
+    ],
+    "far-right": [
+     5,
+     0
+    ],
+    "up-far-left": [
+     -5,
+     -2
+    ],
+    "up-far-right": [
+     5,
+     -2
+    ],
+    "down-far-left": [
+     -5,
+     2
+    ],
+    "down-far-right": [
+     5,
+     2
+    ]
+   }
+  },
+  {
+   "name": "arms",
+   "channel": "arms",
+   "hit": true,
+   "default": "rest",
+   "fallback": {
+    "hold": "rest",
+    "lens": "rest",
+    "run-a": "raised",
+    "run-b": "raised"
+   },
+   "parts": [
+    {
+     "id": "hand-left",
+     "origin": [
+      33,
+      92
+     ],
+     "shape": "hand"
+    },
+    {
+     "id": "hand-right",
+     "origin": [
+      97,
+      92
+     ],
+     "shape": "hand"
+    }
+   ],
+   "shapes": {
+    "hand": {
+     "d": "M -6 0 A 6 5 0 1 0 6 0 A 6 5 0 1 0 -6 0 Z",
+     "fill": "$body",
+     "stroke": "$outline",
+     "stroke_width": 3
+    }
+   },
+   "poses": {
+    "rest": {},
+    "raised": {
+     "hand-left": [
+      24,
+      64
+     ],
+     "hand-right": [
+      106,
+      64
+     ]
+    },
+    "wave-a": {
+     "hand-right": [
+      106,
+      60
+     ]
+    },
+    "wave-b": {
+     "hand-right": [
+      111,
+      72
+     ]
+    }
+   },
+   "transition_ms": 140,
+   "animations": {
+    "rest": {
+     "parts": [
+      "hand-left",
+      "hand-right"
+     ],
+     "phase": [
+      0,
+      0.5
+     ],
+     "loop": "loop",
+     "keys": [
+      [
+       0,
+       0,
+       500
+      ],
+      [
+       0,
+       -1,
+       250
+      ],
+      [
+       0,
+       -1.5,
+       500
+      ],
+      [
+       0,
+       -1,
+       250
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "zs",
+   "channel": "fx",
+   "default": "zs",
+   "fallback": {
+    "zs+sparkles": "zs",
+    "none": null,
+    "dots": null,
+    "notes": null,
+    "alert": null,
+    "sparkles": null,
+    "dust": null
+   },
+   "parts": [
+    {
+     "id": "z-1",
+     "origin": [
+      98,
+      44
+     ],
+     "shape": "z"
+    },
+    {
+     "id": "z-2",
+     "origin": [
+      107,
+      33
+     ],
+     "shape": "z"
+    }
+   ],
+   "shapes": {
+    "z": [
+     {
+      "d": "M -3 -3 H 3 L -3 3 H 3",
+      "stroke": "$outline",
+      "stroke_width": 3.6,
+      "linecap": "round",
+      "linejoin": "round"
+     },
+     {
+      "d": "M -3 -3 H 3 L -3 3 H 3",
+      "stroke": "#E3E8FF",
+      "stroke_width": 1.8,
+      "linecap": "round",
+      "linejoin": "round"
+     }
+    ]
+   },
+   "animations": {
+    "zs": {
+     "parts": [
+      "z-1",
+      "z-2"
+     ],
+     "phase": [
+      0,
+      0.5
+     ],
+     "loop": "loop",
+     "keys": [
+      {
+       "dy": 0,
+       "ms": 300
+      },
+      {
+       "dx": 1,
+       "dy": -3,
+       "opacity": 0.75,
+       "ms": 300
+      },
+      {
+       "dx": 2,
+       "dy": -6,
+       "opacity": 0.45,
+       "ms": 300
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "sparkles",
+   "channel": "fx",
+   "default": "sparkles",
+   "fallback": {
+    "none": null,
+    "zs": null,
+    "dots": null,
+    "notes": null,
+    "alert": null,
+    "dust": null
+   },
+   "parts": [
+    {
+     "id": "spark-1",
+     "origin": [
+      22,
+      52
+     ],
+     "shape": "star"
+    },
+    {
+     "id": "spark-2",
+     "origin": [
+      38,
+      26
+     ],
+     "shape": "star"
+    }
+   ],
+   "shapes": {
+    "star": {
+     "d": "M 0 -7 Q 1 -1 7 0 Q 1 1 0 7 Q -1 1 -7 0 Q -1 -1 0 -7 Z",
+     "fill": "#FFE27A",
+     "stroke": "$outline",
+     "stroke_width": 1.5,
+     "linejoin": "round"
+    }
+   },
+   "animations": {
+    "sparkles": {
+     "parts": [
+      "spark-1",
+      "spark-2"
+     ],
+     "phase": [
+      0,
+      0.5
+     ],
+     "loop": "pingpong",
+     "keys": [
+      {
+       "scale": 0.6,
+       "ms": 120
+      },
+      {
+       "scale": 0.85,
+       "ms": 120
+      },
+      {
+       "scale": 1,
+       "rotate": 15,
+       "ms": 120
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

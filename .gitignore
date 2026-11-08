@@ -23,6 +23,8 @@ TestResults/
 *.log
 *.tmp
 .claude/settings.local.json
+# agent worktrees (Claude Code's); the skills in .claude/skills/ are tracked
+.claude/worktrees/
 
 # The Rust spike's build output (rust/)
 rust/target/

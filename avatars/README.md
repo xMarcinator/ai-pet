@@ -11,6 +11,7 @@ make one.
 | `samples/grid/` | The same pet, with its sheets described as grids. |
 | `samples/native/` | The same pet from a native `sample.aseprite` file, with a `pack.json` for the rest. |
 | `samples/themes/hood-red.json` | A theme file: Hood (vector) in red. |
+| `samples/skill-example/` | Dewdrop, a small vector pack with a palette, a second theme, part poses, the eyes' look and fallbacks for every state: the worked example of the agent skill (`.claude/skills/aipet-avatar-pack/`). `samples/skill_example_gen.py` writes it and its review page, `samples/skill-example-preview.html`. |
 | `reference/` | The built-in pets' reference drawings and the scripts that write their packs: `hood_gen.py`, `hamster_gen.py` and `sprout_gen.py` (with `vector_pack.py`), `pip_gen.py`, `hamster_pixel_gen.py`, and `pet_states.py`, the states every pet draws. Each `*-preview.html` shows a pet's every state. |
 
 To try a sample, check it, then copy it into your avatars folder and click **Reload** on the Avatars page:

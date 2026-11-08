@@ -1,8 +1,8 @@
 # CI: builds the solution and runs its tests on Windows and Linux, checks that the plugin's hook files are what the
-# hook that ships (the Rust one) makes of its event tables, and that the install and build scripts at least parse and
-# stay executable. The Rust workspace (rust/) gets its format, lints and tests on Windows and Linux, and a compile check
-# on macOS. The Rust hook's start-up is timed against the NativeAOT hook's it replaces. Nothing is published here: see
-# release.yml.
+# hook that ships (the Rust one) makes of its event tables, that the install and build scripts at least parse and
+# stay executable, and that the agent skills' Codex copies match. The Rust workspace (rust/) gets its format, lints
+# and tests on Windows and Linux, and a compile check on macOS. The Rust hook's start-up is timed against the
+# NativeAOT hook's it replaces. Nothing is published here: see release.yml.
 name: CI
 
 on:
@@ -290,6 +290,9 @@ jobs:
           for f in build.sh scripts/*.sh; do bash -n "$f"; done
       - name: ShellCheck
         run: shellcheck --severity=warning install.sh build.sh packaging/linux/install.sh plugins/aipet/native/aipet-hook.sh scripts/*.sh
+      # The agent skills Codex reads (.agents/skills/) must be the ones Claude Code reads (.claude/skills/), file for file.
+      - name: The skills' Codex copies
+        run: bash scripts/check-skill-copies.sh
       - name: Executable bits
         run: |
           # The docs run these as ./build.sh and so on, so git must record them as executable (100755). A script added
