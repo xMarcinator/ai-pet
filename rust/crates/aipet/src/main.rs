@@ -375,6 +375,23 @@ fn panic_text(payload: &(dyn Any + Send)) -> &str {
     }
 }
 
+/// Held while a test starts a process: until it has exec'd, the new process holds a copy of every file this one has
+/// open, so a test that lets go of a lock and takes it again holds this too (`single.rs`).
+#[cfg(test)]
+static SPAWNING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+fn tests_spawning() -> std::sync::MutexGuard<'static, ()> {
+    SPAWNING.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Starts a test's process under [`SPAWNING`]; `spawn` returns once the process has exec'd.
+#[cfg(test)]
+fn tests_spawn<T>(spawn: impl FnOnce() -> T) -> T {
+    let _spawning = tests_spawning();
+    spawn()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

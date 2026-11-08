@@ -814,22 +814,24 @@ mod tests {
         fs::write(claude.join("settings.json"), &config).unwrap();
         fs::write(codex.join("hooks.json"), &config).unwrap();
 
-        let mut child = Command::new(std::env::current_exe().unwrap())
-            .args([
-                "updates::tests::uninstall_in_a_process_of_its_own",
-                "--exact",
-                "--include-ignored",
-            ])
-            .env("AIPET_TEST_UNINSTALL", "1")
-            .env("CLAUDE_CONFIG_DIR", &claude)
-            .env("CODEX_HOME", &codex)
-            .env("AIPET_DATA_DIR", &data)
-            .env_remove("VELOPACK_DEBUG")
-            .env_remove("VELOPACK_RESTART")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
+        let mut child = crate::tests_spawn(|| {
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "updates::tests::uninstall_in_a_process_of_its_own",
+                    "--exact",
+                    "--include-ignored",
+                ])
+                .env("AIPET_TEST_UNINSTALL", "1")
+                .env("CLAUDE_CONFIG_DIR", &claude)
+                .env("CODEX_HOME", &codex)
+                .env("AIPET_DATA_DIR", &data)
+                .env_remove("VELOPACK_DEBUG")
+                .env_remove("VELOPACK_RESTART")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+        })
+        .unwrap();
         let deadline = Instant::now() + Duration::from_secs(60);
         let status = loop {
             if let Some(status) = child.try_wait().unwrap() {

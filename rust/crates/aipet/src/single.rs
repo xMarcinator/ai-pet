@@ -188,7 +188,7 @@ mod tests {
         for (key, value) in env {
             command.env(key, value);
         }
-        let mut process = command.spawn().unwrap();
+        let mut process = crate::tests_spawn(|| command.spawn()).unwrap();
         let deadline = Instant::now() + Duration::from_secs(30);
         while process.try_wait().unwrap().is_none() {
             if Instant::now() > deadline {
@@ -452,6 +452,8 @@ mod tests {
 
         #[test]
         fn a_lock_the_csharp_took_keeps_this_pet_out_and_the_other_way_round() {
+            // no test starts a process meanwhile: one not yet past its exec holds every open file, this lock too
+            let _quiet = crate::tests_spawning();
             let scratch = Scratch::new();
             let names = scratch.names();
             let dotnet = csharp(&names.lock).expect("the first");
