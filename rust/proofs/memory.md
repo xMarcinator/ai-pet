@@ -36,17 +36,32 @@ Each change was measured on its own, against the build without it, in alternatin
 | One tokio worker instead of one per core | threads 35 → 20; RSS 0.8 MB, anonymous 1.7 MB | 5.2, 5.6 % against 5.5, 6.2 % |
 | Keep the other pets' sheets deflated, decoding on wear | anonymous 7.1 MB, whichever pet is worn | no per-frame work |
 
-The CPU numbers in the last two rows were taken after Hyprland restarted in safe mode, when every pet ran at about
-5–6 %; compare within a row only.
+The first two rows were measured in the owner's normal session. The last two were measured after Hyprland crashed
+(11:38) and restarted in safe mode, in alternating runs of the two builds; safe mode changes the compositor, not what
+the pet allocates (the heap read the same 15.6 MB again in the normal session after a reboot). Compare CPU within a
+row only.
 
 Not changed: Vulkan (`WGPU_BACKEND=vulkan`). It avoids LLVM but its loader maps every vendor's driver too, giving
 RSS 207 MB at 7.2 % CPU, about twice GL's.
 
 ## After
 
-A fresh pet: **RSS 164 MB, anonymous 15.6 MB** wearing the vector Hood; RSS 176 MB, anonymous 27.2 MB wearing the
-painted Pip; RSS 167 MB, anonymous 18.5 MB wearing the pixel Sprout. After a burst of 3000 hook events, about 1 MB
-more. That is about 55 % of the C# pet's RSS.
+A fresh pet (safe mode): **anonymous 15.6 MB** wearing the vector Hood (RSS 164 MB), 27.2 MB wearing the painted Pip
+(RSS 176 MB), 18.5 MB wearing the pixel Sprout (RSS 167 MB). After a burst of 3000 hook events, about 1 MB more.
+
+Again after a reboot, in the normal session, alternating with the C# pet (two rounds, 40 s settle, 3 × 20 s):
+
+| Pet | Calm CPU | RSS | PSS |
+|---|---|---|---|
+| C# Sprout | 13.6, 12.5 % | 283, 300 MB | 231, 247 MB |
+| Rust Sprout | 5.8, 5.1 % | 170 MB | 121 MB |
+| Rust vector Hood | 6.3, 6.0 % | 167 MB | 118 MB |
+| Rust painted Pip (one run, same hour) | 10.8 % | 127 MB | 88 MB |
+
+After the reboot every pet's calm CPU was about twice the morning's (the C# pet 7.07 % then), so calm CPU is only
+comparable within one run, never across a reboot or a compositor restart. Within this one the Rust pets cost under
+half the C# pet's CPU and about 57 % of its RSS. RSS also moves with what is already resident: the same fresh pet read
+124 MB minutes after boot, since shared driver pages count only once they're touched.
 
 ## What is left, and what it would take
 
