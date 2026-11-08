@@ -18,8 +18,9 @@ Close two gaps the docs pass (task 9) found against the spec.
 
 
 ## Done summary
-TBD
+9c83645: a raster layer moves as one piece by its part's eased pose, animation key and look offset (whole art pixels for pixel packs), in Pet::composite, flatten and the UI sprite, with frame pacing while it moves; at most one part per raster layer and at most 256 vector parts, each with a reason; guide, ARCHITECTURE and spec updated; tests for both kinds and Aseprite slices. Follow-up fix: --check-pack reads a legacy avatar file as one.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:
