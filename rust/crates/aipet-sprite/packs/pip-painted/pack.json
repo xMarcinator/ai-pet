@@ -10,6 +10,16 @@
   "mirror": "flip",
   "accent": "#FFAA85",
   "glow": "#7FEFFF",
+  "theme": "Peach",
+  "themes": {
+    "Lilac": {
+      "sheets": {
+        "arms.png": "arms-lilac.png",
+        "body.png": "body-lilac.png",
+        "feet.png": "feet-lilac.png"
+      }
+    }
+  },
   "layers": [
     {
       "name": "feet",

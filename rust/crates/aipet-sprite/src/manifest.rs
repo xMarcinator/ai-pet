@@ -4,8 +4,10 @@
 //! `[x, y, w, h, duration_ms]` with an optional `pivot`; loop modes and the pet clock; fallbacks (a `null` one draws
 //! nothing); look tables; and part motion (R18): parts with origins, shapes, poses with `transition_ms`, and keyframe
 //! part animations with `phase`; and colour themes: a `palette` of named colours (the default theme, named by
-//! `theme`) and the other `themes`, each changing some of them. It asks for each sheet by name ([`read`]), so a loader
-//! from disk can check the path and the size first. Unknown keys are ignored.
+//! `theme`) and the other `themes`, each changing some of them; or sheet themes, `{"sheets": {"body.png":
+//! "body-night.png"}}`, each drawing some of the pack's sheets from other files of the same size. It asks for each
+//! sheet by name ([`read`]), a sheet theme's too, so a loader from disk can check the path and the size first. Unknown
+//! keys are ignored.
 
 use std::collections::BTreeMap;
 
@@ -15,7 +17,7 @@ use serde_json::Value;
 use crate::bake::Sheet;
 use crate::pack::{
     Animation, Art, Clock, DEFAULT_THEME, Frame, Key, Kind, Layer, LoopMode, Mirror, Pack, Palette, Part,
-    PartAnimation, Shape, Theme,
+    PartAnimation, Shape, Theme, ThemeSheet,
 };
 use crate::pose::{Channel, Look};
 use crate::vector::{self, Cap, Join};
@@ -41,9 +43,10 @@ struct PackJson {
     /// The default theme's name ("Default" when there is none).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     theme: Option<String>,
-    /// The other themes, by name: each changes some of the palette's colours.
+    /// The other themes, by name: each changes some of the palette's colours, or is `sheets`, some of the pack's
+    /// sheets by file name, each with the file drawn instead.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    themes: BTreeMap<String, BTreeMap<String, String>>,
+    themes: BTreeMap<String, BTreeMap<String, Value>>,
     layers: Vec<LayerJson>,
 }
 
@@ -246,7 +249,19 @@ pub fn write(pack: &Pack) -> String {
             .themes
             .iter()
             .filter(|t| t.file.is_none())
-            .map(|t| (t.name.clone(), named(&t.colours)))
+            .map(|t| {
+                let entries = if t.is_sheets() {
+                    let sheets: serde_json::Map<String, Value> = t
+                        .sheets
+                        .iter()
+                        .map(|s| (s.sheet.clone(), s.file.clone().into()))
+                        .collect();
+                    BTreeMap::from([("sheets".to_owned(), Value::Object(sheets))])
+                } else {
+                    named(&t.colours).into_iter().map(|(n, c)| (n, c.into())).collect()
+                };
+                (t.name.clone(), entries)
+            })
             .collect(),
         layers: pack
             .layers
@@ -412,8 +427,16 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
     if let Some(theme) = json.theme {
         palette.theme = theme;
     }
-    if kind == Kind::Painted && !(palette.colours.is_empty() && json.themes.is_empty()) {
-        return Err("a painted pack has no named colours or themes (its colours are blended)".to_owned());
+    let themes = json
+        .themes
+        .iter()
+        .map(|(name, entries)| theme(name, entries))
+        .collect::<Result<Vec<Theme>, String>>()?;
+    if kind == Kind::Painted && !(palette.colours.is_empty() && themes.iter().all(Theme::is_sheets)) {
+        return Err(
+            "a painted pack has no named colours or colour themes (its colours are blended; its themes are sheets)"
+                .to_owned(),
+        );
     }
     if kind == Kind::Pixel {
         // a theme swaps exact colours, so no two names may share one
@@ -432,13 +455,10 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
             palette.theme
         ));
     }
-    for (name, named) in &json.themes {
-        let theme = Theme {
-            name: name.clone(),
-            colours: colours(named, &format!("theme {name:?}:"))?,
-            file: None,
-        };
-        palette.check(&theme).map_err(|e| format!("theme {name:?}: {e}"))?;
+    for theme in themes {
+        palette
+            .check(&theme)
+            .map_err(|e| format!("theme {:?}: {e}", theme.name))?;
         palette.themes.push(theme);
     }
     // a colour, or a palette colour by `$name`: the colour and the name
@@ -590,7 +610,7 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
         }
         layers.push(layer);
     }
-    let pack = Pack {
+    let mut pack = Pack {
         name: json.name,
         kind,
         pixel_size: json.pixel_size,
@@ -611,8 +631,77 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
             ..palette
         },
     };
+    // the sheet themes' sheets, read as the frames' are and after them, each file once (all of them count towards
+    // what the loader allows); then each must be the size of the sheet it replaces, so that the frames still line up
+    let frame_sheets = names.len();
+    for theme in &mut pack.palette.themes {
+        let what = format!("theme {:?}", theme.name);
+        for s in &mut theme.sheets {
+            s.index = names[..frame_sheets]
+                .iter()
+                .position(|n| *n == s.sheet)
+                .ok_or_else(|| format!("{what}: {:?} isn't a sheet the pack's frames are on", s.sheet))?;
+            s.with = match names.iter().position(|n| *n == s.file) {
+                Some(i) => i,
+                None => {
+                    sheets.push(sheet(&s.file).map_err(|e| format!("{what}: {}: {e}", s.file))?);
+                    names.push(s.file.clone());
+                    names.len() - 1
+                }
+            };
+        }
+    }
+    for theme in &pack.palette.themes {
+        for s in &theme.sheets {
+            let (a, b) = (&sheets[s.index], &sheets[s.with]);
+            if (a.width, a.height) != (b.width, b.height) {
+                return Err(format!(
+                    "theme {:?}: {} is {} × {} px, but {} is {} × {} px (a theme's sheet is the same size)",
+                    theme.name, s.file, b.width, b.height, s.sheet, a.width, a.height
+                ));
+            }
+        }
+    }
     pack.validate()?;
     Ok((pack, sheets))
+}
+
+/// A theme from a manifest: `{"sheets": {sheet: file}}`, or named colours. Its sheets' indices are found once the
+/// pack's sheets are read.
+fn theme(name: &str, entries: &BTreeMap<String, Value>) -> Result<Theme, String> {
+    let what = format!("theme {name:?}");
+    if let Some(Value::Object(sheets)) = entries.get("sheets") {
+        if entries.len() > 1 {
+            return Err(format!("{what}: a theme changes colours or sheets, not both"));
+        }
+        if sheets.is_empty() {
+            return Err(format!("{what}: it names no sheets"));
+        }
+        let sheets = sheets
+            .iter()
+            .map(|(sheet, file)| match file {
+                Value::String(file) => Ok(ThemeSheet {
+                    sheet: sheet.clone(),
+                    index: 0,
+                    file: file.clone(),
+                    with: 0,
+                }),
+                _ => Err(format!("{what}: the sheet for {sheet:?} isn't a file name")),
+            })
+            .collect::<Result<_, _>>()?;
+        return Ok(Theme {
+            sheets,
+            ..Theme::of_colours(name, BTreeMap::new())
+        });
+    }
+    let named = entries
+        .iter()
+        .map(|(colour, v)| match v {
+            Value::String(v) => Ok((colour.clone(), v.clone())),
+            _ => Err(format!("{what}: colour {colour:?} isn't a colour")),
+        })
+        .collect::<Result<_, _>>()?;
+    Ok(Theme::of_colours(name, colours(&named, &format!("{what}:"))?))
 }
 
 /// An animation's frames as `[x, y, w, h, ms]` on its sheet `s`: given so, or worked out from its grid.
@@ -753,11 +842,18 @@ pub fn decode_png(bytes: &[u8]) -> Result<Sheet, String> {
     })
 }
 
-/// The files of a baked pack: `pack.json` and its sheets.
+/// The files of a baked pack: `pack.json`, its sheets, and its sheet themes' (each file once).
 pub fn files(pack: &Pack, sheets: &[Sheet]) -> Vec<(String, Vec<u8>)> {
     let mut files = vec![("pack.json".to_owned(), write(pack).into_bytes())];
     for (layer, sheet) in pack.layers.iter().zip(sheets) {
         files.push((sheet_name(&layer.name), encode_png(sheet)));
+    }
+    for s in pack.palette.themes.iter().flat_map(|t| &t.sheets) {
+        if let Some(sheet) = sheets.get(s.with)
+            && !files.iter().any(|(name, _)| *name == s.file)
+        {
+            files.push((s.file.clone(), encode_png(sheet)));
+        }
     }
     files
 }

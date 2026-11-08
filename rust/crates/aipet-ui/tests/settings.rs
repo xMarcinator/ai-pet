@@ -641,3 +641,57 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     assert_eq!(skipped[0].0, "themes/odd.json");
     assert!(skipped[0].1.contains("no colour named \"fur\""), "{skipped:?}");
 }
+
+#[test]
+fn a_pets_sheet_themes_are_picked_like_any_and_offer_no_editor() {
+    let scratch = Scratch::new("sheet-themes");
+    let config = scratch.0.join("config.json");
+    let writes = Arc::new(Mutex::new(0));
+    let start = |prefs: Prefs| {
+        PetUi::new(Setup {
+            host: Box::new(ConfigFile(config.clone(), writes.clone())),
+            prefs,
+            avatars: aipet_sprite::Avatar::custom_dir(&scratch.0),
+            services: Services::detached(scratch.0.clone()),
+            ..Setup::detached()
+        })
+    };
+    let avatars = |message| Message::Settings(settings::Message::Avatars(message));
+    use settings::avatars::Message as A;
+    let mut ui = start(Prefs {
+        avatar: Some("Pip (painted)".into()),
+        ..Prefs::default()
+    });
+    // the painted Pip's themes are sheets: listed and picked, but there is nothing to make one from
+    assert_eq!(
+        settings::avatars::themes(&ui),
+        [("Peach", true, false), ("Lilac", false, false)]
+    );
+    assert!(!settings::avatars::makes_themes(&ui));
+    ui.update(avatars(A::NewTheme));
+    assert!(settings::avatars::theming(&ui).is_none(), "no editor opens");
+    ui.update(avatars(A::EditTheme("Lilac".into())));
+    assert!(settings::avatars::theming(&ui).is_none(), "nor for a sheet theme");
+    let peach = settings::avatars::worn(&ui);
+    ui.update(Message::SelectTheme("Lilac".into()));
+    assert_eq!(ui.theme(), "Lilac");
+    assert_eq!(
+        settings::avatars::themes(&ui),
+        [("Peach", false, false), ("Lilac", true, false)]
+    );
+    let lilac = settings::avatars::worn(&ui);
+    assert_eq!(lilac.pack, peach.pack);
+    assert_ne!(lilac.sheets, peach.sheets);
+    assert_eq!(Config::load_from(&config).0.avatar_theme.as_deref(), Some("Lilac"));
+    // the next start wears it again
+    let again = start(Prefs::from(&Config::load_from(&config).0));
+    assert_eq!(again.theme(), "Lilac");
+    assert_eq!(settings::avatars::worn(&again), lilac);
+    // a pet with named colours still offers New theme
+    let hood = settings::avatars::tiles(&ui)
+        .iter()
+        .position(|&(n, _)| n == "Hood")
+        .unwrap();
+    ui.update(Message::SelectAvatar(hood));
+    assert!(settings::avatars::makes_themes(&ui));
+}

@@ -27,7 +27,8 @@ pub const MAX_SIDE: u32 = 2048;
 /// A pack's sheets decoded: at most 64 MB.
 pub const MAX_DECODED: u64 = 64 * 1024 * 1024;
 
-/// A pet ready to wear: its pack and the pack's sheets (by index, as its frames name them), straight colours.
+/// A pet ready to wear: its pack and the pack's sheets (by index, as its frames name them, then its sheet themes'),
+/// straight colours.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LoadedPack {
     pub pack: Pack,
@@ -93,12 +94,21 @@ impl LoadedPack {
         Ok(pet)
     }
 
-    /// The pet in its theme `name`, from its default theme; `None` for a theme it hasn't.
+    /// The pet in its theme `name`, from its default theme: in other colours, or for a sheet theme with some of its
+    /// sheets drawn from the theme's; `None` for a theme it hasn't.
     pub fn in_theme(&self, name: &str) -> Option<LoadedPack> {
         if name == self.pack.palette.theme {
             return Some(self.clone());
         }
-        self.recoloured(&self.pack.palette.in_theme(name)?).ok()
+        let theme = self.pack.palette.find(name)?;
+        if !theme.is_sheets() {
+            return self.recoloured(&self.pack.palette.in_theme(name)?).ok();
+        }
+        let mut pet = self.clone();
+        for s in &theme.sheets {
+            *pet.sheets.get_mut(s.index)? = self.sheets.get(s.with)?.clone();
+        }
+        Some(pet)
     }
 
     /// The built-in pet's embedded pack for `avatar`, else the avatar baked now.
@@ -227,9 +237,8 @@ fn attach(pets: &mut [LoadedPack], file: &str, t: ThemeFile) -> Result<(), Strin
         return Err(format!("{} is a painted pet, which has no themes", t.pet));
     }
     let theme = Theme {
-        colours: manifest::colours(&t.palette, "the")?,
-        name: t.theme,
         file: Some(file.to_owned()),
+        ..Theme::of_colours(&t.theme, manifest::colours(&t.palette, "the")?)
     };
     pet.pack
         .palette
@@ -1868,6 +1877,126 @@ mod tests {
         })
         .unwrap_err();
         assert!(twice.contains("the same colour"), "{twice}");
+    }
+
+    #[test]
+    fn a_sheet_theme_draws_some_sheets_from_other_files_and_a_bad_one_skips_the_pack() {
+        let d = dir("sheet-themes");
+        // the built-in pixel Hood, in Blue with a Green theme
+        let pack = d.join("night");
+        fs::create_dir_all(&pack).unwrap();
+        let hood = Path::new(env!("CARGO_MANIFEST_DIR")).join("packs/hood");
+        for file in fs::read_dir(&hood).unwrap().flatten() {
+            fs::copy(file.path(), pack.join(file.file_name())).unwrap();
+        }
+        let text = manifest(&pack);
+        let with = |themes: &str| text.replacen("\"themes\": {", &format!("\"themes\": {{{themes}, "), 1);
+        let body = decode_png(&fs::read(pack.join("body.png")).unwrap()).unwrap();
+        let mut night = body.clone();
+        for p in night.pixels.iter_mut().filter(|p| **p >> 24 != 0) {
+            *p = 0xFF10_1830;
+        }
+        fs::write(pack.join("body-night.png"), encode_png(&night)).unwrap();
+        fs::write(
+            pack.join("pack.json"),
+            with(r#""Night": {"sheets": {"body.png": "body-night.png"}}"#),
+        )
+        .unwrap();
+        let p = load_folder(&pack).unwrap();
+        assert_eq!(p.pack.palette.names().collect::<Vec<_>>(), ["Blue", "Green", "Night"]);
+        assert!(p.pack.palette.find("Night").unwrap().is_sheets());
+        assert!(!p.pack.palette.find("Green").unwrap().is_sheets());
+        // worn in Night: the body's sheet is the theme's, and nothing else changed
+        let worn = p.in_theme("Night").unwrap();
+        assert_eq!(worn.pack, p.pack);
+        assert_eq!(worn.sheets[0], night);
+        assert_eq!(worn.sheets[1..], p.sheets[1..]);
+        assert_eq!(p.sheets[0], body);
+        // a colour theme still recolours the pack's own sheets
+        assert_ne!(p.in_theme("Green").unwrap().sheets[0], body);
+        // --check-pack names the themes
+        assert_eq!(
+            check(&pack),
+            (
+                format!(
+                    "OK Hood (pixel, {} layers, {} frames, themes Blue, Green, Night)",
+                    p.pack.layers.len(),
+                    p.pack.frame_count()
+                ),
+                true
+            )
+        );
+        // and it is written back as it was read
+        let (again, _) = manifest::read(&manifest::write(&p.pack), |name| {
+            decode_png(&fs::read(pack.join(name)).map_err(|e| e.to_string())?)
+        })
+        .unwrap();
+        assert_eq!(again, p.pack);
+
+        // each thing wrong with one is the reason the pack is skipped
+        let small = Sheet {
+            width: 1,
+            height: 1,
+            pixels: vec![0],
+        };
+        fs::write(pack.join("small.png"), encode_png(&small)).unwrap();
+        let wide = Sheet {
+            width: 2049,
+            height: 1,
+            pixels: vec![0; 2049],
+        };
+        fs::write(pack.join("wide.png"), encode_png(&wide)).unwrap();
+        let full = encode_png(&Sheet {
+            width: 2048,
+            height: 2048,
+            pixels: vec![0; 2048 * 2048],
+        });
+        for i in 0..5 {
+            fs::write(pack.join(format!("full{i}.png")), &full).unwrap();
+        }
+        fs::write(d.join("outside.png"), encode_png(&body)).unwrap();
+        for (theme, why) in [
+            (
+                r#""Night": {"sheets": {"nope.png": "body-night.png"}}"#,
+                "\"nope.png\" isn't a sheet the pack's frames are on",
+            ),
+            (
+                r#""Night": {"sheets": {"body.png": "gone.png"}}"#,
+                "\"gone.png\" is missing",
+            ),
+            (
+                r#""Night": {"sheets": {"body.png": "small.png"}}"#,
+                "small.png is 1 × 1 px, but body.png is",
+            ),
+            (
+                r#""Night": {"sheets": {"body.png": "wide.png"}}"#,
+                "at most 2048 a side",
+            ),
+            (
+                r#""Night": {"sheets": {"body.png": "../outside.png"}}"#,
+                "leaves the pack's folder",
+            ),
+            (
+                r#""Night": {"sheets": {"body.png": "full0.png", "arms.png": "full1.png", "feet.png": "full2.png",
+                    "eyes.png": "full3.png", "prop.png": "full4.png"}}"#,
+                "MB decoded",
+            ),
+            (
+                r##""Night": {"sheets": {"body.png": "body-night.png"}, "body": "#000000"}"##,
+                "colours or sheets, not both",
+            ),
+            (r#""Night": {"sheets": {"body.png": 3}}"#, "isn't a file name"),
+            (r#""Night": {"sheets": {}}"#, "names no sheets"),
+            (
+                r#""Blue": {"sheets": {"body.png": "body-night.png"}}"#,
+                "already a theme",
+            ),
+        ] {
+            fs::write(pack.join("pack.json"), with(theme)).unwrap();
+            let reason = reason(&pack);
+            assert!(reason.contains("theme \""), "{theme}: {reason}");
+            assert!(reason.contains(why), "{theme}: {reason}");
+        }
     }
 
     #[test]

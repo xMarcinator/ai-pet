@@ -1,7 +1,8 @@
 //! Settings' Avatars page (`SettingsWindow.axaml.cs:214-261`): every avatar as a still with its accent's dot, to pick
-//! one (the pet wears it, and Settings takes its colour); under them the worn pet's colour themes, to pick one, and
-//! New theme, which opens an editor on the pet in its theme, saved as a theme file in the avatars folder's `themes`
-//! folder (the user's own themes can be edited and deleted too); then "Your own avatars": Reload, and Open folder,
+//! one (the pet wears it, and Settings takes its colour); under them the worn pet's themes, colours or sheets, to pick
+//! one, and New theme (for a pet with named colours), which opens an editor on the pet in its theme, saved as a theme
+//! file in the avatars folder's `themes` folder (the user's own themes can be edited and deleted too; a sheet theme
+//! can't be); then "Your own avatars": Reload, and Open folder,
 //! which makes the avatars folder first if it is missing.
 
 use std::collections::BTreeMap;
@@ -58,13 +59,20 @@ pub fn theming(pet: &PetUi) -> Option<&Theming> {
 #[doc(hidden)]
 pub fn themes(pet: &PetUi) -> Vec<(&str, bool, bool)> {
     let palette = &pet.avatars[pet.avatar].pack.palette;
-    if palette.colours.is_empty() {
+    if !palette.has_colours() && palette.themes.is_empty() {
         return Vec::new();
     }
     std::iter::once((palette.theme.as_str(), false))
         .chain(palette.themes.iter().map(|t| (t.name.as_str(), t.file.is_some())))
         .map(|(name, own)| (name, name == pet.theme, own))
         .collect()
+}
+
+/// Whether the page offers New theme: the worn pet has named colours to make a theme from (a pet whose themes are
+/// only sheets has none).
+#[doc(hidden)]
+pub fn makes_themes(pet: &PetUi) -> bool {
+    pet.avatars[pet.avatar].pack.palette.has_colours()
 }
 
 /// The tiles the page draws, in order: each avatar's name, and whether it is the one worn. The worn avatar's tile is
@@ -249,23 +257,27 @@ fn themes_view(pet: &PetUi, accent: Color, folder: bool) -> Element<'_, crate::M
                     .into()
             })
             .collect();
-        pills.push(enabled(pill("New theme", false, accent), Message::NewTheme).into());
+        let makes = makes_themes(pet);
+        if makes {
+            pills.push(enabled(pill("New theme", false, accent), Message::NewTheme).into());
+        }
         if let Some(&(name, _, _)) = list.iter().find(|&&(_, on, own)| on && own) {
             pills.push(enabled(pill("Edit", false, accent), Message::EditTheme(name.to_owned())).into());
             pills.push(enabled(pill("Delete", false, accent), Message::DeleteTheme(name.to_owned())).into());
         }
         let pills = Row::with_children(pills).spacing(8).wrap().vertical_spacing(8);
-        let mut out = column![
-            super::label(
-                "Themes",
-                format!(
-                    "{} in other colours. New theme makes one of your own from the colours it has on.",
-                    worn.name()
-                )
-            ),
-            pills
-        ]
-        .spacing(10);
+        let about = if makes {
+            format!(
+                "{} in other colours. New theme makes one of your own from the colours it has on.",
+                worn.name()
+            )
+        } else {
+            format!(
+                "{} drawn in other sheets. Its themes come with it and can't be edited.",
+                worn.name()
+            )
+        };
+        let mut out = column![super::label("Themes", about), pills].spacing(10);
         if let Some(e) = &pet.settings.avatars.theme_error {
             out = out.push(status(e.as_str(), Tone::Bad));
         }
@@ -362,6 +374,9 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
             reload(pet, found.pets);
         }
         Message::NewTheme => {
+            if !makes_themes(pet) {
+                return None;
+            }
             let base = &pet.avatars[pet.avatar];
             let taken = |n: &str| base.pack.palette.names().any(|t| t == n);
             let name = (1..)

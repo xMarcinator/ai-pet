@@ -374,6 +374,8 @@ def dust():
 
 # the colours a theme may change, by name
 NAMED = {"body": PET, "shade": SHADE, "belly": BELLY, "cheek": CHEEK, "leaf": LEAF, "eyes": EYE}
+# Pip in Peach (its own colours) has a Lilac theme, which the painted Pip paints as its sheet theme of that name
+LILAC = {"body": "#B9A2F0", "shade": "#9A82D6", "belly": "#DCCFFA", "cheek": "#FF8FC4"}
 
 
 def pack():
@@ -389,7 +391,7 @@ def pack():
         "glow": GLOW,
         "layers": [feet(), sprout(), body(), mouth(), eyes(), headphones(), prop(), arms(), screen(), *fx(),
                    sparkles(), dust()],
-    }, NAMED)
+    }, NAMED, theme="Peach", themes={"Lilac": LILAC})
 
 
 def main():

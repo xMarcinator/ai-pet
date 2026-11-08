@@ -716,11 +716,7 @@ pub fn theme(palette: &Palette, name: &str, other: &Avatar) -> Theme {
         .filter(|(n, _)| palette.colours.contains_key(*n))
         .map(|(n, c)| (n.to_owned(), c | 0xFF00_0000))
         .collect();
-    Theme {
-        name: name.to_owned(),
-        colours,
-        file: None,
-    }
+    Theme::of_colours(name, colours)
 }
 
 /// The green Hood's avatar, as the repo's `avatars/hood-green.json` gives it.

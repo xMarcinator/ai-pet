@@ -1,7 +1,8 @@
 //! The built-in pets' packs, embedded in the binary, one per drawing: Sprout and Hood (in Blue, with a Green theme
 //! from `avatars/hood-green.json`), baked ahead of time from their avatars (`tests/bake.rs` checks the committed
 //! files are the bake's: the manifests as text, the sheets pixel for pixel); the vector Pip
-//! (`avatars/reference/pip_gen.py` writes it) with its painting (`tests/bake.rs` again); and the vector Hood (in
+//! (`avatars/reference/pip_gen.py` writes it, in Peach with a Lilac theme) with its painting, whose Lilac theme is
+//! sheets (`tests/bake.rs` again); and the vector Hood (in
 //! Green, with a Blue theme), Hamster and Sprout, and the pixel Hamster, which their reference generators write
 //! (`tests/vector_packs.rs` checks they still do).
 
@@ -34,7 +35,7 @@ const HOOD: Files = baked!("hood");
 const PIP: Files = pack!("pip": "pack.json");
 const PIP_PAINTED: Files = pack!("pip-painted": "pack.json", "feet.png", "sprout.png", "body.png", "mouth.png", "eyes.png",
     "headphones.png", "prop.png", "arms.png", "screen.png", "zs.png", "notes.png", "dots.png", "alert.png",
-    "sparkles.png", "dust.png");
+    "sparkles.png", "dust.png", "feet-lilac.png", "body-lilac.png", "arms-lilac.png");
 const HOOD_VECTOR: Files = pack!("hood-vector": "pack.json");
 const HAMSTER_VECTOR: Files = pack!("hamster-vector": "pack.json");
 const SPROUT_VECTOR: Files = pack!("sprout-vector": "pack.json");

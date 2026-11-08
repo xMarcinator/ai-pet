@@ -457,13 +457,44 @@ impl Default for Palette {
     }
 }
 
-/// A named colour theme: some of a palette's colours, changed.
+/// A named theme: some of a palette's colours, changed; or, for a sheet theme, some of the pack's sheets drawn from
+/// other files of the same size. A theme changes colours or sheets, never both.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
     pub name: String,
     pub colours: BTreeMap<String, u32>,
+    /// A sheet theme's sheets, in the order the manifest gives them; empty for a colour theme.
+    pub sheets: Vec<ThemeSheet>,
     /// For one of the user's themes, its file's name in the themes folder.
     pub file: Option<String>,
+}
+
+impl Theme {
+    /// A colour theme named `name`.
+    pub fn of_colours(name: &str, colours: BTreeMap<String, u32>) -> Theme {
+        Theme {
+            name: name.to_owned(),
+            colours,
+            sheets: Vec::new(),
+            file: None,
+        }
+    }
+
+    /// Whether the theme is alternate sheets, which can't be edited, rather than colours.
+    pub fn is_sheets(&self) -> bool {
+        !self.sheets.is_empty()
+    }
+}
+
+/// One sheet of a sheet theme: the pack's sheet `sheet` (its file, and its index as the frames name it), drawn
+/// instead from the file `file`, which is the loaded pack's sheet `with` (a pack's sheets are its frames' and then
+/// its sheet themes').
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ThemeSheet {
+    pub sheet: String,
+    pub index: usize,
+    pub file: String,
+    pub with: usize,
 }
 
 impl Palette {
@@ -478,18 +509,32 @@ impl Palette {
         if name == self.theme {
             return Some(self.colours.clone());
         }
-        let theme = self.themes.iter().find(|t| t.name == name)?;
+        let theme = self.find(name)?;
         let mut colours = self.colours.clone();
         colours.extend(theme.colours.iter().map(|(n, &c)| (n.clone(), c)));
         Some(colours)
     }
 
-    /// Whether `theme` can join the palette's themes: a name of its own, and only colours the palette names.
+    /// Whether the palette names any colours, which a colour theme changes (a painted pack's themes are only sheets).
+    pub fn has_colours(&self) -> bool {
+        !self.colours.is_empty()
+    }
+
+    /// The theme `name`, if it is one of the other themes (not the default).
+    pub fn find(&self, name: &str) -> Option<&Theme> {
+        self.themes.iter().find(|t| t.name == name)
+    }
+
+    /// Whether `theme` can join the palette's themes: a name of its own, and only colours the palette names, or
+    /// sheets and no colours.
     pub fn check(&self, theme: &Theme) -> Result<(), String> {
         if !theme_name(&theme.name) {
             return Err("its name is empty, or starts or ends with a space".to_owned());
         }
-        if self.colours.is_empty() {
+        if theme.is_sheets() && !theme.colours.is_empty() {
+            return Err("a theme changes colours or sheets, not both".to_owned());
+        }
+        if !theme.is_sheets() && self.colours.is_empty() {
             return Err("there are no named colours to change".to_owned());
         }
         if self.names().any(|n| n == theme.name) {

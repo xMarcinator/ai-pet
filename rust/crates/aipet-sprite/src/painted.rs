@@ -4,24 +4,65 @@
 //! Like the pixel bake ([`crate::bake`]), it runs ahead of time: `tests/bake.rs` checks the committed pack is what it
 //! makes. A layer's parts become its frames: each value's pose, and its part animation as a frame per stretch of
 //! time in which no part's key changes (a phase shifts a part's keys). The eyes' look table stays a table, moving
-//! the whole frame. A pose's eased transition becomes a jump, the one thing a painted pack can't do.
+//! the whole frame. A pose's eased transition becomes a jump, the one thing a painted pack can't do. The vector
+//! pack's colour themes become sheet themes: each layer's sheet that a theme changes, painted in its colours.
 
 use std::collections::BTreeSet;
 
 use crate::bake::{Baked, Sheet};
 use crate::compose::{Placed, step};
-use crate::pack::{Animation, Art, Clock, Frame, Kind, Layer, LoopMode, Pack};
+use crate::pack::{Animation, Art, Clock, Frame, Kind, Layer, LoopMode, Pack, Theme, ThemeSheet};
 use crate::pose::HALO_PAD;
 use crate::vector::{self, View, whole};
 
 /// A sheet is at most this wide: frames go on in rows.
 const SHEET_W: u32 = 2048;
 
-/// `vector` painted at `scale` art px per logical px, named `name`.
+/// `vector` painted at `scale` art px per logical px, named `name`, with each of its colour themes as a sheet theme of
+/// the same name: the sheets it changes, painted in its colours, as `<layer>-<theme>.png`.
 pub fn paint(vector: &Pack, name: &str, scale: f64) -> Result<Baked, String> {
     if vector.kind != Kind::Vector {
         return Err(format!("{} isn't a vector pack", vector.name));
     }
+    let mut baked = layers(vector, name, scale)?;
+    baked.pack.palette.theme = vector.palette.theme.clone();
+    for theme in &vector.palette.themes {
+        let mut coloured = vector.clone();
+        coloured.recolour(&vector.palette.in_theme(&theme.name).expect("one of its themes"))?;
+        let other = layers(&coloured, name, scale)?;
+        if other.pack.layers != baked.pack.layers {
+            return Err(format!(
+                "{}'s theme {:?} moves its frames, which a sheet theme can't",
+                vector.name, theme.name
+            ));
+        }
+        let file = theme.name.to_lowercase().replace(' ', "-");
+        let mut sheets = Vec::new();
+        for (index, sheet) in other.sheets.into_iter().enumerate() {
+            if sheet != baked.sheets[index] {
+                let layer = &baked.pack.layers[index].name;
+                sheets.push(ThemeSheet {
+                    sheet: format!("{layer}.png"),
+                    index,
+                    file: format!("{layer}-{file}.png"),
+                    with: baked.sheets.len(),
+                });
+                baked.sheets.push(sheet);
+            }
+        }
+        if !sheets.is_empty() {
+            baked.pack.palette.themes.push(Theme {
+                sheets,
+                ..Theme::of_colours(&theme.name, Default::default())
+            });
+        }
+    }
+    baked.pack.validate()?;
+    Ok(baked)
+}
+
+/// `vector`'s layers painted, a sheet each, in the colours it has.
+fn layers(vector: &Pack, name: &str, scale: f64) -> Result<Baked, String> {
     let mut pack = Pack {
         name: name.to_owned(),
         kind: Kind::Painted,

@@ -18,6 +18,15 @@
   "leaf": "#5CC48C",
   "eyes": "#161A26"
  },
+ "theme": "Peach",
+ "themes": {
+  "Lilac": {
+   "body": "#B9A2F0",
+   "shade": "#9A82D6",
+   "belly": "#DCCFFA",
+   "cheek": "#FF8FC4"
+  }
+ },
  "layers": [
   {
    "name": "feet",

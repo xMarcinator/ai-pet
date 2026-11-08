@@ -88,6 +88,33 @@ fn painted_pip_is_the_vector_pip_painted() {
 }
 
 #[test]
+fn painted_pip_in_lilac_is_the_vector_pip_in_lilac_painted() {
+    let vector = aipet_sprite::load::load_folder(&packs().join("pip")).unwrap();
+    let painted = aipet_sprite::load::all(Path::new("no such folder"))
+        .pets
+        .into_iter()
+        .find(|p| p.name() == "Pip (painted)")
+        .expect("the painted Pip is built in");
+    assert_eq!(painted.pack.palette.names().collect::<Vec<_>>(), ["Peach", "Lilac"]);
+    let lilac = &painted.pack.palette.themes[0];
+    assert!(lilac.is_sheets() && lilac.colours.is_empty());
+    let mut files: Vec<&str> = lilac.sheets.iter().map(|s| s.file.as_str()).collect();
+    files.sort();
+    assert_eq!(files, ["arms-lilac.png", "body-lilac.png", "feet-lilac.png"]);
+    // worn in Lilac, each layer is the vector Pip in Lilac, painted; in Peach, as it was
+    let theirs = aipet_sprite::painted::paint(&vector.in_theme("Lilac").unwrap().pack, "Pip (painted)", 2.0).unwrap();
+    let worn = painted.in_theme("Lilac").unwrap();
+    assert_eq!(worn.pack, painted.pack, "a sheet theme changes only sheets");
+    for (i, layer) in painted.pack.layers.iter().enumerate() {
+        assert!(close(&worn.sheets[i], &theirs.sheets[i], 2), "layer {}", layer.name);
+    }
+    assert_ne!(worn.sheets, painted.sheets);
+    assert_eq!(painted.in_theme("Peach").as_ref(), Some(&painted));
+    let (line, ok) = aipet_sprite::load::check(&packs().join("pip-painted"));
+    assert!(ok && line.ends_with(", themes Peach, Lilac)"), "{line}");
+}
+
+#[test]
 fn painted_pip_standing_looks_like_the_vector_pip() {
     use aipet_sprite::Pose;
     use aipet_sprite::pose::Values;
