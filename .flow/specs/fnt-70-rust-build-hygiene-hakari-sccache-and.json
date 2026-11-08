@@ -1,0 +1,24 @@
+{
+  "branch_name": "fnt-70-rust-build-hygiene-hakari-sccache-and",
+  "created_at": "2026-11-08T10:29:49.792060Z",
+  "depends_on_epics": [],
+  "id": "fnt-70-rust-build-hygiene-hakari-sccache-and",
+  "next_task": 1,
+  "plan_review_status": "unknown",
+  "plan_reviewed_at": null,
+  "spec_path": ".flow/specs/fnt-70-rust-build-hygiene-hakari-sccache-and.md",
+  "status": "open",
+  "title": "Rust build hygiene: hakari, sccache and target sweeps",
+  "tracker": {
+    "baseHashFlow": null,
+    "baseHashTracker": null,
+    "depRelations": [],
+    "id": null,
+    "identifier": "FNT-70",
+    "lastSyncedAt": null,
+    "mergeBaseFlow": null,
+    "mergeBaseTracker": null,
+    "url": null
+  },
+  "updated_at": "2026-11-08T10:29:49.792076Z"
+}
