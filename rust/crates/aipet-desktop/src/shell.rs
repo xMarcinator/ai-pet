@@ -161,6 +161,8 @@ pub fn run(launch: Launch) -> Result<(), String> {
             text_color: theme.palette().text,
         })
         .subscription(Shell::subscription)
+        // one worker thread, not one per core
+        .executor::<aipet_ui::Executor>()
         .run()
         .map_err(|e| match e {
             iced::Error::GraphicsCreationFailed(e) => format!("no GPU surface for the pet window: {e}"),

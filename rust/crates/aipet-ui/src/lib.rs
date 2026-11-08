@@ -20,10 +20,12 @@
 mod cards;
 #[cfg(any(test, feature = "demo"))]
 pub mod demo;
+mod executor;
 mod geometry;
 mod menu;
 pub mod platform;
 pub mod settings;
+mod shelf;
 mod sprite;
 mod style;
 pub mod vector_view;
@@ -44,6 +46,7 @@ use iced::{Point, Rectangle, Size, Vector};
 
 pub use cards::Button;
 use cards::{Bubble, Buttons, Card, Fitted, Section, Stacks};
+pub use executor::Executor;
 use geometry::{CARD_RADIUS, CLOSE_SIZE, CardFrame, HALO, HEADER_H, HEADER_RADIUS, MENU_RADIUS, Motion};
 pub use geometry::{INLINE_MENU, MENU, Rect, SPRITE, SURFACE};
 use platform::Platform;
@@ -348,7 +351,8 @@ pub struct PetUi {
     /// The sprite's part of the input region, remade in place each tick.
     sprite_rects: Vec<Rect>,
     shadow: Handle,
-    avatars: Vec<aipet_sprite::load::LoadedPack>,
+    /// The avatars the picker offers, their sheets deflated: the worn one is drawn from `pet`'s copy.
+    avatars: Vec<shelf::Shelved>,
     /// What the avatars folder had that didn't load, and why.
     skipped: Vec<aipet_sprite::load::Skipped>,
     /// Device px per logical px on the pet's output, as the shell says: a pixel pack's pixels are snapped to them.
@@ -445,7 +449,7 @@ impl FrameTimes {
 /// The avatar and theme the preferences name: the avatar by its name, or by an older "<pet> (<theme>)" name for one
 /// of a pet's themes (any case), as "Hood (green)" names the Hood in Green; else the first. The theme is the one
 /// the preferences name, else the one the older name does, else the avatar's default.
-fn choose(avatars: &[aipet_sprite::load::LoadedPack], prefs: &Prefs) -> (usize, String) {
+fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
     let name = prefs.avatar.as_deref().unwrap_or_default();
     let by_name = avatars.iter().position(|a| a.name() == name).map(|i| (i, None));
     let by_theme = || {
@@ -481,10 +485,11 @@ impl PetUi {
     /// then).
     pub fn new(setup: Setup) -> Self {
         let found = aipet_sprite::load::all(&setup.avatars);
-        let (avatars, skipped) = (found.pets, found.skipped);
+        let skipped = found.skipped;
+        let mut stills: Vec<Handle> = found.pets.iter().map(sprite::still).collect();
+        let avatars = shelf::shelve(found.pets);
         let (avatar, theme) = choose(&avatars, &setup.prefs);
-        let worn = themed(&avatars[avatar], &theme);
-        let mut stills: Vec<Handle> = avatars.iter().map(sprite::still).collect();
+        let worn = themed(&avatars[avatar].unpacked(), &theme);
         stills[avatar] = sprite::still(&worn);
         let mut pet = Pet::new();
         pet.set_pack(worn.clone());
@@ -1039,17 +1044,17 @@ impl PetUi {
     /// Puts on the avatar `i` in its theme `theme` (its default when it hasn't one by that name). The picker's stills
     /// follow: the one taken off in its default, the one put on in its theme.
     fn wear(&mut self, i: usize, theme: &str) {
-        let base = &self.avatars[i];
+        let base = self.avatars[i].unpacked();
         let theme = if base.pack.palette.names().any(|n| n == theme) {
             theme.to_owned()
         } else {
             base.pack.palette.theme.clone()
         };
-        let worn = themed(base, &theme);
+        let worn = themed(&base, &theme);
         if i != self.avatar
             && let Some(old) = self.avatars.get(self.avatar)
         {
-            self.stills[self.avatar] = sprite::still(old);
+            self.stills[self.avatar] = sprite::still(&old.unpacked());
         }
         self.stills[i] = sprite::still(&worn);
         self.avatar = i;
@@ -1875,7 +1880,7 @@ pub(crate) mod tests {
                 ..Setup::detached()
             })
         };
-        let hood = |ui: &PetUi| ui.avatars.iter().find(|a| a.name() == "Hood").unwrap().clone();
+        let hood = |ui: &PetUi| ui.avatars.iter().find(|a| a.name() == "Hood").unwrap().unpacked();
         // "Hood (green)" was a pet of its own: it is the Hood in Green now
         let ui = start("Hood (green)", None);
         assert_eq!((ui.avatars[ui.avatar].name(), ui.theme()), ("Hood", "Green"));

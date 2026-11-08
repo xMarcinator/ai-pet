@@ -90,7 +90,11 @@ pub fn worn(pet: &PetUi) -> LoadedPack {
 
 fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &LoadedPack)> {
     let gone = pet.settings.avatars.gone;
-    pet.avatars.iter().enumerate().filter(move |&(i, _)| Some(i) != gone)
+    pet.avatars
+        .iter()
+        .enumerate()
+        .filter(move |&(i, _)| Some(i) != gone)
+        .map(|(i, a)| (i, &**a))
 }
 
 /// What the Avatars page sends of its own (picking an avatar sends the pet's [`crate::Message::SelectAvatar`], and
@@ -506,7 +510,7 @@ fn reload(pet: &mut PetUi, mut avatars: Vec<LoadedPack>) {
     let (index, gone) = match avatars.iter().position(|a| a.name() == pet.avatars[pet.avatar].name()) {
         Some(i) => (i, None),
         None => {
-            avatars.push(pet.avatars[pet.avatar].clone());
+            avatars.push(pet.avatars[pet.avatar].unpacked());
             (avatars.len() - 1, Some(avatars.len() - 1))
         }
     };
@@ -527,7 +531,7 @@ fn reload(pet: &mut PetUi, mut avatars: Vec<LoadedPack>) {
         .enumerate()
         .map(|(i, a)| crate::sprite::still(if i == index { &worn } else { a }))
         .collect();
-    pet.avatars = avatars;
+    pet.avatars = crate::shelf::shelve(avatars);
     pet.avatar = index;
     pet.theme = theme;
     pet.settings.avatars.gone = gone;
@@ -559,7 +563,7 @@ fn preview(pet: &PetUi, t: &Theming) -> Option<image::Handle> {
         .iter()
         .filter_map(|(n, v)| Some((n.clone(), aipet_sprite::vector::colour(v).ok().flatten()?)))
         .collect();
-    Some(crate::sprite::still(&base.recoloured(&colours).ok()?))
+    Some(crate::sprite::still(&base.unpacked().recoloured(&colours).ok()?))
 }
 
 /// A name as part of a file name: lower case letters and digits, words joined by `-`.

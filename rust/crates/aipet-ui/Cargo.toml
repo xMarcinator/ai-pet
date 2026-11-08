@@ -19,5 +19,9 @@ aipet-sprite = { path = "../aipet-sprite" }
 # the recolour files Settings' Avatars page writes
 serde_json.workspace = true
 iced.workspace = true
+# the other avatars' sheets, kept deflated (shelf)
+flate2.workspace = true
+# the shells' async runtime (Executor)
+tokio.workspace = true
 # the file dialogs of Settings' Import defaults and Avatars (task 19)
 rfd.workspace = true

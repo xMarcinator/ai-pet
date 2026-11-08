@@ -193,6 +193,8 @@ pub fn run(connection: Connection) -> Result<(), String> {
     })
     .subscription(Shell::subscription)
     .redraw_scope(move |message: &Message| redraw_scope(pet, message))
+    // one worker thread, not one per core
+    .executor::<aipet_ui::Executor>()
     .settings(Settings {
         layer_settings: LayerShellSettings {
             // no surface of its own at start (the pet's is made in boot, with a known id), and the daemon doesn't

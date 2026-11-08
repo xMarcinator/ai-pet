@@ -48,6 +48,9 @@ iced = { version = "0.14.0", default-features = false, features = [
     "canvas",
     "advanced",
 ] }
+# The shells' async runtime (aipet-ui's Executor): iced's tokio runtime with fewer workers. The features iced's tokio
+# backend already enables.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "time"] }
 # Layer-shell surfaces on Wayland. No default features: they add a colour-scheme probe that blocks startup for up
 # to 200 ms.
 iced_exwlshell = { version = "0.20.1", default-features = false, features = ["macros"] }
