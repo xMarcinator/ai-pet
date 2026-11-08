@@ -67,7 +67,7 @@ fn check_pack(folder: Option<std::ffi::OsString>) -> ExitCode {
         windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS);
     }
     let Some(folder) = folder else {
-        eprintln!("usage: AiPet --check-pack <folder or theme file>");
+        eprintln!("usage: AiPet --check-pack <pack folder, theme file or legacy avatar file>");
         return ExitCode::FAILURE;
     };
     let (line, ok) = aipet_sprite::load::check(std::path::Path::new(&folder));

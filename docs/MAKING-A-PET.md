@@ -444,6 +444,7 @@ device names (`CON`, `NUL`, …) are refused.
 ```sh
 AiPet --check-pack <pack folder>
 AiPet --check-pack <theme file>
+AiPet --check-pack <legacy avatar file>
 ```
 
 It loads the pack exactly as the pet does, with the same limits, and prints one line:
@@ -452,7 +453,8 @@ It loads the pack exactly as the pet does, with the same limits, and prints one 
 - or the reason the pack doesn't load, and exits 1.
 
 A theme file is checked against its pet: a built-in one, or one in the avatars folder the `themes/` folder is in, with
-the other theme files there. It prints `OK <pet> in <theme> (a theme)`. The check never starts the pet and never
+the other theme files there. It prints `OK <pet> in <theme> (a theme)`. A `.json` file outside a `themes/` folder that
+doesn't name a `pet` is a legacy avatar, and prints `OK <name> (a legacy avatar)`. The check never starts the pet and never
 writes anything.
 
 On Windows, run it from a terminal: `AiPet.exe --check-pack <folder>`.

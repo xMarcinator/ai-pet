@@ -985,7 +985,11 @@ fn build_aseprite(src: AseSource, extra: Option<&str>) -> Result<(Pack, Vec<Shee
 /// `AiPet --check-pack <folder or theme file>`: the line to print and whether the pack, or the theme, loads.
 pub fn check(folder: &Path) -> (String, bool) {
     if folder.is_file() {
-        return check_theme(folder);
+        return if legacy(folder) {
+            check_legacy(folder)
+        } else {
+            check_theme(folder)
+        };
     }
     if !folder.is_dir() {
         return (format!("{}: not a folder or a theme file", folder.display()), false);
@@ -1011,6 +1015,25 @@ pub fn check(folder: &Path) -> (String, bool) {
             (line, true)
         }
         Err(reason) => (reason, false),
+    }
+}
+
+/// Whether a file is a legacy avatar rather than a theme file: one outside a `themes` folder that doesn't name its
+/// pet (every theme file does).
+fn legacy(path: &Path) -> bool {
+    let in_themes = path.parent().and_then(Path::file_name).is_some_and(|n| n == THEMES);
+    !in_themes
+        && read_all_text(path)
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .is_some_and(|j| j.is_object() && j.get("pet").is_none())
+}
+
+/// A legacy avatar file, as the pet would bake it.
+fn check_legacy(path: &Path) -> (String, bool) {
+    match load_legacy(path) {
+        Ok(p) => (format!("OK {} (a legacy avatar)", p.pack.name), true),
+        Err(reason) => (format!("{}: {reason}", path.display()), false),
     }
 }
 
@@ -1805,6 +1828,14 @@ mod tests {
             ("OK Hood (vector) in Red (a theme)".into(), true)
         );
         assert!(!check(&themes.join("bad-name.json")).1);
+    }
+
+    #[test]
+    fn check_pack_reads_a_legacy_avatar_file_as_one() {
+        let legacy = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../avatars/hood-green.json");
+        let (line, ok) = check(&legacy);
+        assert!(ok, "{line}");
+        assert!(line.ends_with("(a legacy avatar)"), "{line}");
         let samples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../avatars/samples");
         assert_eq!(
             check(&samples.join("themes/hood-red.json")),
