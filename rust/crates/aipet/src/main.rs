@@ -76,8 +76,8 @@ fn check_pack(folder: Option<std::ffi::OsString>) -> ExitCode {
 }
 
 fn main() -> ExitCode {
-    cap_malloc_arenas();
     updates::startup();
+    cap_malloc_arenas();
     let mut args = env::args_os().skip(1);
     if args.next().is_some_and(|a| a == "--check-pack") {
         return check_pack(args.next());
@@ -132,7 +132,8 @@ fn main() -> ExitCode {
 /// At most two malloc arenas (glibc's), unless `MALLOC_ARENA_MAX` says otherwise. glibc gives each thread that
 /// allocates an arena of its own, up to eight per core, and keeps what is freed in them: the hook server's thread per
 /// connection left the pet 5 MB bigger for good after a burst of 3000 hook events, and 2 MB with two arenas, at the
-/// same CPU (rust/proofs/memory.md). It runs first, before any thread starts.
+/// same CPU (rust/proofs/memory.md). It runs right after Velopack's startup (which must come first), before any thread
+/// starts.
 fn cap_malloc_arenas() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     if env::var_os("MALLOC_ARENA_MAX").is_none() {
