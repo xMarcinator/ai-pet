@@ -17,7 +17,13 @@ Every generator writes both (`avatars/reference/pet_states.write_pages`):
 Examples: `avatars/reference/hood-green-preview.html`, `hamster-preview.html`, `sprout-preview.html` and their
 `-sheet.svg`. A generator that writes the manifest directly draws its page from the manifest it wrote, through a
 small resolver that follows the fallbacks as the app does: `avatars/samples/skill_example_gen.py` and its
-`skill-example-preview.html`. Its page has no original to compare with; add one when the user gave a reference.
+`skill-example-preview.html`. Its page has no original to compare with and no state sheet. When the user gave a
+reference, put it at the top of the page: an `<img src="…">` with a path relative to the page (an absolute
+`file://` path may not load in headless Chrome), at the same 130×120 box size, on the same three backgrounds. A small
+pet's first frame of each state, as the sample page shows, stands in for the state sheet.
+
+When you copy `skill_example_gen.py`, rewrite its `REVIEW` rows for your pet's own values (its labels name Dewdrop's
+hands), and its page names the generator it was written by from `__file__`.
 
 The page shows the first frame of each state without the app's whole-body motion; animation is checked in the app.
 

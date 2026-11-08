@@ -47,3 +47,9 @@ and list them as fixed in the Codex review.
   `"mirror": "none"`, or avoid it.
 - Keep a pet recognisable from its original: the user's reference shows the proportions, colours and the turn;
   the review page shows the original beside the new drawing so drift is caught.
+
+## Colours from a reference
+
+PIL may not be installed. Read the colours off the image by eye at a large zoom, name them in the palette for what
+they are, then compare the review page beside the original and adjust. A pixel reference's colours are exact: use
+them as they are.

@@ -52,6 +52,10 @@ moved by `poses`; each Z, dot, note, sparkle or dust puff is a part of its effec
   `opacity`. Put a part's origin where it should turn: a shoulder for an arm (the Hamster), a stem's base for a sprout
   (Pip).
 - `look` (eyes layer only) offsets the eye parts per direction. Small: 2 to 6 px.
+- Parts keep their origins whatever the body draws: when a state's body drawing moves the face (a squatter `sleep`,
+  say), the eyes stay where they were. Keep the face at the same place in every body drawing, or move the eyes with
+  a pose on that state's eye value. Mind the fallbacks: a pose on `closed` also applies to `blink`, which falls back
+  to it, so give the moved state an eye value of its own.
 - Never animate the whole body: the app breathes, squashes, hops and mirrors it.
 
 ## Generators

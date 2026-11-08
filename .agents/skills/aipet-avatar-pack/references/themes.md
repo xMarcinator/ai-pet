@@ -15,6 +15,8 @@ own and the user's together. People's guide: `docs/MAKING-A-PET.md`, "Themes".
 
 - `palette` is the default theme; `theme` names it ("Default" otherwise). Each entry of `themes` changes some of the
   palette's colours; a name the palette lacks is refused.
+- A pet with one look needs no `themes`: a `palette` on its own is fine, and still lets the user make themes in
+  Settings. `--check-pack` names themes only when the pack has some besides the default.
 - Colours: `#RGB`, `#RRGGBB` or `#RRGGBBAA`, not `none`.
 - **Vector**: shapes' `fill` and `stroke`, and the pack's `accent` and `glow`, use `$name`. A `$name` the palette
   lacks is refused. A colour written as hex never changes with the theme, which is right for fixed colours (white

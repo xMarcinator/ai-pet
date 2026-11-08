@@ -68,7 +68,7 @@ the landing read differently.
 ## What "covers every state" means
 
 - **A user's pet**: any value without a drawing falls back to the default, which is valid. Make the fallbacks
-  deliberate: write the ones that matter (`blink` → `closed`, `squint` → `happy`, `run-a` → `raised`, …) and
+  deliberate (the 15 `look` direction names are in `manifest.md`): write the ones that matter (`blink` → `closed`, `squint` → `happy`, `run-a` → `raised`, …) and
   `null` the ones that must draw nothing.
 - **A built-in pet** (`tests/vector_packs.rs`): every layer of the eyes, arms, prop, headphones and fx channels (and
   feet, if it has any) has each value of the table above itself or names it in `fallback`; a combined effect may take
