@@ -17,8 +17,9 @@
 //! `AIPET_DEBUG=1` says which shell runs and makes it log pointer events and input-region updates to stderr;
 //! `AIPET_OPEN_SETTINGS=1` opens Settings at start (both shells), and `AIPET_OPEN_SETTINGS=avatars` (or another
 //! page's name) opens it on that page. The pet renders on the low-power GPU unless
-//! `WGPU_POWER_PREF` says otherwise, and through GL unless `WGPU_BACKEND` does; on Linux, with only Mesa's EGL driver
-//! loaded when an Intel or AMD GPU drives the screen ([`mesa`]), unless `__EGL_VENDOR_LIBRARY_FILENAMES` says otherwise.
+//! `WGPU_POWER_PREF` says otherwise, and through GL unless `WGPU_BACKEND` does; on Linux, with only Mesa's EGL
+//! driver loaded when an Intel or AMD GPU drives the screen ([`mesa`]), unless `__EGL_VENDOR_LIBRARY_FILENAMES` says
+//! otherwise.
 //!
 //! With the `demo` feature it plays the demo's scripted day instead, for development and screenshots: no single
 //! instance, no core, and nothing read or written in the data folder.
@@ -75,6 +76,7 @@ fn check_pack(folder: Option<std::ffi::OsString>) -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    cap_malloc_arenas();
     updates::startup();
     let mut args = env::args_os().skip(1);
     if args.next().is_some_and(|a| a == "--check-pack") {
@@ -124,6 +126,18 @@ fn main() -> ExitCode {
             eprintln!("aipet: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// At most two malloc arenas (glibc's), unless `MALLOC_ARENA_MAX` says otherwise. glibc gives each thread that
+/// allocates an arena of its own, up to eight per core, and keeps what is freed in them: the hook server's thread per
+/// connection left the pet 5 MB bigger for good after a burst of 3000 hook events, and 2 MB with two arenas, at the
+/// same CPU (rust/proofs/memory.md). It runs first, before any thread starts.
+fn cap_malloc_arenas() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    if env::var_os("MALLOC_ARENA_MAX").is_none() {
+        // SAFETY: mallopt only sets a number glibc's malloc reads; failing leaves the default, which is fine
+        unsafe { libc::mallopt(libc::M_ARENA_MAX, 2) };
     }
 }
 
