@@ -18,8 +18,9 @@ Sheet themes (owner's idea, 2026-11-07): sprite-sheet pets whose art isn't a sma
 
 
 ## Done summary
-TBD
+Sheet themes (commit 31a0ab8, by a subagent): a theme may be {"sheets": {"body.png": "body-night.png"}}, read through the pack's own sheet rules; mixed, missing, mismatched or out-of-folder sheets skip the pack. Painted packs may have sheet themes. Settings lists and picks them with no editor; New theme is hidden for a pet without named colours. The painted Pip ships Peach and Lilac (3 Lilac sheets, 13.6 KB), painted from the vector Pip's new Lilac colour theme. Lilac keeps the peach accent (sheet themes don't change accents).
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:
