@@ -72,7 +72,7 @@ impl VectorArt {
 }
 
 /// The typical key of the part animations on screen, when there are any and they move.
-fn fast_ms(pack: &Pack, pose: &Pose) -> Option<u32> {
+pub(crate) fn fast_ms(pack: &Pack, pose: &Pose) -> Option<u32> {
     if pose.still {
         return None;
     }

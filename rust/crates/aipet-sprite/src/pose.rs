@@ -1,7 +1,7 @@
 //! The pet's pose: what its behaviour says each part of it shows, without saying how to draw it.
 //!
 //! [`Pet::update`](crate::Pet::update) computes one every frame from the [`PetInput`](crate::PetInput), the time and
-//! the random source, next to the pixels it still draws itself. A pose is a set of channels (the mood, the eyes, the
+//! the random source, and the pack's layers draw it. A pose is a set of channels (the mood, the eyes, the
 //! arms, the feet, the prop, the headphones, the effect and the facing), each with the time its value last changed,
 //! plus the whole-body motion. A pack's layers are bound to channels, and pick their animations by the channel's
 //! value ([`crate::compose`]).

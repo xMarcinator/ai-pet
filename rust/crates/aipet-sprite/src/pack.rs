@@ -13,6 +13,8 @@ use crate::vector::{Cap, Join, Seg};
 pub const MAX_LAYERS: usize = 16;
 /// At most this many frames in a pack, over all its layers and animations.
 pub const MAX_FRAMES: usize = 512;
+/// At most this many parts in a vector pack, over all its layers.
+pub const MAX_VECTOR_PARTS: usize = 256;
 /// At most this many keys in a part animation.
 pub const MAX_KEYS: usize = 64;
 /// At most this many steps from a value to the layer's default through its fallbacks.
@@ -634,8 +636,19 @@ impl Pack {
         if frames > MAX_FRAMES {
             return Err(format!("{frames} frames (at most {MAX_FRAMES})"));
         }
+        let parts: usize = self.layers.iter().map(|l| l.parts.len()).sum();
+        if self.kind == Kind::Vector && parts > MAX_VECTOR_PARTS {
+            return Err(format!("{parts} vector parts (at most {MAX_VECTOR_PARTS})"));
+        }
         let mut ids = BTreeSet::new();
         for layer in &self.layers {
+            // a raster layer's frame is moved by its part as a whole, so two parts couldn't move apart
+            if self.kind != Kind::Vector && layer.parts.len() > 1 {
+                return Err(format!(
+                    "layer {:?}: a raster layer moves as one piece; give each moving part a layer of its own",
+                    layer.name
+                ));
+            }
             layer.validate()?;
             for p in &layer.parts {
                 if !ids.insert(p.id.as_str()) {
@@ -777,9 +790,15 @@ pub(crate) mod tests {
                 .contains("unknown part \"nose\"")
         );
 
+        // in another layer (a raster layer has one part at most)
         let mut twice = eyes.clone();
-        twice.parts.push(twice.parts[0].clone());
-        assert!(pack(vec![body(), twice]).validate().unwrap_err().contains("used twice"));
+        twice.name = "eyes-again".into();
+        assert!(
+            pack(vec![body(), eyes.clone(), twice])
+                .validate()
+                .unwrap_err()
+                .contains("used twice")
+        );
 
         let mut many = eyes.clone();
         many.part_animations.insert(
@@ -800,6 +819,50 @@ pub(crate) mod tests {
                 .unwrap_err()
                 .contains("transition_ms")
         );
+    }
+
+    fn part(id: &str) -> Part {
+        Part {
+            id: id.into(),
+            origin: (60.0, 60.0),
+            shape: None,
+        }
+    }
+
+    #[test]
+    fn a_raster_layer_has_at_most_one_part() {
+        let mut eyes = Layer::new("eyes", Channel::Eyes, "open");
+        eyes.animations.insert("open".into(), frames(1, 100, LoopMode::Once));
+        eyes.parts.push(part("eye-left"));
+        assert_eq!(pack(vec![body(), eyes.clone()]).validate(), Ok(()));
+        eyes.parts.push(part("eye-right"));
+        for kind in [Kind::Pixel, Kind::Painted] {
+            let mut p = pack(vec![body(), eyes.clone()]);
+            p.kind = kind;
+            assert_eq!(
+                p.validate().unwrap_err(),
+                "layer \"eyes\": a raster layer moves as one piece; give each moving part a layer of its own"
+            );
+        }
+        // a vector layer's parts move apart
+        let mut p = pack(vec![body(), eyes]);
+        p.kind = Kind::Vector;
+        assert_eq!(p.validate(), Ok(()));
+    }
+
+    #[test]
+    fn a_vector_pack_has_at_most_256_parts() {
+        let layer = |name: &str, from: usize, n: usize| {
+            let mut l = Layer::new(name, Channel::Arms, "rest");
+            l.poses.insert("rest".into(), BTreeMap::new());
+            l.parts = (from..from + n).map(|i| part(&format!("p{i}"))).collect();
+            l
+        };
+        let mut p = pack(vec![body(), layer("a", 0, 200), layer("b", 200, 56)]);
+        p.kind = Kind::Vector;
+        assert_eq!(p.validate(), Ok(()));
+        p.layers[2].parts.push(part("p256"));
+        assert_eq!(p.validate().unwrap_err(), "257 vector parts (at most 256)");
     }
 
     #[test]

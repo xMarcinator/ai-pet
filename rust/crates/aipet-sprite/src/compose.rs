@@ -56,7 +56,7 @@ pub fn mirrored(pack: &Pack, layer: &Layer, pose: &Pose) -> bool {
 }
 
 /// How far a raster layer without parts is moved, in art-box px: the eyes channel's look offset, when it has a table.
-pub fn raster_offset(pack: &Pack, layer: &Layer, pose: &Pose) -> (f64, f64) {
+fn raster_offset(pack: &Pack, layer: &Layer, pose: &Pose) -> (f64, f64) {
     if layer.channel == Channel::Eyes && layer.parts.is_empty() && !layer.look.is_empty() {
         look_offset(pack, layer, pose.eyes.look)
     } else {
@@ -197,6 +197,44 @@ impl Parts {
     /// Every part's place at `t`, layer by layer. A layer that draws nothing for the pose's value places none.
     pub fn place(&mut self, pack: &Pack, pose: &Pose, t: f64) -> Vec<Placed> {
         let m = pose.motion;
+        let mut placed = self.local(pack, pose, t);
+        for p in &mut placed {
+            // the body's motion: squash about the anchor, then the offset
+            p.x = ANCHOR.0 + (p.x - ANCHOR.0) * m.scale_x + m.x;
+            p.y = ANCHOR.1 + (p.y - ANCHOR.1) * m.scale_y + m.y;
+            if p.mirrored {
+                p.x = ART_W - p.x;
+                p.rotate = -p.rotate;
+            }
+        }
+        placed
+    }
+
+    /// How far each raster layer's frame is moved at `t`, in art-box px before the body's motion and the mirroring,
+    /// one per layer of the pack. A raster layer moves as one piece: with a part, by the part's place less its origin
+    /// (its pose, eased, its key's `dx` and `dy`, and for the eyes the look offset); without one, by the eyes' look
+    /// offset alone. A pixel pack moves by whole art pixels.
+    pub fn raster_offsets(&mut self, pack: &Pack, pose: &Pose, t: f64) -> Vec<(f64, f64)> {
+        let mut offsets: Vec<(f64, f64)> = pack.layers.iter().map(|l| raster_offset(pack, l, pose)).collect();
+        if pack.kind == Kind::Vector || pack.layers.iter().all(|l| l.parts.is_empty()) {
+            return offsets;
+        }
+        for p in self.local(pack, pose, t) {
+            let origin = pack.layers[p.layer].parts[p.part].origin;
+            let (dx, dy) = (p.x - origin.0, p.y - origin.1);
+            offsets[p.layer] = match pack.kind {
+                Kind::Pixel => {
+                    let px = pack.pixel_size;
+                    ((dx / px).round() * px, (dy / px).round() * px)
+                }
+                Kind::Painted | Kind::Vector => (dx, dy),
+            };
+        }
+        offsets
+    }
+
+    /// Every part's place at `t` before the body's motion and the mirroring (which `mirrored` says is due).
+    fn local(&mut self, pack: &Pack, pose: &Pose, t: f64) -> Vec<Placed> {
         let mut placed = Vec::new();
         for (li, layer) in pack.layers.iter().enumerate() {
             let mirrored = mirrored(pack, layer, pose);
@@ -249,20 +287,11 @@ impl Parts {
                     y += k.dy;
                     (rotate, scale, opacity) = (k.rotate, k.scale, k.opacity);
                 }
-                x += look.0;
-                y += look.1;
-                // the body's motion: squash about the anchor, then the offset
-                x = ANCHOR.0 + (x - ANCHOR.0) * m.scale_x + m.x;
-                y = ANCHOR.1 + (y - ANCHOR.1) * m.scale_y + m.y;
-                if mirrored {
-                    x = ART_W - x;
-                    rotate = -rotate;
-                }
                 placed.push(Placed {
                     layer: li,
                     part: pi,
-                    x,
-                    y,
+                    x: x + look.0,
+                    y: y + look.1,
                     rotate,
                     scale,
                     opacity,
@@ -282,6 +311,7 @@ pub fn flatten(pack: &Pack, sheets: &[crate::bake::Sheet], pose: &Pose, t: f64) 
         (ART_H / pack.pixel_size).round() as i64,
     );
     let mut out = vec![0u32; (w * h) as usize];
+    let offsets = Parts::default().raster_offsets(pack, pose, t);
     for p in pick(pack, pose, t) {
         let layer = &pack.layers[p.layer];
         let Some(crate::pack::Art::Raster {
@@ -295,7 +325,7 @@ pub fn flatten(pack: &Pack, sheets: &[crate::bake::Sheet], pose: &Pose, t: f64) 
         else {
             continue;
         };
-        let (dx, dy) = raster_offset(pack, layer, pose);
+        let (dx, dy) = offsets[p.layer];
         let ox = (dx / pack.pixel_size).round() as i64 - pivot.0 as i64;
         let oy = (dy / pack.pixel_size).round() as i64 - pivot.1 as i64;
         let s = &sheets[sheet];
@@ -600,6 +630,106 @@ mod tests {
         let placed = Parts::default().place(&p, &left, 0.0);
         assert_eq!(placed[0].x, ART_W - x);
         assert!(placed[0].mirrored);
+    }
+
+    /// A raster pack whose hand layer is one part: raised by the wave, bobbing while holding.
+    fn hand_pack(kind: Kind) -> Pack {
+        let mut body = Layer::new("body", Channel::State, "idle");
+        body.animations.insert("idle".into(), frames(1, 100, LoopMode::Once));
+        let mut hand = Layer::new("hand", Channel::Arms, "rest");
+        // a raster layer draws the frames of the value it shows, so each pose has its own
+        for value in ["rest", "wave-a", "hold"] {
+            hand.animations.insert(value.into(), frames(1, 100, LoopMode::Once));
+        }
+        hand.parts = vec![crate::pack::Part {
+            id: "hand".into(),
+            origin: (95.0, 101.0),
+            shape: None,
+        }];
+        hand.poses.insert("rest".into(), BTreeMap::new());
+        hand.poses
+            .insert("wave-a".into(), BTreeMap::from([("hand".to_owned(), (115.0, 71.0))]));
+        hand.transition_ms = 200;
+        hand.part_animations.insert(
+            "hold".into(),
+            PartAnimation {
+                parts: vec![("hand".into(), 0.0)],
+                mode: LoopMode::Loop,
+                keys: vec![Key::offset(0.0, 0.0, 100), Key::offset(1.0, 5.0, 100)],
+            },
+        );
+        let mut p = pack(vec![body, hand]);
+        p.kind = kind;
+        p
+    }
+
+    #[test]
+    fn a_raster_part_moves_its_layer_by_its_pose_eased_and_its_keys() {
+        let p = hand_pack(Kind::Pixel);
+        assert_eq!(p.validate(), Ok(()));
+        let mut parts = Parts::default();
+        assert_eq!(parts.raster_offsets(&p, &arms(Arms::Rest, 0.0), 0.0), [(0.0, 0.0); 2]);
+        assert!(!parts.moving(0.0));
+        // waving: half-way through the transition it is half-way, then the frame sits at (pose − origin)
+        let wave = arms(Arms::WaveA, 1.0);
+        assert_eq!(parts.raster_offsets(&p, &wave, 1.0)[1], (0.0, 0.0));
+        assert!(parts.moving(1.05));
+        assert_eq!(parts.raster_offsets(&p, &wave, 1.1)[1], (10.0, -15.0));
+        assert_eq!(parts.raster_offsets(&p, &wave, 1.3), [(0.0, 0.0), (20.0, -30.0)]);
+        assert!(!parts.moving(1.3));
+        // holding: the key's dx and dy, in whole 5 px art pixels (1 px rounds to none)
+        let hold = arms(Arms::Hold, 2.0);
+        let mut calm = Parts::default();
+        assert_eq!(calm.raster_offsets(&p, &hold, 2.05)[1], (0.0, 0.0));
+        assert_eq!(calm.raster_offsets(&p, &hold, 2.15)[1], (0.0, 5.0));
+        // a painted pack keeps the eased offset in logical px: a quarter of the way is 1/16 of the move
+        let painted = hand_pack(Kind::Painted);
+        let mut parts = Parts::default();
+        parts.raster_offsets(&painted, &arms(Arms::Rest, 0.0), 0.0);
+        parts.raster_offsets(&painted, &arms(Arms::WaveA, 1.0), 1.0);
+        let at = parts.raster_offsets(&painted, &arms(Arms::WaveA, 1.0), 1.05)[1];
+        assert!((at.0 - 1.25).abs() < 1e-9 && (at.1 + 1.875).abs() < 1e-9, "{at:?}");
+        assert_eq!(Parts::default().raster_offsets(&painted, &hold, 2.15)[1], (1.0, 5.0));
+    }
+
+    #[test]
+    fn a_raster_eye_part_takes_the_look_once_and_an_eyes_layer_without_parts_still_looks() {
+        let up = looking(Look { dx: 0, dy: -1 });
+        let mut p = eyes_pack(Kind::Pixel);
+        p.layers[0]
+            .animations
+            .insert("open".into(), frames(1, 100, LoopMode::Once));
+        assert_eq!(Parts::default().raster_offsets(&p, &up, 0.0), [(0.0, -5.0)]);
+        p.layers[0].parts.clear();
+        assert_eq!(Parts::default().raster_offsets(&p, &up, 0.0), [(0.0, -5.0)]);
+    }
+
+    #[test]
+    fn a_still_draws_a_raster_part_at_its_pose() {
+        let p = hand_pack(Kind::Pixel);
+        // one opaque pixel at the frame's corner, for both layers' frames
+        let mut pixels = vec![0u32; 26 * 2 * 24];
+        pixels[0] = 0xFFFF_FFFF;
+        let sheets = [crate::bake::Sheet {
+            width: 52,
+            height: 24,
+            pixels,
+        }];
+        let lit = |p: &Pack, pose: &Pose| {
+            let (w, _, out) = flatten(p, &sheets, pose, 0.0);
+            out.iter()
+                .enumerate()
+                .filter(|(_, px)| **px != 0)
+                .map(|(i, _)| (i % w as usize, i / w as usize))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(lit(&p, &arms(Arms::Rest, 0.0)), [(0, 0)]);
+        // the body's pixel stays; the hand's moves by (20, 10) px, 4 art pixels right and 2 down
+        let mut lowered = p.clone();
+        lowered.layers[1]
+            .poses
+            .insert("wave-a".into(), BTreeMap::from([("hand".to_owned(), (115.0, 111.0))]));
+        assert_eq!(lit(&lowered, &arms(Arms::WaveA, 0.0)), [(0, 0), (4, 2)]);
     }
 
     #[test]

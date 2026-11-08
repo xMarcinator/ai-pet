@@ -178,6 +178,8 @@ pub struct Sprite {
     pub fast_ms: Option<u32>,
     /// A vector pack's drawing, and where its canvas goes in the sprite (before the body's motion).
     pub vector: Option<(VectorArt, Rectangle)>,
+    /// A raster pack's parts on their way between poses.
+    parts: compose::Parts,
 }
 
 impl Sprite {
@@ -188,6 +190,7 @@ impl Sprite {
             hits: Vec::new(),
             fast_ms: None,
             vector: (p.pack.kind == Kind::Vector).then(|| (VectorArt::default(), Rectangle::default())),
+            parts: compose::Parts::default(),
         }
     }
 
@@ -225,6 +228,13 @@ impl Sprite {
             }
             return;
         }
+        // each layer moves as one piece, by its part's motion or the eyes' look
+        let offsets = self.parts.raster_offsets(pack, pose, t);
+        self.fast_ms = if self.parts.moving(t) {
+            Some(16)
+        } else {
+            crate::vector_view::fast_ms(pack, pose)
+        };
         for pick in compose::pick(pack, pose, t) {
             let layer = &pack.layers[pick.layer];
             let Some(frames) = self.art.layers[pick.layer].get(pick.value) else {
@@ -240,9 +250,14 @@ impl Sprite {
                 let typical = ms[ms.len() / 2];
                 self.fast_ms = Some(self.fast_ms.map_or(typical, |m| m.min(typical)));
             }
-            let (dx, dy) = compose::raster_offset(pack, layer, pose);
-            let at_x = (dx / pack.pixel_size).round() as f32 - f.pivot.0 as f32;
-            let at_y = (dy / pack.pixel_size).round() as f32 - f.pivot.1 as f32;
+            // in whole art pixels for a pixel pack; a painted pack's offset is snapped to device pixels with the rest
+            let (dx, dy) = offsets[pick.layer];
+            let (dx, dy) = match pack.kind {
+                Kind::Pixel => ((dx / pack.pixel_size).round(), (dy / pack.pixel_size).round()),
+                Kind::Painted | Kind::Vector => (dx / pack.pixel_size, dy / pack.pixel_size),
+            };
+            let at_x = dx as f32 - f.pivot.0 as f32;
+            let at_y = dy as f32 - f.pivot.1 as f32;
             let mut rect = Rectangle::new(
                 Point::new(origin.x + at_x * ps, origin.y + at_y * ps),
                 Size::new(f.w as f32 * ps, f.h as f32 * ps),
@@ -526,6 +541,60 @@ mod tests {
             let ps = pixel_size(&p.pack, scale);
             assert_eq!(ps * scale, device, "at {scale}");
         }
+    }
+
+    #[test]
+    fn a_raster_part_moves_its_layer_by_its_pose_and_keeps_the_frames_coming_while_it_does() {
+        let plain = sprout();
+        let mut p = plain.clone();
+        let arms = p
+            .pack
+            .layers
+            .iter_mut()
+            .find(|l| l.name == "arms")
+            .expect("Sprout has arms");
+        arms.parts.push(aipet_sprite::pack::Part {
+            id: "hand".into(),
+            origin: (65.0, 60.0),
+            shape: None,
+        });
+        arms.poses
+            .insert("wave-a".into(), BTreeMap::from([("hand".to_owned(), (75.0, 50.0))]));
+        arms.transition_ms = 200;
+        assert_eq!(p.pack.validate(), Ok(()));
+        let wave = |since| {
+            Pose::scripted(
+                Values {
+                    arms: aipet_sprite::pose::Arms::WaveA,
+                    ..Values::IDLE
+                },
+                since,
+            )
+        };
+        let (mut moved, mut still) = (Sprite::new(&p), Sprite::new(&plain));
+        let rects = |s: &Sprite| s.shown.iter().map(|s| s.rect).collect::<Vec<_>>();
+        // how far each image is from where the pack without the part draws it
+        let shifts = |moved: &Sprite, still: &Sprite| {
+            rects(moved)
+                .iter()
+                .zip(rects(still))
+                .map(|(a, b)| (a.x - b.x, a.y - b.y))
+                .filter(|d| *d != (0.0, 0.0))
+                .collect::<Vec<_>>()
+        };
+        let rest = Pose::scripted(Values::IDLE, 0.0);
+        moved.update(&p.pack, &rest, 0.0, 1.0);
+        moved.update(&p.pack, &wave(1.0), 1.0, 1.0);
+        let at = |moved: &mut Sprite, still: &mut Sprite, t: f64| {
+            moved.update(&p.pack, &wave(1.0), t, 1.0);
+            still.update(&plain.pack, &wave(1.0), t, 1.0);
+            shifts(moved, still)
+        };
+        // half-way through the transition, then (pose − origin), in whole 5 px art pixels
+        assert_eq!(at(&mut moved, &mut still, 1.1), [(5.0, -5.0)]);
+        assert_eq!(moved.fast_ms, Some(16));
+        assert_eq!(at(&mut moved, &mut still, 1.3), [(10.0, -10.0)]);
+        assert_eq!(moved.fast_ms, still.fast_ms, "calm once it is there");
     }
 
     #[test]

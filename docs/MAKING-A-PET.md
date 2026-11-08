@@ -298,7 +298,8 @@ Z or sparkle. This is how the Hamster's arms swing from the shoulder and Pip's s
   `transition_ms` (0 to 10 000), eased; 0 makes it jump.
 - **`animations`** with `keys`: keyframes on top of the pose's position, for one `part` or a list of `parts`.
   - A key is `[dx, dy, ms]`, or an object with any of `dx`, `dy`, `rotate` (degrees, about the part's origin),
-    `scale` and `opacity`, and `ms` (1 to 10 000).
+    `scale` and `opacity`, and `ms` (1 to 10 000). `rotate`, `scale` and `opacity` apply to vector parts only; a
+    raster part takes a key's `dx` and `dy`.
   - Each key holds for its `ms`; the pet doesn't tween between keys, so use more keys for smoother motion. At most 64
     keys.
   - `loop` is `loop`, `once` or `pingpong`, as for frames.
@@ -313,9 +314,16 @@ Every number is checked when the pack loads: finite numbers only, positions insi
 offsets no larger than the box, durations in range, and part ids that exist. A key, pose or animation that names an
 unknown part, and a part id used twice, skip the pack with the reason.
 
-Part motion is what the vector packs use. A raster layer is placed by its frames' pivots and moved by the eyes'
-`look` table; parts that a raster pack declares (an Aseprite part slice, say) are read and checked, but don't move
-its frames.
+**Raster parts.** In a pixel or painted pack, a layer moves as one piece. It has at most one part, and its frame is
+drawn where its pivot puts it, moved by the part's place less its origin: the pose's position (eased during a
+transition), the key's `dx` and `dy`, and for the eyes the look offset. A pixel pack moves by whole art pixels, a
+painted pack by logical px. A raster layer with two or more parts skips the pack, since its one frame can't move
+two ways; give each moving part a layer of its own (`hand-left` and `hand-right`, say, both on the `arms` channel).
+An eyes layer without parts still moves by its `look` table.
+
+A raster layer draws the frames of the value it shows, so give each value it poses frames of its own. In an
+Aseprite file the part's slice gives the poses: draw the part in the same place on every tag, and move the slice
+on each tag's first frame to where the part should go, since the pet moves the frame by the slice's move.
 
 ## Themes
 
@@ -418,6 +426,7 @@ down or crashing the pet.
 | An `.aseprite` file | 8 MB, 512 frames, 64 layers, 2048 px a side, 64 MB decoded |
 | Layers | 1 to 16 |
 | Frames | 512 in the pack |
+| Parts | 256 in a vector pack; one per layer in a raster pack |
 | Frame durations | 1 ms to 60 s |
 | Part keys | 64 per animation, 1 ms to 10 s each; `transition_ms` 0 to 10 s; `phase` 0 to 1 |
 | Numbers | finite, within ±10 000 |

@@ -173,6 +173,8 @@ pub struct Pet<R: PetRng = XorShift64> {
     drawn_at: f64,
     drawn_pose: Pose,
     composited: bool,
+    /// The raster parts on their way between poses, as the redraws have shown them.
+    parts: compose::Parts,
 }
 
 /// What the behaviour chose for one frame, in the old renderer's terms (eye names and columns), with the named poses
@@ -267,6 +269,7 @@ impl<R: PetRng> Pet<R> {
             drawn_at: 0.0,
             drawn_pose: Pose::scripted(Values::IDLE, 0.0),
             composited: false,
+            parts: compose::Parts::default(),
         };
         pet.set_avatar(Avatar::sprout());
         pet
@@ -324,6 +327,7 @@ impl<R: PetRng> Pet<R> {
         self.avatar = None;
         self.last_draw_frame = -1;
         self.tracker.reset();
+        self.parts = compose::Parts::default();
     }
 
     /// The last frame's pose ([`Pet::update`] computes it): what each pack layer shows, and the motion.
@@ -568,6 +572,10 @@ impl<R: PetRng> Pet<R> {
             self.drawn_at = t;
             self.drawn_pose = self.pose;
             self.composited = false;
+            // a part's move starts at the redraw that first shows its new pose, as it does on screen
+            if self.pack.layers.iter().any(|l| !l.parts.is_empty()) {
+                self.parts.raster_offsets(&self.pack, &self.drawn_pose, t);
+            }
         }
         PetFrame {
             pixels_changed,
@@ -607,12 +615,14 @@ impl<R: PetRng> Pet<R> {
     }
 
     /// Draws the pose's layers from the pack into the body, glow and effects layers: each layer's frame, moved by its
-    /// look offset and mirrored as it says, copied where it isn't transparent.
+    /// part's motion or its look offset ([`compose::Parts::raster_offsets`]) and mirrored as it says, copied where it
+    /// isn't transparent.
     fn composite(&mut self, t: f64) {
         self.composited = t == self.drawn_at;
         self.body_px.fill(0);
         self.glow_px.fill(0);
         self.fx_px.fill(0);
+        let offsets = self.parts.raster_offsets(&self.pack, &self.drawn_pose, t);
         for pick in compose::pick(&self.pack, &self.drawn_pose, t) {
             let layer = &self.pack.layers[pick.layer];
             let Some(Art::Raster {
@@ -626,11 +636,11 @@ impl<R: PetRng> Pet<R> {
             else {
                 continue;
             };
-            let (dx, dy) = compose::raster_offset(&self.pack, layer, &self.drawn_pose);
-            // the look offset in art pixels, less the frame's pivot (a trimmed frame starts inside the art box)
+            let (dx, dy) = offsets[pick.layer];
+            // the offset in art pixels, less the frame's pivot (a trimmed frame starts inside the art box)
             let (ox, oy) = (
-                (dx / self.pack.pixel_size) as i32 - pivot.0 as i32,
-                (dy / self.pack.pixel_size) as i32 - pivot.1 as i32,
+                (dx / self.pack.pixel_size).round() as i32 - pivot.0 as i32,
+                (dy / self.pack.pixel_size).round() as i32 - pivot.1 as i32,
             );
             let target = if layer.channel == pose::Channel::Fx {
                 &mut self.fx_px

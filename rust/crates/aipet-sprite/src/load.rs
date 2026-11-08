@@ -1275,6 +1275,20 @@ mod tests {
     }
 
     #[test]
+    fn an_aseprite_layer_naming_two_part_slices_is_a_reason() {
+        let extra =
+            r#"{"pixel_size": 5, "layers": [{"name": "eyes", "channel": "eyes", "parts": ["eye-left", "eye-right"]}]}"#;
+        let two = export(ARRAY).replace(
+            "\"slices\": [",
+            r#""slices": [{"name": "eye-right", "keys": [{"frame": 0, "bounds": {"x": 2, "y": 1, "w": 1, "h": 1}}]},"#,
+        );
+        assert_eq!(
+            aseprite(&two, Some(extra), sheet).unwrap_err(),
+            "layer \"eyes\": a raster layer moves as one piece; give each moving part a layer of its own"
+        );
+    }
+
+    #[test]
     fn a_json_hash_export_untagged_frames_or_an_unknown_layer_are_reasons() {
         let hash = export(r#"{"0.png": {"frame": {"x": 0, "y": 0, "w": 4, "h": 4}, "duration": 100}}"#);
         assert!(aseprite(&hash, None, sheet).unwrap_err().contains("json-hash"));
