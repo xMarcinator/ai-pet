@@ -6,8 +6,8 @@ window of forms? Findings only; the pet's crates are untouched.
 
 Machine: Arch Linux, Hyprland 0.56 (Lua config), eDP-1 1920×1200 at scale 1, Intel UHD 770 driving the screen plus an
 NVIDIA RTX A2000. Mesa 26.2.6; the only Vulkan driver installed is NVIDIA's (no `vulkan-intel`). Rust 1.99.1. The
-machine was busy (another session building: 1-minute load 4–10) during the prototype runs; see "Calm CPU and RSS"
-for what that meant for the measurements.
+machine was busy (another session building: 1-minute load 4–10) during the prototype runs; the calm runs came later, with only the
+Claude desktop app running (see "Calm CPU and RSS").
 
 ## The prototypes
 
@@ -168,7 +168,8 @@ crates.io, so on Hyprland it needs window rules, and per-pixel click-through nee
 | Crisp pixels | Yes (`crisp`) | Yes, nearest at any scale | Only if we pre-scale the cells; fractional squash is filtered | Yes (a quad per cell) |
 | Bubble text | cosmic-text in iced | cosmic-text, drawn by us | Slint text | gpui text |
 | Settings window | iced (exists) | None: stays in iced | Slint (rewrite), still no GPU | gpui (rewrite; widgets via gpui-component) |
-| Calm CPU, Linux | 5.1–5.8 % (memory.md); not re-run: load | Not run: load | Not run: load | Not run: load |
+| Calm CPU, Linux (one run, load 1.3–1.6) | 4.40 % | 4.13 % | 3.27 % | 6.66 % on Mesa GL; 8.63 % by default (NVIDIA) |
+| RSS, calm (after a 60 s settle) | 157 MB | 8.9 MB | 14 MB | 164 MB on Mesa GL; 273 MB by default |
 | RSS (short run, not calm) | 164–176 MB (memory.md) | 14 MB | 14 MB | 168 MB on Mesa GL with the env trick; 314 MB by default (NVIDIA) |
 | Release binary (stripped) | 30.4 MB (21.7 MB): the whole app | 6.6 MB (5.0 MB) | 11.2 MB (9.2 MB) | 39.8 MB (29.1 MB) |
 | Packages in Cargo.lock | 487 (the whole workspace) | 103 | 500 | 658 |
@@ -182,13 +183,29 @@ hook server, watchers, TLS).
 
 ## Calm CPU and RSS
 
-**Not run: load.** `scripts/perf/pet-calm.sh` refused the first run (the release iced pet: "the 1-minute load
-average is 14.19 (over 1.0); not measuring") after waiting its 600 s; the load stayed between 3 and 14 all session
-because another session was building. Without the iced baseline from the same run the prototypes' numbers would not
-be comparable (memory.md: calm CPU is only comparable within one run), so the rest were stopped rather than left to
-refuse one by one. `spikes/ui-framework/calm.sh <release AiPet>` runs all five in one go on a quiet machine.
+**Measured 2026-11-09, 19:47–20:05**, with `spikes/ui-framework/calm.sh` against the release iced pet at `6a1feeb`,
+all five in one run, each alone, wearing Sprout. The method is fn-1's (`scripts/perf/pet-calm.sh`: a 60 s settle,
+then five 30 s samples, the median), with one change: the load limit was raised from 1.0 to 3 (`MAX_LOAD=3`). With
+only the Claude desktop app running, the 1-minute load stayed at 1.3–2.5, and three earlier attempts at the 1.0 limit
+waited 10 minutes each and gave up. The five are comparable with each other; they are not comparable with the
+performance gate's figures (taken at load 1.0 or less).
 
-What is known without it:
+| Pet | Calm CPU median | Samples | RSS | PSS |
+|---|---|---|---|---|
+| iced (the real pet) | 4.40 % | 4.07, 4.33, 4.43, 4.40, 4.60 | 157 MB | 53 MB |
+| minimal (sctk + tiny-skia) | 4.13 % | 4.17, 4.13, 4.13, 4.17, 4.07 | 8.9 MB | 6.1 MB |
+| Slint (software renderer) | 3.27 % | 3.27, 3.30, 3.27, 3.23, 3.27 | 14 MB | 9.0 MB |
+| gpui on Mesa GL | 6.66 % | 6.63, 6.56, 6.80, 6.80, 6.66 | 164 MB | 60 MB |
+| gpui by default (NVIDIA) | 8.63 % | 8.70, 8.63, 8.50, 8.70, 8.46 | 273 MB | 149 MB |
+
+- **CPU is close to a wash for the minimal stack:** 0.27 points under the iced pet, with 30–40 % of its features, at
+  scale 1. It redraws and presents the whole surface every frame (`damage_buffer(0, 0, w, h)`), so damage tracking
+  (task 2 below) is where its CPU would fall. Slint is a point under the iced pet; why it beats the minimal prototype
+  was not investigated.
+- **Memory is the real gain:** 9–14 MB against 157 MB, the GPU stack gone.
+- **gpui costs more on both:** 50–100 % more CPU than the iced pet, and the same or more memory.
+
+What was known before the measurement:
 - **RSS** from the short runs above (`/proc/<pid>/status` after 5 s, idle, the art animating): minimal 14 MB, Slint
   14 MB, gpui 168 MB on Mesa GL and 314 MB on NVIDIA's Vulkan. The iced pet is 164–176 MB fresh (memory.md, after
   the cuts). The prototypes have no core, hook server or watchers; memory.md puts the iced pet's anonymous memory at
@@ -202,7 +219,9 @@ What is known without it:
 ## Recommendation
 
 **Move the pet window only, to the minimal stack, behind a measurement gate. Don't move to gpui. Keep Settings in
-iced for now.**
+iced for now.** The calm runs (above) back this for memory, not for CPU: the move is worth it for a pet that holds 9 MB
+instead of 157 MB, and its CPU has to come from damage tracking, which the gate in task 1 must show at the real
+window's size.
 
 - **gpui is out.** It keeps the same GPU stack (wgpu on Mesa GL, the same LLVM-backed driver, about the same RSS
   once forced off the dGPU, and twice the RSS if not), it can't move a layer surface (so no drag without patching
@@ -222,14 +241,14 @@ iced for now.**
 | Option | Tasks | fn-1 R18 (calm CPU ≤ C# + 0.5 pp; RSS ≤ 1.5 × C#) | Platform code |
 |---|---|---|---|
 | Keep iced | 0 | Unchanged: both met today (Rust 5.1–5.8 % against C# 12.5–13.6 %, 170 MB against 283–300 MB, memory.md) | Unchanged |
-| **Move the pet window only, to the minimal stack** | about 9 (below) | RSS falls to an estimated 30–45 MB while Settings is closed. Calm CPU unknown until task 1; it must stay within the C# + 0.5 pp budget, and should not exceed today's 5–6 % | `aipet-wayland`: iced_exwlshell replaced by smithay-client-toolkit (drag.rs kept). `aipet-desktop`: the pet window becomes a native ARGB X11 window and a Windows layered window; `native/x11.rs` and parts of `native/win32.rs` reused, `SetWindowRgn` dropped on Windows. `aipet-ui`: split into a framework-free pet scene and the iced Settings. macOS: compile-only today; keep its iced shell or drop it |
+| **Move the pet window only, to the minimal stack** | about 9 (below) | RSS falls to an estimated 30–45 MB while Settings is closed (the prototype alone: 8.9 MB). Calm CPU about level with iced in the prototype (4.13 % against 4.40 %); it must stay within the C# + 0.5 pp budget, and should not exceed today's 5–6 % | `aipet-wayland`: iced_exwlshell replaced by smithay-client-toolkit (drag.rs kept). `aipet-desktop`: the pet window becomes a native ARGB X11 window and a Windows layered window; `native/x11.rs` and parts of `native/win32.rs` reused, `SetWindowRgn` dropped on Windows. `aipet-ui`: split into a framework-free pet scene and the iced Settings. macOS: compile-only today; keep its iced shell or drop it |
 | Move both (Slint) | about 14: the 9 below with Slint drawing the bubbles, plus 4–5 to rewrite Settings (general, avatars, Jira, GitHub, updates: about 2,300 lines of iced today) and the licence notice | As above, and no GPU even with Settings open | As above, plus iced removed entirely |
 | Move both (gpui) | about 14, plus vendoring gpui for `set_margin` | No gain on RSS; CPU unknown | Native click-through still needed on X11 and Windows |
 
 The tasks for "move the pet window only":
-1. **Gate:** run `spikes/ui-framework/calm.sh` on a quiet machine; then grow the minimal prototype to the real
-   window's worst case (380×600, three bubbles, scale 2) and measure again. Stop here if it can't beat the iced
-   pet's calm CPU.
+1. **Gate:** grow the minimal prototype to the real window's worst case (380×600, three bubbles, scale 2), with
+   damage tracking, and measure it against the iced pet in one run. Stop here if it can't beat the iced pet's calm
+   CPU. (The first calm run is done: the prototype is level with iced on CPU and far below it on memory.)
 2. The pet scene drawn with tiny-skia: pixel, painted and vector packs, glow halos, shadow, with damage tracking
    (redraw only what changed) and per-scale caches.
 3. Bubbles, the reviews header, the music player and the inline menu, with cosmic-text.
@@ -246,7 +265,6 @@ The tasks for "move the pet window only":
 
 ### For the owner (not done here)
 
-- The calm CPU runs (`spikes/ui-framework/calm.sh`), on a quiet machine.
 - Real clicks: poke and drag on each prototype, and clicks on the transparent parts reaching the window below.
 - Windows: nothing was built for Windows. The minimal stack's layered window, Slint's software renderer and gpui's
   DirectComposition window are all untried there.
