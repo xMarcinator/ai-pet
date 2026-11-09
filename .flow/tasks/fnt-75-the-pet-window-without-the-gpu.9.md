@@ -30,9 +30,10 @@ Settles whether Settings can stay in the pet process without loading a GPU libra
 - [ ] A verdict: Settings in-process on the CPU renderer, or the child process, and what task 4 becomes
 
 ## Done summary
-TBD
+Settings stays in-process: today's Settings draws correctly on iced's tiny-skia renderer (every page used; screenshots), no GPU library mapped (33-38 MB vs 165 MB on wgpu), an iced daemon on the main thread with the pet on a second thread works (clicks open/close the window while the pet holds 30 Hz), idle cost about 5 MB and no measurable CPU. Task 4 rewritten to in-process Settings; spec R7, contracts and constraints updated.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: a8ebbc0, 67dd686
+- Tests: ICED_BACKEND=tiny-skia runs of every Settings page, /proc maps grep, pet-calm.sh MAX_LOAD=3
 - PRs:

@@ -4,7 +4,7 @@
 
 The pet window draws through iced and wgpu, which maps the GL driver into the pet process: about 157 MB resident for a pet whose art is a few hundred kilobytes, and a risk of landing on a discrete GPU. FNT-73's spike measured three stacks against it (`rust/proofs/ui-framework.md`). A pet drawn on the CPU with tiny-skia and shown through each platform's own window held 9 MB at about the same calm CPU as iced (4.13 % against 4.40 %), while redrawing its whole window every frame.
 
-This spec moves the pet window to that stack: tiny-skia for every pixel, presented by smithay-client-toolkit on Wayland, by an ARGB window on X11 and by a layered window on Windows. Settings stays in iced but leaves the pet process: it runs as `AiPet --settings`, a child the pet starts on demand, so the pet process never loads a GPU library (the owner's decision, 2026-11-09). The first task is a gate: the CPU stack must beat the iced pet's calm CPU at the real window's worst case, or the spec stops there.
+This spec moves the pet window to that stack: tiny-skia for every pixel, presented by smithay-client-toolkit on Wayland, by an ARGB window on X11 and by a layered window on Windows. Settings stays in iced, in the pet process, drawn by iced's CPU renderer (tiny-skia), so the pet process never loads a GPU library (the owner's decision, 2026-11-09; task 9's spike showed it works). The first task is a gate: the CPU stack must beat the iced pet's calm CPU at the real window's worst case, or the spec stops there.
 
 It runs after fn-1 ships and before FNT-71 (owner, 2026-11-09), so FNT-71's UI-thread commands are built once, on the new pet loop.
 
@@ -17,39 +17,19 @@ flowchart LR
   D --> W[Wayland shell: sctk layer surface, wl_shm]
   D --> X[X11 shell: ARGB window, MIT-SHM, SHAPE]
   D --> N[Windows shell: layered window]
-  S <-- pipe: JSON lines --> C["AiPet --settings (iced)"]
+  S <-- channels --> C["Settings: iced daemon on the main thread, tiny-skia"]
   K[core thread: Board, news] --> S
 ```
 
 - **The pet scene** is today's `PetUi` without iced: the same state, ticks, messages, effects, frame pacing, hit and drawn rects, cards and drag logic, with its own geometry types (point, size, rect, vector) in place of iced's. It draws into a premultiplied RGBA pixmap and returns the rects that changed since the last frame. Everything it draws is already CPU work or becomes it: sprite frames (nearest for pixel packs, at whole device pixels per art pixel), painted frames, vector packs through the existing tiny-skia renderer, halos and the ground shadow, card shadows, the reviews header, the music player, the tooltip and the inline menu.
 - **Text** is cosmic-text, one long-lived font system and glyph cache in the scene. Glyph masks are blitted into the pixmap; measuring and wrapping (bubble fitting, tooltip size) move from iced's paragraph to the same font system.
 - **A shell** per platform owns the window, presentation, input, scale and the frame clock. It converts the pixmap's changed rects to its buffer format (an R/B swap: every target is premultiplied BGRA) and presents only those. It feeds pointer, drag, scale and output events to the scene as messages, as the iced shells do today. The Wayland shell keeps the layer namespace `aipet`, both drag modes and the xdg popup menu with its inline fallback. The X11 shell also serves Wayland desktops without layer-shell, through XWayland.
-- **Settings** runs in its own process, `AiPet --settings`, started by the pet and connected to it by the child's standard input and output: one JSON object per line each way. The pet sends the state Settings shows; Settings sends the changes the user makes. Settings owns its forms and its connection tests; the pet keeps the watchers, the board and the config store, and applies each change as Settings does in-process today.
+- **Settings** stays in the pet process. An iced daemon owns the main thread from start-up with no window, built to draw with tiny-skia (iced's CPU renderer, presented through softbuffer: Settings is opaque, so softbuffer's lack of transparency doesn't matter). It opens the Settings window on demand. The pet's shell runs its loop on a `pet` thread with its own display connection. The two talk over channels, one each way: the pet sends the state Settings shows and asks it to open or raise its window; Settings sends the changes the user makes, which the pet applies as Settings does in-process today. The process ends itself on quit rather than through `iced::exit()` (it panicked in the spike when a window was opening).
 - **The iced pet shell** stays one release behind `AIPET_BACKEND=iced`, for rollback; the default never loads it. macOS keeps compiling with the iced desktop shell.
 
 ## API Contracts
 
-**The Settings pipe.** The pet starts the child with piped stdin and stdout; each line is one JSON object with a `type`. Pet to Settings:
-
-```json
-{"type": "state", "prefs": {...}, "avatars": [...], "worn": {"name": "Hood", "style": "Pixel", "theme": "Blue"}, "services": {"jira": {...}, "github": {...}}, "watchers": {"jira": {"enabled": true, "error": null}, "github": {"enabled": false, "error": null}}, "update": {...}}
-{"type": "raise"}
-```
-
-Settings to the pet:
-
-```json
-{"type": "set", "prefs": {...}}
-{"type": "wear", "name": "Hood", "style": "Vector", "theme": null}
-{"type": "themes_changed", "pet": "Hood"}
-{"type": "services_changed"}
-{"type": "mood", "state": "news"}
-{"type": "reset_position"}
-{"type": "check_updates"}
-{"type": "restart_to_update"}
-```
-
-`prefs` is today's `Prefs` in its config.json field names; `services` is every saved Jira and GitHub field the pages show (Jira site, email, JQL, poll interval; GitHub host, organisations) and whether each token is saved, never the token itself; `update` is today's update state as the About section shows it. The two lists are the whole contract: every Settings action today either changes only the child's own form or is one of the child-to-pet messages above, and every value a page shows comes from `state`. The pet sends `state` when the child starts and after every change, whatever made it (Settings, the menu, a drag, later FNT-71's tools). `raise` asks an open Settings window to come to the front. Unknown types are logged and ignored on both sides.
+**Pet and Settings channels.** Two in-process channels carry typed messages. Pet to Settings: the state every page shows (prefs, the avatars and the worn pet, style and theme, every saved Jira and GitHub field and whether each token is saved, the watchers' state, the update state) whenever it changes, whatever changed it (Settings, the menu, a drag, later FNT-71's tools), and `open` (open or raise the window). Settings to the pet: set prefs, wear a pet, themes changed, services changed, force a mood, reset position, check for updates, restart to update. Every Settings action today either changes only the window's own form or is one of these, and every value a page shows comes from the state.
 
 ## Edge Cases & Constraints
 
@@ -58,8 +38,9 @@ Settings to the pet:
 - **Scale:** integer and fractional (viewporter, buffer `round(logical × scale)`); pixel packs stay crisp at whole device pixels per art pixel; caches are rebuilt per scale.
 - **X11:** an ARGB visual needs a compositing manager; without one the pet logs it once and runs, drawn on black. MIT-SHM missing falls back to plain `PutImage`.
 - **Fallback order** on Linux: layer-shell (Wayland), else X11 (native or XWayland); `AIPET_BACKEND` overrides. A shell that fails to start logs why and the pet tries the next.
-- **Settings child:** one at a time; opening it again sends `raise`. If it exits or crashes, the pet notices, logs it, and the menu opens a new one. If the pet exits, the child sees its stdin close and exits. The Settings window's title stays "AiPet · Settings" and the pet's WM_CLASS and layer namespace stay the same, so the Hyprland rules keep matching.
-- **Threads:** no tokio in the pet's core or shells (fn-1's boundary); each shell runs its own event loop on the main thread.
+- **Settings window:** one at a time; opening it again raises it. Its title stays "AiPet · Settings", and the pet's WM_CLASS and layer namespace stay the same, so the Hyprland rules keep matching.
+- **Renderer:** the default run makes iced draw with tiny-skia only. wgpu stays compiled in for one release, for `AIPET_BACKEND=iced` (R9), whose transparent pet window needs it; that run is the only one that loads a GPU library.
+- **Threads:** the iced daemon owns the main thread (as on macOS, where the iced desktop shell keeps it); each pet shell runs on a `pet` thread. No tokio in the pet's core or shells (fn-1's boundary); iced's own executor is unchanged.
 
 ## Acceptance Criteria
 
@@ -69,23 +50,23 @@ Settings to the pet:
 - **R4:** On Wayland the pet is an sctk layer surface (namespace `aipet`) with today's placement, input region, both drag modes, popup menu with its inline fallback, cursor shapes, output loss and fractional scale. Errors: a compositor without layer-shell gets the X11 shell; one without viewporter gets integer scale only; a lost surface mid-drag ends the drag as today.
 - **R5:** On X11, and on Wayland desktops without layer-shell through XWayland, the pet is a 32-bit ARGB window, drawn through MIT-SHM, with a SHAPE input region, kept above, with today's WM_CLASS. Errors: no compositing manager → logged once, drawn on black; no MIT-SHM → plain PutImage.
 - **R6:** On Windows the pet is a topmost, non-activating layered window sized to its content, with per-pixel click-through, drag and per-monitor DPI. Errors: a failed `UpdateLayeredWindow` is logged and retried on the next change; a DPI change during a drag waits until the drag ends, as today.
-- **R7:** Settings runs as `AiPet --settings`, a child of the pet speaking the Settings pipe, and the pet process maps no GPU or GL library while running, with or without Settings open. Every Settings page works as today, live: a change in Settings shows on the pet at once, and a change from anywhere else shows in an open Settings. Errors: a second open raises the first; a crashed child is logged and can be reopened; a pet that exits takes the child with it; a malformed line is logged and skipped.
+- **R7:** Settings opens in the pet process, drawn by iced's CPU renderer, and the pet process maps no GPU or GL library while running, with or without Settings open (except under `AIPET_BACKEND=iced`). Every Settings page works as today, live: a change in Settings shows on the pet at once, and a change from anywhere else shows in an open Settings. Errors: a second open raises the first; quitting with Settings open ends the process cleanly; a Settings page the CPU renderer draws wrongly is fixed or reported before the task closes.
 - **R8:** The pet meets fn-1 R18 and R1's budgets on Linux and Windows, measured by fn-1's method and recorded. Errors: no error surface beyond R1.
 - **R9:** `AIPET_BACKEND=iced` runs today's iced pet shell for one release, and macOS keeps compiling. Errors: an unknown `AIPET_BACKEND` value logs the choices and uses the default.
 - **R10:** What tests pin today stays pinned: frame pacing, hit and drawn rects, layout, cards, drag, the shells' behaviour (popup, region rate, output loss, mid-drag loss, reset) and the golden replays, ported to the new types. Errors: no error surface beyond the tests.
-- **R11:** README, ARCHITECTURE, HANDOFF, CHANGELOG, THIRD-PARTY-NOTICES and the proofs describe the new window, Settings as a child process, and the new crates. Errors: no error surface beyond review.
+- **R11:** README, ARCHITECTURE, HANDOFF, CHANGELOG, THIRD-PARTY-NOTICES and the proofs describe the new window, Settings on iced's CPU renderer, and the new crates. Errors: no error surface beyond review.
 
 ## Boundaries
 
 - No macOS port: it keeps the iced shell, compile-only.
 - No new pet features or looks: the window shows what it shows today.
-- No change to the hook socket's protocol: the Settings pipe is separate.
+- No change to the hook socket's protocol.
 - Settings keeps its pages and its look; it is moved, not redesigned.
 - No GPU path for the pet window (so no Rive GPU route; fnt-67's CPU route remains).
 
 ## Decision Context
 
-FNT-73 compared the minimal stack, Slint and gpui with iced. gpui keeps the GPU stack and used more CPU than iced; Slint used the least CPU but adds little on the pet window, can't draw crisp pixel images and brings a licence with an attribution duty; the minimal stack has small, mature MIT crates and reuses the pet's existing tiny-skia and platform code. softbuffer can't present transparency on X11 or Windows, so the three presenters are written by hand. Settings in-process would keep the GPU libraries mapped once opened; the owner chose to keep them out, so Settings becomes a child process with its own pipe (the hook socket is frozen v1, shared with the C# pet, and FNT-71 plans to retire it). Using iced's own tiny-skia renderer for Settings is tried in R7's task: if it works, Settings needs no GPU either.
+FNT-73 compared the minimal stack, Slint and gpui with iced. gpui keeps the GPU stack and used more CPU than iced; Slint used the least CPU but adds little on the pet window, can't draw crisp pixel images and brings a licence with an attribution duty; the minimal stack has small, mature MIT crates and reuses the pet's existing tiny-skia and platform code. softbuffer can't present transparency on X11 or Windows, so the three presenters are written by hand. Settings in-process on iced's wgpu renderer would keep the GPU libraries mapped once opened, and the owner chose to keep them out. A child process (`AiPet --settings` over a pipe) was the first plan; task 9's spike showed iced's CPU renderer draws today's Settings correctly with no GPU library mapped (33-38 MB against 165 MB on wgpu), and an iced daemon on the main thread beside the pet on a second thread works at no measurable CPU cost (about 5 MB more), so Settings stays in-process.
 
 ## Early proof point
 
@@ -134,9 +115,9 @@ grep -cE 'libGL|libEGL|libvulkan|nvidia|dri' /proc/$(pgrep -n AiPet)/maps
 | R4 | On Wayland the pet is an sctk layer surface (namespace `aipet`) with today's placement, input region, both drag modes, popup menu with its inline fallback, cursor shapes, output loss and fractional scale. Errors: a compositor without layer-shell gets the X11 shell; one without viewporter gets integer scale only; a lost surface mid-drag ends the drag as today. | fnt-75-the-pet-window-without-the-gpu.5 | — |
 | R5 | On X11, and on Wayland desktops without layer-shell through XWayland, the pet is a 32-bit ARGB window, drawn through MIT-SHM, with a SHAPE input region, kept above, with today's WM_CLASS. Errors: no compositing manager → logged once, drawn on black; no MIT-SHM → plain PutImage. | fnt-75-the-pet-window-without-the-gpu.6 | — |
 | R6 | On Windows the pet is a topmost, non-activating layered window sized to its content, with per-pixel click-through, drag and per-monitor DPI. Errors: a failed `UpdateLayeredWindow` is logged and retried on the next change; a DPI change during a drag waits until the drag ends, as today. | fnt-75-the-pet-window-without-the-gpu.7 | — |
-| R7 | Settings runs as `AiPet --settings`, a child of the pet speaking the Settings pipe, and the pet process maps no GPU or GL library while running, with or without Settings open. Every Settings page works as today, live: a change in Settings shows on the pet at once, and a change from anywhere else shows in an open Settings. Errors: a second open raises the first; a crashed child is logged and can be reopened; a pet that exits takes the child with it; a malformed line is logged and skipped. | fnt-75-the-pet-window-without-the-gpu.4 | — |
+| R7 | Settings opens in the pet process, drawn by iced's CPU renderer, and the pet process maps no GPU or GL library while running, with or without Settings open (except under `AIPET_BACKEND=iced`). Every Settings page works as today, live: a change in Settings shows on the pet at once, and a change from anywhere else shows in an open Settings. Errors: a second open raises the first; quitting with Settings open ends the process cleanly; a Settings page the CPU renderer draws wrongly is fixed or reported before the task closes. | fnt-75-the-pet-window-without-the-gpu.4 | — |
 | R8 | The pet meets fn-1 R18 and R1's budgets on Linux and Windows, measured by fn-1's method and recorded. Errors: no error surface beyond R1. | fnt-75-the-pet-window-without-the-gpu.8 | — |
 | R9 | `AIPET_BACKEND=iced` runs today's iced pet shell for one release, and macOS keeps compiling. Errors: an unknown `AIPET_BACKEND` value logs the choices and uses the default. | fnt-75-the-pet-window-without-the-gpu.5 | — |
 | R10 | What tests pin today stays pinned: frame pacing, hit and drawn rects, layout, cards, drag, the shells' behaviour (popup, region rate, output loss, mid-drag loss, reset) and the golden replays, ported to the new types. Errors: no error surface beyond the tests. | fnt-75-the-pet-window-without-the-gpu.2, fnt-75-the-pet-window-without-the-gpu.3, fnt-75-the-pet-window-without-the-gpu.5, fnt-75-the-pet-window-without-the-gpu.6, fnt-75-the-pet-window-without-the-gpu.7, fnt-75-the-pet-window-without-the-gpu.8 | — |
-| R11 | README, ARCHITECTURE, HANDOFF, CHANGELOG, THIRD-PARTY-NOTICES and the proofs describe the new window, Settings as a child process, and the new crates. Errors: no error surface beyond review. | fnt-75-the-pet-window-without-the-gpu.8 | — |
+| R11 | README, ARCHITECTURE, HANDOFF, CHANGELOG, THIRD-PARTY-NOTICES and the proofs describe the new window, Settings on iced's CPU renderer, and the new crates. Errors: no error surface beyond review. | fnt-75-the-pet-window-without-the-gpu.8 | — |
 

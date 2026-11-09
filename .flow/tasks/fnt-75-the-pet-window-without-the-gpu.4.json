@@ -12,6 +12,6 @@
   "spec": "fnt-75-the-pet-window-without-the-gpu",
   "spec_path": ".flow/tasks/fnt-75-the-pet-window-without-the-gpu.4.md",
   "status": "todo",
-  "title": "Settings as a child process: `AiPet --settings` and the Settings pipe",
-  "updated_at": "2026-11-09T19:53:31.716330Z"
+  "title": "Settings in the pet process on iced's CPU renderer",
+  "updated_at": "2026-11-09T20:13:34.175186Z"
 }
