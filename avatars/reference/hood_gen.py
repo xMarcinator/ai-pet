@@ -53,6 +53,9 @@ CROWN = "M121 51 C126 49 134 49 139 51"
 FACE_LIP = ("M84 104 C85 80 105 64 130 64 C155 64 175 80 176 104 C170 86 152 74 130 74 C108 74 90 86 84 104 Z")
 FACE = "M130 72 C155 72 174 88 174 110 C174 132 155 148 130 148 C105 148 86 132 86 110 C86 88 105 72 130 72 Z"
 
+# The drawstrings: from the hood opening's lower corners, curving in a little, to their tips.
+LACES = [("M109 141 C106 154 106 168 108 180", (108, 184)), ("M151 141 C154 154 154 168 152 180", (152, 184))]
+
 EYE_L, EYE_R = (111, 110), (149, 110)   # local origins (eye centres)
 HAND_L, HAND_R = (70, 180), (190, 180)  # resting: in front of the robe; waving/raised float outside  # floating free beside the robe  # screen-left / screen-right in the unmirrored drawing
 
@@ -133,6 +136,18 @@ def laptop(caret=True):
 GROUND = 242  # the robe's hem, where the figure stands (figure coordinates + 22)
 
 
+def laces():
+    """The two drawstrings, one hanging from each side of the hood opening over the robe: a cord on a dark outline,
+    with a bright tip."""
+    out = []
+    for d, tip in LACES:
+        out.append(el("path", d=d, fill="none", stroke=C["outline"], stroke_width=5, stroke_linecap="round"))
+        out.append(el("path", d=d, fill="none", stroke=C["rimMid"], stroke_width=2.5, stroke_linecap="round"))
+        out.append(el("ellipse", cx=tip[0], cy=tip[1], rx=2.6, ry=4, fill=C["hi"], stroke=C["outline"],
+                      stroke_width=1.5))
+    return '<g id="laces">' + "".join(out) + "</g>"
+
+
 def shadow():
     """The ground shadow: stays put while the figure moves."""
     return ('<g id="shadow">'
@@ -160,8 +175,6 @@ def figure(pose, standalone=False):
                + el("path", d=HOOD_RIM, fill=C["hi"])
                + el("path", d=SHOULDER_RIM_L, fill=C["rimMid"])
                + el("path", d=SHOULDER_RIM_R, fill=C["rimMid"])
-               + el("path", d="M116 158 C115 172 113 187 111 201", fill="none", stroke=C["body"], stroke_width=3,
-                    stroke_linecap="round")
                + el("path", d="M49 203 C81 211 179 211 211 203", fill="none", stroke=C["body"], stroke_width=2,
                     stroke_linecap="round")
                + el("path", d=CROWN, fill="none", stroke=C["spec"], stroke_width=3, stroke_linecap="round",
@@ -171,6 +184,7 @@ def figure(pose, standalone=False):
                + "</g>")
     fig.append('<g id="face">' + el("path", d=FACE_LIP, fill=C["deep"]) + el("path", d=FACE, fill="#010302")
                + "</g>")
+    fig.append(laces())
     fig.append('<g id="eyes">' + eye("eye-left", EYE_L, expr, look, glow) + eye("eye-right", EYE_R, expr, look, glow)
                + "</g>")
     hl, hr = HAND_L, HAND_R
@@ -244,6 +258,8 @@ def pack():
     body = vp.layer("body", "state", "idle", hit=True,
                     shapes={"idle": vp.drawing(d.art({}, "aura", "body", "face")),
                             "sleep": vp.drawing(d.art({"glow": False}, "body", "face"))})
+    # the laces are the one asymmetric-looking part of the body, so they mirror on their own; the body never does
+    laces = vp.layer("laces", "state", "idle", mirror="flip", shapes={"idle": vp.drawing(d.art({}, "laces"))})
     eyes = vp.eyes(d, lambda expr: {"expr": expr})
     prop = vp.layer("prop", "prop", "laptop",
                     parts=[{"id": "prop", "origin": list(a)}],
@@ -266,8 +282,15 @@ def pack():
         shapes = {value: vp.drawing(d.inner(pose, pid)) for value, pose in vp.ARMS.items()}
         animations = {"rest": vp.anim([(pid, vp.phase(STYLE, bob_class))], bob)}
         animations.update({value: vp.anim(pid, k) for value, k in motion.items()})
-        return vp.layer(pid, "arms", "rest", hit=True, parts=[{"id": pid, "origin": poses["rest"][pid]}],
+        return vp.layer(pid, "arms", "rest", hit=True, mirror="flip",
+                        parts=[{"id": pid, "origin": poses["rest"][pid]}],
                         shapes=shapes, poses=poses, transition_ms=120, animations=animations)
+
+    # facing left (only while dragged), the dust trails the other way, as the pixel Hood's does
+    effects = vp.effect_layers(C["hi"], C["outline"], d.norm)
+    for fx in effects:
+        if fx["name"] == "dust":
+            fx["mirror"] = "flip"
 
     return vp.named({
         "format_version": 1,
@@ -275,13 +298,13 @@ def pack():
         "kind": "vector",
         "pixel_size": 1,
         "anchor": list(a),
-        "mirror": "flip",
+        "mirror": "none",
         "accent": C["hi"],
         "glow": C["glow"],
-        "layers": [body, eyes, prop, screen, phones,
+        "layers": [body, laces, eyes, prop, screen, phones,
                    # the screen-left hand types; the screen-right one holds the magnifier as it scans
                    hand("hand-left", "bob-l", {"hold": typing}), hand("hand-right", "bob-r", {"lens": vp.scan_keys()}),
-                   *vp.effect_layers(C["hi"], C["outline"], d.norm)],
+                   *effects],
     }, C, theme="Green", themes={"Blue": BLUE})
 
 
