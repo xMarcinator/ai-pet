@@ -632,6 +632,23 @@ mod tests {
         assert!(placed[0].mirrored);
     }
 
+    #[test]
+    fn a_mirrored_pet_looks_the_way_the_look_points_on_screen() {
+        // dragged left, the pet looks left (pet.rs: lx = 2 * facing): a pack that flips facing left must still show
+        // the eyes to the left of where they'd sit looking ahead, not mirror the look back to the right
+        let mut p = eyes_pack(Kind::Vector);
+        p.layers[0].look.insert(Look { dx: -1, dy: 0 }, (-2.5, 0.0));
+        let mut left = looking(Look { dx: -1, dy: 0 });
+        left.facing = Facing::Left;
+        let placed = Parts::default().place(&p, &left, 0.0);
+        assert!(placed[0].mirrored);
+        assert_eq!(placed[0].x, ART_W - 58.0);
+        // and looking right on screen, it looks right
+        let mut right = looking(Look { dx: 1, dy: 0 });
+        right.facing = Facing::Left;
+        assert_eq!(Parts::default().place(&p, &right, 0.0)[0].x, ART_W - 53.0);
+    }
+
     /// A raster pack whose hand layer is one part: raised by the wave, bobbing while holding.
     fn hand_pack(kind: Kind) -> Pack {
         let mut body = Layer::new("body", Channel::State, "idle");
