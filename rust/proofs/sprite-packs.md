@@ -35,8 +35,8 @@ Sprout and Pip).
   busiest pet, painted Pip, is at 9.30 %. Painted Pip costs the most because its frames are large sheets drawn
   smoothly; the vector pets are at 5.3–6.8 %.
 - **RSS:** every pet passes, at 154–165 MB against a budget of 420 MB (1.5 × 280 MB).
-- **Binary size:** the embedded art is 427 KB (the `packs/` folders, measured with `du -sb` before FNT-72's new
-  states), far under the 3 MB budget.
+- **Binary size:** the embedded art (the `packs/` folders, `du -sb`) is 530 KB with FNT-72's new states for the
+  Hood, Sprout and Pip (427 KB before them), far under the 3 MB budget.
 
 ## Still to do
 
