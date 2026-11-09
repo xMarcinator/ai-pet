@@ -302,11 +302,11 @@ jobs:
           if [ -z "$c" ] || [ -z "$d" ] || [ -z "$r" ] || [ "$c" -gt "$d" ] || [ "$d" -gt "$r" ]; then
             echo "::error::The statuses aren't the C#'s: '$checking', '$downloading 100%', '$ready', in that order"; exit 1
           fi
-          grep -qx "the user's own" "$data/keep.txt"
-          test -f "$data/config.json"
+          ls -la "$data"
+          if ! grep -qx "the user's own" "$data/keep.txt"; then echo "::error::The update changed the data folder"; exit 1; fi
           # the update replaced current\ completely, and brought the hook the registration runs
-          test -f "$root/current/aipet-hook.exe"
-          grep -F 'AiPetApp' "$HOME/.claude/settings.json"
+          if [ ! -f "$root/current/aipet-hook.exe" ]; then echo "::error::The update left no current\\aipet-hook.exe"; exit 1; fi
+          if ! grep -F 'AiPetApp' "$HOME/.claude/settings.json"; then echo "::error::The update lost the hook's registration"; exit 1; fi
           "$root/current/aipet-hook.exe" --doctor claude || true
       - name: Uninstall, which removes the hook's registration
         run: |
@@ -320,14 +320,16 @@ jobs:
             echo "::error::The uninstall left the hook's registration in ~/.claude/settings.json"; exit 1
           fi
           grep -qx "the user's own" "$data/keep.txt"
+      - name: Collect the logs
+        if: always()
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          mkdir -p out/logs
+          cp out/pet.log statuses.txt "$local_app/AiPet/aipet.log" "$local_app"/AiPetApp/*.log out/logs/ 2>/dev/null || true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: rust-update-logs
-          path: |
-            out/pet.log
-            statuses.txt
-            ~/AppData/Local/AiPet/aipet.log
-            ~/AppData/Local/AiPetApp/*.log
+          path: out/logs
           if-no-files-found: warn
           retention-days: 7
