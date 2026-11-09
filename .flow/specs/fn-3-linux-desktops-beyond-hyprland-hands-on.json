@@ -1,7 +1,9 @@
 {
   "branch_name": "fn-3-linux-desktops-beyond-hyprland-hands-on",
   "created_at": "2026-11-07T11:08:27.262527Z",
-  "depends_on_epics": [],
+  "depends_on_epics": [
+    "fnt-75-the-pet-window-without-the-gpu"
+  ],
   "id": "fn-3-linux-desktops-beyond-hyprland-hands-on",
   "next_task": 1,
   "plan_review_status": "unknown",
@@ -20,5 +22,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-07T11:08:27.265204Z"
+  "updated_at": "2026-11-09T19:36:55.430895Z"
 }

@@ -1,0 +1,18 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-09T19:36:54.003622Z",
+  "depends_on": [
+    "fnt-75-the-pet-window-without-the-gpu.5",
+    "fnt-75-the-pet-window-without-the-gpu.6",
+    "fnt-75-the-pet-window-without-the-gpu.7"
+  ],
+  "id": "fnt-75-the-pet-window-without-the-gpu.8",
+  "priority": null,
+  "spec": "fnt-75-the-pet-window-without-the-gpu",
+  "spec_path": ".flow/tasks/fnt-75-the-pet-window-without-the-gpu.8.md",
+  "status": "todo",
+  "title": "Measurements, hands-on passes and docs",
+  "updated_at": "2026-11-09T19:36:54.003622Z"
+}

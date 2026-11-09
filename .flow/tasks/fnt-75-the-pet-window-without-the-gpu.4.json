@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-09T19:36:54.003544Z",
+  "depends_on": [
+    "fnt-75-the-pet-window-without-the-gpu.3"
+  ],
+  "id": "fnt-75-the-pet-window-without-the-gpu.4",
+  "priority": null,
+  "spec": "fnt-75-the-pet-window-without-the-gpu",
+  "spec_path": ".flow/tasks/fnt-75-the-pet-window-without-the-gpu.4.md",
+  "status": "todo",
+  "title": "Settings as a child process: `AiPet --settings` and the Settings pipe",
+  "updated_at": "2026-11-09T19:36:54.003544Z"
+}

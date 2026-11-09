@@ -1,0 +1,27 @@
+{
+  "branch_name": "fnt-75-the-pet-window-without-the-gpu",
+  "created_at": "2026-11-09T19:36:47.826612Z",
+  "depends_on_epics": [
+    "fn-1-migrate-aipet-from-net-to-rust",
+    "fnt-73-ui-framework-spike-gpui-or-something"
+  ],
+  "id": "fnt-75-the-pet-window-without-the-gpu",
+  "next_task": 1,
+  "plan_review_status": "unknown",
+  "plan_reviewed_at": null,
+  "spec_path": ".flow/specs/fnt-75-the-pet-window-without-the-gpu.md",
+  "status": "open",
+  "title": "The pet window without the GPU",
+  "tracker": {
+    "baseHashFlow": null,
+    "baseHashTracker": null,
+    "depRelations": [],
+    "id": null,
+    "identifier": "FNT-75",
+    "lastSyncedAt": null,
+    "mergeBaseFlow": null,
+    "mergeBaseTracker": null,
+    "url": null
+  },
+  "updated_at": "2026-11-09T19:37:02.246758Z"
+}
