@@ -364,6 +364,66 @@ pub fn flatten(pack: &Pack, sheets: &[crate::bake::Sheet], pose: &Pose, t: f64) 
     (w as u32, h as u32, out)
 }
 
+/// How high a pack's `fx` value reaches, in art-box px from the box's top (negative above it), with the body at rest:
+/// the topmost drawn pixel of its `fx` layers through the first 3 s of their animations, so the bubbles can stay clear
+/// of it (fn-2 R24). `sparkles` asks for the value with sparkles on top (`dots+sparkles`). None when nothing is drawn.
+pub fn fx_top(pack: &Pack, sheets: &[crate::bake::Sheet], fx: crate::pose::Fx, sparkles: bool) -> Option<f64> {
+    const MARGIN: f64 = 60.0;
+    const SCALE: f64 = 2.0;
+    let pose = Pose::scripted(
+        crate::pose::Values {
+            fx,
+            sparkles,
+            ..crate::pose::Values::IDLE
+        },
+        0.0,
+    );
+    let is_fx = |i: usize| pack.layers[i].channel == Channel::Fx;
+    let mut top: Option<f64> = None;
+    let mut reach = |y: f64| top = Some(top.map_or(y, |t: f64| t.min(y)));
+    for step in 0..=60 {
+        let t = f64::from(step) * 0.05;
+        if pack.kind == Kind::Vector {
+            let placed = Parts::default().place(pack, &pose, t);
+            let items = crate::vector::scene(pack, &placed, &pose);
+            let view = crate::vector::View {
+                w: ((ART_W + 2.0 * MARGIN) * SCALE) as u32,
+                h: ((ART_H + MARGIN) * SCALE) as u32,
+                x0: -MARGIN,
+                y0: -MARGIN,
+                scale: SCALE,
+            };
+            let px = crate::vector::render(&items, view, |item| is_fx(item.layer));
+            if let Some(row) = px.chunks(view.w as usize * 4).position(|r| r.chunks(4).any(|p| p[3] > 8)) {
+                reach(view.y0 + row as f64 / SCALE);
+            }
+            continue;
+        }
+        let offsets = Parts::default().raster_offsets(pack, &pose, t);
+        for p in pick(pack, &pose, t).into_iter().filter(|p| is_fx(p.layer)) {
+            let Some(crate::pack::Art::Raster {
+                sheet,
+                x,
+                y,
+                w,
+                h,
+                pivot,
+            }) = p.frame.map(|f| pack.layers[p.layer].animations[p.value].frames[f].art.clone())
+            else {
+                continue;
+            };
+            let s = &sheets[sheet];
+            let opaque =
+                (0..h).position(|fy| (0..w).any(|fx| s.pixels[((y + fy) * s.width + x + fx) as usize] >> 24 != 0));
+            if let Some(row) = opaque {
+                let oy = (offsets[p.layer].1 / pack.pixel_size).round() - f64::from(pivot.1);
+                reach((oy + row as f64) * pack.pixel_size);
+            }
+        }
+    }
+    top
+}
+
 /// The rows of a frame's pixels with any alpha, as (x, y, length), from premultiplied `0xAARRGGBB` pixels in rows of
 /// `width`.
 pub fn runs_argb(pixels: &[u32], width: usize) -> Vec<(i32, i32, i32)> {

@@ -27,6 +27,37 @@ pub const PIXELS: usize = (GW * GH) as usize;
 
 const PF: f64 = P as f64;
 
+/// How far the body can lift (art-box px) while the pet shows `fx`, `sparkles` on top or not: the mood that shows it
+/// bounces (thinking's float, listen's nod, attention's hop, running) and a poke or done hops 3 grid px with sparkles,
+/// over any mood. The bubbles stay clear of an effect lifted this far (fn-2 R24; `compute_pose` keeps to it, which a
+/// test checks).
+pub fn fx_lift(fx: Fx, sparkles: bool) -> f64 {
+    if sparkles {
+        return 3.0 * PF;
+    }
+    match fx {
+        Fx::None | Fx::Zs => 0.0,
+        Fx::Dots => 0.7 * PF,
+        Fx::Notes => 1.2 * PF,
+        Fx::Alert | Fx::Sparkles => 3.0 * PF,
+        Fx::Dust => PF,
+    }
+}
+
+/// How high a pack's effects can reach while the pet moves, in art-box px from the box's top (negative above it): the
+/// highest of every effect's [`crate::compose::fx_top`] lifted by its [`fx_lift`]. 0 when they never leave the box.
+pub fn fx_reach(pack: &crate::pack::Pack, sheets: &[crate::bake::Sheet]) -> f64 {
+    let mut reach = 0.0f64;
+    for fx in [Fx::Zs, Fx::Dots, Fx::Notes, Fx::Alert, Fx::Sparkles, Fx::Dust] {
+        for sparkles in [false, true] {
+            if let Some(top) = crate::compose::fx_top(pack, sheets, fx, sparkles) {
+                reach = reach.min(top - fx_lift(fx, sparkles));
+            }
+        }
+    }
+    reach
+}
+
 /// What the UI tells the pet each frame.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PetInput {
@@ -782,6 +813,57 @@ mod tests {
         // a new avatar redraws at once
         pet.set_avatar(Avatar::hood());
         assert!(pet.update(&PetInput::default(), 0.02).pixels_changed);
+    }
+
+    #[test]
+    fn the_body_never_lifts_an_effect_further_than_fx_lift_says() {
+        let mut seen = 0;
+        for state in ["sleep", "idle", "thinking", "working", "attention", "done", "listen"] {
+            for poke in [false, true] {
+                let mut pet = Pet::with_rng(Fixed(0.5));
+                let inp = PetInput {
+                    state: if state == "listen" { "idle" } else { state }.to_owned(),
+                    music: state == "listen",
+                    poke_until: if poke { 2.2 } else { 0.0 },
+                    prop: (state == "working").then(|| "laptop".to_owned()),
+                    ..PetInput::default()
+                };
+                for step in 0..1200 {
+                    let t = 1.0 + f64::from(step) * 0.01;
+                    pet.update(&inp, t);
+                    let p = *pet.pose();
+                    if p.fx == Fx::None && !p.sparkles {
+                        // nothing drawn to lift (an idle hop)
+                        continue;
+                    }
+                    let lift = -p.motion.y;
+                    assert!(
+                        lift <= fx_lift(p.fx, p.sparkles) + 1e-9,
+                        "{state} (poke {poke}) at {t}: {:?}+{} lifts {lift}",
+                        p.fx,
+                        p.sparkles
+                    );
+                    seen += usize::from(p.fx != Fx::None);
+                }
+            }
+        }
+        // and running, dragged: the dust
+        let mut pet = Pet::with_rng(Fixed(0.5));
+        let running = PetInput {
+            state: "idle".to_owned(),
+            dragging: true,
+            moved: true,
+            facing: 1,
+            ..PetInput::default()
+        };
+        for step in 0..300 {
+            let t = 1.0 + f64::from(step) * 0.01;
+            pet.update(&PetInput { last_move: t, ..running.clone() }, t);
+            let p = *pet.pose();
+            assert_eq!(p.fx, Fx::Dust);
+            assert!(-p.motion.y <= fx_lift(Fx::Dust, p.sparkles) + 1e-9);
+        }
+        assert!(seen > 1000, "the moods showed their effects");
     }
 
     #[test]

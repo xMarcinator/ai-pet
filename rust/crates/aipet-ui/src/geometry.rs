@@ -364,6 +364,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_built_in_pets_effects_stay_below_the_bubbles_at_every_size() {
+        // fn-2 R24: the highest an effect gets, lifted by its mood's bounce, against the stacks' bottom
+        let mut failures = Vec::new();
+        for p in aipet_sprite::load::all(std::path::Path::new("/nonexistent")).pets {
+            let reach = aipet_sprite::fx_reach(&p.pack, &p.sheets) as f32;
+            let anchor = (p.pack.anchor.1 * p.pack.pixel_size) as f32;
+            for size in PET_SIZES.step_by(5) {
+                let s = size as f32 / 100.0;
+                let top = SPRITE.y + SPRITE_ORIGIN.y + (reach - anchor) * s;
+                if top < stacks_bottom(s) {
+                    failures.push(format!("{} at {size}%: effects at {top}, bubbles end at {}", p.pack.name, stacks_bottom(s)));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[test]
     fn the_sprite_sits_where_the_csharp_puts_it() {
         assert_eq!(
             SPRITE,
