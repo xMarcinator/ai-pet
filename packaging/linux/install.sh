@@ -9,7 +9,7 @@
 # App:   ~/.local/share/AiPet/app   AiPet and aipet-hook, and uninstall.sh (~/.local/share is $XDG_DATA_HOME if set)
 # Menu:  ~/.local/share/applications/aipet.desktop, icons in ~/.local/share/icons/hicolor
 # Hyprland: window rules in ~/.local/share/AiPet/hyprland, for your config to include (the installer prints the line)
-# Needs no .NET (the app is self-contained) and starts nothing at sign-in. The Claude Code and Codex plugins are
+# Needs glibc 2.27 or newer and no runtime, and starts nothing at sign-in. The Claude Code and Codex plugins are
 # separate: the one-line installer adds them, or see the README.
 set -eu
 

@@ -7,7 +7,8 @@ using Xunit;
 namespace AiPet.Tests;
 
 /// packaging/linux/install.sh, the installer in the Linux tarball, run from a package folder the test makes: its
-/// AiPet only writes down the environment it got, and its aipet-hook is the real hook (dotnet aipet-hook.dll).
+/// AiPet only writes down the environment it got, and its aipet-hook is a real hook: the one AIPET_TEST_HOOK names (the
+/// Rust hook the release ships, in cross-runtime.yml), else dotnet aipet-hook.dll.
 public class PackageInstallerTests
 {
     readonly Scripts.Sandbox box = new();
@@ -37,8 +38,9 @@ public class PackageInstallerTests
         pet.AddRange(Encoding.ASCII.GetBytes("\nenv > \"$AIPET_TEST_OUT/pet-env.tmp\" && mv \"$AIPET_TEST_OUT/pet-env.tmp\" \"$AIPET_TEST_OUT/pet-env\"\n"));
         Directory.CreateDirectory(Path.Combine(dir, "app"));
         File.WriteAllBytes(Path.Combine(dir, "app", "AiPet"), pet.ToArray());
+        var hook = TestEnv.TestHook != null ? $"'{TestEnv.TestHook}'" : $"'{TestEnv.Dotnet}' '{TestEnv.HookDll}'";
         Scripts.Executable(Path.Combine(dir, "app", "aipet-hook"),
-            $"#!/bin/sh\necho \"$*\" >> \"$AIPET_TEST_OUT/hook-calls\"\nexec '{TestEnv.Dotnet}' '{TestEnv.HookDll}' \"$@\"\n");
+            $"#!/bin/sh\necho \"$*\" >> \"$AIPET_TEST_OUT/hook-calls\"\nexec {hook} \"$@\"\n");
         return dir;
     }
 

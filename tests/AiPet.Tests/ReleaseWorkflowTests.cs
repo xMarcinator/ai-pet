@@ -125,14 +125,14 @@ public class ReleaseWorkflowTests
                         Scripts.WorkflowStepText(Workflow, "Pin the marketplaces to the plugin commit"));
     }
 
-    /// The Linux hooks' gate: the newest GLIBC_ symbol version a hook needs is the oldest glibc it runs on, and it may
-    /// not be newer than 2.27. readelf is a stand-in that lists the versions given.
+    /// The Linux binaries' gate: the newest GLIBC_ symbol version the pet or the hook needs is the oldest glibc it runs
+    /// on, and it may not be newer than 2.27. readelf is a stand-in that lists the versions given, for both.
     [UnixTheory]
     [InlineData("2.2.5 2.3 2.17 2.27", null)]
-    [InlineData("2.2.5 2.17 2.28", "The hook needs GLIBC_2.28, newer than 2.27")]
-    [InlineData("2.2.5 2.34", "The hook needs GLIBC_2.34, newer than 2.27")]
+    [InlineData("2.2.5 2.17 2.28", "AiPet needs GLIBC_2.28, newer than 2.27")]
+    [InlineData("2.2.5 2.34", "aipet-hook needs GLIBC_2.34, newer than 2.27")]
     [InlineData("", "readelf found no GLIBC_ versions")]
-    public void GlibcGate_RefusesAHookThatNeedsANewerGlibc(string versions, string error)
+    public void GlibcGate_RefusesABinaryThatNeedsANewerGlibc(string versions, string error)
     {
         box.Stub("readelf", """
             case "$2" in
@@ -147,17 +147,66 @@ public class ReleaseWorkflowTests
             ["AIPET_TEST_GLIBC"] = versions, ["GLIBC_FLOOR"] = "2.27", ["RID"] = "linux-x64", ["GITHUB_STEP_SUMMARY"] = summary,
         }) box.Env[k] = v;
 
-        var r = box.Step(Scripts.WorkflowStep(Workflow, "Check the glibc the hook needs"), box.Root);
+        var r = box.Step(Scripts.WorkflowStep(Workflow, "Check the glibc the binaries need"), box.Root);
         if (error == null)
         {
             Assert.True(r.Exit == 0, r.Output);
-            Assert.Equal("linux-x64 hook: needs glibc 2.27 (floor 2.27)\n", File.ReadAllText(summary));
+            Assert.Equal("linux-x64 AiPet: needs glibc 2.27 (floor 2.27)\nlinux-x64 aipet-hook: needs glibc 2.27 (floor 2.27)\n",
+                         File.ReadAllText(summary));
         }
         else
         {
             Assert.Equal(1, r.Exit);
             Assert.Contains("::error::" + error, r.Output);
         }
+    }
+
+    /// The Linux tarball keeps the layout the releases before had, whatever builds the app: the installer and the
+    /// menu entry's template at the top, the pet and the hook in app/, the icons and the Hyprland rules.
+    [UnixFact]
+    public void Tarball_KeepsTheLayout()
+    {
+        var cwd = box.Dir("job");
+        foreach (var (f, text) in new[] { ("out/app/AiPet", "pet\n"), ("out/hook/aipet-hook", "hook\n"), ("LICENSE", "MIT\n") })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(cwd, f)));
+            File.WriteAllText(Path.Combine(cwd, f), text);
+        }
+        var cp = box.Run(Path.Combine(Scripts.Tools, "cp"), new[] { "-R", Path.Combine(Scripts.Repo, "packaging"), Path.Combine(cwd, "packaging") });
+        Assert.True(cp.Exit == 0, cp.Output);
+        box.Env["VERSION"] = "0.3.0";
+        box.Env["RID"] = "linux-x64";
+
+        var r = box.Step(Scripts.WorkflowStep(Workflow, "Make the tarball"), cwd);
+        Assert.True(r.Exit == 0, r.Output);
+        var list = box.Run(Path.Combine(Scripts.Tools, "tar"), new[] { "-tzf", Path.Combine(cwd, "dist", "AiPet-0.3.0-linux-x64.tar.gz") });
+        Assert.True(list.Exit == 0, list.Output);
+        var files = list.Stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries).Where(l => !l.EndsWith('/')).ToHashSet();
+        foreach (var f in new[]
+        {
+            "app/AiPet", "app/aipet-hook", "install.sh", "aipet.desktop.in", "hyprland/aipet.lua", "hyprland/aipet.conf",
+            "icons/hicolor/256x256/apps/aipet.png", "LICENSE",
+        })
+            Assert.Contains("AiPet-0.3.0-linux-x64/" + f, files);
+        Assert.DoesNotContain(files, f => f.Contains("/app/") && !f.EndsWith("/app/AiPet") && !f.EndsWith("/app/aipet-hook"));
+        var modes = box.Run(Path.Combine(Scripts.Tools, "tar"), new[] { "-tvzf", Path.Combine(cwd, "dist", "AiPet-0.3.0-linux-x64.tar.gz") });
+        foreach (var f in new[] { "app/AiPet", "app/aipet-hook", "install.sh" })
+            Assert.Contains(modes.Stdout.Split('\n'), l => l.StartsWith("-rwxr-xr-x") && l.EndsWith("AiPet-0.3.0-linux-x64/" + f));
+    }
+
+    /// The release builds the Rust pet: no dotnet publish of the app is left, the Windows package carries the hook in
+    /// current\ (task 14's proof), and Velopack packs AiPet.exe under the packId the .NET installs update from.
+    [Fact]
+    public void Release_BuildsTheRustPet()
+    {
+        var text = File.ReadAllText(Path.Combine(Scripts.Repo, ".github", "workflows", Workflow));
+        Assert.DoesNotContain("dotnet publish", text);
+        Assert.Contains("cargo build -p aipet -p aipet-hook --release --locked --target x86_64-pc-windows-msvc", text);
+        Assert.Contains("cargo zigbuild -p aipet -p aipet-hook --release --locked --target \"$TARGET.$GLIBC_FLOOR\"", text);
+        Assert.Contains("cp out/hook/aipet-hook.exe out/app/", Scripts.WorkflowStep(Workflow, "Put the hook next to AiPet.exe"));
+        var pack = Scripts.WorkflowStep(Workflow, "Build the installer and update feed (Velopack)");
+        Assert.Contains("--packId AiPetApp", pack);
+        Assert.Contains("--mainExe AiPet.exe", pack);
     }
 
     /// A repository whose codex.json is A at v0.2.0, B at v0.3.0-rc.1, and B at HEAD (one commit later).

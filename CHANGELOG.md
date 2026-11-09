@@ -5,8 +5,9 @@ app, `aipet-hook` and the plugin share one version number.
 
 ## [Unreleased]
 
-The first step of AiPet's move to Rust: the hook is now written in Rust, and the pet is still the .NET one. The Rust
-pet, which the packages don't ship yet, draws its pets from layered packs, listed under Added.
+AiPet's move to Rust: the hook is written in Rust, and the packages ship the Rust pet in place of the .NET one
+(milestone 2). It draws its pets from layered packs, listed under Added. A release of the milestone 1 hook with the
+.NET pet, if one is cut first, can be updated from and rolled back to without losing settings, tokens or hooks.
 
 ### Added
 - Pets are layered packs: a folder with a `pack.json` and its art, in the data folder's `avatars/`. Each layer
@@ -43,6 +44,14 @@ pet, which the packages don't ship yet, draws its pets from layered packs, liste
   squash or idle acts, though its expressions still change.
 
 ### Changed
+- The pet is the Rust one, in the Windows installer and zip and the Linux packages. It installs to the same folders,
+  keeps its settings, logs, tokens and avatars where they were, and an installed copy updates itself as before: the
+  update from a .NET release keeps them, and so do the hooks it registered. The packages are much smaller, since
+  they carry no .NET runtime.
+- On Windows, `AiPet.exe` keeps its icon and version details, and needs no Visual C++ runtime.
+- Linux: the pet runs on glibc 2.27 and newer, like the hook, and needs no runtime of its own.
+- Building from source needs only Rust: `build.sh`, `build.ps1` and `install-from-source` build the pet and the hook
+  with cargo.
 - `aipet-hook` is the Rust one, in the plugin and in the Windows and Linux packages. Its command line, what it sends
   the pet, and what it registers are the same, so hooks registered by an earlier version keep working, and Codex
   doesn't ask you to trust them again.
@@ -51,8 +60,6 @@ pet, which the packages don't ship yet, draws its pets from layered packs, liste
 - Linux: two pets started at the same moment no longer both run, also when one of them was started from a snap or
   over SSH. The pet holds a lock next to its socket (`aipet.lock`) while it runs, which the Rust pet will hold too.
   When it can't take that lock (something else is at its path, say), the pet doesn't start, and `aipet.log` says why.
-- Building from source needs Rust for the hook: `build.sh`, `build.ps1` and `install-from-source` build it with
-  cargo.
 - Settings → Avatars shows one tile per pet. The green Hood is now the Hood's Green theme, and a `config.json` that
   names "Hood (green)" wears it. The avatar `.json` files of earlier versions still load, `avatars/hood-green.json`
   among them.

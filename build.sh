@@ -4,11 +4,12 @@
 #   ./build.sh                       # this machine's platform (linux-x64 or linux-arm64)
 #   ./build.sh linux-x64 win-x64     # the platforms named (win-x64, linux-x64, linux-arm64)
 #
-# artifacts/<rid>/app    the desktop app (self-contained: no .NET install needed)
-# artifacts/<rid>/hook   aipet-hook, built with cargo from rust/crates/aipet-hook: for this machine's platform with
-#                        cargo itself; for the other Linux platform with cargo-zigbuild, as the release builds it (for
-#                        glibc 2.27 and newer), when cargo-zigbuild and zig are installed. There's no win-x64 hook from
-#                        Linux: build.ps1 builds it on Windows.
+# artifacts/<rid>/app    the desktop app, AiPet (rust/crates/aipet)
+# artifacts/<rid>/hook   aipet-hook (rust/crates/aipet-hook)
+#                        Both are built with cargo: for this machine's platform with cargo itself; for the other Linux
+#                        platform with cargo-zigbuild, as the release builds them (for glibc 2.27 and newer), when
+#                        cargo-zigbuild and zig are installed and pkg-config finds that platform's libxkbcommon. There's
+#                        no win-x64 build from Linux: build.ps1 builds it on Windows.
 # plugins/aipet/native/<rid>/   the same hook, next to aipet-hook.sh (gitignored: the release workflow adds the hooks
 #                        to the release commit in the plugin repository)
 # artifacts/marketplace/ a local marketplace with a copy of the plugin, to try the plugin before a release:
@@ -16,7 +17,7 @@
 #                        claude plugin marketplace add ./artifacts/marketplace && claude plugin install aipet@aipet
 #                        codex plugin marketplace add ./artifacts/marketplace && codex plugin add aipet@aipet
 #                        (it's named aipet like the real one, so remove that first: ... marketplace remove aipet)
-# Needs the .NET 10 SDK, and Rust (rustup) with a C linker (gcc or clang). scripts/install-from-source.sh installs the
+# Needs Rust (rustup) with a C linker (gcc or clang), and pkg-config with libxkbcommon's development files. scripts/install-from-source.sh installs the
 # result; releases are built by .github/workflows/release.yml.
 set -euo pipefail
 
@@ -33,18 +34,12 @@ if [ ${#rids[@]} -eq 0 ]; then
   [ -n "$host" ] || { echo "Name the platforms to build (win-x64, linux-x64, linux-arm64)." >&2; exit 2; }
   rids=("$host")
 fi
-command -v dotnet >/dev/null || { echo "build.sh needs the .NET 10 SDK (dotnet)." >&2; exit 1; }
 command -v cargo >/dev/null || { echo "build.sh needs Rust (cargo, from https://rustup.rs)." >&2; exit 1; }
 
-publish() { # project, output folder, extra arguments...
-  local project=$1 out=$2
-  shift 2
-  dotnet publish "$project" -c Release -o "$out" --nologo -v quiet -p:DebugType=none "$@"
-}
-cargo_hook() { # cargo command (build or zigbuild), extra arguments...
+cargo_build() { # cargo command (build or zigbuild), extra arguments...
   local command=$1
   shift
-  cargo "$command" -p aipet-hook --release --locked --manifest-path "$root/rust/Cargo.toml" "$@"
+  cargo "$command" -p aipet -p aipet-hook --release --locked --manifest-path "$root/rust/Cargo.toml" "$@"
 }
 
 for rid in "${rids[@]}"; do
@@ -53,23 +48,28 @@ for rid in "${rids[@]}"; do
   art="$root/artifacts/$rid"
   rm -rf "$art/app" "$art/hook"
 
-  publish "$root/src/AiPet.UI/AiPet.UI.csproj" "$art/app" -r "$rid" --self-contained
-
-  # the hook runs on every agent event: native, so it starts in a millisecond or two
-  hook=""
+  out=""
   if [ "$rid" = "$host" ]; then
-    cargo_hook build
-    hook="$root/rust/target/release/aipet-hook"
+    cargo_build build
+    out="$root/rust/target/release"
   elif [ "$rid" = win-x64 ]; then
-    warn "No win-x64 hook: build.ps1 builds it on Windows"
+    warn "No win-x64 build: build.ps1 builds it on Windows"
   elif command -v cargo-zigbuild >/dev/null; then
     triple=x86_64-unknown-linux-gnu
     if [ "$rid" = linux-arm64 ]; then triple=aarch64-unknown-linux-gnu; fi
     if command -v rustup >/dev/null; then rustup target add "$triple" >/dev/null; fi
-    cargo_hook zigbuild --target "$triple.2.27"
-    hook="$root/rust/target/$triple/release/aipet-hook"
+    # as release.yml links them: the system's libxkbcommon may ask for a newer glibc itself
+    RUSTFLAGS="-C link-arg=-Wl,--allow-shlib-undefined" cargo_build zigbuild --target "$triple.2.27"
+    out="$root/rust/target/$triple/release"
   else
-    warn "No $rid hook: building it here needs cargo-zigbuild and zig (cargo install cargo-zigbuild; pip install ziglang)"
+    warn "No $rid build: building it here needs cargo-zigbuild and zig (cargo install cargo-zigbuild; pip install ziglang)"
+  fi
+  hook=""
+  if [ -n "$out" ]; then
+    mkdir -p "$art/app"
+    cp "$out/AiPet" "$art/app/AiPet"
+    chmod 755 "$art/app/AiPet"
+    hook="$out/aipet-hook"
   fi
 
   dest="$root/plugins/aipet/native/$rid"

@@ -3,10 +3,11 @@
 #   pwsh ./build.ps1                 # Windows + Linux
 #   pwsh ./build.ps1 -Only win-x64   # just one platform (win-x64, linux-x64, linux-arm64)
 #
-# artifacts/<rid>/app    the desktop app (self-contained: no .NET install needed)
-# artifacts/<rid>/hook   aipet-hook, built with cargo from rust/crates/aipet-hook as the release builds it: for Windows
-#                        with the C runtime linked in; for Linux with cargo-zigbuild (for glibc 2.27 and newer), when
-#                        cargo-zigbuild and zig are installed (build.sh on Linux builds it without them)
+# artifacts/<rid>/app    the desktop app, AiPet.exe or AiPet (rust/crates/aipet)
+# artifacts/<rid>/hook   aipet-hook (rust/crates/aipet-hook)
+#                        Both are built with cargo as the release builds them: for Windows with the C runtime linked
+#                        in; for Linux with cargo-zigbuild (for glibc 2.27 and newer), when cargo-zigbuild and zig are
+#                        installed and pkg-config finds that platform's libxkbcommon (build.sh on Linux needs neither)
 # plugins/aipet/native/<rid>/   the same hooks, next to aipet-hook.sh, which picks the right one per OS. They're
 #                        gitignored: the release workflow adds them to the release commit in the plugin repository.
 # artifacts/marketplace/ a local marketplace with a copy of the plugin, to try the plugin before a release:
@@ -14,7 +15,7 @@
 #                        claude plugin marketplace add ./artifacts/marketplace; claude plugin install aipet@aipet
 #                        codex plugin marketplace add ./artifacts/marketplace; codex plugin add aipet@aipet
 #                        (it's named aipet like the real one, so remove that first: ... marketplace remove aipet)
-# Needs the .NET 10 SDK, and Rust (rustup) with Visual Studio's C++ build tools and Windows SDK. Releases are built by
+# Needs Rust (rustup) with Visual Studio's C++ build tools and Windows SDK. Releases are built by
 # .github/workflows/release.yml, not by this script.
 param([string[]]$Only = @('win-x64', 'linux-x64'))
 $ErrorActionPreference = 'Stop'
@@ -23,16 +24,11 @@ $cargoToml = Join-Path $root 'rust\Cargo.toml'
 $triples = @{ 'win-x64' = 'x86_64-pc-windows-msvc'; 'linux-x64' = 'x86_64-unknown-linux-gnu'; 'linux-arm64' = 'aarch64-unknown-linux-gnu' }
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw 'build.ps1 needs Rust (cargo, from https://rustup.rs)' }
 
-function Publish($project, $out, [string[]]$extra) {
-    dotnet publish $project -c Release -o $out --nologo -v quiet -p:DebugType=none @extra
-    if ($LASTEXITCODE -ne 0) { throw "Build failed: $project -> $out" }
-}
-
-# The hook for a target, with cargo build, or cargo zigbuild for Linux; returns the path of what it built.
-function Hook([string]$command, [string]$triple, [string]$target, [string]$exe) {
-    cargo $command -p aipet-hook --release --locked --manifest-path $cargoToml --target $target | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "Building the hook failed: cargo $command --target $target" }
-    Join-Path $root "rust\target\$triple\release\$exe"
+# The pet and the hook for a target, with cargo build, or cargo zigbuild for Linux; returns the folder they're in.
+function Build([string]$command, [string]$triple, [string]$target) {
+    cargo $command -p aipet -p aipet-hook --release --locked --manifest-path $cargoToml --target $target | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "Building the pet and the hook failed: cargo $command --target $target" }
+    Join-Path $root "rust\target\$triple\release"
 }
 
 foreach ($rid in $Only) {
@@ -43,21 +39,29 @@ foreach ($rid in $Only) {
     if (Test-Path "$art\app") { Remove-Item "$art\app" -Recurse -Force }
     if (Test-Path "$art\hook") { Remove-Item "$art\hook" -Recurse -Force }
 
-    Publish "$root\src\AiPet.UI\AiPet.UI.csproj" "$art\app" @('-r', $rid, '--self-contained')
-
-    # the hook runs on every agent event: native, so it starts in a millisecond or two
-    $hook = $null
+    $out = $null
+    $exe = ''
+    $flags = $env:RUSTFLAGS
     if ($rid -like 'win-*') {
-        # with the C runtime linked in, so that it needs only Windows' own DLLs
-        $flags = $env:RUSTFLAGS
+        # with the C runtime linked in, so that they need only Windows' own DLLs
+        $exe = '.exe'
         $env:RUSTFLAGS = '-C target-feature=+crt-static'
-        try { $hook = Hook 'build' $triple $triple 'aipet-hook.exe' }
+        try { $out = Build 'build' $triple $triple }
         finally { $env:RUSTFLAGS = $flags }
     } elseif (Get-Command cargo-zigbuild -ErrorAction SilentlyContinue) {
         rustup target add $triple | Out-Null
-        $hook = Hook 'zigbuild' $triple "$triple.2.27" 'aipet-hook'
+        # as release.yml links them: the system's libxkbcommon may ask for a newer glibc itself
+        $env:RUSTFLAGS = '-C link-arg=-Wl,--allow-shlib-undefined'
+        try { $out = Build 'zigbuild' $triple "$triple.2.27" }
+        finally { $env:RUSTFLAGS = $flags }
     } else {
-        Write-Warning "No $rid hook: building it here needs cargo-zigbuild and zig (cargo install cargo-zigbuild; pip install ziglang), or build.sh on Linux"
+        Write-Warning "No $rid build: building it here needs cargo-zigbuild and zig (cargo install cargo-zigbuild; pip install ziglang), or build.sh on Linux"
+    }
+    $hook = $null
+    if ($out) {
+        New-Item -ItemType Directory -Force "$art\app" | Out-Null
+        Copy-Item (Join-Path $out "AiPet$exe") "$art\app" -Force
+        $hook = Join-Path $out "aipet-hook$exe"
     }
 
     $dest = Join-Path $root "plugins\aipet\native\$rid"
