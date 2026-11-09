@@ -37,9 +37,10 @@ Group loaded packs into pets with styles (R1), tag the built-ins (R2), keep them
 - [ ] Tests: two packs with one name, and a pack named as another pet, are skipped with reasons; a linked pet folder is refused (Unix symlink; Windows where the test can make one)
 
 ## Done summary
-TBD
+Pack pet and style (optional overrides; defaults name and kind label), written only when set. load::all reads pet folders (subfolders as styles, pet defaulting to the folder name; a link refused; no loadable style -> skipped). Clash rules: same name, same (pet, style), or a name that is another pet's -> skipped with a reason naming the first; built-ins win. Found::groups / load::groups give pets in load order with their styles and default (the drawing named as the pet, else the first). Built-ins tagged (Hood (vector), Sprout (vector), Hamster (pixel), painted Pip) -> Sprout, Hood, Pip, Hamster. Theme files may name a pet alone (default style); check lines name pet and style; a pet folder checks a line per style.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: f29fc14
+- Tests: cargo test --workspace
 - PRs:
