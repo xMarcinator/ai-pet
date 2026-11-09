@@ -23,6 +23,7 @@ pub mod demo;
 mod executor;
 mod geometry;
 mod menu;
+mod mood;
 pub mod platform;
 pub mod settings;
 mod shelf;
@@ -62,8 +63,6 @@ const TEXT_BESIDE: f32 = 190.0;
 /// The narrowest and widest a bubble gets (its Border's MinWidth and MaxWidth).
 const CARD_MIN: f32 = 240.0;
 const CARD_MAX: f32 = 350.0;
-/// How long a new review calls for attention (the C#'s NewReviews: `AlertUntil = Now + 6`).
-const ALERT: f64 = 6.0;
 /// A tooltip (Avalonia 12's ToolTip in the Fluent dark theme) opens 0.4 s after the pointer comes onto what has one, or
 /// at once within 0.1 s of the last one closing (ShowDelay, BetweenShowDelay); 20 px below where the pointer then is
 /// (Placement Pointer, VerticalOffset 20); and fades in over 0.15 s.
@@ -351,6 +350,9 @@ pub struct PetUi {
     /// How high the worn pack's effects get above its art box (art px, negative above), lifted by their moods: the
     /// bubbles start above it (fn-2 R24).
     fx_reach: f32,
+    /// The mood step's memory (the news window), and the local hour, which a test can set (fnt-72).
+    moods: mood::Moods,
+    hour: fn() -> u32,
     /// The sprite's part of the input region, remade in place each tick.
     sprite_rects: Vec<Rect>,
     shadow: Handle,
@@ -501,12 +503,18 @@ impl PetUi {
             host: setup.host,
             platform: setup.platform,
             pet,
-            input: PetInput::default(),
+            // fnt-72's moods: on in the app (the C# golden replays keep them off)
+            input: PetInput {
+                moods: true,
+                ..PetInput::default()
+            },
             start: None,
             t: 0.0,
             motion: Motion::REST,
             sprite: Sprite::new(&worn),
             fx_reach: aipet_sprite::fx_reach(&worn.pack, &worn.sheets) as f32,
+            moods: mood::Moods::default(),
+            hour: || aipet_core::log::local_hour(std::time::SystemTime::now()),
             sprite_rects: Vec::new(),
             shadow: sprite::shadow_image(),
             avatars,
@@ -569,7 +577,7 @@ impl PetUi {
         if let Some(demo) = &mut self.demo {
             // a new review calls for attention, as the C#'s NewReviews does
             if demo::review_arrived(self.t, t) {
-                self.input.alert_until = t + ALERT;
+                self.moods.review(t);
             }
             self.board = Some(demo.board(t));
         }
@@ -577,7 +585,10 @@ impl PetUi {
         settings::tick(self);
 
         let board = self.board.as_deref();
-        let mood = board.map_or("sleep", Board::state);
+        let state = board.map_or("sleep", Board::state);
+        // the clock only matters to an idle or sleeping pet
+        let night = matches!(state, "idle" | "sleep") && mood::night((self.hour)());
+        let mood = self.moods.pick(state, t, night, board.and_then(Board::front_age), self.hover);
         #[cfg(any(test, feature = "demo"))]
         let mood = self.mood.unwrap_or(mood);
         if self.input.state != mood {
@@ -797,7 +808,8 @@ impl PetUi {
     pub fn update(&mut self, message: Message) -> Option<Effect> {
         match message {
             Message::Board(board) => self.board = Some(board),
-            Message::Alert => self.input.alert_until = self.t + ALERT,
+            // a review arrived: the pet shows the news (fnt-72; the C#'s attention alert is the golden replays' alone)
+            Message::Alert => self.moods.review(self.t),
             Message::PointerMoved(p) => {
                 self.pointer = Some(p);
                 self.left_at = None;
@@ -1738,14 +1750,18 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn an_alert_calls_for_attention_for_six_seconds() {
+    fn a_review_alert_is_news_for_six_seconds() {
         let (mut ui, _) = detached();
         let start = Instant::now();
         run(&mut ui, start, 0.0, 2.0);
         ui.update(Message::Alert);
-        assert!((ui.input.alert_until - 8.0).abs() < 0.02, "{}", ui.input.alert_until);
+        assert!((ui.moods.news_until() - 8.0).abs() < 0.02, "{}", ui.moods.news_until());
         run(&mut ui, start, 2.0, 0.5);
+        assert_eq!(ui.input.state, "news");
+        // the worn pet draws no envelope: it looks like attention (fnt-72 R6)
         assert_eq!(ui.pet.anim_state(), "attention");
+        run(&mut ui, start, 2.5, 6.0);
+        assert_ne!(ui.input.state, "news");
         // news from the core becomes the same messages
         let alert = Message::from(News::Alert);
         assert!(matches!(alert, Message::Alert));
@@ -2042,15 +2058,16 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_demos_new_review_calls_for_attention_for_six_seconds() {
+    fn the_demos_new_review_is_news_for_six_seconds() {
         let mut ui = demo();
         let start = Instant::now();
         run(&mut ui, start, 0.0, 12.9);
-        assert_eq!(ui.input.alert_until, 0.0);
+        assert_eq!(ui.moods.news_until(), 0.0);
         run(&mut ui, start, 12.9, 1.0);
-        assert!((ui.input.alert_until - 19.0).abs() < 0.02, "{}", ui.input.alert_until);
-        // working, but the pet shows the alert
-        assert_eq!((ui.input.state.as_str(), ui.pet.anim_state()), ("working", "attention"));
+        assert!((ui.moods.news_until() - 19.0).abs() < 0.02, "{}", ui.moods.news_until());
+        // working, but the pet shows the news; Sprout draws no envelope, so it looks like attention (fnt-72 R6)
+        assert_eq!((ui.input.state.as_str(), ui.pet.anim_state()), ("news", "attention"));
+        assert_eq!(ui.input.alert_until, 0.0, "the C#'s alert is the golden replays' alone");
     }
 
     #[test]

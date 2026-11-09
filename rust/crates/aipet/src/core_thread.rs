@@ -170,9 +170,12 @@ pub fn start(options: Options, news: Sender<News>) -> Core {
 
     let listening = Arc::new(AtomicBool::new(music));
     let player = Player::start(platform, Arc::clone(&listening), events.clone());
+    // fnt-72: a failed turn shows as its own red bubble
+    let mut board = Board::new();
+    board.moods = true;
     let core = CoreThread {
         news,
-        board: Board::new(),
+        board,
         shown: None,
         _server: server,
         sessions,

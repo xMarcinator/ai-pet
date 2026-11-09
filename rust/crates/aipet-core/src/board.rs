@@ -273,6 +273,10 @@ pub struct Board {
     /// fnt-72: a chat whose turn failed shows as `error` ("Failed: …", red) instead of `attention`. The app turns it
     /// on; the C# golden replays never do.
     pub moods: bool,
+    /// When each chat was first seen (Unix seconds): a chat already open when the pet starts counts from then.
+    first_seen: HashMap<String, f64>,
+    /// How long the front chat has been going, at the last refresh.
+    front_age: Option<f64>,
 }
 
 impl Default for Board {
@@ -286,6 +290,8 @@ impl Default for Board {
             dismissed: HashMap::new(),
             music_last_playing: 0.0,
             moods: false,
+            first_seen: HashMap::new(),
+            front_age: None,
         }
     }
 }
@@ -313,7 +319,13 @@ impl Board {
             .map_or(0, |i| self.extra[i])
     }
 
-    /// The pet's mood: sleep, idle, thinking, working, attention or done.
+    /// How long the front chat (the one whose state is the pet's) has been going since the pet first saw it, at the
+    /// last refresh; none without chats (fnt-72's tiredness after two hours).
+    pub fn front_age(&self) -> Option<f64> {
+        self.front_age
+    }
+
+    /// The pet's mood: sleep, idle, thinking, working, attention or done (or error, where moods are on).
     pub fn state(&self) -> &'static str {
         self.state
     }
@@ -467,6 +479,12 @@ impl Board {
         }
         self.state = state;
         self.prop = primary.and_then(|p| p.prop);
+        // how long each chat has been going, from when it was first seen (hook and Codex log chats alike)
+        self.first_seen.retain(|id, _| chats.iter().any(|c| &c.id == id));
+        for c in &chats {
+            self.first_seen.entry(c.id.clone()).or_insert(now);
+        }
+        self.front_age = primary.and_then(|p| self.first_seen.get(&p.id)).map(|since| now - since);
         self.all = sessions;
     }
 }
@@ -727,6 +745,45 @@ mod tests {
         board.refresh(&failed, t + 3600.5);
         assert_eq!(board.find("claude:a").map(|s| s.eff), Some("idle"));
         assert_eq!(board.state(), "sleep");
+    }
+
+    #[test]
+    fn the_front_chat_counts_its_age_from_when_it_was_first_seen_from_either_source() {
+        // fnt-72: two hours after the pet first saw it, a chat makes an idle pet tired, hook or Codex log alike
+        let t = 1_790_000_000.0;
+        let mut hook = Entry::default();
+        hook.id = "claude:a".into();
+        hook.agent = Some("claude");
+        hook.state = Some("idle");
+        hook.ts = t - 50_000.0;
+        let log = Session {
+            id: "codex:b".into(),
+            agent: "codex",
+            eff: "idle",
+            name: "x".into(),
+            ts: t - 50_000.0,
+            source: Some("log"),
+            ..Session::default()
+        };
+        for sources in [
+            Sources {
+                chats: vec![hook],
+                ..Sources::default()
+            },
+            Sources {
+                codex: vec![log],
+                ..Sources::default()
+            },
+        ] {
+            let mut board = Board::new();
+            board.refresh(&sources, t);
+            assert_eq!(board.front_age(), Some(0.0), "a chat open at the start counts from then");
+            board.refresh(&sources, t + 7200.0);
+            assert_eq!(board.front_age(), Some(7200.0));
+        }
+        let mut board = Board::new();
+        board.refresh(&Sources::default(), t);
+        assert_eq!(board.front_age(), None);
     }
 
     #[test]
