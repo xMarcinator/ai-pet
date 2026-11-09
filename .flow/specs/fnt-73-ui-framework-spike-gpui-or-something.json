@@ -1,0 +1,24 @@
+{
+  "branch_name": "fnt-73-ui-framework-spike-gpui-or-something",
+  "created_at": "2026-11-09T10:41:11.667452Z",
+  "depends_on_epics": [],
+  "id": "fnt-73-ui-framework-spike-gpui-or-something",
+  "next_task": 1,
+  "plan_review_status": "unknown",
+  "plan_reviewed_at": null,
+  "spec_path": ".flow/specs/fnt-73-ui-framework-spike-gpui-or-something.md",
+  "status": "open",
+  "title": "UI framework spike: gpui or something simpler",
+  "tracker": {
+    "baseHashFlow": null,
+    "baseHashTracker": null,
+    "depRelations": [],
+    "id": null,
+    "identifier": "FNT-73",
+    "lastSyncedAt": null,
+    "mergeBaseFlow": null,
+    "mergeBaseTracker": null,
+    "url": null
+  },
+  "updated_at": "2026-11-09T10:41:22.174862Z"
+}
