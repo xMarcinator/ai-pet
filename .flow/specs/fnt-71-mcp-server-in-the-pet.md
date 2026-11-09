@@ -49,7 +49,7 @@ flowchart LR
 | `delete_theme` | `{pet, name, confirm_name}` | `{deleted, trashed_to}` | destructive |
 | `check_pack` | `{path}` | `{ok, report}` (the `--check-pack` text) | read-only |
 | `install_pack` | `{path, replace?: bool}` | `{installed, name, report}` | not idempotent |
-| `report_event` | `{agent: "codex", event: <hook input fields>}` | `{}` | hidden from the model where the client allows |
+| `report_event` | `{agent: "codex", event: <hook input fields>}` | `{}` | visible to the model: Codex hooks can't call a disabled tool (task 1's spike) |
 
 ## Edge Cases & Constraints
 

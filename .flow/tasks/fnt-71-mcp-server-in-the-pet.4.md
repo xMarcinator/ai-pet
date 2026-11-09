@@ -25,6 +25,7 @@ Build what task 1's verdict says. Normally: a `report_event` tool that maps the 
 - `rust/crates/aipet-core/src/sessions/turns.rs:1-110`
 
 ### Key context
+- From the spike (`rust/proofs/mcp-spike.md`): build the `mcp_tool` hooks (not the exe fallback). A placeholder missing from an event's payload fails that hook, so generate one input table per event (the proof lists the fields); there is no whole-payload placeholder; Codex skips MCP hooks on SessionEnd; `report_event` can't be in `disabled_tools` (hooks then fail), so it stays visible to the model; and a thread started while the pet was down never reconnects, so its hooks are lost until the next thread (document it).
 - Never rename `aipet`: the Codex trust keys contain `aipet@aipet`.
 
 ## Acceptance

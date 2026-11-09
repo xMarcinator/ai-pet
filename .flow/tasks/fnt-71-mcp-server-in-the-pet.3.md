@@ -27,6 +27,7 @@ Add `/hook/claude`: map Claude's hook body plus the two env headers into envelop
 - `rust/crates/aipet-core/tests/server.rs:1-60` - the Env scratch pattern
 
 ### Key context
+- From the spike (`rust/proofs/mcp-spike.md`): Claude doesn't run HTTP hooks on SessionStart. Keep the exe's command hook for that one event, or create the session from its first HTTP event; decide here and record it. `allowedEnvVars` headers arrive, and Stop's reply comes back before the turn ends.
 - Return `{}` or empty: Claude treats a plain-text 2xx body as an error.
 - R1's spike says whether Stop's HTTP hook completes before the turn ends; if not, the stale rule must protect "done".
 

@@ -32,9 +32,10 @@ Answer R1's questions with a throwaway server before anything is built on them (
 - [ ] Its verdict line says whether task 4 builds `mcp_tool` hooks or the exe fallback
 
 ## Done summary
-TBD
+Spike on Linux (Codex 0.166.0, Claude Code 2.1.316): Codex mcp_tool hooks carry every payload field the pet needs, so task 4 builds them (not the exe fallback); limits: one placeholder set per event, no SessionEnd, report_event must stay enabled, no reconnect if the pet was down at thread start. Claude HTTP hooks work for every event except SessionStart; env-var headers arrive; Stop returns before the turn ends. Tasks 3 and 4 carry the findings.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 97f35ca
+- Tests: 5 Codex and 3 Claude runs against a logging server, request logs in the proof
 - PRs:
