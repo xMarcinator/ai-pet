@@ -12,7 +12,7 @@ Describe pets, styles and themes for pack authors and in the architecture, and a
 
 ### Approach
 - MAKING-A-PET: a "Pets and styles" section (the `pet` and `style` keys, pet folders, the default style, the built-in-wins rule) and the manifest table rows; the skill's `references/manifest.md` and `themes.md` the same, both copies identical.
-- FNT-71: through `flowctl spec set-plan` and `task set-spec`, change the API table rows for `list_avatars` and `wear_avatar`, R7 and R10's existing-name check to (pet, style), and tasks 5 and 6's approach lines.
+- FNT-71: through `flowctl spec set-plan` and `task set-spec`, change the API table rows for `list_avatars` and `wear_avatar`, R7, and R10: `install_pack` checks pet, style and name; replacing an existing user style swaps that style's own folder (found from the loaded pack's path, whatever its name), and replacing a built-in style is refused; tasks 5 and 6's approach lines and tests (a replace of a user style named differently, a refused built-in replace).
 
 ## Acceptance
 - [ ] The docs and both skill copies describe pets and styles; `diff -r` of the skill copies is clean

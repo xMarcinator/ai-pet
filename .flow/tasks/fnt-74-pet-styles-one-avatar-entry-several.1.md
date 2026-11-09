@@ -12,10 +12,11 @@ Group loaded packs into pets with styles (R1), tag the built-ins (R2), keep them
 
 ### Approach
 - Manifest: optional `pet` and `style` (`manifest.rs:28-55` `PackJson`; unknown keys are already ignored by older readers); `Pack` gains `pet` and `style` (defaults: `name`, kind's name).
-- Loader: `load::all` (`load.rs:134-187`) gains a pet folder pass: a folder whose subfolders hold `pack.json` (or `.aseprite`) loads each as a style of the folder's name. `keep()` (`load.rs:177`) dedupes by (pet, style) instead of name, skipping with a reason that names the first.
+- Loader: `load::all` (`load.rs:134-187`) gains a pet folder pass: a folder whose subfolders hold `pack.json` (or `.aseprite`) loads each as a style of the folder's name. `keep()` (`load.rs:177`) dedupes by (pet, style) and still by name, and refuses a pack named as another pet, each skip with a reason that names the first, so pack names and pet names stay unambiguous for theme files and saved configs.
+- Containment: refuse a pet folder that is a symlink or reparse point before reading its children, as `load_folder` refuses a linked pack today.
 - `Found` gains the grouping: pets in load order (built-ins first), each with its styles and its default (the pack named as the pet, else the first). Keep the flat `pets` list for callers until task 2 moves them.
 - Built-ins: add `"pet"` to the generated manifests (Hood (vector) -> Hood; Sprout (vector) -> Sprout; Hamster (pixel) -> Hamster) and to painted Pip (`painted.rs:23`, pet Pip); regenerate and rebake (`AIPET_BAKE=1`).
-- Theme files: `attach()` (`load.rs:231-248`) still matches a pack name first; a bare pet name attaches to its default style.
+- Theme files: `attach()` (`load.rs:231-248`) still matches a pack name first; a bare pet name attaches to its default style. Return the pet and style it attached to, and print both in `check_theme`'s line.
 - `--check-pack` (`load.rs:990-1056`, `main.rs:59-83`): add `pet <P>, style <S>` to the OK line; a pet folder checks each style.
 
 ### Investigation targets
@@ -31,7 +32,9 @@ Group loaded packs into pets with styles (R1), tag the built-ins (R2), keep them
 - [ ] Tests: the built-ins group into Hood, Sprout, Pip, Hamster with their styles and defaults
 - [ ] Tests: a pet folder with pixel and vector subfolders loads as one pet; a duplicate (pet, style) is skipped with a reason naming the first; a built-in wins
 - [ ] Tests: a theme file naming `Hood (vector)` attaches to the vector Hood; one naming `Hood` to the pixel Hood
-- [ ] `--check-pack` prints pet and style, one line per style for a pet folder, exit 1 if any failed
+- [ ] `--check-pack` prints pet and style, one line per style for a pet folder, exit 1 if any failed; on a theme file it names the pet and style it attaches to
+- [ ] Tests: two vector styles of one pet with distinct `style` labels both load; a child folder without a pack and a pet folder with no loadable style are skipped with their reasons
+- [ ] Tests: two packs with one name, and a pack named as another pet, are skipped with reasons; a linked pet folder is refused (Unix symlink; Windows where the test can make one)
 
 ## Done summary
 TBD
