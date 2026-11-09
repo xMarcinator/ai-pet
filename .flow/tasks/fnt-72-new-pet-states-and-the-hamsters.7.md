@@ -23,9 +23,10 @@ Before any pet draws the aura that replaces done's opening sparkles, show the ow
 - [ ] The owner's choice (or requested changes, shown again) is recorded in the done summary
 
 ## Done summary
-TBD
+Owner chose variant B, the soft glow (2026-11-09): three stacked gold ellipses behind the pet (opacity 0.10/0.16/0.24, the largest 22 units past the body) with three small gold-highlight stars above the head, building in and fading over about 1.8 s, then today's sparkles. Drawn by avatars/reference/aura_prototype.py glow(); task 2 draws it for every pet.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
+- Commits: 6d73a1e
 - Tests:
 - PRs:
