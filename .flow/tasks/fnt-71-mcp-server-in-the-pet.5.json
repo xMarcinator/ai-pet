@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-09T09:18:28.094516Z",
+  "depends_on": [
+    "fnt-71-mcp-server-in-the-pet.2"
+  ],
+  "id": "fnt-71-mcp-server-in-the-pet.5",
+  "priority": null,
+  "spec": "fnt-71-mcp-server-in-the-pet",
+  "spec_path": ".flow/tasks/fnt-71-mcp-server-in-the-pet.5.md",
+  "status": "todo",
+  "title": "Avatar, settings and board tools through the UI thread",
+  "updated_at": "2026-11-09T09:18:28.094516Z"
+}

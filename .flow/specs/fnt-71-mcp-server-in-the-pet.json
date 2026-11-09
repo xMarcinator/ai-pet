@@ -1,0 +1,27 @@
+{
+  "branch_name": "fnt-71-mcp-server-in-the-pet",
+  "created_at": "2026-11-09T09:18:14.379662Z",
+  "depends_on_epics": [
+    "fn-1-migrate-aipet-from-net-to-rust",
+    "fn-2-layered-sprite-and-vector-pets"
+  ],
+  "id": "fnt-71-mcp-server-in-the-pet",
+  "next_task": 1,
+  "plan_review_status": "unknown",
+  "plan_reviewed_at": null,
+  "spec_path": ".flow/specs/fnt-71-mcp-server-in-the-pet.md",
+  "status": "open",
+  "title": "MCP server in the pet",
+  "tracker": {
+    "baseHashFlow": null,
+    "baseHashTracker": null,
+    "depRelations": [],
+    "id": null,
+    "identifier": "FNT-71",
+    "lastSyncedAt": null,
+    "mergeBaseFlow": null,
+    "mergeBaseTracker": null,
+    "url": null
+  },
+  "updated_at": "2026-11-09T09:18:48.853396Z"
+}
