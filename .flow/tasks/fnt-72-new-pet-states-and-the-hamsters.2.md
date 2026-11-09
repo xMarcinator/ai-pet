@@ -16,6 +16,7 @@ Draw the shared pieces once in `pet_states.py` (tears, aura, heart, the envelope
 - First frame or key carries each cue (R7): tear already on the cheek, aura fully built, yawn open.
 - Each generator's `eyes()` draws a `sleepy` expression and a yawn mouth state.
 - Regenerate: each `*_gen.py` and `--pack`; painted Pip via the existing paint path (`rust/crates/aipet-sprite/tests/bake.rs`, `AIPET_BAKE=1`).
+- The aura follows the look the owner approved in task 7's prototype (R12); do not draw a different one.
 - Hood drawing comes after fn-2.22 (laces, done) and fn-2.21 (effects vs bubbles); follow 21's placement rule.
 
 ### Investigation targets

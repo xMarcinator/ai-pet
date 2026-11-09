@@ -7,7 +7,7 @@ satisfies: [R10]
 Findings only, no shipped art: can a 24-frame front-side-back-curl turnaround be expressed for the pixel and the vector Hamster, which state uses it, how a cycle finishes before a mood change, and what it costs. Ends with proposed follow-up tasks.
 
 **Size:** S
-**Files:** `rust/proofs/hamster-turnaround.md` (new), scratch drawings outside the packs
+**Files:** `rust/proofs/hamster-turnaround.md` (new); scratch drawings stay in the session scratchpad and are never committed (the proof embeds or describes them)
 **Touches:** [rust/proofs/hamster-turnaround.md]
 
 ### Approach

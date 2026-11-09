@@ -1,13 +1,232 @@
 {
   "branch_name": "fnt-72-new-pet-states-and-the-hamsters",
+  "completion_review_status": "unknown",
+  "completion_reviewed_at": null,
   "created_at": "2026-11-09T10:12:14.548383Z",
+  "default_impl": null,
+  "default_review": null,
+  "default_sync": null,
   "depends_on_epics": [
     "fn-2-layered-sprite-and-vector-pets"
   ],
   "id": "fnt-72-new-pet-states-and-the-hamsters",
+  "impl_review_rounds": {},
   "next_task": 1,
-  "plan_review_status": "unknown",
-  "plan_reviewed_at": null,
+  "plan_review_rounds": 0,
+  "plan_review_status": "ship",
+  "plan_reviewed_at": "2026-11-09T10:20:33.418214Z",
+  "review_attempts": [
+    {
+      "artifact_sha256": "390d0b857757d4409bc1f860c9252e779bbb15f93ab2badc6c1b7e2edf9ea292",
+      "backend": "codex",
+      "base_sha": "61a47b6815e2349a7ae325fae2e06959b1e58094",
+      "counter_kind": "plan",
+      "effort": "high",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-0130342773fa0d210eef47bb3e27e78a",
+            "classification": "introduced",
+            "findingId": "finding-0130342773fa0d210eef47bb3e27e78a",
+            "firstSeenThisRound": true,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-94993a44f1c04a5f8cc3785e7577cd28",
+            "classification": "introduced",
+            "findingId": "finding-94993a44f1c04a5f8cc3785e7577cd28",
+            "firstSeenThisRound": true,
+            "severity": "P0",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-5e2d32dfa90cec2e36142e2842675776",
+            "classification": "introduced",
+            "findingId": "finding-5e2d32dfa90cec2e36142e2842675776",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-744d9ebf5261e87639e8e3fe12621b06",
+            "classification": "introduced",
+            "findingId": "finding-744d9ebf5261e87639e8e3fe12621b06",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-e3bb55b3eed3ddf0779ac85586c96e4d",
+            "classification": "introduced",
+            "findingId": "finding-e3bb55b3eed3ddf0779ac85586c96e4d",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-12779f16068fdd3cb0bbf9734bf47ea1",
+            "classification": "introduced",
+            "findingId": "finding-12779f16068fdd3cb0bbf9734bf47ea1",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-4f35b6df6248446dea3ddb2c9f25e7fb",
+            "classification": "introduced",
+            "findingId": "finding-4f35b6df6248446dea3ddb2c9f25e7fb",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-9c6e55cce308c13fe9cc7c3889a37a7f",
+            "classification": "introduced",
+            "findingId": "finding-9c6e55cce308c13fe9cc7c3889a37a7f",
+            "firstSeenThisRound": true,
+            "severity": "P3",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "c90b56d5336b0d1f5e12757c5b76ba0d48988d19",
+      "head_sha_observed": true,
+      "kind": "plan",
+      "model": "gpt-5.6-sol",
+      "outcome": "verdict",
+      "output_bytes": 478061,
+      "output_sha256": "33f437530deedb598cc2658597c24292d3205f6a7d96c194524dba4a2ed2e63b",
+      "reservation_id": "a1ec909c89d44c2ab38fdda05a23b89d",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-11-09T10:18:14.446848Z",
+      "tool_calls": 20,
+      "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "c6a925c4405c2e8c1fadefe92a17e82c02998abaab61dfe9ede6c4635da1da47",
+      "backend": "codex",
+      "base_sha": "61a47b6815e2349a7ae325fae2e06959b1e58094",
+      "counter_kind": "plan",
+      "effort": "high",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-0130342773fa0d210eef47bb3e27e78a",
+            "classification": "introduced",
+            "findingId": "finding-0130342773fa0d210eef47bb3e27e78a",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-94993a44f1c04a5f8cc3785e7577cd28",
+            "classification": "introduced",
+            "findingId": "finding-94993a44f1c04a5f8cc3785e7577cd28",
+            "firstSeenThisRound": false,
+            "severity": "P0",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-5e2d32dfa90cec2e36142e2842675776",
+            "classification": "introduced",
+            "findingId": "finding-5e2d32dfa90cec2e36142e2842675776",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-744d9ebf5261e87639e8e3fe12621b06",
+            "classification": "introduced",
+            "findingId": "finding-744d9ebf5261e87639e8e3fe12621b06",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-e3bb55b3eed3ddf0779ac85586c96e4d",
+            "classification": "introduced",
+            "findingId": "finding-e3bb55b3eed3ddf0779ac85586c96e4d",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-12779f16068fdd3cb0bbf9734bf47ea1",
+            "classification": "introduced",
+            "findingId": "finding-12779f16068fdd3cb0bbf9734bf47ea1",
+            "firstSeenThisRound": false,
+            "severity": "P2",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-4f35b6df6248446dea3ddb2c9f25e7fb",
+            "classification": "introduced",
+            "findingId": "finding-4f35b6df6248446dea3ddb2c9f25e7fb",
+            "firstSeenThisRound": false,
+            "severity": "P2",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-9c6e55cce308c13fe9cc7c3889a37a7f",
+            "classification": "introduced",
+            "findingId": "finding-9c6e55cce308c13fe9cc7c3889a37a7f",
+            "firstSeenThisRound": false,
+            "severity": "P3",
+            "status": "fixed"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "c90b56d5336b0d1f5e12757c5b76ba0d48988d19",
+      "head_sha_observed": true,
+      "kind": "plan",
+      "model": "gpt-5.6-sol",
+      "outcome": "verdict",
+      "output_bytes": 310,
+      "output_sha256": "633850eaaee863c027d3803b6b57a271be1d9cf195b0903a88143db6e03ca8c3",
+      "reservation_id": "f31ed4178e7b4b1f801383eac565b10e",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-11-09T10:20:33.412460Z",
+      "verdict": "SHIP"
+    }
+  ],
+  "review_hash_epoch": {
+    "plan": 1,
+    "plan#completion": 0
+  },
+  "review_pending_rounds": {},
+  "review_reservations": {},
+  "review_transport_failures": {
+    "plan": 0
+  },
   "spec_path": ".flow/specs/fnt-72-new-pet-states-and-the-hamsters.md",
   "status": "open",
   "title": "New pet states and the Hamster's accessories",
@@ -22,5 +241,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-09T10:12:24.759675Z"
+  "updated_at": "2026-11-09T10:20:33.419064Z"
 }
