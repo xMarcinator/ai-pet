@@ -454,6 +454,14 @@ impl FrameTimes {
 /// The avatar and theme the preferences name: the avatar by its name, or by an older "<pet> (<theme>)" name for one
 /// of a pet's themes (any case), as "Hood (green)" names the Hood in Green; else the first. The theme is the one
 /// the preferences name, else the one the older name does, else the avatar's default.
+/// The way a pet faces at rest: the way its art does (the Hamster is drawn turned to the left).
+fn drawn_facing(pack: &aipet_sprite::pack::Pack) -> i32 {
+    match pack.faces {
+        aipet_sprite::pose::Facing::Left => -1,
+        aipet_sprite::pose::Facing::Right => 1,
+    }
+}
+
 fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
     let name = prefs.avatar.as_deref().unwrap_or_default();
     let by_name = avatars.iter().position(|a| a.name() == name).map(|i| (i, None));
@@ -506,6 +514,7 @@ impl PetUi {
             // fnt-72's moods: on in the app (the C# golden replays keep them off)
             input: PetInput {
                 moods: true,
+                facing: drawn_facing(&worn.pack),
                 ..PetInput::default()
             },
             start: None,
@@ -1079,6 +1088,9 @@ impl PetUi {
         self.sprite = Sprite::new(&worn);
         // another pet's effects may reach higher or lower: the bubbles follow
         self.fx_reach = aipet_sprite::fx_reach(&worn.pack, &worn.sheets) as f32;
+        if !self.input.dragging {
+            self.input.facing = drawn_facing(&worn.pack);
+        }
         self.sized();
     }
 
@@ -2013,6 +2025,32 @@ pub(crate) mod tests {
         assert!(ui.drag_moved() && ui.input.facing == -1);
         assert_eq!(ui.update(Message::DragEnded), Some(Effect::Dropped));
         assert!(ui.input.land_until > ui.t && !ui.input.dragging);
+    }
+
+    #[test]
+    fn a_slow_or_jittery_drag_runs_steadily_one_way() {
+        // the owner saw the pet flicker while dragged: a slow drag's small steps and a wobbling pointer must neither
+        // swap running for dangling nor turn the pet around
+        let (mut ui, _) = detached();
+        let start = Instant::now();
+        run(&mut ui, start, 0.0, 1.0);
+        ui.update(Message::DragStarted);
+        let (mut x, mut runs, mut turns) = (0.0f32, Vec::new(), Vec::new());
+        for i in 0..120 {
+            // right at 30 px/s, half a px a frame at 60 Hz, wobbling a px back and forth
+            x += 0.5;
+            let wobble = if i % 2 == 0 { 1.0 } else { -1.0 };
+            ui.update(Message::DragMoved(Vector::new(10.0 + x + wobble, 0.0)));
+            ui.tick(start + Duration::from_secs_f64(1.0 + f64::from(i) / 60.0));
+            if i >= 30 {
+                runs.push(ui.pet.pose().feet.key());
+                turns.push(ui.input.facing);
+            }
+        }
+        let changes = |v: &[_]| v.windows(2).filter(|w| w[0] != w[1]).count();
+        assert!(turns.iter().all(|&f| f == 1), "turned around: {turns:?}");
+        let runs: Vec<bool> = runs.iter().map(|k| k.starts_with("run")).collect();
+        assert!(runs.iter().all(|&r| r), "stopped running: {} changes", changes(&runs));
     }
 
     #[test]

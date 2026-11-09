@@ -85,7 +85,8 @@ first frame, and the pet doesn't bob, squash or play idle acts.
 if the pack's `mirror` is `flip`, unless the layer has a `mirror` of its own. A layer may also give a value's
 left-facing frames as `<value>@left` (for example `run-a@left`), which are drawn as they are, unmirrored.
 
-Mirror the whole pet only if it is drawn in perspective (turned, like the vector Hamster's three-quarter view). A pet
+Mirror the whole pet only if it is drawn in perspective (turned, like the Hamster's three-quarter view); if it is
+turned to the left, say so with `"faces": "left"`, so it turns the way it is dragged. A pet
 drawn facing the viewer sets the pack's `mirror` to `none` and flips only what has a direction: its hands or arms,
 its feet and the dust. Its body and everything on it (a sprout, laces, markings) stay as drawn, as they would on a
 real thing that turns its head; the eyes already look the way it moves.
@@ -188,6 +189,7 @@ The top-level keys:
 | `pixel_size` | How big one pixel of the art is, in logical px: 5 for the 26 × 24 grid of the original pets, 1 for vector art. |
 | `anchor` | `[x, y]`: the point of the art that stands on the ground shadow, in the art's own pixels. |
 | `mirror` | `flip` (the default) or `none`. |
+| `faces` | `right` (the default) or `left`: the way the art faces. A pet drawn turned to the left (the Hamster) is mirrored when it faces right and drawn as it is when it faces left. Effects are always drawn as for a pet facing right. |
 | `accent` | The pet's accent colour, which Settings and the menu take on while the pet is worn. A colour, or `$name` for a palette colour. |
 | `glow` | The colour of the glow around glowing layers. A colour, or `$name`. |
 | `palette`, `theme`, `themes` | Named colours and the pet's themes (see [Themes](#themes)). Optional. |

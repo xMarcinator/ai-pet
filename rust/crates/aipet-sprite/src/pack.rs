@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::pose::{ART_H, ART_W, Channel, HALO_PAD, Look};
+use crate::pose::{ART_H, ART_W, Channel, Facing, HALO_PAD, Look};
 use crate::vector::{Cap, Join, Seg};
 
 /// At most this many layers in a pack.
@@ -590,6 +590,9 @@ pub struct Pack {
     /// The art pixel that sits on the ground shadow.
     pub anchor: (f64, f64),
     pub mirror: Mirror,
+    /// Which way its art faces: `Right` (the default), or `Left` for a pet drawn turned to the left, which is mirrored
+    /// when it faces right. Effects are drawn as for a pet facing right, whatever this says.
+    pub faces: Facing,
     /// 0xAARRGGBB.
     pub accent: u32,
     pub glow: u32,
@@ -717,6 +720,7 @@ pub(crate) mod tests {
             pixel_size: 5.0,
             anchor: (13.0, 22.0),
             mirror: Mirror::Flip,
+            faces: Facing::Right,
             accent: 0xFF5CFF9C,
             glow: 0xFF5CFF9C,
             layers,

@@ -13,6 +13,7 @@ accept; `docs/MAKING-A-PET.md` ("The manifest", "Part motion") explains the same
 | `pixel_size` | yes | Logical px per art pixel, above 0 and at most 130. 1 for vector; 5 for a 26 × 24 grid; below 1 for painted art drawn at more than 1 px per logical px. |
 | `anchor` | yes | `[x, y]`: the art point that stands on the ground shadow, in art pixels (vector: logical px, `[65, 110]`). |
 | `mirror` | no | `flip` (default) or `none`. |
+| `faces` | no | `right` (default) or `left`: the way the art faces. A pet drawn turned to the left mirrors when it faces right; effects are drawn as for a pet facing right. |
 | `accent` | yes | The pet's accent colour for Settings and the menu: `$name`, `#RRGGBB` or `#AARRGGBB` (alpha first). |
 | `glow` | yes | The glow colour around `glow` layers: `$name`, `#RRGGBB` or `#AARRGGBB`. |
 | `palette` | no | `{name: colour}`, the default theme's colours (`themes.md`). |

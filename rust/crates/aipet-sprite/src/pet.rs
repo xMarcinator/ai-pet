@@ -297,6 +297,7 @@ impl<R: PetRng> Pet<R> {
                 pixel_size: PF,
                 anchor: (13.0, 22.0),
                 mirror: crate::pack::Mirror::None,
+                faces: Facing::Right,
                 accent: 0,
                 glow: 0,
                 layers: Vec::new(),

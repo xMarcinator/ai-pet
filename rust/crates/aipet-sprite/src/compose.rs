@@ -50,9 +50,11 @@ pub struct Pick<'a> {
     pub mirrored: bool,
 }
 
-/// Whether the pose's facing mirrors a layer: by its own policy, else the pack's.
+/// Whether the pose's facing mirrors a layer: by its own policy, else the pack's, when the pet faces away from the way
+/// the art does (the pack's `faces`; effects are always drawn as for a pet facing right).
 pub fn mirrored(pack: &Pack, layer: &Layer, pose: &Pose) -> bool {
-    pose.facing == Facing::Left && layer.mirror.unwrap_or(pack.mirror) == Mirror::Flip
+    let drawn = if layer.channel == Channel::Fx { Facing::Right } else { pack.faces };
+    pose.facing != drawn && layer.mirror.unwrap_or(pack.mirror) == Mirror::Flip
 }
 
 /// The pose's look is a direction on screen; a layer mirrored for facing left draws the opposite one, so the
@@ -703,6 +705,23 @@ mod tests {
         let placed = Parts::default().place(&p, &left, 0.0);
         assert_eq!(placed[0].x, ART_W - x);
         assert!(placed[0].mirrored);
+    }
+
+    #[test]
+    fn art_drawn_facing_left_mirrors_when_the_pet_faces_right_and_effects_dont_follow_it() {
+        // the Hamster is drawn turned to the left: dragged right it must turn right, dragged left stay as drawn
+        let mut p = eyes_pack(Kind::Vector);
+        p.faces = Facing::Left;
+        p.layers.push(Layer::new("dust", Channel::Fx, "dust"));
+        let (body, dust) = (&p.layers[0], &p.layers[1]);
+        let mut pose = looking(Look::CENTER);
+        pose.facing = Facing::Right;
+        assert!(mirrored(&p, body, &pose) && !mirrored(&p, dust, &pose));
+        pose.facing = Facing::Left;
+        assert!(!mirrored(&p, body, &pose) && mirrored(&p, dust, &pose));
+        // a pack drawn facing right is as before
+        p.faces = Facing::Right;
+        assert!(mirrored(&p, &p.layers[0], &pose));
     }
 
     #[test]

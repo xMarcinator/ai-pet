@@ -330,7 +330,9 @@ def pack():
         "kind": "vector",
         "pixel_size": 1,
         "anchor": list(a),
+        # drawn in a three-quarter view turned to the left: it mirrors when it faces right
         "mirror": "flip",
+        "faces": "left",
         "accent": C["orange"],
         "glow": "#7FEFFF",
         "layers": [ears, vp.feet(d, ["foot-1", "foot-2", "foot-3"]), back, body, eyes, prop, screen, front,

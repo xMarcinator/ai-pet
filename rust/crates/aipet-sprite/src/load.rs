@@ -973,6 +973,10 @@ fn build_aseprite(src: AseSource, extra: Option<&str>) -> Result<(Pack, Vec<Shee
             Some("none") => Mirror::None,
             _ => Mirror::Flip,
         },
+        faces: match extra["faces"].as_str() {
+            Some("left") => crate::pose::Facing::Left,
+            _ => crate::pose::Facing::Right,
+        },
         accent: colour("accent", 0xFF5C_FF9C)?,
         glow: colour("glow", 0xFF7F_EFFF)?,
         layers,

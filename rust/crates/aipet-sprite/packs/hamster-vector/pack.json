@@ -8,6 +8,7 @@
   110.0
  ],
  "mirror": "flip",
+ "faces": "left",
  "accent": "$orange",
  "glow": "#7FEFFF",
  "palette": {

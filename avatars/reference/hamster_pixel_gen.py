@@ -425,7 +425,10 @@ def pack():
         "kind": "pixel",
         "pixel_size": PIXEL,
         "anchor": list(ANCHOR),
-        "mirror": "none",
+        # drawn in perspective, turned to the left: the whole pet mirrors when it faces right (only perspective pets
+        # mirror whole; effects are drawn as for a pet facing right)
+        "mirror": "flip",
+        "faces": "left",
         "accent": "$orange",
         "glow": "$glow",
         "palette": {name: PALETTE[c] for name, c in NAMED.items()},
