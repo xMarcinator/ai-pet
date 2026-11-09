@@ -14,21 +14,124 @@
   "impl_review_rounds": {},
   "next_task": 1,
   "plan_review_rounds": 1,
-  "plan_review_status": "unknown",
-  "plan_reviewed_at": null,
-  "review_hash_epoch": {},
-  "review_pending_rounds": {
-    "plan": 1
-  },
-  "review_reservations": {
-    "9f01975ba99948258524d63ea6ae223c": {
+  "plan_review_status": "needs_work",
+  "plan_reviewed_at": "2026-11-09T19:42:46.514496Z",
+  "review_attempts": [
+    {
       "artifact_sha256": "0c5e83b70ed0af95904af5a11d01a23ae5b64744d1f1040ce5c6e33146270bf9",
-      "counter_scope": "plan",
-      "epoch": 0,
-      "exclusive": false,
+      "backend": "codex",
+      "base_sha": "61a47b6815e2349a7ae325fae2e06959b1e58094",
+      "counter_kind": "plan",
+      "effort": "high",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-23c8a03730d3a669e0de14ae04e41c7f",
+            "classification": "introduced",
+            "findingId": "finding-23c8a03730d3a669e0de14ae04e41c7f",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-f09aae5e38c08e4373d986c4fac76849",
+            "classification": "introduced",
+            "findingId": "finding-f09aae5e38c08e4373d986c4fac76849",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-15c3abbd607fe7ba77edd1df41f7c1cf",
+            "classification": "introduced",
+            "findingId": "finding-15c3abbd607fe7ba77edd1df41f7c1cf",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-e851fed3f675646bcfa57f88f1b29b1f",
+            "classification": "introduced",
+            "findingId": "finding-e851fed3f675646bcfa57f88f1b29b1f",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-bec80f0a45e3d70589e69269a9ac5aa6",
+            "classification": "introduced",
+            "findingId": "finding-bec80f0a45e3d70589e69269a9ac5aa6",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-094457c0010f5025b46dba50e078ec74",
+            "classification": "introduced",
+            "findingId": "finding-094457c0010f5025b46dba50e078ec74",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ddad57ce5ecf0e216ead2339674679da",
+            "classification": "introduced",
+            "findingId": "finding-ddad57ce5ecf0e216ead2339674679da",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8d4945ab5a17f779f049973a041e049a",
+            "classification": "introduced",
+            "findingId": "finding-8d4945ab5a17f779f049973a041e049a",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-ff3c6eb371bb7fd84dd3e89026bb5eee",
+            "classification": "introduced",
+            "findingId": "finding-ff3c6eb371bb7fd84dd3e89026bb5eee",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
       "forced": false,
-      "review_type": "plan"
+      "hash_epoch": 0,
+      "head_sha": "78119a097373c670532a10c2b7059183d8545b8a",
+      "head_sha_observed": true,
+      "kind": "plan",
+      "model": "gpt-5.6-sol",
+      "outcome": "verdict",
+      "output_bytes": 713412,
+      "output_sha256": "dfb96747aa3fe5f76f9a219f9048250106364941474789101dc2fa7641d596c3",
+      "reservation_id": "9f01975ba99948258524d63ea6ae223c",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-11-09T19:42:46.487548Z",
+      "tool_calls": 17,
+      "verdict": "NEEDS_WORK"
     }
+  ],
+  "review_hash_epoch": {},
+  "review_pending_rounds": {},
+  "review_reservations": {},
+  "review_transport_failures": {
+    "plan": 0
   },
   "spec_path": ".flow/specs/fnt-75-the-pet-window-without-the-gpu.md",
   "status": "open",
@@ -44,5 +147,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-09T19:37:19.992605Z"
+  "updated_at": "2026-11-09T19:43:44.767112Z"
 }

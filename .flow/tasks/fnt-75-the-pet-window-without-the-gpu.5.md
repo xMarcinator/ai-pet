@@ -15,7 +15,8 @@ Replace iced_exwlshell for the pet with an sctk 0.21 layer surface presenting th
 - Two-buffer `SlotPool`, R/B swap of changed rects, `damage_buffer`, frame callbacks while animating with a timer fallback; nothing committed when calm.
 - Input region at most every 100 ms and never mid-drag (`sync_region` :748); drag via `drag.rs` both strategies; cursor-shape v1; xdg popup menu with the inline fallback (:505-590); output loss and re-make (:630).
 - Fractional scale and viewporter; integer fallback.
-- `choose_shell` (`main.rs:175`): order layer-shell, X11; `AIPET_BACKEND=iced` keeps the old shell; `set_gpu_defaults`/`mesa.rs` only for the iced shell.
+- `choose_shell` (`main.rs:175`): order layer-shell, X11; `AIPET_BACKEND=iced` keeps the old shell; `set_gpu_defaults`/`mesa.rs` only for the iced shell. An unknown `AIPET_BACKEND` logs the choices and takes the default (today it returns an error and the pet exits).
+- Runtime fallback: Wayland start-up (connect, bind globals, create the surface, first configure) completes before the shell takes the scene and launch state, or hands them back on failure, so a failed start logs why and the next shell runs: the winit desktop shell until task 6 lands, the X11 shell after.
 - Port the 16 shell tests to the new shell's state machine.
 
 ### Investigation targets
@@ -30,7 +31,8 @@ Replace iced_exwlshell for the pet with an sctk 0.21 layer surface presenting th
 
 ## Acceptance
 - [ ] On Hyprland the pet runs on the new shell with placement, region, both drag modes, menu, output loss and fractional scale as today
-- [ ] `AIPET_BACKEND=iced` runs the old shell; an unknown value logs the choices
+- [ ] `AIPET_BACKEND=iced` runs the old shell; an unknown value logs the choices and runs the default (a selector test)
+- [ ] An injected Wayland start-up failure logs it and the next shell runs (a test)
 - [ ] The ported shell tests pass; Hyprland rules still match
 
 ## Done summary

@@ -8,12 +8,14 @@ A topmost, non-activating, toolwindow layered window updated with `UpdateLayered
 
 **Size:** M
 **Files:** `rust/crates/aipet-desktop/src/native/win32.rs`, a Windows shell module, `rust/crates/aipet-desktop/src/native.rs`
-**Touches:** [rust/crates/aipet-desktop/src/native/win32.rs, rust/crates/aipet-desktop/src/win_shell.rs, rust/crates/aipet-desktop/src/native.rs, rust/crates/aipet-desktop/src/lib.rs]
+**Touches:** [rust/crates/aipet-desktop/src/native/win32.rs, rust/crates/aipet-desktop/src/win_shell.rs, rust/crates/aipet-desktop/src/native.rs, rust/crates/aipet-desktop/src/lib.rs, rust/crates/aipet-desktop/Cargo.toml, rust/Cargo.toml, rust/Cargo.lock]
 
 ### Approach
 - One DIB section in a memory DC kept between frames; `ULW_ALPHA` with `AC_SRC_ALPHA`; skip the call when nothing changed.
 - Size the window to the union of the pet and its bubbles; move its origin so the pet stays put when it grows or shrinks.
 - Per-pixel hit testing comes from alpha: drop the `SetWindowRgn` and `WS_EX_TRANSPARENT` toggling (`win32.rs:1-13,135-206`).
+- A failed `UpdateLayeredWindow` is logged and the frame's damage stays pending, so the next change presents it all; test with a presenter that fails once and then succeeds.
+- windows-sys: today's direct pin is 0.52; move `aipet-desktop` to 0.61 with the `Win32_UI_WindowsAndMessaging` and `Win32_Graphics_Gdi` features.
 - Per-monitor DPI v2; hold a DPI change during a drag (`win32.rs:88-133`).
 
 ### Investigation targets
@@ -27,6 +29,7 @@ A topmost, non-activating, toolwindow layered window updated with `UpdateLayered
 
 ## Acceptance
 - [ ] On Windows the pet draws, clicks through on transparent pixels, drags, stays on top without taking focus, and handles DPI as R6 says (tried with the owner)
+- [ ] A presenter that fails once presents the pending damage on the next change (a test)
 - [ ] win32 tests pass or are ported
 
 ## Done summary

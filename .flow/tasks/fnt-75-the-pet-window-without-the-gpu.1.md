@@ -16,6 +16,8 @@ Grow FNT-73's minimal prototype into the gate R1 defines and run it paired with 
 - Damage tracking: the scene returns changed rects per frame; keep two `SlotPool` buffers and repaint the union of the last two frames' rects; `damage_buffer` only those; no frame callback and no commit when nothing changed.
 - Scale 2 via `buffer_scale` and 1.5 via wp_fractional_scale_v1 + wp_viewporter (buffer `round(logical x scale)`), pixel art at whole device px per art px.
 - Text: cosmic-text glyph masks blitted into the pixmap (not `Buffer::draw`, which is per pixel).
+- Same scale on both sides: run each case with the output's scale set for both processes (on Hyprland, `hyprctl keyword monitor` to scale 2, then 1.5, restored after), so the iced pet and the gate draw the same physical buffer.
+- Load: the method's limit is 1.0. A run at a raised limit is provisional: it is recorded, but the gate opens only on a run at 1.0, or when the owner accepts the raised run in writing (recorded in the proof).
 - Measure: a paired script (extend `calm.sh` or adapt `scripts/perf/pet-bench.sh`'s pairing) running the gate binary and the release iced pet configured for the same case (`AIPET_DEMO`-style cards or a fixed board), fn-1's settle and samples, load limit 1.0 (record any raise).
 
 ### Investigation targets

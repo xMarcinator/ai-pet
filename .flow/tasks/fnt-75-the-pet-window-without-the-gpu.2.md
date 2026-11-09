@@ -14,7 +14,7 @@ Turn `PetUi` into a framework-free scene: replace iced's geometry types with the
 - Own `Point/Size/Rect/Vector` in the scene; convert at the iced shells' edge only.
 - Draw sprites from `sprite.rs` `Art` frames (Nearest for pixel, smooth for painted) and vector packs via `aipet-sprite` `vector::render` (replacing the iced canvas in `vector_view.rs`), plus `sprite::halo` and `shadow_image`.
 - Damage: track per-layer bounds before and after each tick; return the union of what moved or changed.
-- Equivalence harness: render each built-in pet's states through the old iced path and the new pixmap at scale 1 and 2 and compare (screenshots of the iced canvas are not available headless, so compare against `vector::still` and the sprite frames, which both paths use).
+- Equivalence harness: before changing the drawing, render the old view (`pet_view()`) offscreen with iced's tiny-skia renderer (`iced_tiny_skia`) for every built-in pet, style and theme in a set of poses (idle, working, attention, done with aura, sad, mirrored while dragged, a halo pack) at scales 1 and 2, and store the rasters as goldens; the new pixmap must match them within a small per-channel tolerance, stated in the test. The goldens cover placement, motion transforms, mirroring, filtering, halo and shadow, and clipping.
 
 ### Investigation targets
 **Required:**

@@ -15,6 +15,7 @@ Move Settings out of the pet process. The pet starts `AiPet --settings` with pip
 - The child does its own connection tests with its own `Http` and writes secrets to the shared `SecretStore`; the pet reloads watchers on `services_changed`.
 - The pet sends `state` on start and after every change; one child at a time, `raise` for a second open; reap and log a crashed child; the child exits when stdin closes.
 - Window title stays "AiPet · Settings"; `AIPET_OPEN_SETTINGS=1` keeps working.
+- Every page: a round-trip test per page (General, Avatars, Jira, GitHub, About) that the state the pet sends fills every field, each action reaches the pet as its message (including reset position, check for updates, restart to update), and a change made outside Settings (menu, drag, a config change) refreshes the open window.
 - Check GPU libraries: `grep -E 'libGL|libEGL|libvulkan|nvidia' /proc/<pet>/maps` empty with Settings open.
 
 ### Investigation targets

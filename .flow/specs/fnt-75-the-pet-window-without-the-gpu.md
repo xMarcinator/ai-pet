@@ -32,7 +32,7 @@ flowchart LR
 **The Settings pipe.** The pet starts the child with piped stdin and stdout; each line is one JSON object with a `type`. Pet to Settings:
 
 ```json
-{"type": "state", "prefs": {...}, "avatars": [...], "worn": {"name": "Hood", "style": "Pixel", "theme": "Blue"}, "watchers": {"jira": {"enabled": true, "error": null}, "github": {"enabled": false, "error": null}}}
+{"type": "state", "prefs": {...}, "avatars": [...], "worn": {"name": "Hood", "style": "Pixel", "theme": "Blue"}, "services": {"jira": {...}, "github": {...}}, "watchers": {"jira": {"enabled": true, "error": null}, "github": {"enabled": false, "error": null}}, "update": {...}}
 {"type": "raise"}
 ```
 
@@ -44,9 +44,12 @@ Settings to the pet:
 {"type": "themes_changed", "pet": "Hood"}
 {"type": "services_changed"}
 {"type": "mood", "state": "news"}
+{"type": "reset_position"}
+{"type": "check_updates"}
+{"type": "restart_to_update"}
 ```
 
-`prefs` is today's `Prefs` in its config.json field names. The pet sends `state` when the child starts and after every change, whatever made it (Settings, the menu, a drag, later FNT-71's tools). `raise` asks an open Settings window to come to the front. Unknown types are logged and ignored on both sides.
+`prefs` is today's `Prefs` in its config.json field names; `services` is every saved Jira and GitHub field the pages show (Jira site, email, JQL, poll interval; GitHub host, organisations) and whether each token is saved, never the token itself; `update` is today's update state as the About section shows it. The two lists are the whole contract: every Settings action today either changes only the child's own form or is one of the child-to-pet messages above, and every value a page shows comes from `state`. The pet sends `state` when the child starts and after every change, whatever made it (Settings, the menu, a drag, later FNT-71's tools). `raise` asks an open Settings window to come to the front. Unknown types are logged and ignored on both sides.
 
 ## Edge Cases & Constraints
 
@@ -60,7 +63,7 @@ Settings to the pet:
 
 ## Acceptance Criteria
 
-- **R1:** Before any other task, a gate shows that the CPU stack beats the iced pet's calm CPU at the real window's worst case: 380×600 at scale 2 and at scale 1.5, three bubbles with long text, the pet idle and working, worn as Sprout and as Dewdrop, measured paired with the iced pet by fn-1's method. It passes only if its CPU median is below the iced pet's in every case and its RSS is at most 50 MB. Errors: a failed case stops the spec, and the result and the reason are recorded in `rust/proofs/ui-framework.md`; a machine that can't reach the method's load limit is recorded with the limit used, and the gate is re-run when it can.
+- **R1:** Before any other task, a gate shows that the CPU stack beats the iced pet's calm CPU at the real window's worst case: 380×600 at scale 2 and at scale 1.5, three bubbles with long text, the pet idle and working, worn as Sprout and as Dewdrop, measured paired with the iced pet by fn-1's method. It passes only if its CPU median is below the iced pet's in every case and its RSS is at most 50 MB. Errors: a failed case stops the spec, and the result and the reason are recorded in `rust/proofs/ui-framework.md`; a run at a raised load limit is provisional and opens the gate only if the owner accepts it, recorded in the proof; otherwise the gate is re-run at the method's limit. Both pets draw at the same output scale in every case.
 - **R2:** The pet window draws everything it draws today, without iced, into a CPU buffer: every pack kind, theme and style, the new moods, halos, the ground shadow, mirroring, the bubbles with their shadows and actions, the reviews header, the music player, the tooltip and the inline menu, with bubble sizes and line breaks as today's. Errors: a font that fails to load falls back to the system default; a scale change rebuilds the caches before the next frame.
 - **R3:** Only what changed is redrawn and presented, and a calm pet with nothing changing does no drawing work at all. Errors: no error surface beyond R1's budget.
 - **R4:** On Wayland the pet is an sctk layer surface (namespace `aipet`) with today's placement, input region, both drag modes, popup menu with its inline fallback, cursor shapes, output loss and fractional scale. Errors: a compositor without layer-shell gets the X11 shell; one without viewporter gets integer scale only; a lost surface mid-drag ends the drag as today.
@@ -125,7 +128,7 @@ grep -cE 'libGL|libEGL|libvulkan|nvidia|dri' /proc/$(pgrep -n AiPet)/maps
 
 | Req | Description | Task(s) | Gap justification |
 | --- | --- | --- | --- |
-| R1 | Before any other task, a gate shows that the CPU stack beats the iced pet's calm CPU at the real window's worst case: 380×600 at scale 2 and at scale 1.5, three bubbles with long text, the pet idle and working, worn as Sprout and as Dewdrop, measured paired with the iced pet by fn-1's method. It passes only if its CPU median is below the iced pet's in every case and its RSS is at most 50 MB. Errors: a failed case stops the spec, and the result and the reason are recorded in `rust/proofs/ui-framework.md`; a machine that can't reach the method's load limit is recorded with the limit used, and the gate is re-run when it can. | fnt-75-the-pet-window-without-the-gpu.1 | — |
+| R1 | Before any other task, a gate shows that the CPU stack beats the iced pet's calm CPU at the real window's worst case: 380×600 at scale 2 and at scale 1.5, three bubbles with long text, the pet idle and working, worn as Sprout and as Dewdrop, measured paired with the iced pet by fn-1's method. It passes only if its CPU median is below the iced pet's in every case and its RSS is at most 50 MB. Errors: a failed case stops the spec, and the result and the reason are recorded in `rust/proofs/ui-framework.md`; a run at a raised load limit is provisional and opens the gate only if the owner accepts it, recorded in the proof; otherwise the gate is re-run at the method's limit. Both pets draw at the same output scale in every case. | fnt-75-the-pet-window-without-the-gpu.1 | — |
 | R2 | The pet window draws everything it draws today, without iced, into a CPU buffer: every pack kind, theme and style, the new moods, halos, the ground shadow, mirroring, the bubbles with their shadows and actions, the reviews header, the music player, the tooltip and the inline menu, with bubble sizes and line breaks as today's. Errors: a font that fails to load falls back to the system default; a scale change rebuilds the caches before the next frame. | fnt-75-the-pet-window-without-the-gpu.2, fnt-75-the-pet-window-without-the-gpu.3 | — |
 | R3 | Only what changed is redrawn and presented, and a calm pet with nothing changing does no drawing work at all. Errors: no error surface beyond R1's budget. | fnt-75-the-pet-window-without-the-gpu.2, fnt-75-the-pet-window-without-the-gpu.3, fnt-75-the-pet-window-without-the-gpu.5, fnt-75-the-pet-window-without-the-gpu.6 | — |
 | R4 | On Wayland the pet is an sctk layer surface (namespace `aipet`) with today's placement, input region, both drag modes, popup menu with its inline fallback, cursor shapes, output loss and fractional scale. Errors: a compositor without layer-shell gets the X11 shell; one without viewporter gets integer scale only; a lost surface mid-drag ends the drag as today. | fnt-75-the-pet-window-without-the-gpu.5 | — |
