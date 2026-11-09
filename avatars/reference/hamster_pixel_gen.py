@@ -554,7 +554,7 @@ def main():
                                               "hamster-pixel")
     os.makedirs(out, exist_ok=True)
     manifest, sheets = pack()
-    with open(os.path.join(out, "pack.json"), "w") as f:
+    with open(os.path.join(out, "pack.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, indent=1)
         f.write("\n")
     for name, data in sheets.items():
