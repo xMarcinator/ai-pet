@@ -35,9 +35,10 @@ The `shows` rule needs at least 80 px across and part of the bottom 120 px on so
 - [ ] config.json is written only when the pet actually moves
 
 ## Done summary
-TBD
+The desktop shell (Windows, X11) checks the screens every second once the pet shows (SCREENS_EVERY) and, when the pet's part of the window shows on no screen, moves it to its screen's work-area corner and saves the place; the start rule's 'shows' test is shared. A pet that shows never moves; mid-drag the drop decides. Wayland already remakes the surface on a remaining output (new test). Not checked: the Windows lid-close hands-on (with fn-2.8), and the calm-CPU cost of the 1 s check (expected negligible: three window queries a second).
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: b0b7deb
+- Tests: cargo test -p aipet-desktop (a_pet_left_on_no_screen_goes_back_to_its_corner_and_one_that_shows_stays), cargo test -p aipet-wayland (a_pet_whose_output_goes_away_is_made_again_on_one_that_is_there)
 - PRs:
