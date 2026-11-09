@@ -44,9 +44,10 @@ All behaviour, no art: the error chat on StopFailure, a pet-mood step after the 
 - [ ] Tests: a pack without the new values gets the fallback table, never plain idle
 
 ## Done summary
-TBD
+Behaviour for sad, tired, news, the aura and the heart, all behind PetInput::moods and Board::moods (on in the app, off in the C# golden replays, which pass unchanged; no board deviation was needed: a StopFailure keeps the C#'s attention state and marks the chat failed, and the Board with moods shows it as a red 'Failed: …' error bubble lapsing after an hour). Mood step in aipet-ui/src/mood.rs with priority attention > news > working/thinking > sad > done > tired > idle > sleep; news 6 s, not stretched; tired at 23:00-04:59 or a front chat 2 h old (Board::front_age, from first seen, hook and Codex log alike); a sleeping pet hovered at night shows tired. Packs without the new values fall back (sad/news -> attention look, tired -> idle, aura/heart -> sparkles). Not done: Codex reports no failures, so Codex chats are never sad; NewReviews at startup not re-checked (the watcher test shows NewReviews only for new keys).
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 4f43b6e, d7f8b80, d769325
+- Tests: cargo test --workspace
 - PRs:
