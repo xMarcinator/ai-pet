@@ -47,6 +47,15 @@ impl Kind {
             _ => return None,
         })
     }
+
+    /// The style a pack of this kind is, unless it names its own (FNT-74).
+    pub fn label(self) -> &'static str {
+        match self {
+            Kind::Pixel => "Pixel",
+            Kind::Painted => "Painted",
+            Kind::Vector => "Vector",
+        }
+    }
 }
 
 /// Whether facing left mirrors the art.
@@ -584,6 +593,10 @@ pub fn theme_name(name: &str) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pack {
     pub name: String,
+    /// The pet this pack is a style of, where not the one its `name` names (FNT-74): `Hood (vector)` is the Hood's.
+    pub pet: Option<String>,
+    /// Its style's label, where not its kind's (two vector styles of one pet need their own).
+    pub style: Option<String>,
     pub kind: Kind,
     /// The art's pixel size in logical px (a pixel pack's grid cell; 1 for painted and vector art).
     pub pixel_size: f64,
@@ -602,6 +615,16 @@ pub struct Pack {
 }
 
 impl Pack {
+    /// The pet it is a style of: its `pet`, else its name.
+    pub fn pet(&self) -> &str {
+        self.pet.as_deref().unwrap_or(&self.name)
+    }
+
+    /// Its style: its `style`, else its kind's (Pixel, Vector, Painted).
+    pub fn style(&self) -> &str {
+        self.style.as_deref().unwrap_or(self.kind.label())
+    }
+
     /// The same pet in other colours: each named colour in `colours` replaces the palette's, wherever the pack's
     /// shapes, accent and glow name it (a pixel pack's sheets change with [`crate::load::LoadedPack::recoloured`]).
     /// A name the palette lacks is the reason it can't.
@@ -721,6 +744,8 @@ pub(crate) mod tests {
             anchor: (13.0, 22.0),
             mirror: Mirror::Flip,
             faces: Facing::Right,
+            pet: None,
+            style: None,
             accent: 0xFF5CFF9C,
             glow: 0xFF5CFF9C,
             layers,

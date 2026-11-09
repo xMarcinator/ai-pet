@@ -1,6 +1,7 @@
 {
  "format_version": 1,
  "name": "Hamster (pixel)",
+ "pet": "Hamster",
  "kind": "pixel",
  "pixel_size": 3,
  "anchor": [

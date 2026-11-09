@@ -242,6 +242,8 @@ fn sample() -> (aipet_sprite::pack::Pack, Vec<aipet_sprite::bake::Sheet>) {
         anchor: (13.0, 22.0),
         mirror: Mirror::Flip,
         faces: aipet_sprite::pose::Facing::Right,
+        pet: None,
+        style: None,
         accent: 0xFFB8_8CF0,
         glow: 0xFFFF_F2A8,
         layers: vec![body_layer, eyes_layer],

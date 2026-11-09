@@ -660,6 +660,8 @@ pub fn bake(a: &Avatar) -> Baked {
             anchor: (13.0, 22.0),
             mirror: Mirror::None,
             faces: crate::pose::Facing::Right,
+            pet: None,
+            style: None,
             accent: a.accent,
             glow: a.glow,
             layers: done,

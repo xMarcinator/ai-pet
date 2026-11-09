@@ -71,6 +71,9 @@ fn layers(vector: &Pack, name: &str, scale: f64) -> Result<Baked, String> {
         layers: Vec::new(),
         // painted colours are in its sheets: nothing to recolour
         palette: Default::default(),
+        // a style of the same pet, the painted one
+        pet: Some(vector.pet().to_owned()),
+        style: None,
         ..vector.clone()
     };
     let mut sheets = Vec::new();

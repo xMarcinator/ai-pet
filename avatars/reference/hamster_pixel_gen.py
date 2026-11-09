@@ -422,6 +422,8 @@ def pack():
     manifest = {
         "format_version": 1,
         "name": "Hamster (pixel)",
+        # a style of the Hamster (FNT-74): one entry in Settings, its drawings as styles
+        "pet": "Hamster",
         "kind": "pixel",
         "pixel_size": PIXEL,
         "anchor": list(ANCHOR),

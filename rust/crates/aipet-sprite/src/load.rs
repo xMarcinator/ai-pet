@@ -3,8 +3,9 @@
 //! A folder is a pack when it holds a `pack.json` (the manifest) or an Aseprite `json-array` export with its PNG (and
 //! an optional `pack.json` beside it for the rest). A `.json` file is a legacy ellipse avatar, baked into a pack once
 //! when it loads. Every pack loads completely or not at all, within the spec's limits, and reads only files inside
-//! its own folder. Built-ins win a name; the others are taken in sorted order, and a later pet with a name already
-//! taken is skipped with its reason.
+//! its own folder. A folder of such folders is a pet's folder, each inside a style of it (FNT-74); packs that share a
+//! pet are its styles ([`groups`]). Built-ins win; the others are taken in sorted order, and a later one that clashes
+//! (a name taken, a pet and style taken, or another pet's name) is skipped with its reason.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -129,11 +130,48 @@ pub struct Skipped {
     pub reason: String,
 }
 
-/// What the avatars folder gave: the pets in order (built-ins first), and what was skipped.
+/// What the avatars folder gave: the pets' drawings in order (built-ins first), and what was skipped.
 #[derive(Clone, Debug, Default)]
 pub struct Found {
     pub pets: Vec<LoadedPack>,
     pub skipped: Vec<Skipped>,
+}
+
+impl Found {
+    /// The pets, each with its styles (FNT-74).
+    pub fn groups(&self) -> Vec<Group> {
+        groups(&self.pets)
+    }
+}
+
+/// A pet and its styles (FNT-74): indexes into the list of drawings it came from, in load order, and the one it wears
+/// unless asked for another, the drawing named as the pet, else its first.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Group {
+    pub pet: String,
+    pub styles: Vec<usize>,
+    pub default: usize,
+}
+
+/// `drawings` grouped by pet, the pets in the order their first drawing came.
+pub fn groups(drawings: &[LoadedPack]) -> Vec<Group> {
+    let mut out: Vec<Group> = Vec::new();
+    for (i, d) in drawings.iter().enumerate() {
+        match out.iter_mut().find(|g| g.pet == d.pack.pet()) {
+            Some(g) => g.styles.push(i),
+            None => out.push(Group {
+                pet: d.pack.pet().to_owned(),
+                styles: vec![i],
+                default: i,
+            }),
+        }
+    }
+    for g in &mut out {
+        if let Some(&named) = g.styles.iter().find(|&&i| drawings[i].name() == g.pet) {
+            g.default = named;
+        }
+    }
+    out
 }
 
 /// The built-in pets, then those in `dir`, by name, with the user's themes in its `themes` folder on them; a missing
@@ -162,6 +200,10 @@ fn pets(dir: &Path) -> Found {
             if file == THEMES {
                 continue;
             }
+            if !is_pack(&path) && has_folders(&path) {
+                pet_folder(&mut found, &path, &file);
+                continue;
+            }
             load_folder(&path)
         } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
             load_legacy(&path)
@@ -173,15 +215,80 @@ fn pets(dir: &Path) -> Found {
     found
 }
 
-/// A loaded pet joins the list unless one by its name is there; what didn't load is skipped with why.
+/// A loaded drawing joins the list unless it clashes with one there: the same name, the same pet and style, or a name
+/// that is another pet's (so a pack name or a pet name always means one drawing); what didn't load is skipped with why.
 fn keep(found: &mut Found, file: String, loaded: Result<LoadedPack, String>) {
-    match loaded {
-        Ok(pet) if found.pets.iter().any(|p| p.name() == pet.name()) => found.skipped.push(Skipped {
-            file,
-            reason: format!("a pet named {:?} is already loaded", pet.name()),
-        }),
-        Ok(pet) => found.pets.push(pet),
-        Err(reason) => found.skipped.push(Skipped { file, reason }),
+    let reason = match loaded {
+        Err(reason) => reason,
+        Ok(new) => match clash(&found.pets, &new.pack) {
+            Some(reason) => reason,
+            None => {
+                found.pets.push(new);
+                return;
+            }
+        },
+    };
+    found.skipped.push(Skipped { file, reason });
+}
+
+/// Why `new` can't join `pets`, if it can't.
+fn clash(pets: &[LoadedPack], new: &Pack) -> Option<String> {
+    pets.iter().find_map(|p| {
+        let old = &p.pack;
+        if old.name == new.name {
+            Some(format!("a pet named {:?} is already loaded", new.name))
+        } else if old.pet() == new.pet() && old.style() == new.style() {
+            Some(format!("{} already has a {} style ({:?})", new.pet(), new.style(), old.name))
+        } else if old.pet() == new.name && new.pet() != new.name {
+            Some(format!("{:?} is another pet's name", new.name))
+        } else if old.name == new.pet() && old.pet() != new.pet() {
+            Some(format!("{:?} is the name of {}'s {} style", new.pet(), old.pet(), old.style()))
+        } else {
+            None
+        }
+    })
+}
+
+/// Whether `folder` is a pack itself: it holds a manifest, an Aseprite export or a native `.aseprite` file.
+fn is_pack(folder: &Path) -> bool {
+    folder.join("pack.json").exists()
+        || find_export(folder).ok().flatten().is_some()
+        || find_native(folder).ok().flatten().is_some()
+}
+
+/// Whether `folder` holds folders.
+fn has_folders(folder: &Path) -> bool {
+    fs::read_dir(folder).is_ok_and(|mut e| e.any(|e| e.is_ok_and(|e| e.path().is_dir())))
+}
+
+/// A pet folder (FNT-74): each folder in it is a style of the pet the folder is named for, unless its manifest names
+/// another. A link is refused before anything in it is read; a pet folder with no style that loads is skipped.
+fn pet_folder(found: &mut Found, folder: &Path, file: &str) {
+    let linked = fs::symlink_metadata(folder).map_or(true, |m| m.file_type().is_symlink() || reparse_point(&m));
+    if linked {
+        found.skipped.push(Skipped {
+            file: file.to_owned(),
+            reason: "the folder is a link".to_owned(),
+        });
+        return;
+    }
+    let mut paths: Vec<PathBuf> = fs::read_dir(folder)
+        .map(|e| e.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect())
+        .unwrap_or_default();
+    paths.sort();
+    let before = found.pets.len();
+    for path in paths {
+        let loaded = load_folder(&path).map(|mut p| {
+            p.pack.pet.get_or_insert_with(|| file.to_owned());
+            p
+        });
+        keep(found, format!("{file}/{}", name_of(&path)), loaded);
+    }
+    if found.pets.len() == before {
+        found.skipped.push(Skipped {
+            file: file.to_owned(),
+            reason: "no style of the pet loaded".to_owned(),
+        });
     }
 }
 
@@ -227,12 +334,17 @@ fn themes(found: &mut Found, folder: &Path, except: Option<&std::ffi::OsStr>) {
     }
 }
 
-/// Puts the theme `t`, from the file `file`, on its pet in `pets`, all or nothing.
-fn attach(pets: &mut [LoadedPack], file: &str, t: ThemeFile) -> Result<(), String> {
-    let pet = pets
-        .iter_mut()
-        .find(|p| p.name() == t.pet)
-        .ok_or_else(|| format!("there is no pet named {:?} for the theme", t.pet))?;
+/// Puts the theme `t`, from the file `file`, on its pet in `pets`, all or nothing: the drawing it names, else (a pet's
+/// name) that pet's default style. Says the pet and style it went on.
+fn attach(pets: &mut [LoadedPack], file: &str, t: ThemeFile) -> Result<(String, String, String), String> {
+    let at = pets.iter().position(|p| p.name() == t.pet).or_else(|| {
+        groups(pets)
+            .into_iter()
+            .find(|g| g.pet == t.pet)
+            .map(|g| g.default)
+    });
+    let pet = &mut pets[at.ok_or_else(|| format!("there is no pet named {:?} for the theme", t.pet))?];
+    let on = (pet.name().to_owned(), pet.pack.pet().to_owned(), pet.pack.style().to_owned());
     if pet.pack.kind == Kind::Painted {
         return Err(format!("{} is a painted pet, which has no themes", t.pet));
     }
@@ -245,7 +357,7 @@ fn attach(pets: &mut [LoadedPack], file: &str, t: ThemeFile) -> Result<(), Strin
         .check(&theme)
         .map_err(|e| format!("{}'s theme {:?}: {e}", t.pet, theme.name))?;
     pet.pack.palette.themes.push(theme);
-    Ok(())
+    Ok(on)
 }
 
 /// A legacy ellipse avatar, baked into a pack: exactly the drawing the pet made of it before packs.
@@ -977,6 +1089,8 @@ fn build_aseprite(src: AseSource, extra: Option<&str>) -> Result<(Pack, Vec<Shee
             Some("left") => crate::pose::Facing::Left,
             _ => crate::pose::Facing::Right,
         },
+        pet: extra["pet"].as_str().map(str::to_owned),
+        style: extra["style"].as_str().map(str::to_owned),
         accent: colour("accent", 0xFF5C_FF9C)?,
         glow: colour("glow", 0xFF7F_EFFF)?,
         layers,
@@ -998,28 +1112,41 @@ pub fn check(folder: &Path) -> (String, bool) {
     if !folder.is_dir() {
         return (format!("{}: not a folder or a theme file", folder.display()), false);
     }
+    // a pet folder: a line per style, failing if any does
+    if !is_pack(folder) && has_folders(folder) {
+        let mut found = Found::default();
+        pet_folder(&mut found, folder, &name_of(folder));
+        let mut lines: Vec<String> = found.pets.iter().map(ok_line).collect();
+        lines.extend(found.skipped.iter().map(|s| format!("{}: {}", s.file, s.reason)));
+        return (lines.join("\n"), found.skipped.is_empty());
+    }
     match load_folder(folder) {
-        Ok(p) => {
-            let kind = match p.pack.kind {
-                Kind::Pixel => "pixel",
-                Kind::Painted => "painted",
-                Kind::Vector => "vector",
-            };
-            let mut line = format!(
-                "OK {} ({kind}, {} layers, {} frames",
-                p.pack.name,
-                p.pack.layers.len(),
-                p.pack.frame_count()
-            );
-            if !p.pack.palette.themes.is_empty() {
-                let names: Vec<&str> = p.pack.palette.names().collect();
-                line += &format!(", themes {}", names.join(", "));
-            }
-            line.push(')');
-            (line, true)
-        }
+        Ok(p) => (ok_line(&p), true),
         Err(reason) => (reason, false),
     }
+}
+
+/// A drawing that loaded, as `--check-pack` says it: its name, kind, pet and style, layers, frames and themes.
+fn ok_line(p: &LoadedPack) -> String {
+    let kind = match p.pack.kind {
+        Kind::Pixel => "pixel",
+        Kind::Painted => "painted",
+        Kind::Vector => "vector",
+    };
+    let mut line = format!(
+        "OK {} ({kind}, pet {}, style {}, {} layers, {} frames",
+        p.pack.name,
+        p.pack.pet(),
+        p.pack.style(),
+        p.pack.layers.len(),
+        p.pack.frame_count()
+    );
+    if !p.pack.palette.themes.is_empty() {
+        let names: Vec<&str> = p.pack.palette.names().collect();
+        line += &format!(", themes {}", names.join(", "));
+    }
+    line.push(')');
+    line
 }
 
 /// Whether a file is a legacy avatar rather than a theme file: one outside a `themes` folder that doesn't name its
@@ -1056,8 +1183,9 @@ fn check_theme(path: &Path) -> (String, bool) {
     }
     let file = name_of(path);
     let checked = read_theme(path).and_then(|t| {
-        let line = format!("OK {} in {} (a theme)", t.pet, t.theme);
-        attach(&mut found.pets, &file, t).map(|()| line)
+        let theme = t.theme.clone();
+        attach(&mut found.pets, &file, t)
+            .map(|(name, pet, style)| format!("OK {name} in {theme} (a theme, pet {pet}, style {style})"))
     });
     match checked {
         Ok(line) => (line, true),
@@ -1089,6 +1217,94 @@ mod tests {
 
     fn manifest(at: &Path) -> String {
         fs::read_to_string(at.join("pack.json")).unwrap()
+    }
+
+    /// The baked Hood as a pack folder `at`, named `name`, with `extra` manifest fields after its name.
+    fn styled(at: &Path, name: &str, extra: &str) {
+        hood_pack(at);
+        let text = manifest(at).replace("\"name\": \"Hood\"", &format!("\"name\": \"{name}\"{extra}"));
+        fs::write(at.join("pack.json"), text).unwrap();
+    }
+
+    #[test]
+    fn the_built_ins_are_four_pets_with_their_styles() {
+        // FNT-74 R2: one entry per pet, its drawings as styles, the one named as the pet worn by default
+        let found = all(Path::new("/nonexistent"));
+        let shown: Vec<(String, Vec<&str>, &str)> = found
+            .groups()
+            .iter()
+            .map(|g| {
+                let styles = g.styles.iter().map(|&i| found.pets[i].pack.style()).collect();
+                (g.pet.clone(), styles, found.pets[g.default].pack.style())
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("Sprout".to_owned(), vec!["Pixel", "Vector"], "Pixel"),
+                ("Hood".to_owned(), vec!["Pixel", "Vector"], "Pixel"),
+                ("Pip".to_owned(), vec!["Vector", "Painted"], "Vector"),
+                ("Hamster".to_owned(), vec!["Vector", "Pixel"], "Vector"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_pet_folder_is_one_pet_and_each_clash_is_skipped_with_why() {
+        // FNT-74 R1
+        let d = dir("pet-folder");
+        // two pixel styles of Fox, told apart by a label; the folder names the pet
+        styled(&d.join("Fox").join("pixel"), "Fox (pixel)", "");
+        styled(&d.join("Fox").join("fancy"), "Fox (fancy)", ",\n  \"style\": \"Fancy\"");
+        fs::create_dir_all(d.join("Fox").join("empty").join("nothing")).unwrap();
+        // a style of a built-in pet the built-in already has
+        styled(&d.join("Hood").join("pixel"), "Hood (mine)", "");
+        // the same name twice, and a name that is another pet's
+        styled(&d.join("x-again"), "Fox (pixel)", ",\n  \"pet\": \"Owl\"");
+        styled(&d.join("x-owl"), "Fox", ",\n  \"pet\": \"Owl\"");
+        // a pet folder with nothing that loads
+        fs::create_dir_all(d.join("Ghost").join("nothing").join("deeper")).unwrap();
+        let found = all(&d);
+        let fox = found.groups().into_iter().find(|g| g.pet == "Fox").expect("Fox");
+        let styles: Vec<&str> = fox.styles.iter().map(|&i| found.pets[i].pack.style()).collect();
+        assert_eq!(styles, ["Fancy", "Pixel"]);
+        assert_eq!(found.pets[fox.default].name(), "Fox (fancy)", "no drawing is named Fox: the first loaded");
+        let skipped: Vec<(&str, &str)> = found.skipped.iter().map(|s| (s.file.as_str(), s.reason.as_str())).collect();
+        assert!(skipped.contains(&("Hood/pixel", "Hood already has a Pixel style (\"Hood\")")), "{skipped:?}");
+        assert!(skipped.contains(&("x-again", "a pet named \"Fox (pixel)\" is already loaded")), "{skipped:?}");
+        assert!(skipped.contains(&("x-owl", "\"Fox\" is another pet's name")), "{skipped:?}");
+        assert!(skipped.iter().any(|(f, _)| *f == "Fox/empty"), "{skipped:?}");
+        assert!(skipped.contains(&("Ghost", "no style of the pet loaded")), "{skipped:?}");
+        // --check-pack: a line per style
+        let (lines, ok) = check(&d.join("Fox"));
+        assert!(!ok, "Fox/empty fails: {lines}");
+        assert!(lines.contains("OK Fox (fancy) (pixel, pet Fox, style Fancy, "), "{lines}");
+        assert!(lines.contains("OK Fox (pixel) (pixel, pet Fox, style Pixel, "), "{lines}");
+        // a theme naming the pet alone goes on its default style
+        let themes = d.join(THEMES);
+        fs::create_dir_all(&themes).unwrap();
+        fs::write(themes.join("fox.json"), r##"{"pet": "Fox", "theme": "Red", "palette": {"body": "#4A1010"}}"##)
+            .unwrap();
+        assert_eq!(
+            check(&themes.join("fox.json")),
+            ("OK Fox (fancy) in Red (a theme, pet Fox, style Fancy)".to_owned(), true)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_pet_folder_is_refused() {
+        let d = dir("linked-pet");
+        let outside = dir("linked-pet-outside");
+        styled(&outside.join("Bat").join("pixel"), "Bat", "");
+        std::os::unix::fs::symlink(outside.join("Bat"), d.join("Bat")).unwrap();
+        let found = all(&d);
+        assert!(found.pets.iter().all(|p| p.name() != "Bat"));
+        assert!(
+            found.skipped.iter().any(|s| s.file == "Bat" && s.reason == "the folder is a link"),
+            "{:?}",
+            found.skipped
+        );
     }
 
     #[test]
@@ -1331,7 +1547,7 @@ mod tests {
         let good = d.join("good");
         hood_pack(&good);
         let (line, ok) = check(&good);
-        assert!(ok && line.starts_with("OK Hood (pixel, 13 layers, "), "{line}");
+        assert!(ok && line.starts_with("OK Hood (pixel, pet Hood, style Pixel, 13 layers, "), "{line}");
         fs::remove_file(good.join("eyes.png")).unwrap();
         let (line, ok) = check(&good);
         assert!(!ok && line.contains("eyes.png") && line.contains("missing"), "{line}");
@@ -1829,7 +2045,7 @@ mod tests {
         // --check-pack takes a theme file, against the others in its folder
         assert_eq!(
             check(&themes.join("hood-red.json")),
-            ("OK Hood (vector) in Red (a theme)".into(), true)
+            ("OK Hood (vector) in Red (a theme, pet Hood, style Vector)".into(), true)
         );
         assert!(!check(&themes.join("bad-name.json")).1);
     }
@@ -1843,7 +2059,7 @@ mod tests {
         let samples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../avatars/samples");
         assert_eq!(
             check(&samples.join("themes/hood-red.json")),
-            ("OK Hood (vector) in Red (a theme)".into(), true)
+            ("OK Hood (vector) in Red (a theme, pet Hood, style Vector)".into(), true)
         );
     }
 
@@ -1968,7 +2184,7 @@ mod tests {
             check(&pack),
             (
                 format!(
-                    "OK Hood (pixel, {} layers, {} frames, themes Blue, Green, Night)",
+                    "OK Hood (pixel, pet Hood, style Pixel, {} layers, {} frames, themes Blue, Green, Night)",
                     p.pack.layers.len(),
                     p.pack.frame_count()
                 ),

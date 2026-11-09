@@ -281,6 +281,8 @@ def pack():
     return vp.named({
         "format_version": 1,
         "name": "Sprout (vector)",
+        # a style of the Sprout (FNT-74): one entry in Settings, its drawings as styles
+        "pet": "Sprout",
         "kind": "vector",
         "pixel_size": 1,
         "anchor": list(a),

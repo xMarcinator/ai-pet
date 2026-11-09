@@ -34,6 +34,12 @@ struct PackJson {
     anchor: [f64; 2],
     #[serde(default = "flip")]
     mirror: String,
+    /// The pet it is a style of, and the style's label, where not its name and its kind's (FNT-74; not written when
+    /// absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pet: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    style: Option<String>,
     /// `right` (the default, not written) or `left`: which way the art faces.
     #[serde(default = "right", skip_serializing_if = "is_right")]
     faces: String,
@@ -246,6 +252,8 @@ pub fn write(pack: &Pack) -> String {
         anchor: [pack.anchor.0, pack.anchor.1],
         mirror: mirror_name(pack.mirror).to_owned(),
         faces: pack.faces.key().to_owned(),
+        pet: pack.pet.clone(),
+        style: pack.style.clone(),
         accent: match &pack.palette.accent {
             Some(name) => format!("${name}"),
             None => colour(pack.accent),
@@ -633,6 +641,8 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
             "left" => crate::pose::Facing::Left,
             other => return Err(format!("unknown faces {other:?} (left or right)")),
         },
+        pet: json.pet.clone().filter(|p| !p.trim().is_empty()),
+        style: json.style.clone().filter(|s| !s.trim().is_empty()),
         accent: match paint(&json.accent).map_err(|e| format!("the accent: {e}"))? {
             (Some(c), name) if name.is_some() => c,
             _ => parse_colour(&json.accent)?,

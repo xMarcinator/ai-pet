@@ -298,6 +298,8 @@ impl<R: PetRng> Pet<R> {
                 anchor: (13.0, 22.0),
                 mirror: crate::pack::Mirror::None,
                 faces: Facing::Right,
+                pet: None,
+                style: None,
                 accent: 0,
                 glow: 0,
                 layers: Vec::new(),
