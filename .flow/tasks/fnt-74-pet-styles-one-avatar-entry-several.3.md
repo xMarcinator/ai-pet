@@ -19,9 +19,10 @@ Describe pets, styles and themes for pack authors and in the architecture, and a
 - [ ] FNT-71's spec and tasks 5-6 take a style, and validate
 
 ## Done summary
-TBD
+MAKING-A-PET Pets and styles section and manifest rows; ARCHITECTURE identity and Avatars page; avatars/README; both skill copies (diff -r clean). FNT-71: list_avatars/wear_avatar take styles, R7 names pet/style/theme errors, R10 and task 6 install by pet/style/name, replacing a user style in its own folder and refusing a built-in; tasks 5-6 tests added; FNT-71 validates.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
+- Commits: 8515f87
 - Tests:
 - PRs:
