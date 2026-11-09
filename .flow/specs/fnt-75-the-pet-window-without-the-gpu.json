@@ -1,14 +1,35 @@
 {
   "branch_name": "fnt-75-the-pet-window-without-the-gpu",
+  "completion_review_status": "unknown",
+  "completion_reviewed_at": null,
   "created_at": "2026-11-09T19:36:47.826612Z",
+  "default_impl": null,
+  "default_review": null,
+  "default_sync": null,
   "depends_on_epics": [
     "fn-1-migrate-aipet-from-net-to-rust",
     "fnt-73-ui-framework-spike-gpui-or-something"
   ],
   "id": "fnt-75-the-pet-window-without-the-gpu",
+  "impl_review_rounds": {},
   "next_task": 1,
+  "plan_review_rounds": 1,
   "plan_review_status": "unknown",
   "plan_reviewed_at": null,
+  "review_hash_epoch": {},
+  "review_pending_rounds": {
+    "plan": 1
+  },
+  "review_reservations": {
+    "9f01975ba99948258524d63ea6ae223c": {
+      "artifact_sha256": "0c5e83b70ed0af95904af5a11d01a23ae5b64744d1f1040ce5c6e33146270bf9",
+      "counter_scope": "plan",
+      "epoch": 0,
+      "exclusive": false,
+      "forced": false,
+      "review_type": "plan"
+    }
+  },
   "spec_path": ".flow/specs/fnt-75-the-pet-window-without-the-gpu.md",
   "status": "open",
   "title": "The pet window without the GPU",
@@ -23,5 +44,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-09T19:37:02.246758Z"
+  "updated_at": "2026-11-09T19:37:19.992605Z"
 }

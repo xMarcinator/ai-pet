@@ -342,6 +342,7 @@ dotnet test AiPet.slnx   # the C# suite, until the cutover (with AIPET_TEST_HOOK
 - **R18:** Measured with a scripted, repeatable benchmark on the same machine, on Linux and on Windows:
   - calm CPU: the Rust pet's median ≤ the C# pet's median + 0.5 percentage points;
   - resident memory: the Rust pet's ≤ 1.5 × the C#'s.
+  - Windows: measured by FNT-76 (moved there by the owner, 2026-11-09); this spec ships on the Linux result.
 
   The method: release builds; a fixed workload replayed through the hook; a 60 s settle; 5 paired, alternating 30 s
   samples; medians. It refuses to run on a loaded machine. No error surface beyond a failed budget, which blocks

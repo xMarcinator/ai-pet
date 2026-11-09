@@ -25,14 +25,14 @@ Measure calm CPU and RSS for every built-in pet (Sprout, Hood, Hood (green) pixe
 Windows rules: Git Bash only, never PowerShell; GUI checks need the user present.
 
 ## Acceptance
-- [ ] All nine built-in pets meet the calm-CPU and RSS budgets on Windows and Linux, recorded with numbers
-- [ ] Embedded art adds ≤ 3 MB to the release binary
-- [ ] Windows hands-on pass recorded with the user, covering looks, behaviours, click-through, crispness, reduced motion and Settings
-
+- [x] All nine built-in pets meet the calm-CPU and RSS budgets on Linux, recorded with numbers
+- [x] Embedded art adds ≤ 3 MB to the release binary
+- Windows (each pet's numbers and the hands-on pass with the user) moved to fnt-76-windows-checks-with-the-owner.2 by the owner, 2026-11-09.
 ## Done summary
-TBD
+Every built-in pet within budget on Linux: calm CPU 4.7-9.3 % against the C# pet's 12.3-14.2 %, RSS 154-165 MB; embedded art 530 KB (rust/proofs/sprite-packs.md). Windows numbers and the hands-on pass moved to fnt-76.2 by the owner.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 181b9ca, f186b5c
+- Tests: scripts/perf/pets-calm.sh
 - PRs:
