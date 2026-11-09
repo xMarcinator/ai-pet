@@ -1,0 +1,44 @@
+# Pet styles: one avatar entry, several drawings
+
+## Goal & Context
+
+Settings → Avatars lists every drawing of a pet as its own entry today: Hood and Hood (vector), Sprout and Sprout (vector), Pip and Pip (painted), Hamster and Hamster (pixel). The owner asked (2026-11-09) for one entry per pet, with its drawings as styles chosen separately from its colour themes, and for a pack author to ship several styles of one pet in one pack. After this spec there are four built-in entries (Hood, Sprout, Pip, Hamster), each with a Style choice and that style's themes.
+
+## Acceptance Criteria
+
+- **R1:** Packs that share a pet form one avatar entry, each pack a style of it. A pack's pet is its manifest's optional `pet` (default: its `name`); its style is its optional `style` label (default: its kind as Pixel, Vector or Painted). A folder `<data>/avatars/<Pet>/` whose subfolders hold packs loads each subfolder as a style of `<Pet>`, unless its manifest names another pet. Errors: a second pack with the same pet and style is skipped with a reason naming the first (built-ins load first, so they win); a subfolder without a pack is skipped with its reason; a pet folder with no loadable style is skipped as a whole.
+- **R2:** The built-ins are four entries: Hood (Pixel, the default, and Vector), Sprout (Pixel, the default, and Vector), Pip (Vector, the default, and Painted) and Hamster (Vector, the default, and Pixel). A pet's default style is the pack whose name is the pet's, else the first loaded. Pack names stay as they are (`Hood (vector)`, …). Errors: no error surface beyond R1.
+- **R3:** Settings → Avatars shows one tile per pet, in its current style's still. A Style picker shows when a pet has more than one style; the Theme picker lists the current style's themes. Changing style keeps the theme where the new style has one by that name, else wears that style's default theme. Reload keeps the worn pet and style if they are still there, else falls back as R4 does. Errors: no error surface beyond R4.
+- **R4:** config.json stores `Avatar` as the pet's name and a new `AvatarStyle`, written only when the style isn't the pet's default; `AvatarTheme` stays as it is. A saved pack name (`Hood (vector)`, `Pip (painted)`, `Hamster (pixel)`, `Sprout (vector)`) reads as that pet in that style, and the older `<pet> (<theme>)` form (`Hood (green)`) as today, without rewriting the file. Errors: an unknown pet falls back to the first pet; an unknown style to the pet's default style; a theme the style lacks to its default theme. The .NET pet keeps reading `Avatar`; if it writes the file, the style resets to the pet's default (accepted by the owner).
+- **R5:** Theme files keep addressing one style by its pack name (`"pet": "Hood (vector)"`), and Settings keeps writing them that way, so the theme file format and older builds are unchanged. `--check-pack` on a theme file names the pet and style it attaches to. Errors: a theme file naming a pet with several styles by the pet's name alone attaches to its default style.
+- **R6:** `--check-pack` on a pack prints its pet and style beside its kind; on a pet folder, one line per style. Errors: each skipped style gets its own failing line with the reason, and the exit code is 1 if any style failed.
+- **R7:** `docs/MAKING-A-PET.md`, both copies of the `aipet-avatar-pack` skill, `avatars/README.md` and `docs/ARCHITECTURE.md` describe pets, styles and themes; FNT-71's avatar tools take a style (`list_avatars` gives each pet's styles with their kinds and themes; `wear_avatar` takes `{name, style?, theme?}`; pack install checks pet and style). Errors: no error surface beyond review.
+
+## Boundaries
+
+- No new kinds (Rive stays fnt-67's; a Rive drawing becomes a style through R1's label when fnt-67 lands).
+- Themes stay per style: a theme's colours fill one style's named slots, and styles name different slots.
+- No moving of the built-in pack folders or renaming of pack names.
+- No conversion of a user's existing packs or theme files.
+
+## Decision Context
+
+The owner chose pet folders with style subfolders (each style a normal pack, so `--check-pack`, the generators and FNT-72's per-folder art tasks keep working), plus a `pet` key so a separate folder can add a style to an existing pet. Styles are named by kind by default with an optional label, so two vector styles of one pet are possible. `Avatar` becomes the pet's name so the .NET pet still finds the Hood; it drops `AvatarStyle` when it writes, which the owner accepted. A built-in wins a pet and style a user pack also claims, as built-ins already win a name. Rejected: one manifest listing several styles, which would change the format and move every pack.
+
+## Quick commands
+
+```bash
+cd rust && cargo test -p aipet-sprite load:: && cargo test -p aipet-ui && rust/target/release/AiPet --check-pack avatars/samples
+```
+
+## Requirement coverage
+
+| Req | Description | Task(s) | Gap justification |
+| --- | --- | --- | --- |
+| R1 | Packs that share a pet form one avatar entry, each pack a style of it. A pack's pet is its manifest's optional `pet` (default: its `name`); its style is its optional `style` label (default: its kind as Pixel, Vector or Painted). A folder `<data>/avatars/<Pet>/` whose subfolders hold packs loads each subfolder as a style of `<Pet>`, unless its manifest names another pet. Errors: a second pack with the same pet and style is skipped with a reason naming the first (built-ins load first, so they win); a subfolder without a pack is skipped with its reason; a pet folder with no loadable style is skipped as a whole. | fnt-74-pet-styles-one-avatar-entry-several.1 | — |
+| R2 | The built-ins are four entries: Hood (Pixel, the default, and Vector), Sprout (Pixel, the default, and Vector), Pip (Vector, the default, and Painted) and Hamster (Vector, the default, and Pixel). A pet's default style is the pack whose name is the pet's, else the first loaded. Pack names stay as they are (`Hood (vector)`, …). Errors: no error surface beyond R1. | fnt-74-pet-styles-one-avatar-entry-several.1 | — |
+| R3 | Settings → Avatars shows one tile per pet, in its current style's still. A Style picker shows when a pet has more than one style; the Theme picker lists the current style's themes. Changing style keeps the theme where the new style has one by that name, else wears that style's default theme. Reload keeps the worn pet and style if they are still there, else falls back as R4 does. Errors: no error surface beyond R4. | fnt-74-pet-styles-one-avatar-entry-several.2 | — |
+| R4 | config.json stores `Avatar` as the pet's name and a new `AvatarStyle`, written only when the style isn't the pet's default; `AvatarTheme` stays as it is. A saved pack name (`Hood (vector)`, `Pip (painted)`, `Hamster (pixel)`, `Sprout (vector)`) reads as that pet in that style, and the older `<pet> (<theme>)` form (`Hood (green)`) as today, without rewriting the file. Errors: an unknown pet falls back to the first pet; an unknown style to the pet's default style; a theme the style lacks to its default theme. The .NET pet keeps reading `Avatar`; if it writes the file, the style resets to the pet's default (accepted by the owner). | fnt-74-pet-styles-one-avatar-entry-several.2 | — |
+| R5 | Theme files keep addressing one style by its pack name (`"pet": "Hood (vector)"`), and Settings keeps writing them that way, so the theme file format and older builds are unchanged. `--check-pack` on a theme file names the pet and style it attaches to. Errors: a theme file naming a pet with several styles by the pet's name alone attaches to its default style. | fnt-74-pet-styles-one-avatar-entry-several.1 | — |
+| R6 | `--check-pack` on a pack prints its pet and style beside its kind; on a pet folder, one line per style. Errors: each skipped style gets its own failing line with the reason, and the exit code is 1 if any style failed. | fnt-74-pet-styles-one-avatar-entry-several.1 | — |
+| R7 | `docs/MAKING-A-PET.md`, both copies of the `aipet-avatar-pack` skill, `avatars/README.md` and `docs/ARCHITECTURE.md` describe pets, styles and themes; FNT-71's avatar tools take a style (`list_avatars` gives each pet's styles with their kinds and themes; `wear_avatar` takes `{name, style?, theme?}`; pack install checks pet and style). Errors: no error surface beyond review. | fnt-74-pet-styles-one-avatar-entry-several.3 | — |

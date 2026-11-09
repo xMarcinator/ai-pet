@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-09T14:08:26.995826Z",
+  "depends_on": [
+    "fnt-74-pet-styles-one-avatar-entry-several.1"
+  ],
+  "id": "fnt-74-pet-styles-one-avatar-entry-several.2",
+  "priority": null,
+  "spec": "fnt-74-pet-styles-one-avatar-entry-several",
+  "spec_path": ".flow/tasks/fnt-74-pet-styles-one-avatar-entry-several.2.md",
+  "status": "todo",
+  "title": "Settings and config: one tile per pet, a Style picker, AvatarStyle",
+  "updated_at": "2026-11-09T14:08:26.995826Z"
+}
