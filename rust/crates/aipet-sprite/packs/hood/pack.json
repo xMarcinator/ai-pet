@@ -45,6 +45,43 @@
   },
   "layers": [
     {
+      "name": "aura-glow",
+      "channel": "fx",
+      "hit": false,
+      "default": "aura",
+      "fallback": {
+        "alert": null,
+        "alert+sparkles": null,
+        "dots": null,
+        "dots+sparkles": null,
+        "dust": null,
+        "dust+sparkles": null,
+        "heart": null,
+        "none": null,
+        "notes": null,
+        "notes+sparkles": null,
+        "sparkles": null,
+        "tears": null,
+        "zs": null,
+        "zs+sparkles": null
+      },
+      "animations": {
+        "aura": {
+          "frames": [
+            [
+              0,
+              0,
+              26,
+              24,
+              1000
+            ]
+          ],
+          "loop": "once",
+          "sheet": "aura-glow.png"
+        }
+      }
+    },
+    {
       "name": "body",
       "channel": "state",
       "hit": true,
@@ -54,6 +91,19 @@
           "frames": [
             [
               0,
+              0,
+              26,
+              24,
+              1000
+            ]
+          ],
+          "loop": "once",
+          "sheet": "body.png"
+        },
+        "tired": {
+          "frames": [
+            [
+              26,
               0,
               26,
               24,
@@ -386,6 +436,19 @@
         "none": null
       },
       "animations": {
+        "envelope": {
+          "frames": [
+            [
+              26,
+              0,
+              26,
+              24,
+              1000
+            ]
+          ],
+          "loop": "once",
+          "sheet": "prop.png"
+        },
         "laptop": {
           "frames": [
             [
@@ -403,25 +466,18 @@
           "clock": "pet",
           "frames": [
             [
-              26,
-              0,
-              26,
-              24,
-              667
-            ],
-            [
               52,
               0,
               26,
               24,
-              666
+              667
             ],
             [
               78,
               0,
               26,
               24,
-              667
+              666
             ],
             [
               104,
@@ -435,14 +491,14 @@
               0,
               26,
               24,
-              666
+              667
             ],
             [
               156,
               0,
               26,
               24,
-              667
+              666
             ],
             [
               182,
@@ -456,14 +512,14 @@
               0,
               26,
               24,
-              666
+              667
             ],
             [
               234,
               0,
               26,
               24,
-              667
+              666
             ],
             [
               260,
@@ -477,10 +533,17 @@
               0,
               26,
               24,
-              666
+              667
             ],
             [
               312,
+              0,
+              26,
+              24,
+              666
+            ],
+            [
+              338,
               0,
               26,
               24,
@@ -626,6 +689,19 @@
           "loop": "once",
           "sheet": "eyes.png"
         },
+        "sleepy": {
+          "frames": [
+            [
+              208,
+              0,
+              26,
+              24,
+              1000
+            ]
+          ],
+          "loop": "once",
+          "sheet": "eyes.png"
+        },
         "squint": {
           "frames": [
             [
@@ -674,6 +750,7 @@
       "glow": true,
       "default": "laptop",
       "fallback": {
+        "envelope": null,
         "lens": null,
         "none": null
       },
@@ -710,13 +787,16 @@
       "fallback": {
         "alert": null,
         "alert+sparkles": null,
+        "aura": null,
         "dots": null,
         "dots+sparkles": null,
         "dust+sparkles": "dust",
+        "heart": null,
         "none": null,
         "notes": null,
         "notes+sparkles": null,
         "sparkles": null,
+        "tears": null,
         "zs": null,
         "zs+sparkles": null
       },
@@ -759,12 +839,15 @@
       "default": "zs",
       "fallback": {
         "alert+sparkles": "alert",
+        "aura": null,
         "dots+sparkles": "dots",
         "dust": null,
         "dust+sparkles": null,
+        "heart": null,
         "none": null,
         "notes+sparkles": "notes",
         "sparkles": null,
+        "tears": null,
         "zs+sparkles": "zs"
       },
       "animations": {
@@ -3184,10 +3267,13 @@
       "default": "sparkles",
       "fallback": {
         "alert": null,
+        "aura": null,
         "dots": null,
         "dust": null,
+        "heart": null,
         "none": null,
         "notes": null,
+        "tears": null,
         "zs": null
       },
       "animations": {
@@ -3211,6 +3297,148 @@
           ],
           "loop": "loop",
           "sheet": "sparkles.png"
+        }
+      }
+    },
+    {
+      "name": "tears",
+      "channel": "fx",
+      "hit": false,
+      "default": "tears",
+      "fallback": {
+        "alert": null,
+        "alert+sparkles": null,
+        "aura": null,
+        "dots": null,
+        "dots+sparkles": null,
+        "dust": null,
+        "dust+sparkles": null,
+        "heart": null,
+        "none": null,
+        "notes": null,
+        "notes+sparkles": null,
+        "sparkles": null,
+        "zs": null,
+        "zs+sparkles": null
+      },
+      "animations": {
+        "tears": {
+          "clock": "pet",
+          "frames": [
+            [
+              0,
+              0,
+              26,
+              24,
+              333
+            ],
+            [
+              26,
+              0,
+              26,
+              24,
+              334
+            ],
+            [
+              52,
+              0,
+              26,
+              24,
+              333
+            ]
+          ],
+          "loop": "loop",
+          "sheet": "tears.png"
+        }
+      }
+    },
+    {
+      "name": "heart",
+      "channel": "fx",
+      "hit": false,
+      "default": "heart",
+      "fallback": {
+        "alert": null,
+        "alert+sparkles": null,
+        "aura": null,
+        "dots": null,
+        "dots+sparkles": null,
+        "dust": null,
+        "dust+sparkles": null,
+        "none": null,
+        "notes": null,
+        "notes+sparkles": null,
+        "sparkles": null,
+        "tears": null,
+        "zs": null,
+        "zs+sparkles": null
+      },
+      "animations": {
+        "heart": {
+          "clock": "pet",
+          "frames": [
+            [
+              0,
+              0,
+              26,
+              24,
+              500
+            ],
+            [
+              26,
+              0,
+              26,
+              24,
+              500
+            ]
+          ],
+          "loop": "loop",
+          "sheet": "heart.png"
+        }
+      }
+    },
+    {
+      "name": "aura",
+      "channel": "fx",
+      "hit": false,
+      "default": "aura",
+      "fallback": {
+        "alert": null,
+        "alert+sparkles": null,
+        "dots": null,
+        "dots+sparkles": null,
+        "dust": null,
+        "dust+sparkles": null,
+        "heart": null,
+        "none": null,
+        "notes": null,
+        "notes+sparkles": null,
+        "sparkles": null,
+        "tears": null,
+        "zs": null,
+        "zs+sparkles": null
+      },
+      "animations": {
+        "aura": {
+          "clock": "pet",
+          "frames": [
+            [
+              0,
+              0,
+              26,
+              24,
+              250
+            ],
+            [
+              26,
+              0,
+              26,
+              24,
+              250
+            ]
+          ],
+          "loop": "loop",
+          "sheet": "aura.png"
         }
       }
     }

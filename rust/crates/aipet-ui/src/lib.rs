@@ -476,7 +476,11 @@ fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
     // older "<pet> (<theme>)"
     let by_pet = groups.iter().find(|g| g.pet == name).map(|g| {
         let style = prefs.avatar_style.as_deref();
-        let i = g.styles.iter().copied().find(|&i| Some(avatars[i].pack.style()) == style);
+        let i = g
+            .styles
+            .iter()
+            .copied()
+            .find(|&i| Some(avatars[i].pack.style()) == style);
         (i.unwrap_or(g.default), None)
     });
     let by_name = || avatars.iter().position(|a| a.name() == name).map(|i| (i, None));
@@ -618,7 +622,9 @@ impl PetUi {
         let state = board.map_or("sleep", Board::state);
         // the clock only matters to an idle or sleeping pet
         let night = matches!(state, "idle" | "sleep") && mood::night((self.hour)());
-        let mood = self.moods.pick(state, t, night, board.and_then(Board::front_age), self.hover);
+        let mood = self
+            .moods
+            .pick(state, t, night, board.and_then(Board::front_age), self.hover);
         #[cfg(any(test, feature = "demo"))]
         let mood = self.mood.unwrap_or(mood);
         if self.input.state != mood {
@@ -1083,8 +1089,10 @@ impl PetUi {
     /// stacks above the pet's head and its effects.
     fn sized(&mut self) {
         let pet = self.pet_factor();
-        self.stacks
-            .set_size(self.bubble_size as f32 / 100.0, geometry::stacks_bottom(pet, self.fx_reach));
+        self.stacks.set_size(
+            self.bubble_size as f32 / 100.0,
+            geometry::stacks_bottom(pet, self.fx_reach),
+        );
         let (pose, at) = self.pet.drawn();
         self.sprite.update(self.pet.pack(), pose, at, self.scale * pet);
     }
@@ -1798,8 +1806,8 @@ pub(crate) mod tests {
         assert!((ui.moods.news_until() - 8.0).abs() < 0.02, "{}", ui.moods.news_until());
         run(&mut ui, start, 2.0, 0.5);
         assert_eq!(ui.input.state, "news");
-        // the worn pet draws no envelope: it looks like attention (fnt-72 R6)
-        assert_eq!(ui.pet.anim_state(), "attention");
+        // the worn pet, Sprout, holds its envelope (fnt-72)
+        assert_eq!(ui.pet.anim_state(), "news");
         run(&mut ui, start, 2.5, 6.0);
         assert_ne!(ui.input.state, "news");
         // news from the core becomes the same messages
@@ -1988,7 +1996,11 @@ pub(crate) mod tests {
         };
         let worn = |ui: &PetUi| {
             let a = &ui.avatars[ui.avatar];
-            (a.pack.pet().to_owned(), a.pack.style().to_owned(), ui.theme().to_owned())
+            (
+                a.pack.pet().to_owned(),
+                a.pack.style().to_owned(),
+                ui.theme().to_owned(),
+            )
         };
         let it = |pet: &str, style: &str, theme: &str| (pet.to_owned(), style.to_owned(), theme.to_owned());
         let mut ui = start("Hood", None, Some("Green"));
@@ -2004,7 +2016,11 @@ pub(crate) mod tests {
         assert_eq!(worn(&ui), it("Hood", "Vector", "Green"));
         let prefs = ui.prefs();
         assert_eq!(
-            (prefs.avatar.as_deref(), prefs.avatar_style.as_deref(), prefs.avatar_theme.as_deref()),
+            (
+                prefs.avatar.as_deref(),
+                prefs.avatar_style.as_deref(),
+                prefs.avatar_theme.as_deref()
+            ),
             (Some("Hood"), Some("Vector"), None)
         );
         // the pet's tile still shows the style worn
@@ -2015,9 +2031,15 @@ pub(crate) mod tests {
         assert_eq!(worn(&start("Hamster (pixel)", None, None)).1, "Pixel");
         assert_eq!(worn(&start("Sprout (vector)", None, None)).1, "Vector");
         assert_eq!(worn(&start("Hood (green)", None, None)), it("Hood", "Pixel", "Green"));
-        assert_eq!(worn(&start("Hood", Some("Vector"), Some("Blue"))), it("Hood", "Vector", "Blue"));
+        assert_eq!(
+            worn(&start("Hood", Some("Vector"), Some("Blue"))),
+            it("Hood", "Vector", "Blue")
+        );
         // a style or theme it hasn't: the default
-        assert_eq!(worn(&start("Hood", Some("Chalk"), Some("Purple"))), it("Hood", "Pixel", "Blue"));
+        assert_eq!(
+            worn(&start("Hood", Some("Chalk"), Some("Purple"))),
+            it("Hood", "Pixel", "Blue")
+        );
         // the default style isn't kept
         assert_eq!(start("Hamster", Some("Vector"), None).prefs().avatar_style, None);
     }
@@ -2184,8 +2206,8 @@ pub(crate) mod tests {
         assert_eq!(ui.moods.news_until(), 0.0);
         run(&mut ui, start, 12.9, 1.0);
         assert!((ui.moods.news_until() - 19.0).abs() < 0.02, "{}", ui.moods.news_until());
-        // working, but the pet shows the news; Sprout draws no envelope, so it looks like attention (fnt-72 R6)
-        assert_eq!((ui.input.state.as_str(), ui.pet.anim_state()), ("news", "attention"));
+        // working, but the pet shows the news: Sprout holds its envelope (fnt-72)
+        assert_eq!((ui.input.state.as_str(), ui.pet.anim_state()), ("news", "news"));
         assert_eq!(ui.input.alert_until, 0.0, "the C#'s alert is the golden replays' alone");
     }
 
@@ -2253,8 +2275,11 @@ pub(crate) mod tests {
         assert!(all(&ticks, 11.0, 12.9, CALM_FRAME), "working");
         // Claude's bubble slides in at 2 s (and the pet wakes): smooth for a while
         assert!(all(&ticks, 2.0, 2.5, SMOOTH_FRAME), "a bubble coming");
-        // the review's alert, then Claude needing you: the pet hops all along
-        assert!(all(&ticks, 13.1, 22.0, SMOOTH_FRAME), "attention");
+        // the review's news comes in smoothly; then the pet stands holding its envelope, calm (fnt-72)
+        assert!(all(&ticks, 13.1, 14.2, SMOOTH_FRAME), "news coming");
+        assert!(all(&ticks, 14.5, 15.9, CALM_FRAME), "holding the news");
+        // Claude needing you: the pet hops all along
+        assert!(all(&ticks, 16.1, 22.0, SMOOTH_FRAME), "attention");
         // the script's busy first 30 s: about 13 s of it calm
         let calm: Duration = ticks
             .iter()
@@ -2328,7 +2353,8 @@ pub(crate) mod tests {
         assert_eq!(ui.frame_interval(), CALM_FRAME);
         // the body's frame flips every 20 ms: quicker than the calm rate shows
         let mut quick = ui.pet.loaded();
-        let body = quick.pack.layers[0].animations.get_mut("body").unwrap();
+        let at = quick.pack.layers.iter().position(|l| l.name == "body").unwrap();
+        let body = quick.pack.layers[at].animations.get_mut("body").unwrap();
         body.frames = vec![body.frames[0].clone(), body.frames[0].clone()];
         body.frames.iter_mut().for_each(|f| f.ms = 20);
         body.mode = aipet_sprite::pack::LoopMode::Loop;

@@ -11,7 +11,7 @@ pub const TIRED_AFTER_S: f64 = 2.0 * 3600.0;
 
 /// Whether `hour` (0 to 23, local) is late enough for the pet to be tired: 23:00 to 04:59.
 pub fn night(hour: u32) -> bool {
-    hour >= 23 || hour < 5
+    !(5..23).contains(&hour)
 }
 
 /// What the mood step remembers between ticks: the news window.

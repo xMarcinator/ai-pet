@@ -915,7 +915,8 @@ mod tests {
         let none = |_: &str| -> Result<Sheet, String> { Err("missing".into()) };
         let newer = text.replacen("\"format_version\": 1", "\"format_version\": 2", 1);
         assert!(read(&newer, none).unwrap_err().contains("newer"));
-        let tail = text.replacen("\"channel\": \"state\"", "\"channel\": \"tail\"", 1);
+        // the first layer, so its channel is read before any of its sheets
+        let tail = text.replacen("\"channel\": \"fx\"", "\"channel\": \"tail\"", 1);
         assert!(read(&tail, none).unwrap_err().contains("unknown channel"));
     }
 

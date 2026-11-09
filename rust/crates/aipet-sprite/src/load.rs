@@ -244,11 +244,21 @@ fn clash(pets: &[LoadedPack], new: &Pack) -> Option<String> {
         if old.name == new.name {
             Some(format!("a pet named {:?} is already loaded", new.name))
         } else if old.pet() == new.pet() && old.style() == new.style() {
-            Some(format!("{} already has a {} style ({:?})", new.pet(), new.style(), old.name))
+            Some(format!(
+                "{} already has a {} style ({:?})",
+                new.pet(),
+                new.style(),
+                old.name
+            ))
         } else if old.pet() == new.name && new.pet() != new.name {
             Some(format!("{:?} is another pet's name", new.name))
         } else if old.name == new.pet() && old.pet() != new.pet() {
-            Some(format!("{:?} is the name of {}'s {} style", new.pet(), old.pet(), old.style()))
+            Some(format!(
+                "{:?} is the name of {}'s {} style",
+                new.pet(),
+                old.pet(),
+                old.style()
+            ))
         } else {
             None
         }
@@ -343,14 +353,16 @@ fn themes(found: &mut Found, folder: &Path, except: Option<&std::ffi::OsStr>) {
 /// Puts the theme `t`, from the file `file`, on its pet in `pets`, all or nothing: the drawing it names, else (a pet's
 /// name) that pet's default style. Says the pet and style it went on.
 fn attach(pets: &mut [LoadedPack], file: &str, t: ThemeFile) -> Result<(String, String, String), String> {
-    let at = pets.iter().position(|p| p.name() == t.pet).or_else(|| {
-        groups(pets)
-            .into_iter()
-            .find(|g| g.pet == t.pet)
-            .map(|g| g.default)
-    });
+    let at = pets
+        .iter()
+        .position(|p| p.name() == t.pet)
+        .or_else(|| groups(pets).into_iter().find(|g| g.pet == t.pet).map(|g| g.default));
     let pet = &mut pets[at.ok_or_else(|| format!("there is no pet named {:?} for the theme", t.pet))?];
-    let on = (pet.name().to_owned(), pet.pack.pet().to_owned(), pet.pack.style().to_owned());
+    let on = (
+        pet.name().to_owned(),
+        pet.pack.pet().to_owned(),
+        pet.pack.style().to_owned(),
+    );
     if pet.pack.kind == Kind::Painted {
         return Err(format!("{} is a painted pet, which has no themes", t.pet));
     }
@@ -1274,23 +1286,52 @@ mod tests {
         let fox = found.groups().into_iter().find(|g| g.pet == "Fox").expect("Fox");
         let styles: Vec<&str> = fox.styles.iter().map(|&i| found.pets[i].pack.style()).collect();
         assert_eq!(styles, ["Fancy", "Pixel"]);
-        assert_eq!(found.pets[fox.default].name(), "Fox (fancy)", "no drawing is named Fox: the first loaded");
-        let skipped: Vec<(&str, &str)> = found.skipped.iter().map(|s| (s.file.as_str(), s.reason.as_str())).collect();
-        assert!(skipped.contains(&("Hood/pixel", "Hood already has a Pixel style (\"Hood\")")), "{skipped:?}");
-        assert!(skipped.contains(&("x-again", "a pet named \"Fox (pixel)\" is already loaded")), "{skipped:?}");
-        assert!(skipped.contains(&("x-owl", "\"Fox\" is another pet's name")), "{skipped:?}");
+        assert_eq!(
+            found.pets[fox.default].name(),
+            "Fox (fancy)",
+            "no drawing is named Fox: the first loaded"
+        );
+        let skipped: Vec<(&str, &str)> = found
+            .skipped
+            .iter()
+            .map(|s| (s.file.as_str(), s.reason.as_str()))
+            .collect();
+        assert!(
+            skipped.contains(&("Hood/pixel", "Hood already has a Pixel style (\"Hood\")")),
+            "{skipped:?}"
+        );
+        assert!(
+            skipped.contains(&("x-again", "a pet named \"Fox (pixel)\" is already loaded")),
+            "{skipped:?}"
+        );
+        assert!(
+            skipped.contains(&("x-owl", "\"Fox\" is another pet's name")),
+            "{skipped:?}"
+        );
         assert!(skipped.iter().any(|(f, _)| *f == "Fox/empty"), "{skipped:?}");
-        assert!(skipped.contains(&("Ghost", "no style of the pet loaded")), "{skipped:?}");
+        assert!(
+            skipped.contains(&("Ghost", "no style of the pet loaded")),
+            "{skipped:?}"
+        );
         // --check-pack: a line per style
         let (lines, ok) = check(&d.join("Fox"));
         assert!(!ok, "Fox/empty fails: {lines}");
-        assert!(lines.contains("OK Fox (fancy) (pixel, pet Fox, style Fancy, "), "{lines}");
-        assert!(lines.contains("OK Fox (pixel) (pixel, pet Fox, style Pixel, "), "{lines}");
+        assert!(
+            lines.contains("OK Fox (fancy) (pixel, pet Fox, style Fancy, "),
+            "{lines}"
+        );
+        assert!(
+            lines.contains("OK Fox (pixel) (pixel, pet Fox, style Pixel, "),
+            "{lines}"
+        );
         // a theme naming the pet alone goes on its default style
         let themes = d.join(THEMES);
         fs::create_dir_all(&themes).unwrap();
-        fs::write(themes.join("fox.json"), r##"{"pet": "Fox", "theme": "Red", "palette": {"body": "#4A1010"}}"##)
-            .unwrap();
+        fs::write(
+            themes.join("fox.json"),
+            r##"{"pet": "Fox", "theme": "Red", "palette": {"body": "#4A1010"}}"##,
+        )
+        .unwrap();
         assert_eq!(
             check(&themes.join("fox.json")),
             ("OK Fox (fancy) in Red (a theme, pet Fox, style Fancy)".to_owned(), true)
@@ -1307,7 +1348,10 @@ mod tests {
         let found = all(&d);
         assert!(found.pets.iter().all(|p| p.name() != "Bat"));
         assert!(
-            found.skipped.iter().any(|s| s.file == "Bat" && s.reason == "the folder is a link"),
+            found
+                .skipped
+                .iter()
+                .any(|s| s.file == "Bat" && s.reason == "the folder is a link"),
             "{:?}",
             found.skipped
         );
@@ -1553,7 +1597,10 @@ mod tests {
         let good = d.join("good");
         hood_pack(&good);
         let (line, ok) = check(&good);
-        assert!(ok && line.starts_with("OK Hood (pixel, pet Hood, style Pixel, 13 layers, "), "{line}");
+        assert!(
+            ok && line.starts_with("OK Hood (pixel, pet Hood, style Pixel, 17 layers, "),
+            "{line}"
+        );
         fs::remove_file(good.join("eyes.png")).unwrap();
         let (line, ok) = check(&good);
         assert!(!ok && line.contains("eyes.png") && line.contains("missing"), "{line}");
@@ -2022,7 +2069,8 @@ mod tests {
         let sprout = pet("Sprout");
         let mint = sprout.in_theme("Mint").unwrap();
         let body = sprout.pack.palette.colours["body"];
-        let count = |p: &LoadedPack, c: u32| p.sheets[0].pixels.iter().filter(|&&px| px == c).count();
+        let at = sprout.pack.layers.iter().position(|l| l.name == "body").unwrap();
+        let count = |p: &LoadedPack, c: u32| p.sheets[at].pixels.iter().filter(|&&px| px == c).count();
         assert!(count(sprout, body) > 0);
         assert_eq!(count(&mint, body), 0);
         assert_eq!(count(&mint, 0xFF7FD8A0), count(sprout, body));
@@ -2181,11 +2229,13 @@ mod tests {
         // worn in Night: the body's sheet is the theme's, and nothing else changed
         let worn = p.in_theme("Night").unwrap();
         assert_eq!(worn.pack, p.pack);
-        assert_eq!(worn.sheets[0], night);
-        assert_eq!(worn.sheets[1..], p.sheets[1..]);
-        assert_eq!(p.sheets[0], body);
+        let at = p.pack.layers.iter().position(|l| l.name == "body").unwrap();
+        for (i, (worn, own)) in worn.sheets.iter().zip(&p.sheets).enumerate() {
+            assert_eq!(worn, if i == at { &night } else { own }, "sheet {i}");
+        }
+        assert_eq!(p.sheets[at], body);
         // a colour theme still recolours the pack's own sheets
-        assert_ne!(p.in_theme("Green").unwrap().sheets[0], body);
+        assert_ne!(p.in_theme("Green").unwrap().sheets[at], body);
         // --check-pack names the themes
         assert_eq!(
             check(&pack),

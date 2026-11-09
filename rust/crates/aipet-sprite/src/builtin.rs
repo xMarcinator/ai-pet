@@ -26,7 +26,8 @@ macro_rules! pack {
 macro_rules! baked {
     ($dir:literal) => {
         pack!($dir: "pack.json", "body.png", "headphones-outline.png", "arms.png", "arms-run.png", "feet.png",
-            "feet-run.png", "headphones.png", "prop.png", "eyes.png", "screen.png", "dust.png", "fx.png", "sparkles.png")
+            "feet-run.png", "headphones.png", "prop.png", "eyes.png", "screen.png", "dust.png", "fx.png", "sparkles.png",
+            "aura-glow.png", "tears.png", "heart.png", "aura.png")
     };
 }
 

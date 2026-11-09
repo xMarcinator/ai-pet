@@ -484,7 +484,9 @@ impl Board {
         for c in &chats {
             self.first_seen.entry(c.id.clone()).or_insert(now);
         }
-        self.front_age = primary.and_then(|p| self.first_seen.get(&p.id)).map(|since| now - since);
+        self.front_age = primary
+            .and_then(|p| self.first_seen.get(&p.id))
+            .map(|since| now - since);
         self.all = sessions;
     }
 }
@@ -777,7 +779,11 @@ mod tests {
         ] {
             let mut board = Board::new();
             board.refresh(&sources, t);
-            assert_eq!(board.front_age(), Some(0.0), "a chat open at the start counts from then");
+            assert_eq!(
+                board.front_age(),
+                Some(0.0),
+                "a chat open at the start counts from then"
+            );
             board.refresh(&sources, t + 7200.0);
             assert_eq!(board.front_age(), Some(7200.0));
         }

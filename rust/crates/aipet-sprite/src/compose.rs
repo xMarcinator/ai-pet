@@ -53,7 +53,11 @@ pub struct Pick<'a> {
 /// Whether the pose's facing mirrors a layer: by its own policy, else the pack's, when the pet faces away from the way
 /// the art does (the pack's `faces`; effects are always drawn as for a pet facing right).
 pub fn mirrored(pack: &Pack, layer: &Layer, pose: &Pose) -> bool {
-    let drawn = if layer.channel == Channel::Fx { Facing::Right } else { pack.faces };
+    let drawn = if layer.channel == Channel::Fx {
+        Facing::Right
+    } else {
+        pack.faces
+    };
     pose.facing != drawn && layer.mirror.unwrap_or(pack.mirror) == Mirror::Flip
 }
 
@@ -397,7 +401,10 @@ pub fn fx_top(pack: &Pack, sheets: &[crate::bake::Sheet], fx: crate::pose::Fx, s
                 scale: SCALE,
             };
             let px = crate::vector::render(&items, view, |item| is_fx(item.layer));
-            if let Some(row) = px.chunks(view.w as usize * 4).position(|r| r.chunks(4).any(|p| p[3] > 8)) {
+            if let Some(row) = px
+                .chunks(view.w as usize * 4)
+                .position(|r| r.chunks(4).any(|p| p[3] > 8))
+            {
                 reach(view.y0 + row as f64 / SCALE);
             }
             continue;
@@ -411,7 +418,9 @@ pub fn fx_top(pack: &Pack, sheets: &[crate::bake::Sheet], fx: crate::pose::Fx, s
                 w,
                 h,
                 pivot,
-            }) = p.frame.map(|f| pack.layers[p.layer].animations[p.value].frames[f].art.clone())
+            }) = p
+                .frame
+                .map(|f| pack.layers[p.layer].animations[p.value].frames[f].art.clone())
             else {
                 continue;
             };
@@ -419,7 +428,7 @@ pub fn fx_top(pack: &Pack, sheets: &[crate::bake::Sheet], fx: crate::pose::Fx, s
             let opaque =
                 (0..h).position(|fy| (0..w).any(|fx| s.pixels[((y + fy) * s.width + x + fx) as usize] >> 24 != 0));
             if let Some(row) = opaque {
-                let oy = (offsets[p.layer].1 / pack.pixel_size).round() - f64::from(pivot.1);
+                let oy = (offsets[p.layer].1 / pack.pixel_size).round() - pivot.1;
                 reach((oy + row as f64) * pack.pixel_size);
             }
         }

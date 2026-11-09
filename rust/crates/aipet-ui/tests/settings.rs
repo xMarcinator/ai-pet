@@ -620,8 +620,9 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     ui.update(avatars(A::SaveTheme));
     assert_eq!(ui.theme(), "My theme");
     let worn = settings::avatars::worn(&ui);
-    assert!(worn.sheets[0].pixels.contains(&0xFF5A1A60));
-    assert!(!worn.sheets[0].pixels.contains(&0xFF16285E));
+    let at = worn.pack.layers.iter().position(|l| l.name == "body").unwrap();
+    assert!(worn.sheets[at].pixels.contains(&0xFF5A1A60));
+    assert!(!worn.sheets[at].pixels.contains(&0xFF16285E));
 
     // deleted: its file goes, and the pet is back in its default
     ui.update(avatars(A::DeleteTheme("My theme".into())));
@@ -730,7 +731,13 @@ fn reload_puts_on_the_default_style_when_the_worn_one_goes_and_the_first_pet_whe
     };
     reload(&mut ui);
     // one tile for the Fox, two styles
-    assert_eq!(settings::avatars::tiles(&ui).iter().filter(|&&(n, _)| n == "Fox").count(), 1);
+    assert_eq!(
+        settings::avatars::tiles(&ui)
+            .iter()
+            .filter(|&&(n, _)| n == "Fox")
+            .count(),
+        1
+    );
     // wear the Fox in its Fancy style
     let fancy = aipet_sprite::load::all(&folder)
         .pets

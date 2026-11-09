@@ -491,7 +491,11 @@ mod tests {
             )
         };
         let failed = |sessions: &super::super::AgentSessions| {
-            let e = sessions.snapshot().into_iter().find(|e| e.id == "claude:s1").expect("the chat");
+            let e = sessions
+                .snapshot()
+                .into_iter()
+                .find(|e| e.id == "claude:s1")
+                .expect("the chat");
             (e.state, e.failed)
         };
         let line = event("UserPromptSubmit", 100.0);

@@ -75,20 +75,28 @@ pub fn makes_themes(pet: &PetUi) -> bool {
 /// The tiles the page draws, in order: one per pet (FNT-74), its name, and whether it is the one worn.
 #[doc(hidden)]
 pub fn tiles(pet: &PetUi) -> Vec<(&str, bool)> {
-    shown(pet).map(|(i, avatar)| (avatar.pack.pet(), i == pet.avatar)).collect()
+    shown(pet)
+        .map(|(i, avatar)| (avatar.pack.pet(), i == pet.avatar))
+        .collect()
 }
 
 /// The worn pet's styles as the page shows them, in order: each one's label, its drawing, and whether it is worn.
 /// Empty for a pet with one style.
 #[doc(hidden)]
 pub fn styles(pet: &PetUi) -> Vec<(&str, usize, bool)> {
-    let Some(g) = crate::pets(&pet.avatars).into_iter().find(|g| g.styles.contains(&pet.avatar)) else {
+    let Some(g) = crate::pets(&pet.avatars)
+        .into_iter()
+        .find(|g| g.styles.contains(&pet.avatar))
+    else {
         return Vec::new();
     };
     if g.styles.len() < 2 {
         return Vec::new();
     }
-    g.styles.iter().map(|&i| (pet.avatars[i].pack.style(), i, i == pet.avatar)).collect()
+    g.styles
+        .iter()
+        .map(|&i| (pet.avatars[i].pack.style(), i, i == pet.avatar))
+        .collect()
 }
 
 /// Wears the worn pet in its style drawn by `i`, in the theme it wears now where that style has one by that name, else
@@ -118,7 +126,11 @@ pub fn worn(pet: &PetUi) -> LoadedPack {
 /// Each pet's tile, in order: the drawing it shows (the worn one for the worn pet, else its default style) and it.
 fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &LoadedPack)> {
     crate::pets(&pet.avatars).into_iter().map(move |g| {
-        let i = if g.styles.contains(&pet.avatar) { pet.avatar } else { g.default };
+        let i = if g.styles.contains(&pet.avatar) {
+            pet.avatar
+        } else {
+            g.default
+        };
         (i, &*pet.avatars[i])
     })
 }
@@ -206,7 +218,12 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
                     shadow: Shadow::default(),
                     snap: true,
                 });
-            tooltip(tile, tip(format!("Wear {}", avatar.pack.pet())), tooltip::Position::Bottom).into()
+            tooltip(
+                tile,
+                tip(format!("Wear {}", avatar.pack.pet())),
+                tooltip::Position::Bottom,
+            )
+            .into()
         });
     let grid = Row::with_children(tiles).spacing(12).wrap().vertical_spacing(12);
     // the demo shows the repository's avatars, which aren't in a data folder: there is nothing to reload or open
@@ -259,7 +276,9 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
     // the worn pet's styles, where it has more than one: how it is drawn, beside its themes (FNT-74)
     let list = styles(pet);
     let style_card = (!list.is_empty()).then(|| {
-        let pills = list.iter().map(|&(label, i, on)| pill(label, on, accent).on_press(crate::Message::SelectStyle(i)).into());
+        let pills = list
+            .iter()
+            .map(|&(label, i, on)| pill(label, on, accent).on_press(crate::Message::SelectStyle(i)).into());
         card(button_row(
             "Style",
             "How the pet is drawn. Each style has its own themes; switching keeps the theme where the style has one by \

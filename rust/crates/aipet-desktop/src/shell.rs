@@ -785,10 +785,14 @@ impl Located {
     /// it across at least. The window's size is the C#'s `(int)(Width * Scale)`, truncated.
     fn shows(&self, (x, y): (i64, i64)) -> bool {
         let scale = self.scale();
-        let (w, h) = ((f64::from(SURFACE.width) * scale) as i64, (f64::from(SURFACE.height) * scale) as i64);
-        self.screens.iter().map(|s| s.bounds).any(|b| {
-            x + w - 80 > b.left() && x + 80 < b.right() && y + h - 120 > b.top() && y + h - 60 < b.bottom()
-        })
+        let (w, h) = (
+            (f64::from(SURFACE.width) * scale) as i64,
+            (f64::from(SURFACE.height) * scale) as i64,
+        );
+        self.screens
+            .iter()
+            .map(|s| s.bounds)
+            .any(|b| x + w - 80 > b.left() && x + 80 < b.right() && y + h - 120 > b.top() && y + h - 60 < b.bottom())
     }
 
     /// Where the window goes after the screens changed under it (fn-2 R23): nowhere while the pet still shows on some
@@ -1350,7 +1354,11 @@ mod tests {
         };
         assert_eq!(on_the_left.rescue(), None);
         let _ = shell.update(Message::Screens(on_the_left.clone()));
-        assert!(heard.lines().is_empty(), "a pet that shows doesn't move: {:?}", heard.lines());
+        assert!(
+            heard.lines().is_empty(),
+            "a pet that shows doesn't move: {:?}",
+            heard.lines()
+        );
         let gone = Located {
             screens: screens(1.0)[..1].to_vec(),
             ..on_the_left.clone()

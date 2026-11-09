@@ -48,7 +48,17 @@ pub fn fx_lift(fx: Fx, sparkles: bool) -> f64 {
 /// highest of every effect's [`crate::compose::fx_top`] lifted by its [`fx_lift`]. 0 when they never leave the box.
 pub fn fx_reach(pack: &crate::pack::Pack, sheets: &[crate::bake::Sheet]) -> f64 {
     let mut reach = 0.0f64;
-    for fx in [Fx::Zs, Fx::Dots, Fx::Notes, Fx::Alert, Fx::Sparkles, Fx::Dust, Fx::Tears, Fx::Aura, Fx::Heart] {
+    for fx in [
+        Fx::Zs,
+        Fx::Dots,
+        Fx::Notes,
+        Fx::Alert,
+        Fx::Sparkles,
+        Fx::Dust,
+        Fx::Tears,
+        Fx::Aura,
+        Fx::Heart,
+    ] {
         for sparkles in [false, true] {
             if let Some(top) = crate::compose::fx_top(pack, sheets, fx, sparkles) {
                 reach = reach.min(top - fx_lift(fx, sparkles));
@@ -382,7 +392,10 @@ impl<R: PetRng> Pet<R> {
 
     /// Whether the worn pack draws `value` on `channel` itself, not a fallback's.
     fn draws(&self, channel: pose::Channel, value: &str) -> bool {
-        self.pack.layers.iter().any(|l| l.channel == channel && l.resolve_art(value) == Some(value))
+        self.pack
+            .layers
+            .iter()
+            .any(|l| l.channel == channel && l.resolve_art(value) == Some(value))
     }
 
     /// The state the pet shows for `st` (fnt-72 R6): sad and news look like attention, and tired is idle, with the moods
@@ -902,6 +915,21 @@ mod tests {
         loaded
     }
 
+    /// Sprout as it was before fnt-72: none of the new values drawn.
+    fn without_new_values<R: PetRng>(pet: &Pet<R>) -> LoadedPack {
+        let mut loaded = pet.loaded();
+        let new_layer = |l: &crate::pack::Layer| ["aura-glow", "tears", "heart", "aura"].contains(&l.name.as_str());
+        let mut keep = loaded.pack.layers.iter().map(|l| !new_layer(l));
+        loaded.sheets.retain(|_| keep.next().unwrap());
+        loaded.pack.layers.retain(|l| !new_layer(l));
+        for layer in &mut loaded.pack.layers {
+            for v in ["envelope", "sleepy", "tired"] {
+                layer.animations.remove(v);
+            }
+        }
+        loaded
+    }
+
     fn moody(state: &str) -> PetInput {
         PetInput {
             state: state.to_owned(),
@@ -916,13 +944,22 @@ mod tests {
         pet.set_pack(with_new_values(&pet));
         pet.update(&moody("sad"), 1.0);
         let p = *pet.pose();
-        assert_eq!((p.state.mood, p.fx, p.eyes.expression), (Mood::Sad, Fx::Tears, Expression::Down));
+        assert_eq!(
+            (p.state.mood, p.fx, p.eyes.expression),
+            (Mood::Sad, Fx::Tears, Expression::Down)
+        );
         pet.update(&moody("tired"), 2.0);
         let p = *pet.pose();
-        assert_eq!((p.state.mood, p.eyes.expression, p.fx), (Mood::Tired, Expression::Sleepy, Fx::None));
+        assert_eq!(
+            (p.state.mood, p.eyes.expression, p.fx),
+            (Mood::Tired, Expression::Sleepy, Fx::None)
+        );
         pet.update(&moody("news"), 3.0);
         let p = *pet.pose();
-        assert_eq!((p.state.mood, p.prop, p.arms, p.fx), (Mood::News, Prop::Envelope, pose::Arms::Hold, Fx::None));
+        assert_eq!(
+            (p.state.mood, p.prop, p.arms, p.fx),
+            (Mood::News, Prop::Envelope, pose::Arms::Hold, Fx::None)
+        );
         // a done opens with the aura instead of sparkles, then sparkles
         let done = PetInput {
             state_since: 4.0,
@@ -933,14 +970,21 @@ mod tests {
         pet.update(&done, 4.0 + AURA_S + 0.1);
         assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
         // a poke shows a heart
-        pet.update(&PetInput { poke_until: 9.0, ..moody("idle") }, 8.5);
+        pet.update(
+            &PetInput {
+                poke_until: 9.0,
+                ..moody("idle")
+            },
+            8.5,
+        );
         assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::Heart, false));
     }
 
     #[test]
     fn a_pack_without_the_new_values_falls_back_and_never_to_plain_idle() {
-        // Sprout as built in draws none of them: sad and news look like attention, tired like idle, sparkles stay
+        // sad and news look like attention, tired like idle, sparkles stay
         let mut pet = Pet::with_rng(Fixed(0.5));
+        pet.set_pack(without_new_values(&pet));
         pet.update(&moody("sad"), 1.0);
         assert_eq!((pet.pose().state.mood, pet.pose().fx), (Mood::Attention, Fx::Alert));
         pet.update(&moody("news"), 2.0);
@@ -953,7 +997,13 @@ mod tests {
         };
         pet.update(&done, 4.5);
         assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
-        pet.update(&PetInput { poke_until: 9.0, ..moody("idle") }, 8.5);
+        pet.update(
+            &PetInput {
+                poke_until: 9.0,
+                ..moody("idle")
+            },
+            8.5,
+        );
         assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
     }
 
@@ -968,7 +1018,13 @@ mod tests {
         };
         pet.update(&off("done", 1.0), 1.5);
         assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
-        pet.update(&PetInput { poke_until: 9.0, ..off("idle", 0.0) }, 8.5);
+        pet.update(
+            &PetInput {
+                poke_until: 9.0,
+                ..off("idle", 0.0)
+            },
+            8.5,
+        );
         assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
         pet.update(&off("sad", 0.0), 10.0);
         assert_eq!(pet.pose().state.mood, Mood::Attention);
@@ -1025,7 +1081,13 @@ mod tests {
         };
         for step in 0..300 {
             let t = 1.0 + f64::from(step) * 0.01;
-            pet.update(&PetInput { last_move: t, ..running.clone() }, t);
+            pet.update(
+                &PetInput {
+                    last_move: t,
+                    ..running.clone()
+                },
+                t,
+            );
             let p = *pet.pose();
             assert_eq!(p.fx, Fx::Dust);
             assert!(-p.motion.y <= fx_lift(Fx::Dust, p.sparkles) + 1e-9);

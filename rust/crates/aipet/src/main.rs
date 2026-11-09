@@ -419,7 +419,13 @@ mod tests {
         assert!(text.contains(r#""Avatar":"Hood","AvatarStyle":"Vector""#), "{text}");
         let (read, _) = aipet_core::config::Config::load_from(&path);
         assert_eq!(aipet_ui::Prefs::from(&read).avatar_style.as_deref(), Some("Vector"));
-        apply_prefs(&mut config, &aipet_ui::Prefs { avatar_style: None, ..prefs });
+        apply_prefs(
+            &mut config,
+            &aipet_ui::Prefs {
+                avatar_style: None,
+                ..prefs
+            },
+        );
         config.save_to(&path).unwrap();
         assert!(!std::fs::read_to_string(&path).unwrap().contains("AvatarStyle"));
         let _ = std::fs::remove_dir_all(&dir);

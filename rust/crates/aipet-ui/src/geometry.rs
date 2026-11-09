@@ -377,7 +377,10 @@ mod tests {
                 let top = SPRITE.y + SPRITE_ORIGIN.y + (reach - anchor) * s;
                 let bottom = stacks_bottom(s, reach);
                 if top < bottom {
-                    failures.push(format!("{} at {size}%: effects at {top}, bubbles end at {bottom}", p.pack.name));
+                    failures.push(format!(
+                        "{} at {size}%: effects at {top}, bubbles end at {bottom}",
+                        p.pack.name
+                    ));
                 }
             }
         }
