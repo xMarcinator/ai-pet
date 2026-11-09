@@ -36,10 +36,10 @@ pub fn fx_lift(fx: Fx, sparkles: bool) -> f64 {
         return 3.0 * PF;
     }
     match fx {
-        Fx::None | Fx::Zs => 0.0,
+        Fx::None | Fx::Zs | Fx::Tears => 0.0,
         Fx::Dots => 0.7 * PF,
         Fx::Notes => 1.2 * PF,
-        Fx::Alert | Fx::Sparkles => 3.0 * PF,
+        Fx::Alert | Fx::Sparkles | Fx::Aura | Fx::Heart => 3.0 * PF,
         Fx::Dust => PF,
     }
 }
@@ -48,7 +48,7 @@ pub fn fx_lift(fx: Fx, sparkles: bool) -> f64 {
 /// highest of every effect's [`crate::compose::fx_top`] lifted by its [`fx_lift`]. 0 when they never leave the box.
 pub fn fx_reach(pack: &crate::pack::Pack, sheets: &[crate::bake::Sheet]) -> f64 {
     let mut reach = 0.0f64;
-    for fx in [Fx::Zs, Fx::Dots, Fx::Notes, Fx::Alert, Fx::Sparkles, Fx::Dust] {
+    for fx in [Fx::Zs, Fx::Dots, Fx::Notes, Fx::Alert, Fx::Sparkles, Fx::Dust, Fx::Tears, Fx::Aura, Fx::Heart] {
         for sparkles in [false, true] {
             if let Some(top) = crate::compose::fx_top(pack, sheets, fx, sparkles) {
                 reach = reach.min(top - fx_lift(fx, sparkles));
@@ -80,7 +80,13 @@ pub struct PetInput {
     pub wave_until: f64,
     pub alert_until: f64,
     pub music: bool,
+    /// fnt-72's moods and effects: `sad`, `tired` and `news` as states, the aura opening a done, the heart of a poke.
+    /// The app turns them on; the C# golden replays never do, so with them off the pet is the C#'s.
+    pub moods: bool,
 }
+
+/// How long the golden aura plays at the start of a done (fnt-72 R3), in seconds.
+pub const AURA_S: f64 = 1.8;
 
 impl Default for PetInput {
     fn default() -> Self {
@@ -99,6 +105,7 @@ impl Default for PetInput {
             wave_until: 0.0,
             alert_until: 0.0,
             music: false,
+            moods: false,
         }
     }
 }
@@ -370,9 +377,29 @@ impl<R: PetRng> Pet<R> {
         a + self.rng.next_double() * (b - a)
     }
 
+    /// Whether the worn pack draws `value` on `channel` itself, not a fallback's.
+    fn draws(&self, channel: pose::Channel, value: &str) -> bool {
+        self.pack.layers.iter().any(|l| l.channel == channel && l.resolve_art(value) == Some(value))
+    }
+
+    /// The state the pet shows for `st` (fnt-72 R6): sad and news look like attention, and tired is idle, with the moods
+    /// off or where the pack draws nothing of them (its tears, its envelope, its sleepy eyes or its own state).
+    fn drawable<'a>(&self, st: &'a str, moods: bool) -> &'a str {
+        let has = |state: &str, channel, value: &str| {
+            moods && (self.draws(pose::Channel::State, state) || self.draws(channel, value))
+        };
+        match st {
+            "sad" if !has("sad", pose::Channel::Fx, Fx::Tears.key()) => "attention",
+            "news" if !has("news", pose::Channel::Prop, Prop::Envelope.key()) => "attention",
+            "tired" if !has("tired", pose::Channel::Eyes, Expression::Sleepy.key()) => "idle",
+            st => st,
+        }
+    }
+
     fn compute_pose<'a>(&mut self, inp: &'a PetInput, t: f64) -> Figure<'a> {
         let mut p = Figure::default();
         let mut st: &'a str = if t < inp.alert_until { "attention" } else { &inp.state };
+        st = self.drawable(st, inp.moods);
         p.headphones = inp.music;
         // with nothing to do and music on, the pet listens along instead of idling or napping
         if inp.music && (matches!(st, "idle" | "sleep") || (st == "done" && t - inp.state_since > 4.0)) {
@@ -468,6 +495,20 @@ impl<R: PetRng> Pet<R> {
                     p.lx = 1;
                 }
             }
+            "sad" => {
+                // a slow droop, eyes down; the tears are the effect
+                p.y = (0.5 + 0.5 * (t * 1.4).sin()) * 0.4 * PF;
+                p.eyes = "down";
+            }
+            "tired" => {
+                p.y = (0.5 + 0.5 * (t * 1.0).sin()) * 0.6 * PF;
+                p.eyes = "sleepy";
+            }
+            "news" => {
+                // a review came in: the envelope held up, a little bounce
+                p.y = -(0.5 + 0.5 * (t * 3.0).sin()) * 0.6 * PF;
+                p.prop = Some("envelope");
+            }
             "attention" => {
                 let ph = t % 1.2;
                 p.y = if ph < 0.6 {
@@ -495,6 +536,10 @@ impl<R: PetRng> Pet<R> {
             p.pointer = Some(m);
             p.lx = (((m.0 - (13 * P) as f64) / 28.0).round_ties_even() as i32).clamp(-2, 2);
             p.eyes = if m.1 < (11 * P - 40) as f64 { "up" } else { "normal" };
+            if st == "tired" {
+                // the eyes follow the pointer, sleepily
+                p.eyes = "sleepy";
+            }
             if st == "sleep" {
                 p.y = 0.0;
             }
@@ -716,12 +761,14 @@ impl<R: PetRng> Pet<R> {
         };
         let prop = match p.prop.filter(|_| !p.poked && t >= inp.land_until) {
             Some("lens") => Prop::Lens,
+            Some("envelope") => Prop::Envelope,
             Some(_) => Prop::Laptop,
             None => Prop::None,
         };
         let arms = match (p.arms_pose, prop) {
             (pose::Arms::Rest, Prop::Laptop) => pose::Arms::Hold,
             (pose::Arms::Rest, Prop::Lens) => pose::Arms::Lens,
+            (pose::Arms::Rest, Prop::Envelope) => pose::Arms::Hold,
             (arms, _) => arms,
         };
         let fx = if p.running {
@@ -734,9 +781,24 @@ impl<R: PetRng> Pet<R> {
                 Mood::Listen => Fx::Notes,
                 Mood::Sleep if !inp.hover => Fx::Zs,
                 Mood::Attention => Fx::Alert,
+                Mood::Sad => Fx::Tears,
                 _ => Fx::None,
             }
         };
+        let mut sparkles = (self.anim_state == "done" || p.poked) && !p.held;
+        // fnt-72: a poke shows a heart and a done opens with the aura, where the pack draws them; else sparkles
+        let mut fx = fx;
+        if inp.moods && sparkles && !p.running {
+            if p.poked && self.draws(pose::Channel::Fx, Fx::Heart.key()) {
+                (fx, sparkles) = (Fx::Heart, false);
+            } else if !p.poked
+                && self.anim_state == "done"
+                && t - inp.state_since < AURA_S
+                && self.draws(pose::Channel::Fx, Fx::Aura.key())
+            {
+                (fx, sparkles) = (Fx::Aura, false);
+            }
+        }
         Values {
             state: StateValue {
                 mood,
@@ -752,7 +814,7 @@ impl<R: PetRng> Pet<R> {
             prop,
             headphones: p.headphones,
             fx,
-            sparkles: (self.anim_state == "done" || p.poked) && !p.held,
+            sparkles,
             facing: if inp.facing > 0 { Facing::Right } else { Facing::Left },
         }
     }
@@ -815,13 +877,115 @@ mod tests {
         assert!(pet.update(&PetInput::default(), 0.02).pixels_changed);
     }
 
+    /// Sprout with fnt-72's values drawn (borrowed frames: the tears, aura and heart are its sparkles, the envelope its
+    /// laptop, the sleepy eyes its happy ones).
+    fn with_new_values<R: PetRng>(pet: &Pet<R>) -> LoadedPack {
+        let mut loaded = pet.loaded();
+        for layer in &mut loaded.pack.layers {
+            let mut copy = |from: &str, to: &[&str]| {
+                if let Some(a) = layer.animations.get(from).cloned() {
+                    for v in to {
+                        layer.animations.insert((*v).to_owned(), a.clone());
+                    }
+                }
+            };
+            match layer.channel {
+                pose::Channel::Fx => copy("sparkles", &["tears", "aura", "heart"]),
+                pose::Channel::Prop => copy("laptop", &["envelope"]),
+                pose::Channel::Eyes => copy("happy", &["sleepy"]),
+                _ => {}
+            }
+        }
+        loaded
+    }
+
+    fn moody(state: &str) -> PetInput {
+        PetInput {
+            state: state.to_owned(),
+            moods: true,
+            ..PetInput::default()
+        }
+    }
+
+    #[test]
+    fn the_new_moods_show_where_the_pack_draws_them() {
+        let mut pet = Pet::with_rng(Fixed(0.5));
+        pet.set_pack(with_new_values(&pet));
+        pet.update(&moody("sad"), 1.0);
+        let p = *pet.pose();
+        assert_eq!((p.state.mood, p.fx, p.eyes.expression), (Mood::Sad, Fx::Tears, Expression::Down));
+        pet.update(&moody("tired"), 2.0);
+        let p = *pet.pose();
+        assert_eq!((p.state.mood, p.eyes.expression, p.fx), (Mood::Tired, Expression::Sleepy, Fx::None));
+        pet.update(&moody("news"), 3.0);
+        let p = *pet.pose();
+        assert_eq!((p.state.mood, p.prop, p.arms, p.fx), (Mood::News, Prop::Envelope, pose::Arms::Hold, Fx::None));
+        // a done opens with the aura instead of sparkles, then sparkles
+        let done = PetInput {
+            state_since: 4.0,
+            ..moody("done")
+        };
+        pet.update(&done, 4.5);
+        assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::Aura, false));
+        pet.update(&done, 4.0 + AURA_S + 0.1);
+        assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
+        // a poke shows a heart
+        pet.update(&PetInput { poke_until: 9.0, ..moody("idle") }, 8.5);
+        assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::Heart, false));
+    }
+
+    #[test]
+    fn a_pack_without_the_new_values_falls_back_and_never_to_plain_idle() {
+        // Sprout as built in draws none of them: sad and news look like attention, tired like idle, sparkles stay
+        let mut pet = Pet::with_rng(Fixed(0.5));
+        pet.update(&moody("sad"), 1.0);
+        assert_eq!((pet.pose().state.mood, pet.pose().fx), (Mood::Attention, Fx::Alert));
+        pet.update(&moody("news"), 2.0);
+        assert_eq!((pet.pose().state.mood, pet.pose().fx), (Mood::Attention, Fx::Alert));
+        pet.update(&moody("tired"), 3.0);
+        assert_eq!(pet.pose().state.mood, Mood::Idle);
+        let done = PetInput {
+            state_since: 4.0,
+            ..moody("done")
+        };
+        pet.update(&done, 4.5);
+        assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
+        pet.update(&PetInput { poke_until: 9.0, ..moody("idle") }, 8.5);
+        assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
+    }
+
+    #[test]
+    fn with_the_moods_off_the_pet_is_the_csharps_whatever_the_pack_draws() {
+        let mut pet = Pet::with_rng(Fixed(0.5));
+        pet.set_pack(with_new_values(&pet));
+        let off = |state: &str, since: f64| PetInput {
+            state: state.to_owned(),
+            state_since: since,
+            ..PetInput::default()
+        };
+        pet.update(&off("done", 1.0), 1.5);
+        assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
+        pet.update(&PetInput { poke_until: 9.0, ..off("idle", 0.0) }, 8.5);
+        assert_eq!((pet.pose().fx, pet.pose().sparkles), (Fx::None, true));
+        pet.update(&off("sad", 0.0), 10.0);
+        assert_eq!(pet.pose().state.mood, Mood::Attention);
+    }
+
     #[test]
     fn the_body_never_lifts_an_effect_further_than_fx_lift_says() {
         let mut seen = 0;
-        for state in ["sleep", "idle", "thinking", "working", "attention", "done", "listen"] {
+        for (state, moods) in ["sleep", "idle", "thinking", "working", "attention", "done", "listen"]
+            .into_iter()
+            .map(|s| (s, false))
+            .chain(["sad", "tired", "news", "done", "idle"].into_iter().map(|s| (s, true)))
+        {
             for poke in [false, true] {
                 let mut pet = Pet::with_rng(Fixed(0.5));
+                if moods {
+                    pet.set_pack(with_new_values(&pet));
+                }
                 let inp = PetInput {
+                    moods,
                     state: if state == "listen" { "idle" } else { state }.to_owned(),
                     music: state == "listen",
                     poke_until: if poke { 2.2 } else { 0.0 },

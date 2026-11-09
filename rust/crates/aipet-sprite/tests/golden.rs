@@ -174,6 +174,8 @@ fn parse_input(v: &Value) -> PetInput {
         wave_until: f64_of(v, "wave_until"),
         alert_until: f64_of(v, "alert_until"),
         music: flag("music"),
+        // the C# pet has none of fnt-72's moods: the replay keeps them off
+        moods: false,
     }
 }
 
