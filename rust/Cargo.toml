@@ -39,6 +39,7 @@ tiny-skia = { version = "0.11", default-features = false, features = ["std", "si
 # winit needs a backend on Linux, hence x11 and wayland. tokio is the executor (and gives time::every).
 iced = { version = "0.14.0", default-features = false, features = [
     "wgpu",
+    "tiny-skia",
     "crisp",
     "web-colors",
     "x11",
