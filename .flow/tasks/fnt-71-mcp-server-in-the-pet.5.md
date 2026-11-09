@@ -29,6 +29,7 @@ Give the listener a command channel to the UI thread with a reply, and build `li
 
 ## Acceptance
 - [ ] Tests drive each tool against a headless UI and see the Prefs, worn avatar and saved `config.json` match what the Settings message produces
+- [ ] The six tools are in task 2's conformance table
 - [ ] An out-of-range size, unknown avatar or theme, and unknown card id each give `isError` and change nothing
 - [ ] A UI that never replies gives `isError` after 5 s
 - [ ] Hands-on: an open Settings window shows a size changed by the tool

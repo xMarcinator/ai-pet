@@ -12,7 +12,8 @@ Move `--install`, `--uninstall` and `--doctor` into `AiPet` and make them regist
 
 ### Approach
 - Follow the existing install code (`aipet-hook/src/claude.rs:208-262`, `codex.rs` BEGIN/END block) and its golden tests (`aipet-hook/tests/golden/{registration,codex,doctor}`).
-- Claude: `http` hooks with `timeout: 2`, `allowedEnvVars` for the two env vars, never `onFailure: block`; MCP entry `{type: http, url, headersHelper}`. Codex: hook JSON from task 4; `[mcp_servers.aipet]` with `http_headers_helper`.
+- Claude: `http` hooks with `timeout: 2`, `allowedEnvVars` for the two env vars, never `onFailure: block`; MCP entry `{type: http, url, headersHelper}`. Codex: branch on the verdict in `rust/proofs/mcp-spike.md`. On success, install task 4's `mcp_tool` hooks and remove the exe's command hooks. On the fallback, keep registering the exe's command hooks unchanged (frozen strings, no re-trust). Either way add `[mcp_servers.aipet]` with `http_headers_helper` for the tools.
+- Port and URLs come from `aipet_ipc::protocol::MCP_PORT` only.
 - The header helper is `AiPet --print-token-header` (reads the token file, prints the header, exits 0 even when the pet is down).
 - Doctor asks `status` over HTTP and reports listener, token, registrations, and untrusted Codex hooks (warning).
 - Uninstall cleanup in `cleanup.rs` and `updates.rs` removes both kinds.
@@ -28,7 +29,7 @@ Move `--install`, `--uninstall` and `--doctor` into `AiPet` and make them regist
 
 ### Key context
 - fn-1.23 owns the release workflow; this task runs after it and only changes what it ships.
-- Codex users re-trust once: the doctor must say so plainly.
+- On the success verdict Codex users re-trust once: the doctor must say so plainly.
 
 ## Acceptance
 - [ ] Golden tests: install on a settings file with old exe hooks leaves only the new hooks and MCP entry; uninstall removes both kinds; invalid JSON or TOML is untouched with a message

@@ -4,7 +4,7 @@ satisfies: [R6]
 # fnt-71-mcp-server-in-the-pet.4 Codex status over mcp_tool hooks (or the exe fallback)
 
 ## Description
-Build what task 1's verdict says. Normally: a `report_event` tool that maps the templated Codex fields into envelope v1 and feeds the same queue as task 3, and the generated Codex hook file of `mcp_tool` hooks for the full event list on every OS. Fallback: keep `codex.json`'s command hooks and record it in the spec.
+Build what task 1's verdict says. Normally: a `report_event` tool that maps the templated Codex fields into envelope v1 and feeds task 3's queue and consumer, and the generated Codex hook file of `mcp_tool` hooks for the full event list on every OS. Fallback: keep `codex.json`'s command hooks and record it in the spec.
 
 **Size:** M
 **Files:** `rust/crates/aipet-mcp/src/report.rs` (new), `rust/crates/aipet-hook/src/codex.rs`, `rust/crates/aipet-hook/src/plugin_hooks.rs`, `plugins/aipet/hooks/codex.json`, `plugins/aipet/.codex-plugin/plugin.json`
@@ -28,6 +28,7 @@ Build what task 1's verdict says. Normally: a `report_event` tool that maps the 
 - Never rename `aipet`: the Codex trust keys contain `aipet@aipet`.
 
 ## Acceptance
+- [ ] `report_event` is in task 2's conformance table
 - [ ] A test calls `report_event` with each Codex event and sees the same session state the pipe path gives
 - [ ] An invalid agent or event is `isError` and changes nothing
 - [ ] `--print-plugin-hooks` matches the committed `plugins/aipet/hooks/codex.json` byte for byte

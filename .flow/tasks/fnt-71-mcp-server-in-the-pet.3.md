@@ -4,7 +4,7 @@ satisfies: [R4, R5]
 # fnt-71-mcp-server-in-the-pet.3 Claude status over HTTP hooks, ordered under parallel posts
 
 ## Description
-Add `/hook/claude`: map Claude's hook body plus the two env headers into envelope v1 with receive time as `at`, push it on a bounded queue, answer 200 `{}`, and apply from one consumer through `AgentSessions::apply`, record and `changed()` as the pipe server does. Move the exe's trimming to the server. Prove ordering with the C# goldens replayed under jitter.
+Add `/hook/claude`: map Claude's hook body plus the two env headers into envelope v1 with receive time as `at`, push it on a bounded queue, answer 200 `{}`, and apply from one consumer through task 2's ingress handle (`AgentSessions::apply`, record and `changed()`, the same instances the pipe server uses). Move the exe's trimming to the server. Prove ordering with the C# goldens replayed under jitter.
 
 **Size:** M
 **Files:** `rust/crates/aipet-mcp/src/hook.rs` (new), `rust/crates/aipet-core/src/server/answer.rs`, `rust/crates/aipet-core/src/sessions/claude.rs`, `rust/crates/aipet-core/tests/**`

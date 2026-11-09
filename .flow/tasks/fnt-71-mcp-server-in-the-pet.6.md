@@ -12,9 +12,9 @@ Move the theme file logic out of the Avatars page into shared code, then build `
 
 ### Approach
 - Extract naming, save and delete from `aipet-ui/src/settings/avatars.rs:103-120,372-470,589-640` into `aipet-sprite`; the page calls the extracted functions (equivalence: the page's existing tests plus a before/after file listing for New/Edit/Delete).
-- Name allowlist and path containment per the spec's Edge Cases; delete moves to `<data>/avatars/.trash/`. Deleting the worn theme sends `SelectTheme` default through task 5's channel.
+- Name allowlist and path containment per the spec's Edge Cases; delete moves to `<data>/trash/` (outside `<data>/avatars/`, so the loader never lists it). Deleting the worn theme sends `SelectTheme` default through task 5's channel.
 - `check_pack` calls `load::check` (`aipet-sprite/src/load.rs:986`), the same function `--check-pack` uses (`aipet/src/main.rs:62-76`).
-- `install_pack`: canonicalize, require under the home dir, copy into `<data>/avatars/.staging/<uuid>` without following symlinks and within the loader's limits, `check`, then rename into place (refuse an existing name unless `replace`), then reload via the UI channel. Clean staging on every exit path.
+- `install_pack`: canonicalize, require under the home dir, copy into `<data>/staging/<uuid>` without following symlinks, counting bytes and entries as it walks and stopping at 64 MiB or 2,000 entries. Then `check`. Refuse an existing name unless `replace`. Install with a serialized swap (one install at a time behind a mutex): rename an existing pack to `<data>/staging/<uuid>.old`, rename the staged pack into `<data>/avatars/<name>`, restore the backup if that rename fails, delete the backup only after success. Then reload via the UI channel. Clean staging on every exit path.
 
 ### Investigation targets
 **Required:**
@@ -25,11 +25,14 @@ Move the theme file logic out of the Avatars page into shared code, then build `
 - `.claude/skills/aipet-avatar-pack/SKILL.md` - how packs and themes are made today
 
 ### Key context
-- Rename across volumes fails: stage inside `<data>/avatars/` so the final move is a same-volume rename.
+- Rename across volumes fails: staging and trash live under `<data>/`, the same volume as `<data>/avatars/`.
+- `std::fs::rename` cannot replace a non-empty directory on every OS: hence the backup swap.
 
 ## Acceptance
 - [ ] Settings → Avatars New/Edit/Delete produce the same files as before the move
-- [ ] Tests for each R9 and R10 error case, each leaving `<data>/avatars/` unchanged
+- [ ] Tests for each R9 and R10 error case, each leaving `<data>/avatars/` unchanged, including a replacement whose final rename fails (the old pack is restored) and a source with oversized or too many unreferenced files
+- [ ] `list_avatars` never shows staging or trash, during an install and after a theme delete
+- [ ] The five tools are in task 2's conformance table
 - [ ] `check_pack` output equals `AiPet --check-pack` output for the fixture packs
 - [ ] An installed pack appears in `list_avatars` and can be worn
 

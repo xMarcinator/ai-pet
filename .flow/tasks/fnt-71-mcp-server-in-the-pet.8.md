@@ -14,7 +14,7 @@ Final measurement with every tool built, the Windows hands-on pass with the owne
 - Re-run task 2's measurement on Linux and Windows with an agent connected and hook traffic replayed; record in `rust/proofs/memory.md`.
 - Hands-on checklist in the shape of `rust/proofs/windows-hands-on.md`: both agents' status, each tool, pet stopped and restarted mid-session, Codex re-trust, Settings reflecting tool changes.
 - Docs: follow docs-gap-scout's section list in the spec's Resolved via Research; ARCHITECTURE cites `[file](../path):line`; CHANGELOG under `[Unreleased]`; THIRD-PARTY-NOTICES table rows with versions from `rust/Cargo.lock`. Edit both skill copies identically (`diff -r` clean).
-- HANDOFF Decisions: replace "Codex on Windows keeps its command hooks" and "Don't change the registered command strings" with this spec's decision.
+- HANDOFF Decisions: follow the verdict in `rust/proofs/mcp-spike.md`. On success, replace "Codex on Windows keeps its command hooks" and "Don't change the registered command strings" with the `mcp_tool` decision. On the fallback, keep both and add that Codex keeps the exe for status while the tools use MCP.
 
 ### Investigation targets
 **Required:**
