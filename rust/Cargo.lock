@@ -59,6 +59,7 @@ dependencies = [
  "libc",
  "velopack",
  "windows-sys 0.52.0",
+ "winresource",
 ]
 
 [[package]]

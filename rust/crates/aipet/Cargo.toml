@@ -35,3 +35,7 @@ libc.workspace = true
 # the single-instance mutex (src/single.rs), and --check-pack's console (src/main.rs)
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading", "Win32_System_Console"] }
+
+# the Windows exe's icon, manifest and version resource, and the version the pet shows (build.rs)
+[build-dependencies]
+winresource.workspace = true
