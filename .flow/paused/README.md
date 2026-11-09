@@ -5,7 +5,7 @@ The work branch is `fn-2-layered-sprite-and-vector-pets`, pushed; CI on it is gr
 
 | Spec | State | Next |
 |---|---|---|
-| fn-1 (.NET → Rust) | 26 of 30 done; task 23 (ship) in progress: the release ships the Rust pet, dry run, lock test, Windows update test and notices done | The owner: clean installs on Linux and Windows, update from v0.1.0 and rollback, then cut the release. Then tasks 24-26 |
+| fn-1 (.NET → Rust) | 25 of 30 done; task 23 (ship) in progress: the release ships the Rust pet, dry run, lock test, Windows update test and notices done | The owner: clean installs on Linux and Windows, update from v0.1.0 and rollback, then cut the release. Then tasks 24-26 (29 waits on 25) |
 | fn-2, FNT-72, FNT-73 | every task done | completion review |
 | FNT-71 (MCP server) | task 1 (spike) done: Codex `mcp_tool` hooks work; Claude HTTP hooks except SessionStart; R15 caps the server at 5 MB RSS | tasks 2-4 (listener, Claude and Codex status) can start; 5-6 wait for FNT-75's pet loop (owner) |
 | FNT-75 (pet window without the GPU) | task 9 (spike) done: Settings stays in-process on iced's CPU renderer | task 1, the gate, after fn-1 ships |
