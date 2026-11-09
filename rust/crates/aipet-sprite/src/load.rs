@@ -155,19 +155,25 @@ pub struct Group {
 
 /// `drawings` grouped by pet, the pets in the order their first drawing came.
 pub fn groups(drawings: &[LoadedPack]) -> Vec<Group> {
+    groups_of(drawings.iter().map(|d| &d.pack))
+}
+
+/// [`groups`] of the packs `packs`, by their index among them.
+pub fn groups_of<'a>(packs: impl IntoIterator<Item = &'a Pack>) -> Vec<Group> {
+    let packs: Vec<&Pack> = packs.into_iter().collect();
     let mut out: Vec<Group> = Vec::new();
-    for (i, d) in drawings.iter().enumerate() {
-        match out.iter_mut().find(|g| g.pet == d.pack.pet()) {
+    for (i, d) in packs.iter().enumerate() {
+        match out.iter_mut().find(|g| g.pet == d.pet()) {
             Some(g) => g.styles.push(i),
             None => out.push(Group {
-                pet: d.pack.pet().to_owned(),
+                pet: d.pet().to_owned(),
                 styles: vec![i],
                 default: i,
             }),
         }
     }
     for g in &mut out {
-        if let Some(&named) = g.styles.iter().find(|&&i| drawings[i].name() == g.pet) {
+        if let Some(&named) = g.styles.iter().find(|&&i| packs[i].name == g.pet) {
             g.default = named;
         }
     }

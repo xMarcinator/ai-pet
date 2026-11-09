@@ -23,9 +23,6 @@ use crate::{Effect, PetUi};
 /// The Avatars page's own state.
 #[derive(Debug, Default)]
 pub struct Avatars {
-    /// The pet's list keeps the avatar worn when Reload found its file gone, so that the pet still wears it, but the
-    /// page draws no tile for it: `FillAvatars` shows only what `Avatar.All()` reads.
-    gone: Option<usize>,
     /// Why Open folder couldn't make the avatars folder, under "Your own avatars".
     pub folder_error: Option<String>,
     /// The theme being made or edited, while the editor is open.
@@ -75,11 +72,41 @@ pub fn makes_themes(pet: &PetUi) -> bool {
     pet.avatars[pet.avatar].pack.palette.has_colours()
 }
 
-/// The tiles the page draws, in order: each avatar's name, and whether it is the one worn. The worn avatar's tile is
-/// missing when its file has gone.
+/// The tiles the page draws, in order: one per pet (FNT-74), its name, and whether it is the one worn.
 #[doc(hidden)]
 pub fn tiles(pet: &PetUi) -> Vec<(&str, bool)> {
-    shown(pet).map(|(i, avatar)| (avatar.name(), i == pet.avatar)).collect()
+    shown(pet).map(|(i, avatar)| (avatar.pack.pet(), i == pet.avatar)).collect()
+}
+
+/// The worn pet's styles as the page shows them, in order: each one's label, its drawing, and whether it is worn.
+/// Empty for a pet with one style.
+#[doc(hidden)]
+pub fn styles(pet: &PetUi) -> Vec<(&str, usize, bool)> {
+    let Some(g) = crate::pets(&pet.avatars).into_iter().find(|g| g.styles.contains(&pet.avatar)) else {
+        return Vec::new();
+    };
+    if g.styles.len() < 2 {
+        return Vec::new();
+    }
+    g.styles.iter().map(|&i| (pet.avatars[i].pack.style(), i, i == pet.avatar)).collect()
+}
+
+/// Wears the worn pet in its style drawn by `i`, in the theme it wears now where that style has one by that name, else
+/// in that style's default (FNT-74 R3).
+pub(crate) fn select_style(pet: &mut PetUi, i: usize) {
+    if i == pet.avatar || !styles(pet).iter().any(|&(_, s, _)| s == i) {
+        return;
+    }
+    let palette = &pet.avatars[i].pack.palette;
+    let theme = if palette.names().any(|n| n == pet.theme) {
+        pet.theme.clone()
+    } else {
+        palette.theme.clone()
+    };
+    // the theme editor was for the style taken off
+    pet.settings.avatars.theme = None;
+    pet.wear(i, &theme);
+    pet.save_prefs();
 }
 
 /// The pet worn, as drawn: its pack and sheets, in its theme.
@@ -88,13 +115,12 @@ pub fn worn(pet: &PetUi) -> LoadedPack {
     pet.pet.loaded()
 }
 
+/// Each pet's tile, in order: the drawing it shows (the worn one for the worn pet, else its default style) and it.
 fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &LoadedPack)> {
-    let gone = pet.settings.avatars.gone;
-    pet.avatars
-        .iter()
-        .enumerate()
-        .filter(move |&(i, _)| Some(i) != gone)
-        .map(|(i, a)| (i, &**a))
+    crate::pets(&pet.avatars).into_iter().map(move |g| {
+        let i = if g.styles.contains(&pet.avatar) { pet.avatar } else { g.default };
+        (i, &*pet.avatars[i])
+    })
 }
 
 /// What the Avatars page sends of its own (picking an avatar sends the pet's [`crate::Message::SelectAvatar`], and
@@ -137,7 +163,7 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
                     ),
                     9.0,
                 ),
-                text(avatar.name())
+                text(avatar.pack.pet())
                     .size(13)
                     .font(style::UI_SEMIBOLD)
                     .color(Color::WHITE),
@@ -180,7 +206,7 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
                     shadow: Shadow::default(),
                     snap: true,
                 });
-            tooltip(tile, tip(format!("Wear {}", avatar.name())), tooltip::Position::Bottom).into()
+            tooltip(tile, tip(format!("Wear {}", avatar.pack.pet())), tooltip::Position::Bottom).into()
         });
     let grid = Row::with_children(tiles).spacing(12).wrap().vertical_spacing(12);
     // the demo shows the repository's avatars, which aren't in a data folder: there is nothing to reload or open
@@ -230,7 +256,23 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
             Tone::Bad,
         ));
     }
-    column![grid, card(themes_view(pet, accent, folder)), card(own)]
+    // the worn pet's styles, where it has more than one: how it is drawn, beside its themes (FNT-74)
+    let list = styles(pet);
+    let style_card = (!list.is_empty()).then(|| {
+        let pills = list.iter().map(|&(label, i, on)| pill(label, on, accent).on_press(crate::Message::SelectStyle(i)).into());
+        card(button_row(
+            "Style",
+            "How the pet is drawn. Each style has its own themes; switching keeps the theme where the style has one by \
+             that name.",
+            Row::with_children(pills).spacing(8).wrap().vertical_spacing(8),
+        ))
+    });
+    let mut page = column![grid];
+    if let Some(style_card) = style_card {
+        page = page.push(style_card);
+    }
+    page.push(card(themes_view(pet, accent, folder)))
+        .push(card(own))
         .spacing(16)
         .padding(iced::Padding::ZERO.top(10).bottom(24))
         .into()
@@ -506,14 +548,15 @@ fn open_editor(pet: &mut PetUi, from: &str, editing: Option<String>, name: Strin
 /// when its file has changed the pet wears it as it is now, in its theme if it still has it, else in its default (the
 /// C# reapplies a tile clicked again; here the one worn takes no click). When its file has gone, the pet keeps
 /// wearing it as it was, with no tile, until it takes another.
-fn reload(pet: &mut PetUi, mut avatars: Vec<LoadedPack>) {
-    let (index, gone) = match avatars.iter().position(|a| a.name() == pet.avatars[pet.avatar].name()) {
-        Some(i) => (i, None),
-        None => {
-            avatars.push(pet.avatars[pet.avatar].unpacked());
-            (avatars.len() - 1, Some(avatars.len() - 1))
-        }
-    };
+fn reload(pet: &mut PetUi, avatars: Vec<LoadedPack>) {
+    // the drawing worn, else the worn pet's default style, else the first pet (FNT-74 R3, R4)
+    let worn = &pet.avatars[pet.avatar];
+    let groups = aipet_sprite::load::groups(&avatars);
+    let index = avatars
+        .iter()
+        .position(|a| a.name() == worn.name())
+        .or_else(|| groups.iter().find(|g| g.pet == worn.pack.pet()).map(|g| g.default))
+        .unwrap_or_else(|| groups.first().map_or(0, |g| g.default));
     let palette = &avatars[index].pack.palette;
     let theme = if palette.names().any(|n| n == pet.theme) {
         pet.theme.clone()
@@ -534,7 +577,6 @@ fn reload(pet: &mut PetUi, mut avatars: Vec<LoadedPack>) {
     pet.avatars = crate::shelf::shelve(avatars);
     pet.avatar = index;
     pet.theme = theme;
-    pet.settings.avatars.gone = gone;
 }
 
 /// A palette name as words: `eyeHi` is "Eye hi", `rim-mid` "Rim mid".

@@ -119,7 +119,10 @@ pub enum Message {
     Dismiss(Arc<str>),
     /// A menu item was chosen. The shell closes the menu.
     Menu(MenuItem),
+    /// Wear this drawing (a pet's tile wears its default style, or the style it wears now).
     SelectAvatar(usize),
+    /// Wear the worn pet in another of its styles, this drawing, keeping the theme where it has one by that name.
+    SelectStyle(usize),
     /// Wear the worn pet in its theme by this name.
     SelectTheme(String),
     /// Draw the pet this big, in percent (kept within [`geometry::PET_SIZES`]).
@@ -185,9 +188,12 @@ pub struct Prefs {
     pub bubbles: bool,
     pub on_top: bool,
     pub music: bool,
-    /// The avatar's name; the first avatar when none or an unknown one. An older name for a pet in one of its themes,
-    /// "<pet> (<theme>)" such as "Hood (green)", is that pet in that theme.
+    /// The avatar's pet (FNT-74); the first pet when none or an unknown one. An older name for one of a pet's
+    /// drawings, "Hood (vector)" say, is that pet in that style; one for a pet in one of its themes, "<pet> (<theme>)"
+    /// such as "Hood (green)", is that pet in that theme.
     pub avatar: Option<String>,
+    /// The pet's style (Pixel, Vector, …); its default when none or one it hasn't.
+    pub avatar_style: Option<String>,
     /// The avatar's colour theme; its default when none or one it hasn't.
     pub avatar_theme: Option<String>,
     /// How big the pet and the bubbles are drawn, in percent, within [`geometry::PET_SIZES`] and
@@ -203,6 +209,7 @@ impl From<&Config> for Prefs {
             on_top: config.on_top,
             music: config.music,
             avatar: config.avatar.clone(),
+            avatar_style: config.avatar_style.clone(),
             avatar_theme: config.avatar_theme.clone(),
             pet_size: config
                 .pet_size
@@ -464,7 +471,15 @@ fn drawn_facing(pack: &aipet_sprite::pack::Pack) -> i32 {
 
 fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
     let name = prefs.avatar.as_deref().unwrap_or_default();
-    let by_name = avatars.iter().position(|a| a.name() == name).map(|i| (i, None));
+    let groups = pets(avatars);
+    // the pet by its name, in its style (else its default); then an older name for one of its drawings; then the
+    // older "<pet> (<theme>)"
+    let by_pet = groups.iter().find(|g| g.pet == name).map(|g| {
+        let style = prefs.avatar_style.as_deref();
+        let i = g.styles.iter().copied().find(|&i| Some(avatars[i].pack.style()) == style);
+        (i.unwrap_or(g.default), None)
+    });
+    let by_name = || avatars.iter().position(|a| a.name() == name).map(|i| (i, None));
     let by_theme = || {
         avatars.iter().enumerate().find_map(|(i, a)| {
             let theme = name.strip_prefix(a.name())?.strip_prefix(" (")?.strip_suffix(')')?;
@@ -472,7 +487,8 @@ fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
             Some((i, Some(theme.to_owned())))
         })
     };
-    let (i, old) = by_name.or_else(by_theme).unwrap_or((0, None));
+    let first = groups.first().map_or(0, |g| g.default);
+    let (i, old) = by_pet.or_else(by_name).or_else(by_theme).unwrap_or((first, None));
     let palette = &avatars[i].pack.palette;
     let theme = prefs
         .avatar_theme
@@ -481,6 +497,11 @@ fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
         .or(old)
         .unwrap_or_else(|| palette.theme.clone());
     (i, theme)
+}
+
+/// The avatars' pets, each with its styles (FNT-74).
+fn pets(avatars: &[shelf::Shelved]) -> Vec<aipet_sprite::load::Group> {
+    aipet_sprite::load::groups_of(avatars.iter().map(|a| &a.pack))
 }
 
 /// `pet` in its theme `theme`, which it has.
@@ -898,6 +919,7 @@ impl PetUi {
                     self.save_prefs();
                 }
             }
+            Message::SelectStyle(i) => settings::avatars::select_style(self, i),
             Message::SelectTheme(theme) => {
                 let has = self.avatars[self.avatar].pack.palette.names().any(|n| n == theme);
                 if has && theme != self.theme {
@@ -1027,14 +1049,20 @@ impl PetUi {
         Effect::OpenSettings
     }
 
-    /// The preferences now: the avatar's theme only when it isn't the avatar's default.
+    /// The preferences now: the avatar's pet, its style only when it isn't the pet's default, and its theme only when
+    /// it isn't the style's default.
     pub fn prefs(&self) -> Prefs {
         let avatar = &self.avatars[self.avatar];
+        let default = pets(&self.avatars)
+            .into_iter()
+            .find(|g| g.styles.contains(&self.avatar))
+            .map_or(self.avatar, |g| g.default);
         Prefs {
             bubbles: self.bubbles,
             on_top: self.on_top,
             music: self.music,
-            avatar: Some(avatar.name().to_owned()),
+            avatar: Some(avatar.pack.pet().to_owned()),
+            avatar_style: (default != self.avatar).then(|| avatar.pack.style().to_owned()),
             avatar_theme: (self.theme != avatar.pack.palette.theme).then(|| self.theme.clone()),
             pet_size: self.pet_size,
             bubble_size: self.bubble_size,
@@ -1855,6 +1883,7 @@ pub(crate) mod tests {
                 on_top: false,
                 music: true,
                 avatar: Some("Hood".into()),
+                avatar_style: None,
                 avatar_theme: None,
                 pet_size: 100,
                 bubble_size: 100,
@@ -1869,6 +1898,7 @@ pub(crate) mod tests {
                 on_top: false,
                 music: true,
                 avatar: Some("Hood".into()),
+                avatar_style: None,
                 avatar_theme: None,
                 pet_size: 100,
                 bubble_size: 100,
@@ -1887,6 +1917,7 @@ pub(crate) mod tests {
                 on_top: true,
                 music: true,
                 avatar: Some("Sprout".into()),
+                avatar_style: None,
                 avatar_theme: None,
                 pet_size: 100,
                 bubble_size: 100,
@@ -1939,6 +1970,56 @@ pub(crate) mod tests {
         let ui = start("Hood (vector)", Some("Blue"));
         assert_eq!(ui.theme(), "Blue");
         assert_eq!(start("Hood (vector)", None).theme(), "Green");
+    }
+
+    #[test]
+    fn a_pet_is_one_tile_with_its_styles_and_older_names_wear_the_right_one() {
+        // FNT-74 R3, R4
+        let start = |avatar: &str, style: Option<&str>, theme: Option<&str>| {
+            PetUi::new(Setup {
+                prefs: Prefs {
+                    avatar: Some(avatar.into()),
+                    avatar_style: style.map(str::to_owned),
+                    avatar_theme: theme.map(str::to_owned),
+                    ..Prefs::default()
+                },
+                ..Setup::detached()
+            })
+        };
+        let worn = |ui: &PetUi| {
+            let a = &ui.avatars[ui.avatar];
+            (a.pack.pet().to_owned(), a.pack.style().to_owned(), ui.theme().to_owned())
+        };
+        let it = |pet: &str, style: &str, theme: &str| (pet.to_owned(), style.to_owned(), theme.to_owned());
+        let mut ui = start("Hood", None, Some("Green"));
+        assert_eq!(
+            settings::avatars::tiles(&ui),
+            [("Sprout", false), ("Hood", true), ("Pip", false), ("Hamster", false)]
+        );
+        let styles: Vec<&str> = settings::avatars::styles(&ui).iter().map(|s| s.0).collect();
+        assert_eq!(styles, ["Pixel", "Vector"]);
+        // switching style keeps Green, which both have; the vector Hood's default is Green, so nothing is kept of it
+        let vector = settings::avatars::styles(&ui)[1].1;
+        ui.update(Message::SelectStyle(vector));
+        assert_eq!(worn(&ui), it("Hood", "Vector", "Green"));
+        let prefs = ui.prefs();
+        assert_eq!(
+            (prefs.avatar.as_deref(), prefs.avatar_style.as_deref(), prefs.avatar_theme.as_deref()),
+            (Some("Hood"), Some("Vector"), None)
+        );
+        // the pet's tile still shows the style worn
+        assert_eq!(settings::avatars::tiles(&ui)[1], ("Hood", true));
+        // older names for a pet's drawings, and for a pet in a theme
+        assert_eq!(worn(&start("Hood (vector)", None, None)), it("Hood", "Vector", "Green"));
+        assert_eq!(worn(&start("Pip (painted)", None, None)), it("Pip", "Painted", "Peach"));
+        assert_eq!(worn(&start("Hamster (pixel)", None, None)).1, "Pixel");
+        assert_eq!(worn(&start("Sprout (vector)", None, None)).1, "Vector");
+        assert_eq!(worn(&start("Hood (green)", None, None)), it("Hood", "Pixel", "Green"));
+        assert_eq!(worn(&start("Hood", Some("Vector"), Some("Blue"))), it("Hood", "Vector", "Blue"));
+        // a style or theme it hasn't: the default
+        assert_eq!(worn(&start("Hood", Some("Chalk"), Some("Purple"))), it("Hood", "Pixel", "Blue"));
+        // the default style isn't kept
+        assert_eq!(start("Hamster", Some("Vector"), None).prefs().avatar_style, None);
     }
 
     #[test]
