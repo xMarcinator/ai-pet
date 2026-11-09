@@ -28,6 +28,7 @@ Draw the shared pieces once in `pet_states.py` (tears, aura, heart, the envelope
 - `.flow/tasks/fn-2-layered-sprite-and-vector-pets.21.md` - the effects placement rule
 
 ### Key context
+- Layer limit: a pack may have at most 16 layers (`MAX_LAYERS`, `rust/crates/aipet-sprite/src/pack.rs:13`); the vector Hamster has 16, Pip 15, the vector Hood 14. Draw `tears`, `aura` and `heart` as values of one new fx layer (not one layer each, as `vector_pack.effect_layers` does today), and the envelope as a value of the existing prop layer. The turnaround spike (`rust/proofs/hamster-turnaround.md`) found this.
 - `glow` is reserved (pack colour, layer halo; fx layers may not glow): the effect is `aura`, drawn art.
 
 ## Acceptance

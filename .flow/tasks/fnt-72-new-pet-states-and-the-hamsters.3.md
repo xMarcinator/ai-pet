@@ -25,6 +25,7 @@ The Hamster's own look for the new states and its accessories, in both generator
 - `avatars/reference/hamster.png` - the reference the Hamster was drawn from
 
 ### Key context
+- Layer limit: the vector Hamster already has 16 layers, the most a pack may have (`MAX_LAYERS`); its new effects go in task 2's single new fx layer, so merge two of its existing layers (for example zs and notes into one fx layer with both values) to make room, and check it still loads.
 - `hamster_pixel_gen.py`'s docstring says `packs/hamster/`; the folder is `hamster-pixel`.
 
 ## Acceptance
