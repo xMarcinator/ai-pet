@@ -39,7 +39,7 @@ Parts carry their own positions and motion as data (R18), and a pack-making agen
 - **Review:** Codex rated all three READY on 2026-11-06.
 - **The owner's design decisions:**
   - **Hood:** round hood with no peak, slim, short robe, tall glowing eyes, round hands resting in front of the robe that float out to wave, no feet, the laptop at the lower right (one hand holds it, one types) with only a tight glow on `>_`.
-  - **Hamster:** true to its pixel reference, with the back in the head's yellow and orange only as an edge shadow.
+  - **Hamster:** true to its pixel reference, after JLandbo's hamster-pet (https://github.com/JLandbo/hamster-pet, used with its author's permission). Since fnt-72 its shading is a darker orange down the right and bottom right, replacing the back in the head's yellow; paws are nubs on the belly, `lens` is round glasses, and it has its own blush, speed lines and the new states' art.
   - **Sprout:** flat body with the outline as its only edge, and no blush.
   - **Pip:** the repo-root `pocket-sprout.html` is the owner's Pip design that fn-2 task 5 builds from.
 

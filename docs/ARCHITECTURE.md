@@ -79,7 +79,7 @@ graph LR
 
 Files: [pet.rs](../rust/crates/aipet-sprite/src/pet.rs) (behaviour), [pose.rs](../rust/crates/aipet-sprite/src/pose.rs) (the Pose), [pack.rs](../rust/crates/aipet-sprite/src/pack.rs) (the pack model and its checks), [manifest.rs](../rust/crates/aipet-sprite/src/manifest.rs) (reading `pack.json`), [load.rs](../rust/crates/aipet-sprite/src/load.rs) (finding and loading pets, the limits, Aseprite, theme files, `--check-pack`), [compose.rs](../rust/crates/aipet-sprite/src/compose.rs) (the compositor), [vector.rs](../rust/crates/aipet-sprite/src/vector.rs) (path data and the tiny-skia rasteriser), [builtin.rs](../rust/crates/aipet-sprite/src/builtin.rs) (the embedded pets), and in the UI crate [sprite.rs](../rust/crates/aipet-ui/src/sprite.rs), [vector_view.rs](../rust/crates/aipet-ui/src/vector_view.rs) and [settings/avatars.rs](../rust/crates/aipet-ui/src/settings/avatars.rs).
 
-This section describes the Rust pet. The behaviour in `pet.rs` is a port of `src/AiPet.Core/Pet.cs` that keeps its numbers bit for bit; what the pet looks like comes from a **pack**. The authoring side (the manifest, every key, the limits and the checker) is in [MAKING-A-PET.md](MAKING-A-PET.md).
+This section describes the Rust pet. The behaviour in `pet.rs` is a port of `src/AiPet.Core/Pet.cs` that keeps its numbers bit for bit, with the C#'s states. The moods added since (`sad`, `tired`, `news`, the aura and the heart, fnt-72) are the Rust pet's own: they are on in the app and off in the golden replays (`PetInput.moods`, `Board.moods`), so the replays still match the C# frame for frame. What the pet looks like comes from a **pack**. The authoring side (the manifest, every key, the limits and the checker) is in [MAKING-A-PET.md](MAKING-A-PET.md).
 
 ### 3.1 Pipeline: Pose → compositor → renderers
 
@@ -120,7 +120,9 @@ flowchart LR
 
 The UI copies the board's state into `input.state` and resets `state_since` only when it changes; §5 explains how the board's state is derived. Inside `Pet::compute_pose`:
 
-- The mood is `attention` while `t < alert_until`. A new Jira or GitHub review sets `alert_until = t + 6`.
+- The mood is `attention` while `t < alert_until`. In the golden replays a new Jira or GitHub review sets `alert_until = t + 6`, as in the C#.
+- In the app, the UI's mood step ([mood.rs](../rust/crates/aipet-ui/src/mood.rs)) picks the state instead, highest first: `attention`; `news` for 6 s after a new review (`NEWS_S`; one arriving while it shows doesn't stretch it); `working` or `thinking`; `sad` for the board's `error` (a failed turn, §5.3); `done`; `tired` instead of `idle` from 23:00 to 04:59 local, or once the front chat has gone on for 2 hours (`TIRED_AFTER_S`); then `idle` and `sleep`. Asleep stays asleep, but at night the pointer over a sleeping pet shows it tired.
+- A pack that draws neither a newer state nor its sign (`tears`, the `envelope`, `sleepy` eyes) shows `sad` and `news` as `attention` and `tired` as `idle` (`Pet::drawable`), so a pack made before them never shows plain idle for news.
 - While music is playing, `idle` or `sleep` of any age, or `done` older than 4 s, becomes the synthetic mood `listen`. `headphones` is `on` whenever music plays.
 - The idle act is cleared on a mood change.
 - The prop is used only while working: `lens` when the input says so, else `laptop`. It is hidden while poked or landing. With a prop and resting arms, the arms channel is `hold` (laptop) or `lens`.
@@ -137,14 +139,17 @@ Y is in DIPs (negative is up) and `P = 5`. `Wave(rate)` alternates `wave-a` and 
 | `thinking` | Floats up, `Y=-(0.5+0.5 sin 2.4t)*0.7P` | `up`, looking right | `rest` / `stand` | `dots` |
 | `working` | Quick bounce, `Y=-abs(sin 6.3t)*0.6P` | Lens: `open`, scanning [−1, 0, 1, 0] at 1.5 steps/s. Laptop: `down`, looking right. | `lens` or `hold` | `none` |
 | `attention` | 1.2 s cycle with a 0.6 s hop to 3P | `open` | `Wave(3)` | `alert` |
-| `done` | One 0.7 s hop to 3P | `happy` | `Wave(3)` for the first 4 s | `sparkles` |
+| `done` | One 0.7 s hop to 3P | `happy` | `Wave(3)` for the first 4 s | `aura` for the first 1.8 s (`AURA_S`) where the pack draws one, then `sparkles` |
+| `sad` | Slow droop, `Y=(0.5+0.5 sin 1.4t)*0.4P` | `down` | `rest` / `stand` | `tears` |
+| `tired` | Slow bob, `Y=(0.5+0.5 sin t)*0.6P` | `sleepy`, still following the pointer | `rest` / `stand` | `none` |
+| `news` | Little bounce, `Y=-(0.5+0.5 sin 3t)*0.6P`, holding the `envelope` | `open` | `hold` / `stand` | `none` |
 | `listen` | Beat 60/112 s; nod `Y=-abs(sin(πt/beat))*1.2P`; sway `X=sin(πt/(2·beat))*0.6P` | `happy` for 6 of every 8 beats | `rest` / `stand`, headphones `on` | `notes` |
 
 **Overrides.** These apply after the base pose, in this fixed order:
 
 1. **Hover tracking** (pointer over the sprite, not dragging, not working): the eyes look towards the pointer, up when it is above them. A sleeping pet stops bobbing and opens its eyes.
 2. **Wave** (`t < wave_until`, only in idle, sleep or done): `Wave(5)` with happy eyes. On pointer enter, `wave_until = t + 1.4` unless the last wave ended less than 3 s ago.
-3. **Poke** (a click without a drag, `poke_until = t + 1.2`): squint, then happy eyes; a hop of `Y=-sin(pp·π)*3P`; sparkles on top of the effect.
+3. **Poke** (a click without a drag, `poke_until = t + 1.2`): squint, then happy eyes; a hop of `Y=-sin(pp·π)*3P`; a `heart` where the pack draws one, else sparkles on top of the effect.
 4. **Landing** (after a drag, `land_until = t + 0.45`): a hop of `2.5P` with happy eyes.
 5. **Running** (dragging, and the last move was under 0.25 s ago): `run-a`/`run-b` arms and feet at 10 Hz, a lean of `X=facing*P`, looking far towards `facing`, no prop, `fx` `dust`. Otherwise **held** (the drag has passed its threshold but the last move was 0.25 s or more ago): feet `dangle-a`/`dangle-b` at 3 Hz, arms `raised`, `wide` eyes, no prop, no effect.
 6. **Blink**: when the eyes are open, up or down and `t > blink_at`, they `blink` for 0.13 s. The next blink comes 2.5-5.5 s later; the first is at t=3.
@@ -487,7 +492,7 @@ Turns order as in §6.4 (`AgentSessions.V7Before`). The hook's `Turn` is the cha
 | `working` | 3 | 900 s | `#E27A52` |
 | `thinking` | 3 | 900 s | `#7AA7FF` |
 | `done` | 2 | 20 s | `#5FD38D` |
-| `error` | 2 | — | `#E5484D` |
+| `error` | 2 | as the attention it replaces | `#E5484D` |
 | `idle` / `sleep` | 1 (also unknown states) | — | `#8A8A90` |
 | `music` / `paused` | 0 | — | `#1DB954` / `#5E8F6E` |
 
@@ -497,6 +502,7 @@ The store bumps `Ts` only on a visible change, so the 900 s timeout counts from 
 - `State` is the `Eff` of the first chat in `All`: highest priority, then newest. This list includes idle and dismissed chats.
 - With no chats the mood is `sleep`. `idle` becomes `sleep` when the newest chat `Ts` is more than 300 s old.
 - `Prop` is the top chat's prop.
+- **A failed turn** (fnt-72, with `Board.moods` on, as in the app): a chat whose turn ended on an API error (Claude's `StopFailure`, the entry's `failed`) and is `attention` becomes `error`, its own red bubble with the detail `Failed: …`. It lapses as the attention would, and the next event of that chat clears it. The pet shows it as `sad` (§3.2). The C# board, and the golden replays, keep it as `attention`.
 
 ### 5.4 App colours and deep links
 

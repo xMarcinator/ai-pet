@@ -34,3 +34,7 @@ cp avatars/samples/themes/hood-red.json ~/.local/share/AiPet/avatars/themes/
 ```
 
 Packs are read by the Rust build of AiPet; the .NET app reads only avatar `.json` files.
+
+## Credits
+
+The Hamster's design, and the ideas for its newer states, come from JLandbo's [hamster-pet](https://github.com/JLandbo/hamster-pet), used with its author's permission.

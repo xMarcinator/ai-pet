@@ -25,8 +25,9 @@ looks.
    feel like. Ask before inventing a character. Read `references/design-conventions.md` before drawing anything.
 3. **List the states to cover.** `avatars/reference/pet_states.py` has every state (`STATES`) and second frame
    (`PHASES`) the pet shows. `references/channels.md` maps them to channel values and fallbacks. Decide with the user
-   which values the pet draws itself and which fall back. The generator draws only the pet's own parts per pose; the
-   shared `pet_states.py` adds the effects, the magnifier, the headphones, the whole-body motion, the shadow, mirroring, the
+   which values the pet draws itself and which fall back. Cover the newer states too (`sad`, `tired`, `news`: tears,
+   sleepy eyes, the envelope); a pet that skips them shows attention or idle instead. The generator draws only the pet's own parts per pose; the
+   shared `pet_states.py` adds the effects (the tears, hearts and golden glow too), the magnifier, the envelope, the headphones, the whole-body motion, the shadow, mirroring, the
    review page and the state sheet.
 4. **Draw with a generator**, a Python script beside the pack, modelled on `avatars/reference/hood_gen.py`,
    `hamster_gen.py` and `sprout_gen.py` (vector), or `hamster_pixel_gen.py` (pixel). Named parts at their origins,
@@ -86,7 +87,9 @@ binary is missing, say so and ask; don't start a `cargo build` unasked, since an
 - **A built-in pet** (only when the user asks): the pack in `rust/crates/aipet-sprite/packs/<folder>/`, its files
   listed in `rust/crates/aipet-sprite/src/builtin.rs` and the pet added to `all()`. A generated one is also listed in
   `rust/crates/aipet-sprite/tests/vector_packs.rs`, which checks the generator still writes it, and must draw every
-  value of `pet_states.py` explicitly (a fallback that names the value counts) with all 15 `look` directions.
+  value of `pet_states.py` explicitly (a fallback that names the value counts) with all 15 `look` directions. The same
+  test runs over every built-in pack, baked pixel ones included: some layer must draw each value with art (a `null`
+  fallback alone fails), and each of `sad`, `tired` and `news` must be drawn as a state or by its sign.
   Built-ins are a code change: run the crate's tests, or say they weren't run.
 
 ## Things that are easy to get wrong

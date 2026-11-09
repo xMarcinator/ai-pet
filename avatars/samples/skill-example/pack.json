@@ -328,7 +328,10 @@
     "notes": null,
     "alert": null,
     "sparkles": null,
-    "dust": null
+    "dust": null,
+    "tears": null,
+    "aura": null,
+    "heart": null
    },
    "parts": [
     {
@@ -408,7 +411,10 @@
     "dots": null,
     "notes": null,
     "alert": null,
-    "dust": null
+    "dust": null,
+    "tears": null,
+    "aura": null,
+    "heart": null
    },
    "parts": [
     {

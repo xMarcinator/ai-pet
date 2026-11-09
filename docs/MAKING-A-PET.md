@@ -48,14 +48,19 @@ A pack is a list of **layers**, drawn in the order the manifest gives them, bott
 
 | Channel | Values |
 |---|---|
-| `state` | `idle`, the idle acts `idle-look`, `idle-hop`, `idle-stretch`, `idle-wiggle` and `idle-tap`, `sleep`, `thinking`, `working`, `attention`, `done`, and `listen` (music plays while nothing else is going on) |
-| `eyes` | `open`, `closed` (asleep), `blink`, `happy`, `squint` (poked), `wide` (held), `up` (thinking, or the pointer is above) and `down` (reading the laptop). The eyes also have a look direction: see [`look`](#part-motion). |
-| `arms` | `rest`, `raised` (held, or stretching), `wave-a` and `wave-b` (waving), `run-a` and `run-b` (dragged), `hold` (at the laptop) and `lens` (holding the magnifier) |
+| `state` | `idle`, the idle acts `idle-look`, `idle-hop`, `idle-stretch`, `idle-wiggle` and `idle-tap`, `sleep`, `thinking`, `working`, `attention`, `done`, `listen` (music plays while nothing else is going on), `sad` (the last turn failed), `tired` (late at night, or after a long chat) and `news` (a new review or message) |
+| `eyes` | `open`, `closed` (asleep), `blink`, `happy`, `squint` (poked), `wide` (held), `up` (thinking, or the pointer is above), `down` (reading the laptop, or sad) and `sleepy` (tired). The eyes also have a look direction: see [`look`](#part-motion). |
+| `arms` | `rest`, `raised` (held, or stretching), `wave-a` and `wave-b` (waving), `run-a` and `run-b` (dragged), `hold` (at the laptop, or holding the envelope) and `lens` (holding the lens) |
 | `feet` | `stand`, `tap`, `dangle-a` and `dangle-b` (held), `run-a` and `run-b` (dragged) |
-| `prop` | `none`, `laptop` (working) and `lens` (searching or reading) |
+| `prop` | `none`, `laptop` (working), `lens` (searching or reading) and `envelope` (news). The `lens` is whatever the pack draws for it: a magnifier, or glasses as the Hamster wears. |
 | `headphones` | `on` and `off` |
-| `fx` | `none`, `zs` (asleep), `dots` (thinking), `notes` (listening), `alert` (attention), `sparkles` (done, or poked) and `dust` (running). Sparkles can come on top of another effect: `zs+sparkles`, `dots+sparkles`, `notes+sparkles`, `alert+sparkles` and `dust+sparkles`. |
+| `fx` | `none`, `zs` (asleep), `dots` (thinking), `notes` (listening), `alert` (attention), `sparkles` (done, or poked), `dust` (running), `tears` (sad), `aura` (the golden glow that opens a done) and `heart` (poked). Sparkles can come on top of another effect: `zs+sparkles`, `dots+sparkles`, `notes+sparkles`, `alert+sparkles` and `dust+sparkles`. `tears`, `aura` and `heart` never combine. |
 | `facing` | `left` and `right` |
+
+**The newer states.** A pack made before `sad`, `tired` and `news` still works. The pet shows `sad` and `news` as
+`attention`, and `tired` as `idle`, unless the pack draws the state itself or its sign: `tears` for sad, the `envelope`
+for news, `sleepy` eyes for tired. A done opens with the `aura` only where the pack draws one, and a poke shows the
+`heart` only where the pack draws one; otherwise both show sparkles, as before.
 
 Several layers may share a channel: a pet can have a `body` and a `mouth` layer both bound to `state`, or one effects
 layer per effect.
@@ -70,7 +75,7 @@ nothing for every other effect:
 ```json
 "fallback": { "off": null }
 "fallback": { "zs+sparkles": "zs", "none": null, "dots": null, "notes": null, "alert": null,
-              "sparkles": null, "dust": null }
+              "sparkles": null, "dust": null, "tears": null, "aura": null, "heart": null }
 ```
 
 You only need to draw what your pet should show differently. A pet with just a body and eyes is fine: the arms,
@@ -164,7 +169,7 @@ loads as it is.
       "channel": "fx",
       "default": "zs",
       "fallback": { "zs+sparkles": "zs", "none": null, "dots": null, "notes": null, "alert": null,
-                    "sparkles": null, "dust": null },
+                    "sparkles": null, "dust": null, "tears": null, "aura": null, "heart": null },
       "parts": [ { "id": "z-1", "origin": [100, 46], "shape": "z" },
                  { "id": "z-2", "origin": [108, 36], "shape": "z" } ],
       "shapes": { "z": { "d": "M -3 -3 H 3 L -3 3 H 3", "stroke": "#C9D0FF", "stroke_width": 1.6,

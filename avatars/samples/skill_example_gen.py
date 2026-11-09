@@ -90,7 +90,7 @@ LOOK = {
     "far-left": [-FAR, 0], "far-right": [FAR, 0],
     "up-far-left": [-FAR, -UP], "up-far-right": [FAR, -UP], "down-far-left": [-FAR, UP], "down-far-right": [FAR, UP],
 }
-EFFECTS = ["none", "zs", "dots", "notes", "alert", "sparkles", "dust"]
+EFFECTS = ["none", "zs", "dots", "notes", "alert", "sparkles", "dust", "tears", "aura", "heart"]
 
 
 def pack():
