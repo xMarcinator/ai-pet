@@ -50,7 +50,9 @@ Go through `design-conventions.md`, then:
 - Every state reads: the eyes and the expression at a glance, on all three backgrounds, in every theme.
 - Nothing pokes out of the dashed box, and the feet stand on the ground in `idle`.
 - Fallbacks do what was meant: no default drawn where `null` was meant (a laptop while idle, Zs while awake).
-- Parts line up in every pose: hands on the laptop and the magnifier handle, the headset on the head (on a turned
+- The newer states read too: tears on the face for sad, sleepy eyes for tired, the envelope held for news, the glow
+  round the body and the heart.
+- Parts line up in every pose: hands on the laptop, the magnifier handle and the envelope, the headset on the head (on a turned
   pet, on the head's own centre), eyes on the face at the far looks.
 - The mirrored view still looks right (asymmetric details, a turned head).
 - The new drawing is recognisably the original: proportions, colours, the turn.

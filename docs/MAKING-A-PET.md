@@ -48,14 +48,19 @@ A pack is a list of **layers**, drawn in the order the manifest gives them, bott
 
 | Channel | Values |
 |---|---|
-| `state` | `idle`, the idle acts `idle-look`, `idle-hop`, `idle-stretch`, `idle-wiggle` and `idle-tap`, `sleep`, `thinking`, `working`, `attention`, `done`, and `listen` (music plays while nothing else is going on) |
-| `eyes` | `open`, `closed` (asleep), `blink`, `happy`, `squint` (poked), `wide` (held), `up` (thinking, or the pointer is above) and `down` (reading the laptop). The eyes also have a look direction: see [`look`](#part-motion). |
-| `arms` | `rest`, `raised` (held, or stretching), `wave-a` and `wave-b` (waving), `run-a` and `run-b` (dragged), `hold` (at the laptop) and `lens` (holding the magnifier) |
+| `state` | `idle`, the idle acts `idle-look`, `idle-hop`, `idle-stretch`, `idle-wiggle` and `idle-tap`, `sleep`, `thinking`, `working`, `attention`, `done`, `listen` (music plays while nothing else is going on), `sad` (the last turn failed), `tired` (late at night, or after a long chat) and `news` (a new review or message) |
+| `eyes` | `open`, `closed` (asleep), `blink`, `happy`, `squint` (poked), `wide` (held), `up` (thinking, or the pointer is above), `down` (reading the laptop, or sad) and `sleepy` (tired). The eyes also have a look direction: see [`look`](#part-motion). |
+| `arms` | `rest`, `raised` (held, or stretching), `wave-a` and `wave-b` (waving), `run-a` and `run-b` (dragged), `hold` (at the laptop, or holding the envelope) and `lens` (holding the lens) |
 | `feet` | `stand`, `tap`, `dangle-a` and `dangle-b` (held), `run-a` and `run-b` (dragged) |
-| `prop` | `none`, `laptop` (working) and `lens` (searching or reading) |
+| `prop` | `none`, `laptop` (working), `lens` (searching or reading) and `envelope` (news). The `lens` is whatever the pack draws for it: a magnifier, or glasses as the Hamster wears. |
 | `headphones` | `on` and `off` |
-| `fx` | `none`, `zs` (asleep), `dots` (thinking), `notes` (listening), `alert` (attention), `sparkles` (done, or poked) and `dust` (running). Sparkles can come on top of another effect: `zs+sparkles`, `dots+sparkles`, `notes+sparkles`, `alert+sparkles` and `dust+sparkles`. |
+| `fx` | `none`, `zs` (asleep), `dots` (thinking), `notes` (listening), `alert` (attention), `sparkles` (done, or poked), `dust` (running), `tears` (sad), `aura` (the golden glow that opens a done) and `heart` (poked). Sparkles can come on top of another effect: `zs+sparkles`, `dots+sparkles`, `notes+sparkles`, `alert+sparkles` and `dust+sparkles`. `tears`, `aura` and `heart` never combine. |
 | `facing` | `left` and `right` |
+
+**The newer states.** A pack made before `sad`, `tired` and `news` still works. The pet shows `sad` and `news` as
+`attention`, and `tired` as `idle`, unless the pack draws the state itself or its sign: `tears` for sad, the `envelope`
+for news, `sleepy` eyes for tired. A done opens with the `aura` only where the pack draws one, and a poke shows the
+`heart` only where the pack draws one; otherwise both show sparkles, as before.
 
 Several layers may share a channel: a pet can have a `body` and a `mouth` layer both bound to `state`, or one effects
 layer per effect.
@@ -70,7 +75,7 @@ nothing for every other effect:
 ```json
 "fallback": { "off": null }
 "fallback": { "zs+sparkles": "zs", "none": null, "dots": null, "notes": null, "alert": null,
-              "sparkles": null, "dust": null }
+              "sparkles": null, "dust": null, "tears": null, "aura": null, "heart": null }
 ```
 
 You only need to draw what your pet should show differently. A pet with just a body and eyes is fine: the arms,
@@ -85,7 +90,8 @@ first frame, and the pet doesn't bob, squash or play idle acts.
 if the pack's `mirror` is `flip`, unless the layer has a `mirror` of its own. A layer may also give a value's
 left-facing frames as `<value>@left` (for example `run-a@left`), which are drawn as they are, unmirrored.
 
-Mirror the whole pet only if it is drawn in perspective (turned, like the vector Hamster's three-quarter view). A pet
+Mirror the whole pet only if it is drawn in perspective (turned, like the Hamster's three-quarter view); if it is
+turned to the left, say so with `"faces": "left"`, so it turns the way it is dragged. A pet
 drawn facing the viewer sets the pack's `mirror` to `none` and flips only what has a direction: its hands or arms,
 its feet and the dust. Its body and everything on it (a sprout, laces, markings) stay as drawn, as they would on a
 real thing that turns its head; the eyes already look the way it moves.
@@ -163,7 +169,7 @@ loads as it is.
       "channel": "fx",
       "default": "zs",
       "fallback": { "zs+sparkles": "zs", "none": null, "dots": null, "notes": null, "alert": null,
-                    "sparkles": null, "dust": null },
+                    "sparkles": null, "dust": null, "tears": null, "aura": null, "heart": null },
       "parts": [ { "id": "z-1", "origin": [100, 46], "shape": "z" },
                  { "id": "z-2", "origin": [108, 36], "shape": "z" } ],
       "shapes": { "z": { "d": "M -3 -3 H 3 L -3 3 H 3", "stroke": "#C9D0FF", "stroke_width": 1.6,
@@ -183,15 +189,18 @@ The top-level keys:
 | Key | What it is |
 |---|---|
 | `format_version` | `1`. A pack with a newer version than the app reads is skipped. |
-| `name` | The pet's name, as the Avatars page shows it and `config.json` saves it. A built-in pet wins a name; of two of your own with one name, the first in sorted folder order loads and the other is skipped. |
+| `name` | This drawing's name, unique among all packs: the pet's name for its main style (`Hood`), else something like `Hood (vector)`. A built-in wins a name; of two of your own with one name, the first in sorted folder order loads and the other is skipped. |
+| `pet` | The pet this pack is a style of, where that isn't its `name` (`Hood (vector)` is the Hood's). A pack inside a pet folder is the folder's pet unless it says. |
+| `style` | The style's label, where it isn't the kind's (Pixel, Vector or Painted): two styles of one kind need their own, such as `Chibi`. |
 | `kind` | `pixel`, `painted` or `vector` (see below). |
 | `pixel_size` | How big one pixel of the art is, in logical px: 5 for the 26 × 24 grid of the original pets, 1 for vector art. |
 | `anchor` | `[x, y]`: the point of the art that stands on the ground shadow, in the art's own pixels. |
 | `mirror` | `flip` (the default) or `none`. |
+| `faces` | `right` (the default) or `left`: the way the art faces. A pet drawn turned to the left (the Hamster) is mirrored when it faces right and drawn as it is when it faces left. Effects are always drawn as for a pet facing right. |
 | `accent` | The pet's accent colour, which Settings and the menu take on while the pet is worn. A colour, or `$name` for a palette colour. |
 | `glow` | The colour of the glow around glowing layers. A colour, or `$name`. |
 | `palette`, `theme`, `themes` | Named colours and the pet's themes (see [Themes](#themes)). Optional. |
-| `layers` | The layers, bottom first. 1 to 16 of them. |
+| `layers` | The layers, bottom first. 1 to 24 of them. |
 
 Each layer has:
 
@@ -331,6 +340,23 @@ frames (else its default's) where the pose puts the part. A vector layer does th
 Aseprite file the part's slice gives the poses: draw the part in the same place on every tag, and move the slice
 on each tag's first frame to where the part should go, since the pet moves the frame by the slice's move.
 
+## Pets and styles
+
+A pet can be drawn more than one way: the built-in Hood is a pixel pack and a vector pack. Each drawing is a **style**
+of the pet, and the Avatars page shows the pet once, with a **Style** choice beside its themes. A style's name is its
+kind (Pixel, Vector, Painted) unless its manifest gives a `style` label.
+
+Ship several styles of one pet as a **pet folder**: a folder named for the pet with a pack folder per style inside,
+such as `avatars/Fox/pixel/pack.json` and `avatars/Fox/vector/pack.json`. Each style is a normal pack and checks on its
+own; `AiPet --check-pack avatars/Fox` checks them all, a line each. A pack folder elsewhere joins a pet with
+`"pet": "Fox"`, so a style can be added to a pet, a built-in one too.
+
+The pet wears its **default style** unless asked for another: the drawing whose `name` is the pet's, else the first
+loaded. Pack names stay unique, and no pack may be named as another pet: a pack that repeats a name, repeats a pet's
+style, or takes another pet's name is skipped with the reason, and a built-in always wins. Each style has its own
+themes, since styles name different colours; switching style keeps the theme where the new style has one by that
+name.
+
 ## Themes
 
 A theme is the same pet in other colours (or, for a raster pack, drawn from other sheets). The Avatars page shows
@@ -430,7 +456,7 @@ down or crashing the pet.
 | A PNG sheet | 8 MB, 2048 px a side, checked from its header before it is decoded |
 | A pack's sheets, decoded | 64 MB in all |
 | An `.aseprite` file | 8 MB, 512 frames, 64 layers, 2048 px a side, 64 MB decoded |
-| Layers | 1 to 16 |
+| Layers | 1 to 24 |
 | Frames | 512 in the pack |
 | Parts | 256 in a vector pack; one per layer in a raster pack |
 | Frame durations | 1 ms to 60 s |

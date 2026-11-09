@@ -8,6 +8,7 @@
   110.0
  ],
  "mirror": "flip",
+ "faces": "left",
  "accent": "$orange",
  "glow": "#7FEFFF",
  "palette": {
@@ -20,9 +21,109 @@
   "line": "#A5967A",
   "edgeDark": "#90664C",
   "eye": "#A5663A",
-  "dark": "#3B3A3A"
+  "dark": "#3B3A3A",
+  "shade": "#E39A2E",
+  "blush": "#FF9AAE",
+  "mouth": "#8E4A3A"
  },
  "layers": [
+  {
+   "name": "aura-glow",
+   "channel": "fx",
+   "parts": [
+    {
+     "id": "glow-1",
+     "origin": [
+      64.0,
+      67.6
+     ],
+     "shape": "glow-1"
+    },
+    {
+     "id": "glow-2",
+     "origin": [
+      64.0,
+      67.6
+     ],
+     "shape": "glow-2"
+    },
+    {
+     "id": "glow-3",
+     "origin": [
+      64.0,
+      67.6
+     ],
+     "shape": "glow-3"
+    }
+   ],
+   "shapes": {
+    "glow-1": {
+     "d": "M -60 0 A 60 61 0 1 0 60 0 A 60 61 0 1 0 -60 0 Z",
+     "fill": "#FFC83D",
+     "opacity": 0.1
+    },
+    "glow-2": {
+     "d": "M -55 0 A 55 56 0 1 0 55 0 A 55 56 0 1 0 -55 0 Z",
+     "fill": "#FFC83D",
+     "opacity": 0.16
+    },
+    "glow-3": {
+     "d": "M -50 0 A 50 51 0 1 0 50 0 A 50 51 0 1 0 -50 0 Z",
+     "fill": "#FFC83D",
+     "opacity": 0.24
+    }
+   },
+   "animations": {
+    "aura": {
+     "parts": [
+      "glow-1",
+      "glow-2",
+      "glow-3"
+     ],
+     "loop": "loop",
+     "keys": [
+      {
+       "ms": 300
+      },
+      {
+       "scale": 1.04,
+       "ms": 300
+      },
+      {
+       "scale": 1.06,
+       "opacity": 0.8,
+       "ms": 300
+      },
+      {
+       "scale": 1.04,
+       "opacity": 0.5,
+       "ms": 300
+      },
+      {
+       "opacity": 0.25,
+       "ms": 300
+      }
+     ]
+    }
+   },
+   "fallback": {
+    "none": null,
+    "dust": null,
+    "sparkles": null,
+    "zs": null,
+    "dots": null,
+    "notes": null,
+    "alert": null,
+    "zs+sparkles": null,
+    "dots+sparkles": null,
+    "notes+sparkles": null,
+    "alert+sparkles": null,
+    "dust+sparkles": null,
+    "tears": null,
+    "heart": null
+   },
+   "default": "aura"
+  },
   {
    "name": "ears",
    "channel": "state",
@@ -244,8 +345,94 @@
       "fill": "$yellow"
      },
      {
-      "d": "M 89 43.6 C 99.5 46.6 108.5 53.8 109.1 64.6 C 109.7 72.1 109.4 78.1 108.5 83.2 C 106.1 83.2 104.3 82.3 103.1 80.8 C 103.7 75.4 104 69.4 103.1 63.4 C 101.9 55.6 97.1 48.4 89 43.6 Z",
+      "d": "M 23 57.4 C 26 56.8 30.5 57.4 33.5 59.2 C 30.5 62.2 27.5 64 23 64.6 Z",
       "fill": "$orange"
+     },
+     {
+      "d": "M 26.3 64.6 C 25.1 52.6 28.1 45.4 34.7 41.8 M 48.5 38.2 C 53 37 57.5 37 62 38.2",
+      "stroke": "$hi",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 88.1 47.8 C 90.5 47.2 92.9 47.8 94.7 49.3",
+      "stroke": "$hi",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 39.5 54.4 C 45.5 51.4 54.5 51.4 60.5 53.8 C 72.5 53.8 81.5 55 87.5 58.6 C 90.5 64 90.5 71.8 91.7 78.4 C 98.3 79.6 107.3 82 109.4 88 C 110 91.6 108.2 95.2 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8 C 23.3 82.6 23.3 73.6 24.5 67.6 C 27.5 61.6 33.5 56.8 39.5 54.4 Z",
+      "fill": "$cream"
+     },
+     {
+      "d": "M 23.9 70.6 C 42.5 72.4 69.5 72.4 89.9 71.2 C 90.5 74.8 90.8 76.6 91.7 78.4 C 91.1 87.4 88.7 96.4 85.1 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8 C 23.6 82.6 23.3 76.6 23.9 70.6 Z",
+      "fill": "$creamShade"
+     },
+     {
+      "d": "M 88.7 83.8 C 94.7 80.2 104.3 81.4 107.9 87.4 C 109.7 92.2 108.2 95.8 105.5 98.2 C 101.3 103.6 95.3 104.5 87.5 104.8 C 85.1 97.6 85.7 89.2 88.7 83.8 Z",
+      "fill": "$cream"
+     },
+     {
+      "d": "M 42.5 102.4 C 57.5 103.3 72.5 103.3 84.5 102.4",
+      "stroke": "$line",
+      "stroke_width": 1.25,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 89.3 84.4 C 86.3 89.8 85.7 97 86.9 103.6",
+      "stroke": "$line",
+      "stroke_width": 1.25,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 92 44.8 C 101.3 47.8 108.5 55 109.4 64.6 C 110.3 77.8 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 75.5 105.4 63.5 105.7 53 105.1 C 63.5 102.4 75.5 101.2 85.7 99.4 C 93.5 97.6 98.3 93.4 100.1 86.8 C 101.9 78.4 101.9 68.8 100.7 61.6 C 98.9 53.8 95.9 48.4 92 44.8 Z",
+      "fill": "$orange"
+     },
+     {
+      "d": "M 101.3 54.4 C 106.7 58.6 109.1 64.6 109.1 70.6 C 109.1 79.6 108.5 88.6 105.5 95.8 C 101.9 101.8 95.9 103.6 87.5 104.2 C 93.5 100.6 98.3 96.4 101.3 89.8 C 103.7 82.6 104.3 74.8 103.7 67.6 C 103.1 62.2 102.5 58 101.3 54.4 Z",
+      "fill": "$shade"
+     },
+     {
+      "d": "M 33.5 40.6 C 39.5 34.6 69.5 34.6 81.5 40.6 C 96.5 41.8 108.5 50.8 109.7 64.6 C 110.6 78.1 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8 C 22.7 82.6 21.5 75.4 21.5 67.6 C 21.5 59.8 25.7 45.4 33.5 40.6 Z",
+      "stroke": "$rust",
+      "stroke_width": 2.0,
+      "linecap": "butt",
+      "linejoin": "round"
+     },
+     {
+      "d": "M 81.5 40.6 C 96.5 41.8 108.5 50.8 109.7 64.6 C 110.6 78.1 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8",
+      "stroke": "$edgeDark",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 87.5 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8",
+      "stroke": "$line",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 47 49.6 L 53 49.6 A 1.5 1.5 0 0 1 54.5 51.1 L 54.5 51.1 A 1.5 1.5 0 0 1 53 52.6 L 47 52.6 A 1.5 1.5 0 0 1 45.5 51.1 L 45.5 51.1 A 1.5 1.5 0 0 1 47 49.6 Z",
+      "fill": "$rust"
+     },
+     {
+      "d": "M 47 57.1 L 50 54.1 L 53 57.1",
+      "stroke": "$rust",
+      "stroke_width": 1.5,
+      "linecap": "round",
+      "linejoin": "round"
+     }
+    ],
+    "tired": [
+     {
+      "d": "M 33.5 40.6 C 39.5 34.6 69.5 34.6 81.5 40.6 C 96.5 41.8 108.5 50.8 109.7 64.6 C 110.6 78.1 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8 C 22.7 82.6 21.5 75.4 21.5 67.6 C 21.5 59.8 25.7 45.4 33.5 40.6 Z",
+      "fill": "$yellow"
      },
      {
       "d": "M 23 57.4 C 26 56.8 30.5 57.4 33.5 59.2 C 30.5 62.2 27.5 64 23 64.6 Z",
@@ -292,6 +479,109 @@
       "linejoin": "miter"
      },
      {
+      "d": "M 92 44.8 C 101.3 47.8 108.5 55 109.4 64.6 C 110.3 77.8 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 75.5 105.4 63.5 105.7 53 105.1 C 63.5 102.4 75.5 101.2 85.7 99.4 C 93.5 97.6 98.3 93.4 100.1 86.8 C 101.9 78.4 101.9 68.8 100.7 61.6 C 98.9 53.8 95.9 48.4 92 44.8 Z",
+      "fill": "$orange"
+     },
+     {
+      "d": "M 101.3 54.4 C 106.7 58.6 109.1 64.6 109.1 70.6 C 109.1 79.6 108.5 88.6 105.5 95.8 C 101.9 101.8 95.9 103.6 87.5 104.2 C 93.5 100.6 98.3 96.4 101.3 89.8 C 103.7 82.6 104.3 74.8 103.7 67.6 C 103.1 62.2 102.5 58 101.3 54.4 Z",
+      "fill": "$shade"
+     },
+     {
+      "d": "M 33.5 40.6 C 39.5 34.6 69.5 34.6 81.5 40.6 C 96.5 41.8 108.5 50.8 109.7 64.6 C 110.6 78.1 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8 C 22.7 82.6 21.5 75.4 21.5 67.6 C 21.5 59.8 25.7 45.4 33.5 40.6 Z",
+      "stroke": "$rust",
+      "stroke_width": 2.0,
+      "linecap": "butt",
+      "linejoin": "round"
+     },
+     {
+      "d": "M 81.5 40.6 C 96.5 41.8 108.5 50.8 109.7 64.6 C 110.6 78.1 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8",
+      "stroke": "$edgeDark",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 87.5 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8",
+      "stroke": "$line",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 47 49.6 L 53 49.6 A 1.5 1.5 0 0 1 54.5 51.1 L 54.5 51.1 A 1.5 1.5 0 0 1 53 52.6 L 47 52.6 A 1.5 1.5 0 0 1 45.5 51.1 L 45.5 51.1 A 1.5 1.5 0 0 1 47 49.6 Z",
+      "fill": "$rust"
+     },
+     {
+      "d": "M 47.25 57.1 A 2.75 3.75 0 1 0 52.75 57.1 A 2.75 3.75 0 1 0 47.25 57.1 Z",
+      "fill": "$mouth",
+      "stroke": "$edgeDark",
+      "stroke_width": 1.0,
+      "linecap": "butt",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 48.5 59.1 A 1.5 1.1 0 1 0 51.5 59.1 A 1.5 1.1 0 1 0 48.5 59.1 Z",
+      "fill": "$blush"
+     }
+    ],
+    "done": [
+     {
+      "d": "M 33.5 40.6 C 39.5 34.6 69.5 34.6 81.5 40.6 C 96.5 41.8 108.5 50.8 109.7 64.6 C 110.6 78.1 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8 C 22.7 82.6 21.5 75.4 21.5 67.6 C 21.5 59.8 25.7 45.4 33.5 40.6 Z",
+      "fill": "$yellow"
+     },
+     {
+      "d": "M 23 57.4 C 26 56.8 30.5 57.4 33.5 59.2 C 30.5 62.2 27.5 64 23 64.6 Z",
+      "fill": "$orange"
+     },
+     {
+      "d": "M 26.3 64.6 C 25.1 52.6 28.1 45.4 34.7 41.8 M 48.5 38.2 C 53 37 57.5 37 62 38.2",
+      "stroke": "$hi",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 88.1 47.8 C 90.5 47.2 92.9 47.8 94.7 49.3",
+      "stroke": "$hi",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 39.5 54.4 C 45.5 51.4 54.5 51.4 60.5 53.8 C 72.5 53.8 81.5 55 87.5 58.6 C 90.5 64 90.5 71.8 91.7 78.4 C 98.3 79.6 107.3 82 109.4 88 C 110 91.6 108.2 95.2 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8 C 23.3 82.6 23.3 73.6 24.5 67.6 C 27.5 61.6 33.5 56.8 39.5 54.4 Z",
+      "fill": "$cream"
+     },
+     {
+      "d": "M 23.9 70.6 C 42.5 72.4 69.5 72.4 89.9 71.2 C 90.5 74.8 90.8 76.6 91.7 78.4 C 91.1 87.4 88.7 96.4 85.1 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8 C 23.6 82.6 23.3 76.6 23.9 70.6 Z",
+      "fill": "$creamShade"
+     },
+     {
+      "d": "M 88.7 83.8 C 94.7 80.2 104.3 81.4 107.9 87.4 C 109.7 92.2 108.2 95.8 105.5 98.2 C 101.3 103.6 95.3 104.5 87.5 104.8 C 85.1 97.6 85.7 89.2 88.7 83.8 Z",
+      "fill": "$cream"
+     },
+     {
+      "d": "M 42.5 102.4 C 57.5 103.3 72.5 103.3 84.5 102.4",
+      "stroke": "$line",
+      "stroke_width": 1.25,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 89.3 84.4 C 86.3 89.8 85.7 97 86.9 103.6",
+      "stroke": "$line",
+      "stroke_width": 1.25,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 92 44.8 C 101.3 47.8 108.5 55 109.4 64.6 C 110.3 77.8 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 75.5 105.4 63.5 105.7 53 105.1 C 63.5 102.4 75.5 101.2 85.7 99.4 C 93.5 97.6 98.3 93.4 100.1 86.8 C 101.9 78.4 101.9 68.8 100.7 61.6 C 98.9 53.8 95.9 48.4 92 44.8 Z",
+      "fill": "$orange"
+     },
+     {
+      "d": "M 101.3 54.4 C 106.7 58.6 109.1 64.6 109.1 70.6 C 109.1 79.6 108.5 88.6 105.5 95.8 C 101.9 101.8 95.9 103.6 87.5 104.2 C 93.5 100.6 98.3 96.4 101.3 89.8 C 103.7 82.6 104.3 74.8 103.7 67.6 C 103.1 62.2 102.5 58 101.3 54.4 Z",
+      "fill": "$shade"
+     },
+     {
       "d": "M 33.5 40.6 C 39.5 34.6 69.5 34.6 81.5 40.6 C 96.5 41.8 108.5 50.8 109.7 64.6 C 110.6 78.1 109.7 90.4 105.5 97.6 C 101.3 103.6 95.3 104.5 87.5 104.8 C 72.5 105.7 57.5 105.7 45.5 104.5 C 36.5 103.6 30.5 95.8 27.5 89.8 C 22.7 82.6 21.5 75.4 21.5 67.6 C 21.5 59.8 25.7 45.4 33.5 40.6 Z",
       "stroke": "$rust",
       "stroke_width": 2.0,
@@ -322,6 +612,16 @@
       "stroke_width": 1.5,
       "linecap": "round",
       "linejoin": "round"
+     },
+     {
+      "d": "M 87 56.8 A 3.5 2 0 1 0 94 56.8 A 3.5 2 0 1 0 87 56.8 Z",
+      "fill": "$blush",
+      "opacity": 0.75
+     },
+     {
+      "d": "M 27.3 58 A 2 1.6 0 1 0 31.3 58 A 2 1.6 0 1 0 27.3 58 Z",
+      "fill": "$blush",
+      "opacity": 0.6
      }
     ]
    },
@@ -385,7 +685,17 @@
     "down": {
      "d": "M -1.5 -1 L 1.5 -1 A 1.5 1.5 0 0 1 3 0.5 L 3 1.5 A 1.5 1.5 0 0 1 1.5 3 L -1.5 3 A 1.5 1.5 0 0 1 -3 1.5 L -3 0.5 A 1.5 1.5 0 0 1 -1.5 -1 Z",
      "fill": "$eye"
-    }
+    },
+    "sleepy": [
+     {
+      "d": "M -2 0 L 2 0 A 1 1 0 0 1 3 1 L 3 2 A 1 1 0 0 1 2 3 L -2 3 A 1 1 0 0 1 -3 2 L -3 1 A 1 1 0 0 1 -2 0 Z",
+      "fill": "$eye"
+     },
+     {
+      "d": "M -3.12 -0.75 L 3.12 -0.75 A 0.62 0.62 0 0 1 3.75 -0.13 L 3.75 -0.13 A 0.62 0.62 0 0 1 3.12 0.5 L -3.12 0.5 A 0.62 0.62 0 0 1 -3.75 -0.13 L -3.75 -0.13 A 0.62 0.62 0 0 1 -3.12 -0.75 Z",
+      "fill": "$eye"
+     }
+    ]
    },
    "look": {
     "center": [
@@ -503,71 +813,84 @@
     ],
     "lens": [
      {
-      "d": "M -24 -16.4 L -16 -8.4",
-      "stroke": "#3B2618",
-      "stroke_width": 6.0,
-      "linecap": "round",
-      "linejoin": "miter"
+      "d": "M -31 -60.4 A 5.5 5.5 0 1 0 -20 -60.4 A 5.5 5.5 0 1 0 -31 -60.4 Z",
+      "fill": "#FFFFFF",
+      "opacity": 0.22
      },
      {
-      "d": "M -24 -16.4 L -16 -8.4",
-      "stroke": "#7A5236",
-      "stroke_width": 3.5,
-      "linecap": "round",
-      "linejoin": "miter"
+      "d": "M -4 -60.4 A 5.5 5.5 0 1 0 7 -60.4 A 5.5 5.5 0 1 0 -4 -60.4 Z",
+      "fill": "#FFFFFF",
+      "opacity": 0.22
      },
      {
-      "d": "M -45.5 -25.4 A 13 13 0 1 0 -19.5 -25.4 A 13 13 0 1 0 -45.5 -25.4 Z",
-      "fill": "#A9E4FF",
-      "opacity": 0.55
-     },
-     {
-      "d": "M -45.5 -25.4 A 13 13 0 1 0 -19.5 -25.4 A 13 13 0 1 0 -45.5 -25.4 Z",
-      "stroke": "#30344A",
-      "stroke_width": 5.0,
+      "d": "M -31 -60.4 A 5.5 5.5 0 1 0 -20 -60.4 A 5.5 5.5 0 1 0 -31 -60.4 Z",
+      "stroke": "$dark",
+      "stroke_width": 1.75,
       "linecap": "butt",
       "linejoin": "miter"
      },
      {
-      "d": "M -45.5 -25.4 A 13 13 0 1 0 -19.5 -25.4 A 13 13 0 1 0 -45.5 -25.4 Z",
-      "stroke": "#D5DCEB",
-      "stroke_width": 3.0,
+      "d": "M -4 -60.4 A 5.5 5.5 0 1 0 7 -60.4 A 5.5 5.5 0 1 0 -4 -60.4 Z",
+      "stroke": "$dark",
+      "stroke_width": 1.75,
       "linecap": "butt",
       "linejoin": "miter"
      },
      {
-      "d": "M -39 -30.4 C -37.5 -33.4 -35 -34.9 -32 -34.9",
+      "d": "M -20 -61.4 C -17 -63.4 -7 -63.4 -4 -61.4",
+      "stroke": "$dark",
+      "stroke_width": 1.5,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M 7 -61.9 L 24.3 -64",
+      "stroke": "$dark",
+      "stroke_width": 1.5,
+      "linecap": "round",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M -28.5 -63.4 C -27.5 -64.4 -26 -64.9 -24.5 -64.9",
       "stroke": "#FFFFFF",
-      "stroke_width": 2.0,
+      "stroke_width": 1.0,
       "linecap": "round",
       "linejoin": "miter",
-      "opacity": 0.85
+      "opacity": 0.8
+     }
+    ],
+    "envelope": [
+     {
+      "d": "M -25 -31.4 L 10 -31.4 A 2.5 2.5 0 0 1 12.5 -28.9 L 12.5 -11.9 A 2.5 2.5 0 0 1 10 -9.4 L -25 -9.4 A 2.5 2.5 0 0 1 -27.5 -11.9 L -27.5 -28.9 A 2.5 2.5 0 0 1 -25 -31.4 Z",
+      "fill": "#FFFDF4",
+      "stroke": "$edgeDark",
+      "stroke_width": 2.0,
+      "linecap": "butt",
+      "linejoin": "miter"
+     },
+     {
+      "d": "M -25.5 -11.4 L -7.5 -20.4 L 10.5 -11.4",
+      "stroke": "#E6DCC4",
+      "stroke_width": 1.5,
+      "linecap": "butt",
+      "linejoin": "round"
+     },
+     {
+      "d": "M -26.5 -30.4 L -7.5 -19.3 L 11.5 -30.4",
+      "stroke": "$edgeDark",
+      "stroke_width": 1.75,
+      "linecap": "butt",
+      "linejoin": "round"
+     },
+     {
+      "d": "M -7.5 -16.82 C -11.22 -19.92 -9.36 -23.02 -7.5 -20.85 C -5.64 -23.02 -3.78 -19.92 -7.5 -16.82 Z",
+      "fill": "$orange",
+      "stroke": "$edgeDark",
+      "stroke_width": 1.25,
+      "linecap": "butt",
+      "linejoin": "round"
      }
     ]
-   },
-   "animations": {
-    "lens": {
-     "parts": [
-      "prop"
-     ],
-     "loop": "loop",
-     "keys": [
-      {
-       "ms": 667
-      },
-      {
-       "dx": 5.0,
-       "ms": 667
-      },
-      {
-       "ms": 667
-      },
-      {
-       "dx": -5.0,
-       "ms": 667
-      }
-     ]
-    }
    },
    "fallback": {
     "none": null
@@ -620,7 +943,8 @@
    },
    "fallback": {
     "lens": null,
-    "none": null
+    "none": null,
+    "envelope": null
    },
    "default": "laptop"
   },
@@ -680,23 +1004,20 @@
    "shapes": {
     "rest": [
      {
-      "d": "M -8 0 C -8 6 -5 11 -1 13 C 3 11 7 6 8 0 Z",
-      "fill": "$cream"
-     },
-     {
-      "d": "M -8 0 C -8 6 -5 11 -1 13 C 3 11 7 6 8 0",
-      "stroke": "$line",
-      "stroke_width": 1.25,
-      "linecap": "round",
-      "linejoin": "miter"
-     },
-     {
-      "d": "M -4.25 13 A 3.25 2.5 0 1 0 2.25 13 A 3.25 2.5 0 1 0 -4.25 13 Z",
+      "d": "M -4.25 12 A 3.25 2.5 0 1 0 2.25 12 A 3.25 2.5 0 1 0 -4.25 12 Z",
       "fill": "$rust",
       "stroke": "$edgeDark",
       "stroke_width": 1.0,
       "linecap": "butt",
       "linejoin": "miter"
+     },
+     {
+      "d": "M -3 11 C -2 10 0 10 1 11",
+      "stroke": "$hi",
+      "stroke_width": 0.75,
+      "linecap": "round",
+      "linejoin": "miter",
+      "opacity": 0.7
      }
     ],
     "raised": [
@@ -827,23 +1148,20 @@
     ],
     "lens": [
      {
-      "d": "M -8 0 C -8 6 -5 11 -1 13 C 3 11 7 6 8 0 Z",
-      "fill": "$cream"
-     },
-     {
-      "d": "M -8 0 C -8 6 -5 11 -1 13 C 3 11 7 6 8 0",
-      "stroke": "$line",
-      "stroke_width": 1.25,
-      "linecap": "round",
-      "linejoin": "miter"
-     },
-     {
-      "d": "M -5 13 A 4 3 0 1 0 3 13 A 4 3 0 1 0 -5 13 Z",
+      "d": "M -4.25 12 A 3.25 2.5 0 1 0 2.25 12 A 3.25 2.5 0 1 0 -4.25 12 Z",
       "fill": "$rust",
       "stroke": "$edgeDark",
       "stroke_width": 1.0,
       "linecap": "butt",
       "linejoin": "miter"
+     },
+     {
+      "d": "M -3 11 C -2 10 0 10 1 11",
+      "stroke": "$hi",
+      "stroke_width": 0.75,
+      "linecap": "round",
+      "linejoin": "miter",
+      "opacity": 0.7
      }
     ]
    },
@@ -892,8 +1210,8 @@
     },
     "lens": {
      "arm-left": [
-      54.0,
-      87.3
+      39.5,
+      68.8
      ]
     }
    },
@@ -1076,22 +1394,7 @@
      "loop": "loop",
      "keys": [
       {
-       "rotate": 40.0,
-       "ms": 667
-      },
-      {
-       "rotate": 40.0,
-       "dx": 5.0,
-       "ms": 667
-      },
-      {
-       "rotate": 40.0,
-       "ms": 667
-      },
-      {
-       "rotate": 40.0,
-       "dx": -5.0,
-       "ms": 667
+       "ms": 1000
       }
      ]
     }
@@ -1114,23 +1417,20 @@
    "shapes": {
     "rest": [
      {
-      "d": "M -8 0 C -8 6 -5 11 -1 13 C 3 11 7 6 8 0 Z",
-      "fill": "$cream"
-     },
-     {
-      "d": "M -8 0 C -8 6 -5 11 -1 13 C 3 11 7 6 8 0",
-      "stroke": "$line",
-      "stroke_width": 1.25,
-      "linecap": "round",
-      "linejoin": "miter"
-     },
-     {
-      "d": "M -4.25 13 A 3.25 2.5 0 1 0 2.25 13 A 3.25 2.5 0 1 0 -4.25 13 Z",
+      "d": "M -4.25 12 A 3.25 2.5 0 1 0 2.25 12 A 3.25 2.5 0 1 0 -4.25 12 Z",
       "fill": "$rust",
       "stroke": "$edgeDark",
       "stroke_width": 1.0,
       "linecap": "butt",
       "linejoin": "miter"
+     },
+     {
+      "d": "M -3 11 C -2 10 0 10 1 11",
+      "stroke": "$hi",
+      "stroke_width": 0.75,
+      "linecap": "round",
+      "linejoin": "miter",
+      "opacity": 0.7
      }
     ],
     "raised": [
@@ -1261,23 +1561,20 @@
     ],
     "lens": [
      {
-      "d": "M -8 0 C -8 6 -5 11 -1 13 C 3 11 7 6 8 0 Z",
-      "fill": "$cream"
-     },
-     {
-      "d": "M -8 0 C -8 6 -5 11 -1 13 C 3 11 7 6 8 0",
-      "stroke": "$line",
-      "stroke_width": 1.25,
-      "linecap": "round",
-      "linejoin": "miter"
-     },
-     {
-      "d": "M -4.25 13 A 3.25 2.5 0 1 0 2.25 13 A 3.25 2.5 0 1 0 -4.25 13 Z",
+      "d": "M -4.25 12 A 3.25 2.5 0 1 0 2.25 12 A 3.25 2.5 0 1 0 -4.25 12 Z",
       "fill": "$rust",
       "stroke": "$edgeDark",
       "stroke_width": 1.0,
       "linecap": "butt",
       "linejoin": "miter"
+     },
+     {
+      "d": "M -3 11 C -2 10 0 10 1 11",
+      "stroke": "$hi",
+      "stroke_width": 0.75,
+      "linecap": "round",
+      "linejoin": "miter",
+      "opacity": 0.7
      }
     ]
    },
@@ -1493,6 +1790,90 @@
    "default": "rest"
   },
   {
+   "name": "blush",
+   "channel": "fx",
+   "shapes": {
+    "heart": [
+     {
+      "d": "M 87 56.8 A 3.5 2 0 1 0 94 56.8 A 3.5 2 0 1 0 87 56.8 Z",
+      "fill": "$blush",
+      "opacity": 0.75
+     },
+     {
+      "d": "M 27.3 58 A 2 1.6 0 1 0 31.3 58 A 2 1.6 0 1 0 27.3 58 Z",
+      "fill": "$blush",
+      "opacity": 0.6
+     }
+    ]
+   },
+   "fallback": {
+    "none": null,
+    "dust": null,
+    "sparkles": null,
+    "zs": null,
+    "dots": null,
+    "notes": null,
+    "alert": null,
+    "zs+sparkles": null,
+    "dots+sparkles": null,
+    "notes+sparkles": null,
+    "alert+sparkles": null,
+    "dust+sparkles": null,
+    "tears": null,
+    "aura": null
+   },
+   "default": "heart"
+  },
+  {
+   "name": "speed",
+   "channel": "fx",
+   "shapes": {
+    "dust": [
+     {
+      "d": "M 9 74.6 L 22 74.6",
+      "stroke": "#C9C2B8",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter",
+      "opacity": 0.8
+     },
+     {
+      "d": "M 4 84.6 L 21 84.6",
+      "stroke": "#C9C2B8",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter",
+      "opacity": 0.7
+     },
+     {
+      "d": "M 10 94.6 L 21 94.6",
+      "stroke": "#C9C2B8",
+      "stroke_width": 2.0,
+      "linecap": "round",
+      "linejoin": "miter",
+      "opacity": 0.6
+     }
+    ]
+   },
+   "fallback": {
+    "dust+sparkles": "dust",
+    "none": null,
+    "sparkles": null,
+    "zs": null,
+    "dots": null,
+    "notes": null,
+    "alert": null,
+    "zs+sparkles": null,
+    "dots+sparkles": null,
+    "notes+sparkles": null,
+    "alert+sparkles": null,
+    "tears": null,
+    "aura": null,
+    "heart": null
+   },
+   "default": "dust"
+  },
+  {
    "name": "zs",
    "channel": "fx",
    "parts": [
@@ -1634,7 +2015,10 @@
     "dots+sparkles": null,
     "notes+sparkles": null,
     "alert+sparkles": null,
-    "dust+sparkles": null
+    "dust+sparkles": null,
+    "tears": null,
+    "aura": null,
+    "heart": null
    },
    "default": "zs"
   },
@@ -1732,7 +2116,10 @@
     "zs+sparkles": null,
     "notes+sparkles": null,
     "alert+sparkles": null,
-    "dust+sparkles": null
+    "dust+sparkles": null,
+    "tears": null,
+    "aura": null,
+    "heart": null
    },
    "default": "dots"
   },
@@ -1874,7 +2261,10 @@
     "zs+sparkles": null,
     "dots+sparkles": null,
     "alert+sparkles": null,
-    "dust+sparkles": null
+    "dust+sparkles": null,
+    "tears": null,
+    "aura": null,
+    "heart": null
    },
    "default": "notes"
   },
@@ -1939,7 +2329,10 @@
     "zs+sparkles": null,
     "dots+sparkles": null,
     "notes+sparkles": null,
-    "dust+sparkles": null
+    "dust+sparkles": null,
+    "tears": null,
+    "aura": null,
+    "heart": null
    },
    "default": "alert"
   },
@@ -2033,7 +2426,10 @@
     "zs": null,
     "dots": null,
     "notes": null,
-    "alert": null
+    "alert": null,
+    "tears": null,
+    "aura": null,
+    "heart": null
    },
    "default": "sparkles"
   },
@@ -2135,9 +2531,334 @@
     "zs+sparkles": null,
     "dots+sparkles": null,
     "notes+sparkles": null,
-    "alert+sparkles": null
+    "alert+sparkles": null,
+    "tears": null,
+    "aura": null,
+    "heart": null
    },
    "default": "dust"
+  },
+  {
+   "name": "tears",
+   "channel": "fx",
+   "parts": [
+    {
+     "id": "tear-1",
+     "origin": [
+      69.0,
+      55.85
+     ],
+     "shape": "tear-1"
+    },
+    {
+     "id": "tear-2",
+     "origin": [
+      69.5,
+      63.91
+     ],
+     "shape": "tear-2"
+    }
+   ],
+   "shapes": {
+    "tear-1": [
+     {
+      "d": "M 0 -3.75 C 3 -0.25 3 3.25 0 3.75 C -3 3.25 -3 -0.25 0 -3.75 Z",
+      "fill": "#7CC8FF",
+      "stroke": "$edgeDark",
+      "stroke_width": 1.25,
+      "linecap": "butt",
+      "linejoin": "round"
+     },
+     {
+      "d": "M -1.55 1 A 0.8 0.8 0 1 0 0.05 1 A 0.8 0.8 0 1 0 -1.55 1 Z",
+      "fill": "#E8F7FF"
+     }
+    ],
+    "tear-2": [
+     {
+      "d": "M 0 -2.81 C 2.25 -0.19 2.25 2.44 0 2.81 C -2.25 2.44 -2.25 -0.19 0 -2.81 Z",
+      "fill": "#7CC8FF",
+      "stroke": "$edgeDark",
+      "stroke_width": 1.25,
+      "linecap": "butt",
+      "linejoin": "round",
+      "opacity": 0.85
+     },
+     {
+      "d": "M -1.16 0.75 A 0.6 0.6 0 1 0 0.04 0.75 A 0.6 0.6 0 1 0 -1.16 0.75 Z",
+      "fill": "#E8F7FF",
+      "opacity": 0.85
+     }
+    ]
+   },
+   "animations": {
+    "tears": {
+     "parts": [
+      "tear-1",
+      "tear-2"
+     ],
+     "loop": "loop",
+     "keys": [
+      {
+       "ms": 400
+      },
+      {
+       "dy": 3.0,
+       "ms": 300
+      },
+      {
+       "dy": 6.0,
+       "opacity": 0.7,
+       "ms": 300
+      },
+      {
+       "dy": 9.0,
+       "opacity": 0.3,
+       "ms": 300
+      }
+     ]
+    }
+   },
+   "fallback": {
+    "tears+sparkles": "tears",
+    "none": null,
+    "dust": null,
+    "sparkles": null,
+    "zs": null,
+    "dots": null,
+    "notes": null,
+    "alert": null,
+    "zs+sparkles": null,
+    "dots+sparkles": null,
+    "notes+sparkles": null,
+    "alert+sparkles": null,
+    "dust+sparkles": null,
+    "aura": null,
+    "heart": null
+   },
+   "default": "tears"
+  },
+  {
+   "name": "heart",
+   "channel": "fx",
+   "parts": [
+    {
+     "id": "heart-1",
+     "origin": [
+      111.0,
+      22.35
+     ],
+     "shape": "heart-1"
+    },
+    {
+     "id": "heart-2",
+     "origin": [
+      20.0,
+      37.8
+     ],
+     "shape": "heart-2"
+    }
+   ],
+   "shapes": {
+    "heart-1": [
+     {
+      "d": "M 0 6.25 C -7.5 0 -3.75 -6.25 0 -1.88 C 3.75 -6.25 7.5 0 0 6.25 Z",
+      "fill": "#FF6F91",
+      "stroke": "$edgeDark",
+      "stroke_width": 1.25,
+      "linecap": "butt",
+      "linejoin": "round"
+     },
+     {
+      "d": "M -3.75 -1.25 A 1.25 1.25 0 1 0 -1.25 -1.25 A 1.25 1.25 0 1 0 -3.75 -1.25 Z",
+      "fill": "#FFD3DE"
+     }
+    ],
+    "heart-2": [
+     {
+      "d": "M 0 4 C -4.8 0 -2.4 -4 0 -1.2 C 2.4 -4 4.8 0 0 4 Z",
+      "fill": "#FF6F91",
+      "stroke": "$edgeDark",
+      "stroke_width": 1.25,
+      "linecap": "butt",
+      "linejoin": "round"
+     },
+     {
+      "d": "M -2.4 -0.8 A 0.8 0.8 0 1 0 -0.8 -0.8 A 0.8 0.8 0 1 0 -2.4 -0.8 Z",
+      "fill": "#FFD3DE"
+     }
+    ]
+   },
+   "animations": {
+    "heart": {
+     "parts": [
+      "heart-1",
+      "heart-2"
+     ],
+     "loop": "loop",
+     "keys": [
+      {
+       "ms": 160
+      },
+      {
+       "dy": -1.33,
+       "opacity": 0.87,
+       "ms": 160
+      },
+      {
+       "dy": -2.67,
+       "opacity": 0.73,
+       "ms": 160
+      },
+      {
+       "dy": -4.0,
+       "opacity": 0.6,
+       "ms": 160
+      },
+      {
+       "dy": -5.33,
+       "opacity": 0.47,
+       "ms": 160
+      },
+      {
+       "dy": -6.67,
+       "opacity": 0.33,
+       "ms": 160
+      }
+     ],
+     "phase": [
+      0.0,
+      0.5
+     ]
+    }
+   },
+   "fallback": {
+    "heart+sparkles": "heart",
+    "none": null,
+    "dust": null,
+    "sparkles": null,
+    "zs": null,
+    "dots": null,
+    "notes": null,
+    "alert": null,
+    "zs+sparkles": null,
+    "dots+sparkles": null,
+    "notes+sparkles": null,
+    "alert+sparkles": null,
+    "dust+sparkles": null,
+    "tears": null,
+    "aura": null
+   },
+   "default": "heart"
+  },
+  {
+   "name": "aura",
+   "channel": "fx",
+   "parts": [
+    {
+     "id": "aura-star-1",
+     "origin": [
+      38.0,
+      21.6
+     ],
+     "shape": "aura-star-1"
+    },
+    {
+     "id": "aura-star-2",
+     "origin": [
+      93.0,
+      16.6
+     ],
+     "shape": "aura-star-2"
+    },
+    {
+     "id": "aura-star-3",
+     "origin": [
+      68.0,
+      8.6
+     ],
+     "shape": "aura-star-3"
+    }
+   ],
+   "shapes": {
+    "aura-star-1": {
+     "d": "M 0 -3.6 Q 0.6 -0.6 3.6 0 Q 0.6 0.6 0 3.6 Q -0.6 0.6 -3.6 0 Q -0.6 -0.6 0 -3.6 Z",
+     "fill": "#FFF1B0",
+     "stroke": "#E39B12",
+     "stroke_width": 0.75,
+     "linecap": "butt",
+     "linejoin": "round"
+    },
+    "aura-star-2": {
+     "d": "M 0 -4.95 Q 0.83 -0.83 4.95 0 Q 0.83 0.82 0 4.95 Q -0.83 0.82 -4.95 0 Q -0.83 -0.83 0 -4.95 Z",
+     "fill": "#FFF1B0",
+     "stroke": "#E39B12",
+     "stroke_width": 0.75,
+     "linecap": "butt",
+     "linejoin": "round"
+    },
+    "aura-star-3": {
+     "d": "M 0 -3.15 Q 0.53 -0.53 3.15 0 Q 0.53 0.52 0 3.15 Q -0.53 0.52 -3.15 0 Q -0.53 -0.53 0 -3.15 Z",
+     "fill": "#FFF1B0",
+     "stroke": "#E39B12",
+     "stroke_width": 0.75,
+     "linecap": "butt",
+     "linejoin": "round"
+    }
+   },
+   "animations": {
+    "aura": {
+     "parts": [
+      "aura-star-1",
+      "aura-star-2",
+      "aura-star-3"
+     ],
+     "loop": "loop",
+     "keys": [
+      {
+       "ms": 120
+      },
+      {
+       "scale": 0.8,
+       "opacity": 0.85,
+       "ms": 120
+      },
+      {
+       "scale": 0.6,
+       "opacity": 0.6,
+       "ms": 120
+      },
+      {
+       "scale": 0.8,
+       "opacity": 0.85,
+       "ms": 120
+      }
+     ],
+     "phase": [
+      0.0,
+      0.33,
+      0.67
+     ]
+    }
+   },
+   "fallback": {
+    "aura+sparkles": "aura",
+    "none": null,
+    "dust": null,
+    "sparkles": null,
+    "zs": null,
+    "dots": null,
+    "notes": null,
+    "alert": null,
+    "zs+sparkles": null,
+    "dots+sparkles": null,
+    "notes+sparkles": null,
+    "alert+sparkles": null,
+    "dust+sparkles": null,
+    "tears": null,
+    "heart": null
+   },
+   "default": "aura"
   }
  ]
 }

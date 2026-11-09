@@ -36,9 +36,10 @@ Build a throwaway prototype of the pet window per candidate and compare them wit
 - [ ] A recommendation with its cost in tasks and its effect on fn-1's budgets
 
 ## Done summary
-TBD
+Prototypes for the minimal stack (sctk + tiny-skia), Slint and gpui against iced, on branch worktree-agent-af0c406e01f20bf2e (df8c5f6). Calm runs in one go (load limit 3; the desktop app alone keeps the load near 2): iced 4.40 % / 157 MB, minimal 4.13 % / 8.9 MB, Slint 3.27 % / 14 MB, gpui 6.66 % / 164 MB on Mesa GL and 8.63 % / 273 MB by default. Recommendation: move the pet window only, to the minimal stack, behind a gate at the real window's size with damage tracking; gpui is out; Settings stays in iced.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 054c817, 0d2f01a, df8c5f6
+- Tests: spikes/ui-framework/calm.sh with MAX_LOAD=3
 - PRs:

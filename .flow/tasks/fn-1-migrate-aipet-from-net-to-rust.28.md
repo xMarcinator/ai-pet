@@ -50,13 +50,15 @@ frames) and fix it, comparing with the .NET pet. `AIPET_DEBUG=1` prints one line
 frame time; the demo gathers a full stack 27-37 s into each 40 s pass. Measurements: rust/proofs/windows-hands-on.md,
 E-x9.
 ## Acceptance
-- [ ] `pet-bench.sh` and `pet-bench.ps1` run end to end and print both pets' medians and the verdict.
-- [ ] R18's budgets pass on Linux and Windows. The numbers and conditions are recorded in `rust/proofs/performance.md`.
-- [ ] Two runs on the same machine give the same verdict.
+- [x] `pet-bench.sh` runs end to end and prints both pets' medians and the verdict.
+- [x] R18's budgets pass on Linux. The numbers and conditions are recorded in `rust/proofs/performance.md`.
+- [x] Two runs on the same machine give the same verdict.
+- Windows (`pet-bench` for Windows, its two runs) moved to fnt-76-windows-checks-with-the-owner.1, and task 27's bubble-stack frame drops (E-x9) to FNT-75's bubble drawing (fnt-75-the-pet-window-without-the-gpu.3), by the owner, 2026-11-09.
 ## Done summary
-TBD
+pet-bench.sh (calm and lively, paired, load-gated) passes R18 on Linux in two runs with the same verdict: calm CPU 4.70 / 4.86 % against the C# pet's 12.23 / 12.10 %, RSS 157 MB against 277-283 MB (rust/proofs/performance.md). Windows moved to fnt-76.1 and the bubble-stack frame drops (E-x9) to fnt-75.3, by the owner.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 181b9ca, dd42386
+- Tests: scripts/perf/pet-bench.sh, two runs
 - PRs:

@@ -152,7 +152,7 @@ fn send(action: Action) -> crate::Message {
 /// The moods the demo's Settings can force, for trying the states out; "Demo" follows the script again.
 #[cfg(any(test, feature = "demo"))]
 fn moods(pet: &PetUi) -> Element<'_, crate::Message> {
-    const MOODS: [(Option<&str>, &str); 7] = [
+    const MOODS: [(Option<&str>, &str); 10] = [
         (None, "Demo"),
         (Some("sleep"), "Sleep"),
         (Some("idle"), "Idle"),
@@ -160,6 +160,10 @@ fn moods(pet: &PetUi) -> Element<'_, crate::Message> {
         (Some("working"), "Working"),
         (Some("attention"), "Needs you"),
         (Some("done"), "Done"),
+        // fnt-72's: a failed turn, late or long, a review arriving
+        (Some("sad"), "Sad"),
+        (Some("tired"), "Tired"),
+        (Some("news"), "News"),
     ];
     let accent = pet.accent();
     iced::widget::Row::with_children(MOODS.iter().map(|&(mood, label)| {

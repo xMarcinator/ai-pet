@@ -1038,6 +1038,21 @@ mod tests {
     }
 
     #[test]
+    fn a_pet_whose_output_goes_away_is_made_again_on_one_that_is_there() {
+        // fn-2 R23: the compositor closes a layer surface whose output went away (a laptop's lid closed)
+        let (mut shell, _) = live_shell();
+        let on = shell.output;
+        let _ = shell.update(pet(Event::Window(window::Event::Closed)));
+        assert_eq!(shell.surface, Surface::Gone);
+        if let Some(id) = on {
+            shell.outputs.remove(&id);
+        }
+        shell.outputs.insert(99, None);
+        let _ = shell.update(Message::Retry);
+        assert_ne!(shell.surface, Surface::Gone, "made again at the retry");
+    }
+
+    #[test]
     fn losing_the_surface_mid_drag_lets_the_pet_go() {
         let (mut shell, _) = live_shell();
         let _ = shell.update(press(mouse::Button::Left));

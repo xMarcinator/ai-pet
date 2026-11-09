@@ -28,6 +28,16 @@ pet, which the packages don't ship yet, draws its pets from layered packs, liste
   pet, several sets of sheets. Settings → Avatars shows the worn pet's themes, and New theme makes your own from any
   pet with named colours, saved as a file in `avatars/themes/` that Edit and Delete change or remove. The theme you
   pick is saved as `AvatarTheme` in `config.json`.
+- Styles: a pet can come in several styles (pixel, vector or painted) under one tile. A pet folder holds a
+  subfolder per style, or a pack joins a pet with its `pet` key and names its style with `style`. Settings → Avatars
+  shows the worn pet's styles, and the one you pick is saved as `AvatarStyle` in `config.json`.
+- New moods in the Rust pet: `news` (it holds up an envelope for 6 s when a review comes in), `sad` (tears, when a
+  chat's turn fails, with its own red "Failed" bubble), `tired` (sleepy eyes and a yawn, late at night or after a
+  chat of 2 hours), a golden glow that opens every done, and a heart when you poke it. Every built-in pet draws them;
+  a pack that doesn't shows them as before (attention, idle, sparkles). The pack format has the new values `sad`,
+  `tired`, `news`, `sleepy`, `envelope`, `tears`, `aura` and `heart`.
+- The Hamster wears round glasses to read, has its own blush and speed lines, and new shading. Its design comes from
+  JLandbo's [hamster-pet](https://github.com/JLandbo/hamster-pet), used with its author's permission.
 - Settings → General has Pet size (75 to 200 %) and Bubble size (80 to 120 %), saved as `PetSize` and `BubbleSize`.
 - The pet holds still when the system asks for reduced motion, or when `AIPET_REDUCE_MOTION=1` is set: no bobbing,
   squash or idle acts, though its expressions still change.

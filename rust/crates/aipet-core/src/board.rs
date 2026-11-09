@@ -103,6 +103,8 @@ pub struct Session {
     /// hook's report and the log's are ordered by turn.
     pub turn: Option<String>,
     pub turn_ended: bool,
+    /// A chat whose turn ended on an API error (its entry's [`Entry::failed`]).
+    pub failed: bool,
     /// Unix seconds.
     pub ts: f64,
 }
@@ -126,6 +128,7 @@ impl Default for Session {
             source: None,
             turn: None,
             turn_ended: false,
+            failed: false,
             ts: 0.0,
         }
     }
@@ -267,6 +270,13 @@ pub struct Board {
     prop: Option<&'static str>,
     dismissed: HashMap<String, Dismissal>,
     music_last_playing: f64,
+    /// fnt-72: a chat whose turn failed shows as `error` ("Failed: …", red) instead of `attention`. The app turns it
+    /// on; the C# golden replays never do.
+    pub moods: bool,
+    /// When each chat was first seen (Unix seconds): a chat already open when the pet starts counts from then.
+    first_seen: HashMap<String, f64>,
+    /// How long the front chat has been going, at the last refresh.
+    front_age: Option<f64>,
 }
 
 impl Default for Board {
@@ -279,6 +289,9 @@ impl Default for Board {
             prop: None,
             dismissed: HashMap::new(),
             music_last_playing: 0.0,
+            moods: false,
+            first_seen: HashMap::new(),
+            front_age: None,
         }
     }
 }
@@ -306,7 +319,13 @@ impl Board {
             .map_or(0, |i| self.extra[i])
     }
 
-    /// The pet's mood: sleep, idle, thinking, working, attention or done.
+    /// How long the front chat (the one whose state is the pet's) has been going since the pet first saw it, at the
+    /// last refresh; none without chats (fnt-72's tiredness after two hours).
+    pub fn front_age(&self) -> Option<f64> {
+        self.front_age
+    }
+
+    /// The pet's mood: sleep, idle, thinking, working, attention or done (or error, where moods are on).
     pub fn state(&self) -> &'static str {
         self.state
     }
@@ -361,6 +380,11 @@ impl Board {
             .into_iter()
             .map(|(mut s, _)| {
                 s.eff = effective(s.eff, s.ts, now);
+                // a failed turn is attention to the C#; here, where asked, its own red bubble (it lapses as attention does)
+                if self.moods && s.failed && s.eff == "attention" {
+                    s.eff = "error";
+                    s.detail = format!("Failed: {}", s.detail);
+                }
                 s
             })
             .collect();
@@ -455,6 +479,14 @@ impl Board {
         }
         self.state = state;
         self.prop = primary.and_then(|p| p.prop);
+        // how long each chat has been going, from when it was first seen (hook and Codex log chats alike)
+        self.first_seen.retain(|id, _| chats.iter().any(|c| &c.id == id));
+        for c in &chats {
+            self.first_seen.entry(c.id.clone()).or_insert(now);
+        }
+        self.front_age = primary
+            .and_then(|p| self.first_seen.get(&p.id))
+            .map(|since| now - since);
         self.all = sessions;
     }
 }
@@ -554,6 +586,7 @@ fn recorded(chats: &[Entry]) -> Vec<(Session, i32)> {
                 source: Some("hook"),
                 turn: v.turn.clone(),
                 turn_ended: v.turn_ended,
+                failed: v.failed,
                 link: link_for(agent, v.r#where.as_deref(), sid_of(&v.id), v.host_id.as_deref()),
                 name,
                 cwd,
@@ -684,6 +717,80 @@ mod tests {
 
     // What the golden data can't reach: the C#'s real clock can't move 600 s between two refreshes, and a turn id
     // with a `+` inside makes the C#'s Refresh throw.
+
+    #[test]
+    fn a_failed_turn_is_a_red_failed_bubble_where_asked_and_attention_to_the_csharp() {
+        // fnt-72 R1
+        let t = 1_790_000_000.0;
+        let mut chat = Entry::default();
+        chat.id = "claude:a".into();
+        chat.agent = Some("claude");
+        chat.state = Some("attention");
+        chat.detail = Some("Rate limited".into());
+        chat.failed = true;
+        chat.ts = t;
+        let failed = Sources {
+            chats: vec![chat],
+            ..Sources::default()
+        };
+        let shows = |board: &Board| board.find("claude:a").map(|s| (s.eff, s.detail.clone()));
+        let mut csharp = Board::new();
+        csharp.refresh(&failed, t + 1.0);
+        assert_eq!(shows(&csharp), Some(("attention", "Rate limited".into())));
+        let mut board = Board::new();
+        board.moods = true;
+        board.refresh(&failed, t + 1.0);
+        assert_eq!(shows(&board), Some(("error", "Failed: Rate limited".into())));
+        assert_eq!(board.state(), "error");
+        assert_eq!(status_color("error"), Some(0xFFE5484D));
+        // it lapses as attention does, after an hour (and, an hour on, the pet is asleep)
+        board.refresh(&failed, t + 3600.5);
+        assert_eq!(board.find("claude:a").map(|s| s.eff), Some("idle"));
+        assert_eq!(board.state(), "sleep");
+    }
+
+    #[test]
+    fn the_front_chat_counts_its_age_from_when_it_was_first_seen_from_either_source() {
+        // fnt-72: two hours after the pet first saw it, a chat makes an idle pet tired, hook or Codex log alike
+        let t = 1_790_000_000.0;
+        let mut hook = Entry::default();
+        hook.id = "claude:a".into();
+        hook.agent = Some("claude");
+        hook.state = Some("idle");
+        hook.ts = t - 50_000.0;
+        let log = Session {
+            id: "codex:b".into(),
+            agent: "codex",
+            eff: "idle",
+            name: "x".into(),
+            ts: t - 50_000.0,
+            source: Some("log"),
+            ..Session::default()
+        };
+        for sources in [
+            Sources {
+                chats: vec![hook],
+                ..Sources::default()
+            },
+            Sources {
+                codex: vec![log],
+                ..Sources::default()
+            },
+        ] {
+            let mut board = Board::new();
+            board.refresh(&sources, t);
+            assert_eq!(
+                board.front_age(),
+                Some(0.0),
+                "a chat open at the start counts from then"
+            );
+            board.refresh(&sources, t + 7200.0);
+            assert_eq!(board.front_age(), Some(7200.0));
+        }
+        let mut board = Board::new();
+        board.refresh(&Sources::default(), t);
+        assert_eq!(board.front_age(), None);
+    }
 
     #[test]
     fn music_stays_ten_minutes_after_it_last_played() {

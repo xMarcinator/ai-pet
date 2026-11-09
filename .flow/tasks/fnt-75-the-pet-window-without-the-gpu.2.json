@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-09T19:36:54.003487Z",
+  "depends_on": [
+    "fnt-75-the-pet-window-without-the-gpu.1"
+  ],
+  "id": "fnt-75-the-pet-window-without-the-gpu.2",
+  "priority": null,
+  "spec": "fnt-75-the-pet-window-without-the-gpu",
+  "spec_path": ".flow/tasks/fnt-75-the-pet-window-without-the-gpu.2.md",
+  "status": "todo",
+  "title": "The pet scene without iced: own geometry types, sprite drawing and damage",
+  "updated_at": "2026-11-09T19:43:46.527769Z"
+}

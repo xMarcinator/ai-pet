@@ -72,6 +72,11 @@ pub enum Mood {
     Attention,
     Done,
     Listen,
+    /// fnt-72's moods, which only the app's mood step asks for ([`crate::PetInput::moods`]): a failed turn, late or
+    /// long, a review arriving.
+    Sad,
+    Tired,
+    News,
 }
 
 impl Mood {
@@ -84,6 +89,9 @@ impl Mood {
             "attention" => Mood::Attention,
             "done" => Mood::Done,
             "listen" => Mood::Listen,
+            "sad" => Mood::Sad,
+            "tired" => Mood::Tired,
+            "news" => Mood::News,
             _ => Mood::Idle,
         }
     }
@@ -135,6 +143,9 @@ impl StateValue {
             (Mood::Attention, _) => "attention",
             (Mood::Done, _) => "done",
             (Mood::Listen, _) => "listen",
+            (Mood::Sad, _) => "sad",
+            (Mood::Tired, _) => "tired",
+            (Mood::News, _) => "news",
         }
     }
 }
@@ -151,6 +162,8 @@ pub enum Expression {
     Wide,
     Up,
     Down,
+    /// Half shut, tired (fnt-72).
+    Sleepy,
 }
 
 impl Expression {
@@ -164,6 +177,7 @@ impl Expression {
             Expression::Wide => "wide",
             Expression::Up => "up",
             Expression::Down => "down",
+            Expression::Sleepy => "sleepy",
         }
     }
 
@@ -177,6 +191,7 @@ impl Expression {
             "wide" => Expression::Wide,
             "up" => Expression::Up,
             "down" => Expression::Down,
+            "sleepy" => Expression::Sleepy,
             _ => Expression::Open,
         }
     }
@@ -305,6 +320,8 @@ pub enum Prop {
     None,
     Laptop,
     Lens,
+    /// Held while a review arrives (fnt-72).
+    Envelope,
 }
 
 impl Prop {
@@ -313,6 +330,7 @@ impl Prop {
             Prop::None => "none",
             Prop::Laptop => "laptop",
             Prop::Lens => "lens",
+            Prop::Envelope => "envelope",
         }
     }
 }
@@ -328,6 +346,11 @@ pub enum Fx {
     Alert,
     Sparkles,
     Dust,
+    /// fnt-72: tears when sad, the golden aura that opens a done, the heart of a poke. They replace sparkles rather than
+    /// come with them.
+    Tears,
+    Aura,
+    Heart,
 }
 
 impl Fx {
@@ -340,6 +363,9 @@ impl Fx {
             Fx::Alert => "alert",
             Fx::Sparkles => "sparkles",
             Fx::Dust => "dust",
+            Fx::Tears => "tears",
+            Fx::Aura => "aura",
+            Fx::Heart => "heart",
         }
     }
 }
@@ -427,6 +453,7 @@ pub fn fx_key(fx: Fx, sparkles: bool) -> &'static str {
         (Fx::Notes, true) => "notes+sparkles",
         (Fx::Alert, true) => "alert+sparkles",
         (Fx::Dust, true) => "dust+sparkles",
+        (fx @ (Fx::Tears | Fx::Aura | Fx::Heart), true) => fx.key(),
     }
 }
 

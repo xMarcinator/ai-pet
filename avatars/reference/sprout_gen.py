@@ -82,6 +82,10 @@ SPEC = "M116 34 C124 30 136 30 144 34"
 FACE = (80, 90, 100, 60)  # face cells 8-17 x 9-14: x, y, w, h
 
 EYE_L, EYE_R = (110, 115), (150, 115)  # eye centres (cells 10-11 and 14-15, rows 10-12)
+# fnt-72: where a tear starts (under the screen-right eye), the news envelope (where the laptop sits) and the glow
+FACE_TEAR = (156, 137)
+ENVELOPE = (114, 146, 204, 198)
+AURA = (130, 135, 96, 92)
 ARM_L, ARM_R = (58, 166), (202, 166)  # arm nubs (cells 4-5 and 20-21, rows 15-16); screen sides, unmirrored
 FEET = [(95, 214), (165, 214)]  # feet (cells 8-10 and 15-17, row 21)
 
@@ -100,6 +104,11 @@ def eye(name, origin, expr="open", look=(0, 0), glow=True):
         if glow:
             p.append(el("rect", x=-w / 2 - 2, y=3, width=w + 4, height=10, rx=5, fill=g, opacity="0.15"))
         p.append(el("rect", x=-w / 2, y=6, width=w, height=4, rx=2, fill=C["eye"]))
+    elif expr == "sleepy":  # tired (fnt-72): the eye's lower half, under a flat lid
+        if glow:
+            p.append(el("rect", x=-13, y=-1, width=26, height=17, rx=6, fill=g, opacity="0.14"))
+        p.append(el("rect", x=-10, y=2, width=20, height=11, rx=3, fill=C["eye"]))
+        p.append(el("rect", x=-11, y=1, width=22, height=3.5, rx=1.5, fill=C["eyeLo"]))
     elif expr == "happy":
         if glow:
             p.append(el("path", d="M-10 6 C-8 -8 8 -8 10 6", fill="none", stroke=g, stroke_width=11,
@@ -184,6 +193,10 @@ def figure(pose, standalone=False):
                + el("rect", x=fx, y=fy, width=fw, height=fh, rx=10, fill=C["screen"])
                + el("path", d=f"M{fx + 8} {fy + 14} C{fx + 10} {fy + 7} {fx + 16} {fy + 5} {fx + 28} {fy + 5}",
                     fill="none", stroke=C["glint"], stroke_width=3, stroke_linecap="round")
+               # tired (fnt-72): a yawn, a glowing open mouth on the screen face
+               + (el("ellipse", cx=130, cy=140, rx=9, ry=8, fill=C["glow"], opacity="0.18")
+                  + el("ellipse", cx=130, cy=140, rx=6, ry=5.5, fill=C["screen"], stroke=C["eye"], stroke_width=3)
+                  if pose.get("yawn") else "")
                + "</g>")
     fig.append('<g id="eyes">' + eye("eye-left", EYE_L, expr, look, glow) + eye("eye-right", EYE_R, expr, look, glow)
                + "</g>")
@@ -202,6 +215,8 @@ def figure(pose, standalone=False):
         fig.append(laptop(pose.get("caret", True)))
     elif prop == "lens":
         fig.append(pet_states.magnifier(scan))
+    elif prop == "envelope":  # news (fnt-72): held where the laptop is
+        fig.append(pet_states.envelope(ENVELOPE, C["accent"], C["outline"]))
     if pose.get("headphones"):
         fig.append(pet_states.headphones(48, 212, 104, 2, C["accent"], C["outline"]))
     cl = ("type" if arms == "hold" else ("bob-l" if standalone else ""),
@@ -212,7 +227,8 @@ def figure(pose, standalone=False):
 
 
 def frame(pose, standalone=False):
-    return pet_states.compose(figure(pose, standalone), shadow(), GROUND, pose, C["accent"], C["outline"])
+    return pet_states.compose(figure(pose, standalone), shadow(), GROUND,
+                              {**pose, "face": FACE_TEAR, "aura_box": AURA}, C["accent"], C["outline"])
 
 
 HEADER = """<!-- Sprout: a smooth, flat-shaded cartoon vector of the pixel Sprout. Its four ellipses traced into one round,
@@ -249,18 +265,20 @@ def pack():
     d = vp.Drawing(figure, GROUND)
     a = vp.ANCHOR
     hold, lens = vp.ARMS["hold"], vp.ARMS["lens"]
-    body = vp.layer("body", "state", "idle", hit=True, shapes={"idle": vp.drawing(d.art({}, "body", "face"))})
+    body = vp.layer("body", "state", "idle", hit=True, shapes={"idle": vp.drawing(d.art({}, "body", "face")),
+                                                               "tired": vp.drawing(d.art({"yawn": True}, "body", "face"))})
     eyes = vp.eyes(d, lambda expr: {"expr": expr})
     prop = vp.layer("prop", "prop", "laptop", parts=[{"id": "prop", "origin": list(a)}],
                     shapes={"laptop": vp.drawing(vp.relative(d.art(hold, "prop", skip=("caret",)), a)),
-                            "lens": vp.drawing(vp.relative(d.art(lens, "prop"), a))},
+                            "lens": vp.drawing(vp.relative(d.art(lens, "prop"), a)),
+                            "envelope": vp.drawing(vp.relative(d.art({**hold, "prop": "envelope"}, "prop"), a))},
                     animations={"lens": vp.anim("prop", vp.scan_keys())},
                     fallback={"none": None})
     at, cursor = vp.caret(d, hold)
     screen = vp.layer("screen", "prop", "laptop",
                       parts=[{"id": "caret", "origin": list(at), "shape": "caret"}], shapes={"caret": cursor},
                       animations={"laptop": vp.anim("caret", vp.keys(vp.held(STYLE, "caret", "caret")))},
-                      fallback={"lens": None, "none": None})
+                      fallback={"lens": None, "none": None, "envelope": None})
     phones = vp.layer("headphones", "headphones", "on", hit=True,
                       shapes={"on": vp.drawing(d.art({"headphones": True}, "headphones"))}, fallback={"off": None})
     ids = ["arm-left", "arm-right"]
@@ -277,10 +295,12 @@ def pack():
                     })
     feet = {**vp.feet(d, ["foot-left", "foot-right"]), "mirror": "flip"}
     effects = [{**fx, "mirror": "flip"} if fx["name"] == "dust" else fx
-               for fx in vp.effect_layers(C["accent"], C["outline"], d.norm)]
+               for fx in vp.effect_layers(C["accent"], C["outline"], d.norm, FACE_TEAR, AURA)]
     return vp.named({
         "format_version": 1,
         "name": "Sprout (vector)",
+        # a style of the Sprout (FNT-74): one entry in Settings, its drawings as styles
+        "pet": "Sprout",
         "kind": "vector",
         "pixel_size": 1,
         "anchor": list(a),
@@ -288,7 +308,8 @@ def pack():
         "mirror": "none",
         "accent": C["accent"],
         "glow": C["glow"],
-        "layers": [feet, body, eyes, prop, screen, phones, arms, *effects],
+        # the done's golden glow first, behind everything
+        "layers": [vp.aura_layer(d.norm, AURA), feet, body, eyes, prop, screen, phones, arms, *effects],
     }, C)
 
 

@@ -31,14 +31,17 @@ and list them as fixed in the Codex review.
 - On **white**, **mid-grey** (`#808080`) and **near-black** (`#101214`): the review page shows every state on all
   three. The outline must hold on white, the rim light on near-black, and neither fill nor outline may disappear on
   mid-grey. Check every theme, not only the default.
-- Effects (Zs, dots, notes, the alert, sparkles, dust) keep their fixed colours from `pet_states.py` (the notes take
-  the accent), each with the pet's outline.
+- Effects (Zs, dots, notes, the alert, sparkles, dust, tears, hearts and the golden aura) keep their fixed colours
+  from `pet_states.py` (the notes take the accent), each with the pet's outline. The aura's glow is soft and sits
+  behind the body: the first layer.
+- The `lens` is the pack's own: a magnifier, or glasses as the Hamster wears. The `envelope` is white with a heart
+  seal in the accent, held where the laptop sits.
 
 ## The pet's own shape
 
 - Fit head-anchored things to the head, not the body. The **Hamster** is drawn in a three-quarter view: its head is
   off-centre and narrower than its body, turned slightly left. Its headset band and cups, the eyes' look offsets, and
-  the props held in front (laptop, magnifier) follow the head's own centre, width and turn. Don't reuse the
+  the props held in front (laptop, magnifier, envelope) and its glasses follow the head's own centre, width and turn. Don't reuse the
   front-facing pets' coordinates (Sprout, Hood) on a turned pet; check this first on any pet that isn't drawn
   straight on.
 - Keep the pet's ground on the anchor, and its feet (or robe) on the ground in `idle`. The shadow is the app's: don't

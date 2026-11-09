@@ -322,6 +322,7 @@ impl Host for ConfigFile {
         config.music = prefs.music;
         config.avatar = prefs.avatar.clone();
         config.avatar_theme = prefs.avatar_theme.clone();
+        config.avatar_style = prefs.avatar_style.clone();
         config.pet_size = (prefs.pet_size != 100).then_some(prefs.pet_size);
         config.bubble_size = (prefs.bubble_size != 100).then_some(prefs.bubble_size);
         config.save_to(&self.0).unwrap();
@@ -375,6 +376,7 @@ fn the_switches_and_the_avatar_persist_through_config_json() {
             on_top: false,
             music: false,
             avatar: Some("Hood".into()),
+            avatar_style: None,
             avatar_theme: None,
             pet_size: 200,
             bubble_size: 90,
@@ -430,20 +432,18 @@ fn reload_shows_new_avatars_and_open_folder_makes_the_folder_first() {
     assert_eq!(settings::avatars::worn(&ui), read("Mint"));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Mint"));
 
-    // the avatar worn stays on when its file goes, with no tile, and the others are as the folder has them
-    let worn = settings::avatars::worn(&ui);
+    // when the worn pet's file goes, Reload puts on the first pet (FNT-74 R3), and the tiles are the folder's pets
     std::fs::remove_file(&custom).unwrap();
     ui.update(avatars(settings::avatars::Message::Reload));
-    assert_eq!(ui.prefs().avatar.as_deref(), Some("Mint"));
-    assert_eq!(settings::avatars::worn(&ui), worn);
+    assert_eq!(ui.prefs().avatar.as_deref(), Some("Sprout"));
     let tiles = settings::avatars::tiles(&ui);
-    assert!(tiles.iter().all(|&(name, worn)| name != "Mint" && !worn), "{tiles:?}");
+    assert!(tiles.iter().all(|&(name, _)| name != "Mint"), "{tiles:?}");
     assert_eq!(
         tiles.iter().map(|&(name, _)| name).collect::<Vec<_>>(),
         aipet_sprite::load::all(&folder)
-            .pets
+            .groups()
             .iter()
-            .map(|a| a.name())
+            .map(|g| g.pet.as_str())
             .collect::<Vec<_>>()
     );
     ui.update(Message::SelectAvatar(1));
@@ -475,8 +475,8 @@ fn reload_lists_what_didnt_load_and_why() {
     assert_eq!(skipped[0].0, "half-made");
     assert!(skipped[0].1.contains("manifest isn't valid"), "{skipped:?}");
     assert_eq!(skipped[1].0, "note.json");
-    // the pets themselves are all there
-    assert_eq!(settings::avatars::tiles(&ui).len(), 8);
+    // the pets themselves are all there: the four built-in pets (FNT-74)
+    assert_eq!(settings::avatars::tiles(&ui).len(), 4);
 }
 
 #[test]
@@ -620,8 +620,9 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     ui.update(avatars(A::SaveTheme));
     assert_eq!(ui.theme(), "My theme");
     let worn = settings::avatars::worn(&ui);
-    assert!(worn.sheets[0].pixels.contains(&0xFF5A1A60));
-    assert!(!worn.sheets[0].pixels.contains(&0xFF16285E));
+    let at = worn.pack.layers.iter().position(|l| l.name == "body").unwrap();
+    assert!(worn.sheets[at].pixels.contains(&0xFF5A1A60));
+    assert!(!worn.sheets[at].pixels.contains(&0xFF16285E));
 
     // deleted: its file goes, and the pet is back in its default
     ui.update(avatars(A::DeleteTheme("My theme".into())));
@@ -702,4 +703,62 @@ fn a_pets_sheet_themes_are_picked_like_any_and_offer_no_editor() {
         .unwrap();
     ui.update(Message::SelectAvatar(hood));
     assert!(settings::avatars::makes_themes(&ui));
+}
+
+#[test]
+fn reload_puts_on_the_default_style_when_the_worn_one_goes_and_the_first_pet_when_the_pet_does() {
+    // FNT-74 R3: a pet folder of two styles, each a copy of the built-in Hood under another name
+    let pet = Pet::new("avatars-styles");
+    let mut ui = pet.ui;
+    let folder = aipet_sprite::Avatar::custom_dir(&pet.scratch.0);
+    let hood = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../aipet-sprite/packs/hood");
+    let style = |sub: &str, name: &str, extra: &str| {
+        let at = folder.join("Fox").join(sub);
+        std::fs::create_dir_all(&at).unwrap();
+        for entry in std::fs::read_dir(&hood).unwrap().flatten() {
+            std::fs::copy(entry.path(), at.join(entry.file_name())).unwrap();
+        }
+        let manifest = std::fs::read_to_string(at.join("pack.json")).unwrap();
+        let named = manifest.replacen("\"name\": \"Hood\"", &format!("\"name\": \"{name}\"{extra}"), 1);
+        std::fs::write(at.join("pack.json"), named).unwrap();
+    };
+    style("pixel", "Fox", "");
+    style("fancy", "Fox (fancy)", ",\n  \"style\": \"Fancy\"");
+    let reload = |ui: &mut aipet_ui::PetUi| {
+        ui.update(Message::Settings(settings::Message::Avatars(
+            settings::avatars::Message::Reload,
+        )))
+    };
+    reload(&mut ui);
+    // one tile for the Fox, two styles
+    assert_eq!(
+        settings::avatars::tiles(&ui)
+            .iter()
+            .filter(|&&(n, _)| n == "Fox")
+            .count(),
+        1
+    );
+    // wear the Fox in its Fancy style
+    let fancy = aipet_sprite::load::all(&folder)
+        .pets
+        .iter()
+        .position(|a| a.name() == "Fox (fancy)")
+        .unwrap();
+    ui.update(Message::SelectAvatar(fancy));
+    assert_eq!(
+        (ui.prefs().avatar.as_deref(), ui.prefs().avatar_style.as_deref()),
+        (Some("Fox"), Some("Fancy"))
+    );
+    // the Fancy style goes: the Fox in its default style
+    std::fs::remove_dir_all(folder.join("Fox").join("fancy")).unwrap();
+    reload(&mut ui);
+    assert_eq!(
+        (ui.prefs().avatar.as_deref(), ui.prefs().avatar_style.as_deref()),
+        (Some("Fox"), None)
+    );
+    assert_eq!(settings::avatars::worn(&ui).pack.name, "Fox");
+    // the Fox goes: the first pet
+    std::fs::remove_dir_all(folder.join("Fox")).unwrap();
+    reload(&mut ui);
+    assert_eq!(ui.prefs().avatar.as_deref(), Some("Sprout"));
 }

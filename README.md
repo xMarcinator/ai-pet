@@ -145,7 +145,8 @@ Uninstalling AiPet removes the rules and the line that includes them. The config
 
 The pet shows the mood of all your chats together: asleep when nothing is going on, thinking, working, waving when
 a chat needs you, or done. Drag it and it runs; it remembers where you put it. Hover over it and it waves; click
-it and it reacts.
+it and it reacts. The Rust pet also has moods of its own: it holds up an envelope when a review comes in, looks sad
+when a chat's turn fails, glows gold as a chat finishes, and gets tired late at night or after a long chat.
 
 ### Bubbles
 
@@ -196,8 +197,9 @@ Right-click the pet for its menu:
   - Team defaults: **Import defaults…** reads a preset file (below).
   - About: the version, and whether this copy updates itself. The installed Windows app shows the state of its
     updates here, with **Check for updates**.
-- **Avatars**: the pets, one tile each. Click one to wear it. Eight are built in: Sprout, Hood, Pip and Pip (painted),
-  Hood (vector), Hamster, Sprout (vector) and Hamster (pixel).
+- **Avatars**: the pets, one tile each. Click one to wear it. Four are built in, each in two styles: Sprout and Hood
+  (pixel or vector), Pip (vector or painted) and Hamster (vector or pixel). The worn pet's **Style** picks one, saved
+  as `AvatarStyle` in `config.json`. The Hamster's design, and the ideas for its newer states, come from JLandbo's [hamster-pet](https://github.com/JLandbo/hamster-pet), used with its author's permission.
   - Themes: under the tiles, the worn pet's themes (the Hood in Blue or Green, say). **New theme** makes one of your
     own from any pet with named colours: pick its colours and save it. **Edit** and **Delete** change or remove your
     own themes.

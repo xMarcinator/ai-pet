@@ -26,7 +26,8 @@ macro_rules! pack {
 macro_rules! baked {
     ($dir:literal) => {
         pack!($dir: "pack.json", "body.png", "headphones-outline.png", "arms.png", "arms-run.png", "feet.png",
-            "feet-run.png", "headphones.png", "prop.png", "eyes.png", "screen.png", "dust.png", "fx.png", "sparkles.png")
+            "feet-run.png", "headphones.png", "prop.png", "eyes.png", "screen.png", "dust.png", "fx.png", "sparkles.png",
+            "aura-glow.png", "tears.png", "heart.png", "aura.png")
     };
 }
 
@@ -35,12 +36,14 @@ const HOOD: Files = baked!("hood");
 const PIP: Files = pack!("pip": "pack.json");
 const PIP_PAINTED: Files = pack!("pip-painted": "pack.json", "feet.png", "sprout.png", "body.png", "mouth.png", "eyes.png",
     "headphones.png", "prop.png", "arms.png", "screen.png", "zs.png", "notes.png", "dots.png", "alert.png",
-    "sparkles.png", "dust.png", "feet-lilac.png", "body-lilac.png", "arms-lilac.png");
+    "sparkles.png", "dust.png", "feet-lilac.png", "body-lilac.png", "arms-lilac.png", "aura-glow.png", "tears.png",
+    "heart.png", "aura.png");
 const HOOD_VECTOR: Files = pack!("hood-vector": "pack.json");
 const HAMSTER_VECTOR: Files = pack!("hamster-vector": "pack.json");
 const SPROUT_VECTOR: Files = pack!("sprout-vector": "pack.json");
 const HAMSTER_PIXEL: Files = pack!("hamster-pixel": "pack.json", "body.png", "feet.png", "prop.png", "screen.png",
-    "arms.png", "headphones.png", "eyes.png", "fx.png", "sparkles.png", "dust.png");
+    "arms.png", "headphones.png", "eyes.png", "fx.png", "sparkles.png", "dust.png", "aura-glow.png", "tears.png",
+    "blush.png", "heart.png", "aura.png");
 
 /// The built-in pets, in order.
 pub fn all() -> Vec<LoadedPack> {

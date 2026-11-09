@@ -29,9 +29,10 @@ Findings only, no shipped art: can a 24-frame front-side-back-curl turnaround be
 - [ ] It lists proposed follow-up tasks with sizes
 
 ## Done summary
-TBD
+Spike written up in rust/proofs/hamster-turnaround.md: a 24-frame turn and roll fits today's format for both Hamsters with no new pack keys (pixel: a 24-frame body animation, about 6 hand-drawn cells; vector: 24 view parts lit by a phase table, about 90 hand-drawn shapes). Use: an occasional idle act behind task 1's switch; hold-to-end in compute_pose with drag and poke interrupting. Six follow-ups proposed (behaviour M, renderer skip S, pixel art M, vector art L, docs S, optional vector flipbook M). Found the 16-layer limit risk, now noted in tasks 2 and 3. Open: should attention interrupt the spin?
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
+- Commits: 0f9fa5a
 - Tests:
 - PRs:

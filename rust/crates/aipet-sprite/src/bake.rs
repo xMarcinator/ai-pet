@@ -36,6 +36,13 @@ const BANG: u32 = 0xFFFFD24A;
 const DUSTC: u32 = 0xB0E6DED3;
 const HP_DARK: u32 = 0xFF26262C;
 const HP_CUP: u32 = 0xFF3A3A43;
+// fnt-72's fixed colours (avatars/reference/pet_states.py's): themes never change them
+const TEAR: u32 = 0xFF7CC8FF;
+const HEART: u32 = 0xFFFF6F91;
+const AURA: u32 = 0xFFFFC83D;
+const AURA_HI: u32 = 0xFFFFF1B0;
+const PAPER: u32 = 0xFFFFFDF4;
+const PAPER_SHADE: u32 = 0xFFE6DCC4;
 
 // ------------------------------------------------------------------ limb and effect cells
 const FEET: &[Cell] = &[(8, 21), (9, 21), (10, 21), (15, 21), (16, 21), (17, 21)];
@@ -267,6 +274,12 @@ fn draw_body(a: &Avatar, g: &Geometry, limbs: &[Cell], headphones: Headphones) -
 /// The eyes in the glow layer, looking ahead (a look moves the whole layer).
 fn draw_eyes(a: &Avatar, kind: &str) -> Buf {
     let mut buf = [0; PIXELS];
+    if kind == "sleepy" {
+        // tired (fnt-72): the lower row under a heavy, darker lid
+        put_all(&mut buf, eye_cells("up", 0).into_iter().filter(|c| c.1 == 11), a.eye_lo);
+        put_all(&mut buf, eye_cells("down", 0).into_iter().filter(|c| c.1 == 12), a.eye);
+        return buf;
+    }
     let eyes = eye_cells(kind, 0);
     let set: BTreeSet<Cell> = eyes.iter().copied().collect();
     for &(x, y) in &eyes {
@@ -327,6 +340,95 @@ fn draw_laptop(a: &Avatar) -> Buf {
     put_all(&mut buf, base_row.iter().copied(), BASE);
     put_all(&mut buf, [(21, 21), (22, 21)], BASE_SH);
     buf
+}
+
+/// News (fnt-72): a white envelope where the laptop stands, its flap a V, sealed with a heart in the accent.
+fn draw_envelope(a: &Avatar) -> Buf {
+    let mut buf = [0; PIXELS];
+    let paper: BTreeSet<Cell> = (13..22).flat_map(|x| (15..21).map(move |y| (x, y))).collect();
+    put_all(&mut buf, outline(&paper), a.outline);
+    put_all(&mut buf, paper.iter().copied(), PAPER);
+    put_all(
+        &mut buf,
+        [(14, 16), (15, 17), (16, 18), (20, 16), (19, 17), (18, 18)],
+        PAPER_SHADE,
+    );
+    put_all(
+        &mut buf,
+        [(16, 19), (18, 19), (17, 19), (17, 20)],
+        a.accent | 0xFF00_0000,
+    );
+    buf
+}
+
+/// The yawn (fnt-72): an open mouth on the face under the eyes, a ring in the eyes' colour.
+fn draw_yawn(a: &Avatar) -> Vec<(Cell, u32)> {
+    let ring = [(12, 14), (13, 14), (11, 15), (14, 15), (12, 16), (13, 16)];
+    let mut out: Vec<(Cell, u32)> = ring.iter().map(|&c| (c, a.eye)).collect();
+    out.extend([((12, 15), LID_IN), ((13, 15), LID_IN)]);
+    out
+}
+
+/// Tears (fnt-72): one on the cheek under the screen-right eye and one falling, both there from the first frame.
+fn draw_tears(t: f64) -> Buf {
+    let mut buf = [0; PIXELS];
+    put_all(&mut buf, [(16, 13), (16, 14)], TEAR);
+    put(&mut buf, (17, 15 + (t * 3.0) as i32 % 3), TEAR);
+    buf
+}
+
+/// The poke's hearts (fnt-72), bobbing.
+fn draw_hearts(t: f64) -> Buf {
+    let mut buf = [0; PIXELS];
+    let up = (t * 2.0) as i32 % 2;
+    for (x, y) in [(22, 4 - up), (3, 8 - up)] {
+        put_all(
+            &mut buf,
+            [
+                (x - 1, y),
+                (x + 1, y),
+                (x - 1, y + 1),
+                (x, y + 1),
+                (x + 1, y + 1),
+                (x, y + 2),
+            ],
+            HEART,
+        );
+    }
+    buf
+}
+
+/// The golden glow's stars over the head (fnt-72), twinkling; the glow itself is [`draw_glow`].
+fn draw_aura_stars(t: f64) -> Buf {
+    let mut buf = [0; PIXELS];
+    let on = (t * 4.0) as i32 % 2 == 1;
+    for (i, (x, y)) in [(5, 4), (20, 2), (12, 1)].into_iter().enumerate() {
+        if on || i != 1 {
+            put_all(&mut buf, [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)], AURA);
+            put(&mut buf, (x, y), AURA_HI);
+        } else {
+            put(&mut buf, (x, y), AURA);
+        }
+    }
+    buf
+}
+
+/// The golden glow behind the pet that opens a done (the owner's soft glow, fnt-72 task 7): two soft rings round the
+/// body's outline, the inner one stronger.
+fn draw_glow(g: &Geometry) -> Buf {
+    let mut buf = [0; PIXELS];
+    let near = outline(&g.body);
+    let inner: BTreeSet<Cell> = outline(&near).union(&near).copied().collect();
+    let mut all = g.body.clone();
+    all.extend(inner.iter().copied());
+    let far = outline(&all);
+    put_all(&mut buf, far, (AURA & 0x00FF_FFFF) | 0x44 << 24);
+    put_all(&mut buf, inner, (AURA & 0x00FF_FFFF) | 0x88 << 24);
+    buf
+}
+
+fn refs(v: &[String]) -> Vec<&str> {
+    v.iter().map(String::as_str).collect()
 }
 
 /// The prompt on the laptop's screen, in the glow layer, with its cursor if on.
@@ -535,6 +637,8 @@ impl Making {
 const ARM_VALUES: [&str; 6] = ["rest", "raised", "wave-a", "wave-b", "hold", "lens"];
 const FEET_VALUES: [&str; 4] = ["stand", "tap", "dangle-a", "dangle-b"];
 const FX_VALUES: [&str; 6] = ["none", "zs", "dots", "notes", "alert", "dust"];
+/// fnt-72's effects: each replaces sparkles rather than comes with them.
+const NEW_FX: [&str; 3] = ["tears", "aura", "heart"];
 
 /// `avatar` as a layered pixel pack: the renderer's every layer, once.
 pub fn bake(a: &Avatar) -> Baked {
@@ -548,8 +652,28 @@ pub fn bake(a: &Avatar) -> Baked {
     wave_b.extend_from_slice(WAVE_B);
     let sparkles_of = |fx: &str| format!("{fx}+sparkles");
 
+    let mut tired = base;
+    for (c, colour) in draw_yawn(a) {
+        put(&mut tired, c, colour);
+    }
+    let all_fx_but = |keep: &str| {
+        let mut out: Vec<String> = FX_VALUES.iter().chain(NEW_FX.iter()).map(|v| v.to_string()).collect();
+        out.extend(["zs", "dots", "notes", "alert", "dust"].map(sparkles_of));
+        out.push("sparkles".to_owned());
+        out.retain(|v| v != keep);
+        out
+    };
+    let (not_glow, not_tears, not_heart) = (all_fx_but("aura"), all_fx_but("tears"), all_fx_but("heart"));
+    let (not_glow, not_tears, not_heart) = (refs(&not_glow), refs(&not_tears), refs(&not_heart));
+
     let layers = vec![
-        Making::new("body", Channel::State, "body").still("body", base),
+        // fnt-72: the done's golden glow first, behind everything
+        Making::new("aura-glow", Channel::Fx, "aura")
+            .still("aura", draw_glow(&g))
+            .empty_for(&not_glow),
+        Making::new("body", Channel::State, "body")
+            .still("body", base)
+            .still("tired", tired),
         Making::new("headphones-outline", Channel::Headphones, "on")
             .still("on", diff(&hp_outline, &base))
             .empty_for(&["off"]),
@@ -583,6 +707,7 @@ pub fn bake(a: &Avatar) -> Baked {
             .empty_for(&["off"]),
         Making::new("prop", Channel::Prop, "laptop")
             .still("laptop", draw_laptop(a))
+            .still("envelope", draw_envelope(a))
             .timed(
                 "lens",
                 sampled(8000, |t| draw_lens(a, [0, 1, 0, -1][((t * 1.5) as i32 % 4) as usize])),
@@ -597,7 +722,8 @@ pub fn bake(a: &Avatar) -> Baked {
                 .still("squint", draw_eyes(a, "squint"))
                 .still("wide", draw_eyes(a, "wide"))
                 .still("up", draw_eyes(a, "up"))
-                .still("down", draw_eyes(a, "down"));
+                .still("down", draw_eyes(a, "down"))
+                .still("sleepy", draw_eyes(a, "sleepy"));
             eyes.layer.glow = true;
             eyes.layer.look = Look::ALL
                 .into_iter()
@@ -608,7 +734,7 @@ pub fn bake(a: &Avatar) -> Baked {
         {
             let mut screen = Making::new("screen", Channel::Prop, "laptop")
                 .timed("laptop", sampled(800, |t| draw_screen(a, (t * 2.5) as i32 % 2 == 1)))
-                .empty_for(&["none", "lens"]);
+                .empty_for(&["none", "lens", "envelope"]);
             screen.layer.glow = true;
             screen
         },
@@ -617,6 +743,7 @@ pub fn bake(a: &Avatar) -> Baked {
                 .timed("dust", sampled(375, draw_dust))
                 .falls(&[("dust+sparkles", "dust")])
                 .empty_for(&["none", "zs", "dots", "notes", "alert", "sparkles"])
+                .empty_for(&NEW_FX)
                 .empty_for(
                     &["zs", "dots", "notes", "alert"]
                         .map(sparkles_of)
@@ -639,10 +766,22 @@ pub fn bake(a: &Avatar) -> Baked {
                 ("notes+sparkles", "notes"),
                 ("alert+sparkles", "alert"),
             ])
-            .empty_for(&["none", "dust", "sparkles", "dust+sparkles"]),
+            .empty_for(&["none", "dust", "sparkles", "dust+sparkles"])
+            .empty_for(&NEW_FX),
         Making::new("sparkles", Channel::Fx, "sparkles")
             .timed("sparkles", sampled(500, draw_sparkles))
-            .empty_for(&FX_VALUES),
+            .empty_for(&FX_VALUES)
+            .empty_for(&NEW_FX),
+        // fnt-72: tears, the poke's hearts and the glow's stars
+        Making::new("tears", Channel::Fx, "tears")
+            .timed("tears", sampled(1000, draw_tears))
+            .empty_for(&not_tears),
+        Making::new("heart", Channel::Fx, "heart")
+            .timed("heart", sampled(1000, draw_hearts))
+            .empty_for(&not_heart),
+        Making::new("aura", Channel::Fx, "aura")
+            .timed("aura", sampled(500, draw_aura_stars))
+            .empty_for(&not_glow),
     ];
 
     let mut sheets = Vec::new();
@@ -659,6 +798,9 @@ pub fn bake(a: &Avatar) -> Baked {
             pixel_size: 5.0,
             anchor: (13.0, 22.0),
             mirror: Mirror::None,
+            faces: crate::pose::Facing::Right,
+            pet: None,
+            style: None,
             accent: a.accent,
             glow: a.glow,
             layers: done,

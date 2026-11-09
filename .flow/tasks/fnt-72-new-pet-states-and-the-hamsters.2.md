@@ -28,6 +28,7 @@ Draw the shared pieces once in `pet_states.py` (tears, aura, heart, the envelope
 - `.flow/tasks/fn-2-layered-sprite-and-vector-pets.21.md` - the effects placement rule
 
 ### Key context
+- Layer limit: a pack may have at most 16 layers (`MAX_LAYERS`, `rust/crates/aipet-sprite/src/pack.rs:13`); the vector Hamster has 16, Pip 15, the vector Hood 14. Draw `tears`, `aura` and `heart` as values of one new fx layer (not one layer each, as `vector_pack.effect_layers` does today), and the envelope as a value of the existing prop layer. The turnaround spike (`rust/proofs/hamster-turnaround.md`) found this.
 - `glow` is reserved (pack colour, layer halo; fx layers may not glow): the effect is `aura`, drawn art.
 
 ## Acceptance
@@ -36,9 +37,10 @@ Draw the shared pieces once in `pet_states.py` (tears, aura, heart, the envelope
 - [ ] Each new state's first frame or key shows its cue
 
 ## Done summary
-TBD
+Shared effects in pet_states.py / vector_pack.py: tears (from under the screen-right eye), hearts (poke), the owner's soft golden glow (its own layer, first, behind the pet) with three stars, and a sealed envelope prop where the laptop sits; fixed colours tear blue, gold, heart pink, paper. Hood, Sprout (vector) and Pip draw sleepy eyes and a yawn; Pip's in its own generator. Packs regenerated, painted Pip rebaked (four new sheets embedded). MAX_LAYERS 16 -> 24 (the glow layer would push the vector Hamster to 19), with docs. First keys carry each cue (tear on the cheek, glow full, heart shown). Checked: the Hood and Sprout sheets rendered; workspace tests pass. Not checked: Pip rendered through the compositor in the new states.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: c739df2
+- Tests: cargo test --workspace
 - PRs:

@@ -53,6 +53,11 @@ CROWN = "M121 51 C126 49 134 49 139 51"
 FACE_LIP = ("M84 104 C85 80 105 64 130 64 C155 64 175 80 176 104 C170 86 152 74 130 74 C108 74 90 86 84 104 Z")
 FACE = "M130 72 C155 72 174 88 174 110 C174 132 155 148 130 148 C105 148 86 132 86 110 C86 88 105 72 130 72 Z"
 
+# fnt-72: where a tear starts (under the screen-right eye, canvas coordinates), and the news envelope, where the
+# laptop sits between the hands.
+FACE_TEAR = (154, 152)
+ENVELOPE = (114, 150, 204, 202)
+
 # The drawstrings: from the hood opening's lower corners, curving in a little, to their tips; pulled unevenly, so the
 # screen-left one hangs shorter than the screen-right one.
 LACES = [("M109 141 C106 151 106 162 108 171", (108, 175)), ("M151 141 C154 156 154 174 152 189", (152, 193))]
@@ -76,6 +81,11 @@ def eye(name, origin, expr="open", look=(0, 0), glow=True):
         if glow:
             parts.append(el("rect", x=-w / 2 - 3, y=3, width=w + 6, height=10, rx=5, fill=g, opacity="0.15"))
         parts.append(el("rect", x=-w / 2, y=6, width=w, height=4, rx=2, fill=C["eye"]))
+    elif expr == "sleepy":  # tired (fnt-72): the eye's lower half, under a flat lid
+        if glow:
+            parts.append(el("rect", x=-12, y=-1, width=24, height=16, rx=7, fill=g, opacity="0.12"))
+        parts.append(el("rect", x=-9, y=2, width=18, height=10, rx=4, fill=C["eye"]))
+        parts.append(el("rect", x=-10, y=1, width=20, height=3.5, rx=1.5, fill=C["eyeLo"]))
     elif expr == "happy":
         if glow:
             parts.append(el("path", d="M-10 6 C-8 -8 8 -8 10 6", fill="none", stroke=g, stroke_width=11,
@@ -183,8 +193,12 @@ def figure(pose, standalone=False):
                + el("path", d=SILHOUETTE, fill="none", stroke=C["outline"], stroke_width=4,
                     stroke_linejoin="round")
                + "</g>")
+    # tired: a yawn, a glowing open mouth in the dark face (fnt-72)
+    yawn = (el("ellipse", cx=130, cy=134, rx=9, ry=11, fill=C["glow"], opacity="0.15")
+            + el("ellipse", cx=130, cy=134, rx=6, ry=8, fill="#000", stroke=C["eye"], stroke_width=3)
+            if pose.get("yawn") else "")
     fig.append('<g id="face">' + el("path", d=FACE_LIP, fill=C["deep"]) + el("path", d=FACE, fill="#010302")
-               + "</g>")
+               + yawn + "</g>")
     fig.append(laces())
     fig.append('<g id="eyes">' + eye("eye-left", EYE_L, expr, look, glow) + eye("eye-right", EYE_R, expr, look, glow)
                + "</g>")
@@ -204,6 +218,8 @@ def figure(pose, standalone=False):
         fig.append(laptop(pose.get("caret", True)))
     elif prop == "lens":
         fig.append(pet_states.magnifier(scan))
+    elif prop == "envelope":  # news (fnt-72): held where the laptop is
+        fig.append(pet_states.envelope(ENVELOPE, C["hi"], C["outline"]))
     if pose.get("headphones"):
         fig.append(pet_states.headphones(64, 196, 112, 24, C["hi"], C["outline"]))
     floating = hands in ("wave", "raised", "run")
@@ -217,7 +233,8 @@ def figure(pose, standalone=False):
 
 
 def frame(pose, standalone=False):
-    return pet_states.compose(figure(pose, standalone), shadow(), GROUND, pose, C["hi"], C["outline"])
+    return pet_states.compose(figure(pose, standalone), shadow(), GROUND, {**pose, "face": FACE_TEAR}, C["hi"],
+                              C["outline"])
 
 
 HEADER = """<!-- Hood (green): a smooth, flat-shaded cartoon vector of the pixel Hood. Round hood with no peak, upright sides,
@@ -258,21 +275,23 @@ def pack():
     hold, lens = vp.ARMS["hold"], vp.ARMS["lens"]
     body = vp.layer("body", "state", "idle", hit=True,
                     shapes={"idle": vp.drawing(d.art({}, "aura", "body", "face")),
-                            "sleep": vp.drawing(d.art({"glow": False}, "body", "face"))})
+                            "sleep": vp.drawing(d.art({"glow": False}, "body", "face")),
+                            "tired": vp.drawing(d.art({"yawn": True}, "aura", "body", "face"))})
     # the Hood faces the viewer, so nothing it wears mirrors when it faces left: only the hands and the dust follow
     laces = vp.layer("laces", "state", "idle", shapes={"idle": vp.drawing(d.art({}, "laces"))})
     eyes = vp.eyes(d, lambda expr: {"expr": expr})
     prop = vp.layer("prop", "prop", "laptop",
                     parts=[{"id": "prop", "origin": list(a)}],
                     shapes={"laptop": vp.drawing(vp.relative(d.art(hold, "prop", skip=("caret",)), a)),
-                            "lens": vp.drawing(vp.relative(d.art(lens, "prop"), a))},
+                            "lens": vp.drawing(vp.relative(d.art(lens, "prop"), a)),
+                            "envelope": vp.drawing(vp.relative(d.art({**hold, "prop": "envelope"}, "prop"), a))},
                     animations={"lens": vp.anim("prop", vp.scan_keys())},
                     fallback={"none": None})
     at, cursor = vp.caret(d, hold)
     screen = vp.layer("screen", "prop", "laptop",
                       parts=[{"id": "caret", "origin": list(at), "shape": "caret"}], shapes={"caret": cursor},
                       animations={"laptop": vp.anim("caret", vp.keys(vp.held(STYLE, "caret", "caret")))},
-                      fallback={"lens": None, "none": None})
+                      fallback={"lens": None, "none": None, "envelope": None})
     phones = vp.layer("headphones", "headphones", "on", hit=True,
                       shapes={"on": vp.drawing(d.art({"headphones": True}, "headphones"))}, fallback={"off": None})
     bob = vp.keys(vp.drawn(vp.eased(STYLE, "bob-l", "bob", 16)))
@@ -288,7 +307,7 @@ def pack():
                         shapes=shapes, poses=poses, transition_ms=120, animations=animations)
 
     # facing left (only while dragged), the dust trails the other way, as the pixel Hood's does
-    effects = vp.effect_layers(C["hi"], C["outline"], d.norm)
+    effects = vp.effect_layers(C["hi"], C["outline"], d.norm, FACE_TEAR)
     for fx in effects:
         if fx["name"] == "dust":
             fx["mirror"] = "flip"
@@ -296,13 +315,16 @@ def pack():
     return vp.named({
         "format_version": 1,
         "name": "Hood (vector)",
+        # a style of the Hood (FNT-74): one entry in Settings, its drawings as styles
+        "pet": "Hood",
         "kind": "vector",
         "pixel_size": 1,
         "anchor": list(a),
         "mirror": "none",
         "accent": C["hi"],
         "glow": C["glow"],
-        "layers": [body, laces, eyes, prop, screen, phones,
+        # the done's golden glow first, behind everything
+        "layers": [vp.aura_layer(d.norm), body, laces, eyes, prop, screen, phones,
                    # the screen-left hand types; the screen-right one holds the magnifier as it scans
                    hand("hand-left", "bob-l", {"hold": typing}), hand("hand-right", "bob-r", {"lens": vp.scan_keys()}),
                    *effects],

@@ -198,6 +198,11 @@ mod windows_format {
     }
 }
 
+/// The local hour of `now`, 0 to 23 (fnt-72's late-night tiredness).
+pub fn local_hour(now: SystemTime) -> u32 {
+    local_time(now).0
+}
+
 /// The local time of day of `now`: hours, minutes, seconds and milliseconds (cut, not rounded, as .NET's `fff`).
 #[cfg(unix)]
 fn local_time(now: SystemTime) -> (u32, u32, u32, u32) {

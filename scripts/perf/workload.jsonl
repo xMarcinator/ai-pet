@@ -1,0 +1,12 @@
+{"t": 0.0, "agent": "claude", "event": {"session_id": "bench-a", "hook_event_name": "UserPromptSubmit", "cwd": "/tmp/bench-a", "prompt": "Refactor the parser"}}
+{"t": 0.0, "agent": "claude", "event": {"session_id": "bench-b", "hook_event_name": "UserPromptSubmit", "cwd": "/tmp/bench-b", "prompt": "Write the tests"}}
+{"t": 0.5, "agent": "claude", "event": {"session_id": "bench-c", "hook_event_name": "Notification", "cwd": "/tmp/bench-c", "notification_type": "permission_prompt", "message": "Claude needs your permission to use Bash"}}
+{"t": 1.0, "agent": "claude", "event": {"session_id": "bench-a", "hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "a1", "tool_input": {"command": "cargo test"}}}
+{"t": 2.0, "agent": "claude", "event": {"session_id": "bench-b", "hook_event_name": "PreToolUse", "tool_name": "Read", "tool_use_id": "b1", "tool_input": {"file_path": "/tmp/bench-b/lib.rs"}}}
+{"t": 3.0, "agent": "claude", "event": {"session_id": "bench-a", "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "a1"}}
+{"t": 4.0, "agent": "claude", "event": {"session_id": "bench-b", "hook_event_name": "PostToolUse", "tool_name": "Read", "tool_use_id": "b1"}}
+{"t": 5.0, "agent": "claude", "event": {"session_id": "bench-a", "hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_use_id": "a2", "tool_input": {"file_path": "/tmp/bench-a/parser.rs"}}}
+{"t": 6.0, "agent": "claude", "event": {"session_id": "bench-b", "hook_event_name": "PreToolUse", "tool_name": "WebFetch", "tool_use_id": "b2", "tool_input": {"url": "https://example.com/doc"}}}
+{"t": 7.0, "agent": "claude", "event": {"session_id": "bench-a", "hook_event_name": "PostToolUse", "tool_name": "Edit", "tool_use_id": "a2"}}
+{"t": 8.0, "agent": "claude", "event": {"session_id": "bench-b", "hook_event_name": "PostToolUse", "tool_name": "WebFetch", "tool_use_id": "b2"}}
+{"t": 9.0, "agent": "claude", "event": {"session_id": "bench-c", "hook_event_name": "Notification", "cwd": "/tmp/bench-c", "notification_type": "permission_prompt", "message": "Claude needs your permission to use Bash"}}

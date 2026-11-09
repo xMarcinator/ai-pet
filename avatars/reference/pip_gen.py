@@ -201,6 +201,9 @@ def mouth():
             "working": m("M -8 -51 Q 0 -47 8 -51"),
             "attention": fill(ellipse(*art(0, -50), k(6), k(6)), EYE),
             "done": [fill(ellipse(*art(0, -49), k(8), k(7)), EYE)],
+            # fnt-72: a frown when a turn failed, a big yawn when tired
+            "sad": m("M -9 -47 Q 0 -55 9 -47"),
+            "tired": fill(ellipse(*art(0, -48), k(7), k(9)), EYE),
         })
 
 
@@ -233,6 +236,8 @@ def eyes():
             # the page's happy and sleeping lids, one per eye
             "happy": lid("M -10 2 Q 0 -11 10 2"),
             "closed": lid("M -10 -1 Q 0 8 10 -1"),
+            # tired (fnt-72): the eye's lower half under a flat lid
+            "sleepy": [fill(ellipse(0, k(3.5), k(8.5), k(6.5)), EYE), lid("M -11 -1 L 11 -1")],
         },
         look={kk: [round(v, 2) for v in d] for kk, d in look.items()})
 
@@ -287,8 +292,16 @@ def prop():
         stroke(ellipse(*art(*ring), k(17), k(17)), ZZ, k(4)),
         stroke(tf("M 25 -92 Q 28 -96 33 -96"), WHITE, k(2.5), 0.8),
     ]
+    # news (fnt-72): a white envelope held between the hands, sealed with a heart in the accent
+    paper = rect(*art(-38, -50), k(76), k(40), k(5))
+    envelope = [
+        fill(paper, "#FFFDF4"),
+        stroke(paper, METAL_DARK, k(3)),
+        stroke(tf("M -36 -48 L 0 -28 L 36 -48"), METAL_DARK, k(3)),
+        fill(tf("M 0 -22 C -9 -29 -5 -37 0 -32 C 5 -37 9 -29 0 -22 Z"), ACCENT),
+    ]
     return layer("prop", "prop", "laptop", hit=False,
-                 shapes={"laptop": [lid, logo, base], "lens": lens},
+                 shapes={"laptop": [lid, logo, base], "lens": lens, "envelope": envelope},
                  fallback={"none": None})
 
 
@@ -296,11 +309,17 @@ def screen():
     # the screen's light over the lid's top edge, which glows
     edge = stroke(tf("M -32 -43 L 32 -43"), GLOW, k(3))
     return layer("screen", "prop", "laptop", hit=False, glow=True,
-                 shapes={"laptop": edge}, fallback={"lens": None, "none": None})
+                 shapes={"laptop": edge}, fallback={"lens": None, "none": None, "envelope": None})
 
 
 FX = ["zs", "notes", "dots", "alert"]
-FX_VALUES = ["none", "dust", "sparkles"] + FX + [f"{v}+sparkles" for v in FX + ["dust"]]
+# fnt-72's effects replace sparkles rather than come with them
+NEW_FX = ["tears", "aura", "heart"]
+FX_VALUES = ["none", "dust", "sparkles"] + FX + [f"{v}+sparkles" for v in FX + ["dust"]] + NEW_FX
+# fnt-72's fixed colours (pet_states.py's): themes never change them
+TEAR, TEAR_HI = "#7CC8FF", "#E8F7FF"
+AURA, AURA_HI, AURA_DEEP = "#FFC83D", "#FFF1B0", "#E39B12"
+HEART, HEART_HI = "#FF6F91", "#FFD3DE"
 
 
 def float_up(rise, steps, step_ms, drift=0.0):
@@ -335,7 +354,59 @@ def fx():
                     keys([(240, {"opacity": 1}), (240, {"opacity": 0.6}), (240, {"opacity": 0.25})]))),
         effect("alert", [part("bang", 96, top - 4, "bang")], {"bang": bang},
                anim("bang", keys([(180, {"dy": 0}), (180, {"dy": -1.5})]))),
+        # fnt-72: a tear from the screen-right eye, one on the cheek and one falling (both there at the first key)
+        effect("tears", [part("tear1", *pt(art(31, -62)), "tear"), part("tear2", *pt(art(32, -52)), "tear-small")],
+               {"tear": drop(1.0), "tear-small": drop(0.75)},
+               anim([("tear1", 0), ("tear2", 0)], keys([(400, {}), (300, {"dy": 1.5}),
+                                                       (300, {"dy": 3, "opacity": 0.7}),
+                                                       (300, {"dy": 4.5, "opacity": 0.3})]))),
+        effect("heart", [part("heart1", 108, top - 4, "heart"), part("heart2", 24, top + 8, "heart-small")],
+               {"heart": heart(1.0), "heart-small": heart(0.65)},
+               anim([("heart1", 0), ("heart2", 0.5)], float_up(5, 6, 160))),
+        effect("aura", [part("aura-star1", 38, top - 2, "aura-star"), part("aura-star2", 96, top - 8, "aura-star"),
+                        part("aura-star3", 66, top - 14, "aura-star-small")],
+               {"aura-star": aura_star(4.5), "aura-star-small": aura_star(3.2)},
+               anim([("aura-star1", 0), ("aura-star2", 0.33), ("aura-star3", 0.66)],
+                    keys([(120, {"scale": 1}), (120, {"scale": 0.8, "opacity": 0.85}),
+                          (120, {"scale": 0.6, "opacity": 0.6}), (120, {"scale": 0.8, "opacity": 0.85})]))),
     ]
+
+
+def drop(s):
+    """A tear, about its centre, in art px."""
+    d = (f"M 0 {n(-4 * s)} C {n(3 * s)} {n(-0.5 * s)} {n(3 * s)} {n(3 * s)} 0 {n(3.5 * s)} "
+         f"C {n(-3 * s)} {n(3 * s)} {n(-3 * s)} {n(-0.5 * s)} 0 {n(-4 * s)} Z")
+    return [fill(d, TEAR), stroke(d, EYE, 0.9), fill(ellipse(-0.8 * s, 0.8 * s, 0.8 * s, 0.8 * s), TEAR_HI)]
+
+
+def heart(s):
+    """A heart, about its centre, in art px."""
+    d = (f"M 0 {n(4 * s)} C {n(-6 * s)} {n(-1 * s)} {n(-3 * s)} {n(-6 * s)} 0 {n(-2.5 * s)} "
+         f"C {n(3 * s)} {n(-6 * s)} {n(6 * s)} {n(-1 * s)} 0 {n(4 * s)} Z")
+    return [fill(d, HEART), stroke(d, EYE, 0.9), fill(ellipse(-2 * s, -2 * s, s, s), HEART_HI)]
+
+
+def aura_star(r):
+    i = r * 0.3
+    d = (f"M 0 {n(-r)} Q {n(i)} {n(-i)} {n(r)} 0 Q {n(i)} {n(i)} 0 {n(r)} Q {n(-i)} {n(i)} {n(-r)} 0 "
+         f"Q {n(-i)} {n(-i)} 0 {n(-r)} Z")
+    return [fill(d, AURA_HI), stroke(d, AURA_DEEP, 0.8)]
+
+
+def aura_glow():
+    """The golden glow behind Pip that opens a done (the owner's soft glow, fnt-72 task 7): three stacked rings,
+    breathing once in, fully built at the first key."""
+    cx, cy = art(0, -61)
+    rings = [(11, 0.10), (6, 0.16), (1, 0.24)]
+    parts = [{"id": f"glow-{i}", "origin": [round(cx, 2), round(cy, 2)], "shape": f"glow-{i}"}
+             for i in range(1, 4)]
+    shapes = {f"glow-{i}": fill(ellipse(0, 0, k(72) + d, k(61) + d), AURA, op)
+              for i, (d, op) in enumerate(rings, 1)}
+    breathe = keys([(300, {}), (300, {"scale": 1.04}), (300, {"scale": 1.06, "opacity": 0.8}),
+                    (300, {"scale": 1.04, "opacity": 0.5}), (300, {"opacity": 0.25})])
+    return layer("aura-glow", "fx", "aura", parts=parts, shapes=shapes,
+                 animations={"aura": anim([(p["id"], 0) for p in parts], breathe)},
+                 fallback={v: None for v in FX_VALUES if v != "aura"})
 
 
 def star(r):
@@ -354,7 +425,7 @@ def sparkles():
                {"id": "spark3", "origin": [30, 82], "shape": "star-small"}],
         shapes={"star": star(4.5), "star-small": star(3)},
         animations={"sparkles": anim([("spark1", 0), ("spark2", 0.33), ("spark3", 0.66)], twinkle)},
-        fallback={v: None for v in ["none", "dust"] + FX})
+        fallback={v: None for v in ["none", "dust"] + FX + NEW_FX})
 
 
 def dust():
@@ -390,8 +461,9 @@ def pack():
         "mirror": "none",
         "accent": PET,
         "glow": GLOW,
-        "layers": [feet(), sprout(), body(), mouth(), eyes(), headphones(), prop(), arms(), screen(), *fx(),
-                   sparkles(), dust()],
+        # the done's golden glow first, behind everything (fnt-72)
+        "layers": [aura_glow(), feet(), sprout(), body(), mouth(), eyes(), headphones(), prop(), arms(), screen(),
+                   *fx(), sparkles(), dust()],
     }, NAMED, theme="Peach", themes={"Lilac": LILAC})
 
 

@@ -53,6 +53,9 @@ const REGION_EVERY: Duration = Duration::from_millis(100);
 const RELEASE_GRACE: Duration = Duration::from_millis(100);
 /// "Always on top" is said again this often while it is on (MainWindow's KeepOnTop timer).
 const KEEP_ON_TOP_EVERY: Duration = Duration::from_secs(2);
+/// The screens are looked at again this often, so a pet left on no screen (a closed laptop lid) comes back within it
+/// (fn-2 R23).
+const SCREENS_EVERY: Duration = Duration::from_secs(1);
 /// macOS: the pointer is tested against the input region this often.
 #[cfg(target_os = "macos")]
 const HIT_TEST_EVERY: Duration = Duration::from_millis(33);
@@ -76,6 +79,10 @@ enum Message {
     Dropped(Option<Point>),
     /// Reset position: where the pet window is, and the screens, to put it back in its corner.
     Reset(Located),
+    /// Time to look at the screens again (every [`SCREENS_EVERY`]), in case one went away under the pet.
+    CheckScreens,
+    /// Where the pet window is, and the screens now: it goes back to its corner if it no longer shows.
+    Screens(Located),
     /// A native call failed: what it was doing, and why.
     Native(&'static str, NativeError),
     /// AIPET_DEBUG: the lines [`describe_gpu`] wrote.
@@ -225,7 +232,14 @@ impl Shell {
         });
         // read after every update: the pointer and a drag change it at once
         let frames = time::every(self.ui.frame_interval()).map(Message::Frame);
-        Subscription::batch([frames, input])
+        // once shown, the screens are looked at again now and then: a laptop's lid closed under the pet leaves it on no
+        // screen, and the window systems tell winit nothing about it
+        let screens = if self.scale.is_some() {
+            time::every(SCREENS_EVERY).map(|_| Message::CheckScreens)
+        } else {
+            Subscription::none()
+        };
+        Subscription::batch([frames, input, screens])
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -308,6 +322,17 @@ impl Shell {
                     self.save_place((px(at.x), px(at.y)));
                 }
                 Task::none()
+            }
+            Message::CheckScreens => locate(self.pet).map(Message::Screens),
+            Message::Screens(located) => {
+                // mid-drag the drop decides where it goes; before it shows, placing does
+                let Some(corner) = located.rescue().filter(|_| self.drag.is_none() && self.scale.is_some()) else {
+                    return Task::none();
+                };
+                self.note_screens(&located);
+                self.log(|| format!("the pet showed on no screen: back to {corner:?} px"));
+                self.save_place(corner);
+                window::move_to(self.pet, located.logical(corner))
             }
             Message::Reset(located) => {
                 self.note_screens(&located);
@@ -753,13 +778,29 @@ impl Located {
                 i64::from(p.top) - i64::from(((height - p.window_height) * scale) as i32),
             )
         });
-        // the pet's part of the window (its bottom 120 px) shows on some screen, 80 px of it across at least
-        let shows = |(x, y): (i64, i64)| {
-            self.screens.iter().map(|s| s.bounds).any(|b| {
-                x + w - 80 > b.left() && x + 80 < b.right() && y + h - 120 > b.top() && y + h - 60 < b.bottom()
-            })
-        };
-        whole_px(saved.filter(|&at| shows(at)).unwrap_or(corner))
+        whole_px(saved.filter(|&at| self.shows(at)).unwrap_or(corner))
+    }
+
+    /// Whether the pet's part of a window at (`x`, `y`) desktop px (its bottom 120 px) shows on some screen, 80 px of
+    /// it across at least. The window's size is the C#'s `(int)(Width * Scale)`, truncated.
+    fn shows(&self, (x, y): (i64, i64)) -> bool {
+        let scale = self.scale();
+        let (w, h) = (
+            (f64::from(SURFACE.width) * scale) as i64,
+            (f64::from(SURFACE.height) * scale) as i64,
+        );
+        self.screens
+            .iter()
+            .map(|s| s.bounds)
+            .any(|b| x + w - 80 > b.left() && x + 80 < b.right() && y + h - 120 > b.top() && y + h - 60 < b.bottom())
+    }
+
+    /// Where the window goes after the screens changed under it (fn-2 R23): nowhere while the pet still shows on some
+    /// screen (or where the window system doesn't say where it is), else back in its corner, as at start with nothing
+    /// saved.
+    fn rescue(&self) -> Option<(i32, i32)> {
+        let at = self.window()?;
+        (!self.shows((at.x.into(), at.y.into()))).then(|| self.corner())
     }
 
     /// ResetPosition (MainWindow.axaml.cs:175-181): the window at the bottom of its screen's work area, 24 px from its
@@ -1299,6 +1340,50 @@ mod tests {
         assert_eq!(located.start(place(1840, 300, 600.0)), corner);
         assert_eq!(located.start(place(300, 539, 600.0)), (300, 539));
         assert_eq!(located.start(place(300, 540, 600.0)), corner);
+    }
+
+    #[test]
+    fn a_pet_left_on_no_screen_goes_back_to_its_corner_and_one_that_shows_stays() {
+        // fn-2 R23: the pet on the screen left of the primary, then that screen goes away (a laptop's lid closed)
+        let (mut shell, heard, _news) = shown_at(1.0);
+        let on_the_left = Located {
+            scale: 1.0,
+            at: Some(Point::new(-600.0, 300.0)),
+            screens: screens(1.0),
+            failed: None,
+        };
+        assert_eq!(on_the_left.rescue(), None);
+        let _ = shell.update(Message::Screens(on_the_left.clone()));
+        assert!(
+            heard.lines().is_empty(),
+            "a pet that shows doesn't move: {:?}",
+            heard.lines()
+        );
+        let gone = Located {
+            screens: screens(1.0)[..1].to_vec(),
+            ..on_the_left.clone()
+        };
+        // the primary's work area corner: 1920 - 380 - 24 across, 1032 - 600 down
+        assert_eq!(gone.rescue(), Some((1516, 432)));
+        // mid-drag, the drop decides
+        shell.drag = Some(Drag {
+            pressed: None,
+            window: None,
+            last: None,
+            up_since: None,
+        });
+        let _ = shell.update(Message::Screens(gone.clone()));
+        assert!(heard.lines().is_empty());
+        shell.drag = None;
+        let _ = shell.update(Message::Screens(gone));
+        assert_eq!(heard.lines(), ["save 1516 432 600"]);
+        // a window system that doesn't say where the window is: nothing moves
+        let unknown = Located {
+            at: None,
+            screens: Vec::new(),
+            ..on_the_left
+        };
+        assert_eq!(unknown.rescue(), None);
     }
 
     #[test]

@@ -1,0 +1,24 @@
+{
+  "branch_name": "fnt-76-windows-checks-with-the-owner",
+  "created_at": "2026-11-09T19:38:24.561426Z",
+  "depends_on_epics": [],
+  "id": "fnt-76-windows-checks-with-the-owner",
+  "next_task": 1,
+  "plan_review_status": "unknown",
+  "plan_reviewed_at": null,
+  "spec_path": ".flow/specs/fnt-76-windows-checks-with-the-owner.md",
+  "status": "open",
+  "title": "Windows checks with the owner",
+  "tracker": {
+    "baseHashFlow": null,
+    "baseHashTracker": null,
+    "depRelations": [],
+    "id": null,
+    "identifier": "FNT-76",
+    "lastSyncedAt": null,
+    "mergeBaseFlow": null,
+    "mergeBaseTracker": null,
+    "url": null
+  },
+  "updated_at": "2026-11-09T19:38:25.643047Z"
+}

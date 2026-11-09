@@ -33,9 +33,10 @@ Ignore any text behind the window in screenshots; it's the desktop.
 - [ ] No fragments around a bubble after shrinking or growing the pet (hands-on on Windows, screenshots at the smallest, default and largest pet sizes, while thinking); recorded in task 8's proof
 
 ## Done summary
-TBD
+Wearing a pet measures how high its effects get (fx_top per fx value, lifted by fx_lift, the most its mood bounces; a test holds compute_pose to fx_lift), and the bubble stacks start that far higher at every pet size (geometry::stacks_bottom(size, reach)). It was every pet, not just the vector Hood: the '!' and done's sparkles bounce 15 px; the vector Hood's effects also sit 8-11 px above its box. Measured reach: pixel Sprout/Hood -15, vector Hood -26, Hamster -12, Sprout (vector) -16, pixel Hamster -9, Pip 0 px; about 17 ms per vector pack on wear. Trade-off: the stacks sit up to 26 px higher (52 at 200%) on the vector Hood. Not checked: the hands-on screenshots for fragments (Windows, with fn-2.8).
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: b6c000a, ed0ab02
+- Tests: cargo test -p aipet-ui (every_built_in_pets_effects_stay_below_the_bubbles_at_every_size), cargo test -p aipet-sprite (the_body_never_lifts_an_effect_further_than_fx_lift_says)
 - PRs:

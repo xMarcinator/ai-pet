@@ -56,9 +56,11 @@ pub const STACKS_BOTTOM: f32 = SPRITE.y - 8.0;
 pub const PET_SIZES: std::ops::RangeInclusive<i32> = 75..=200;
 pub const BUBBLE_SIZES: std::ops::RangeInclusive<i32> = 80..=120;
 
-/// Where the bubble stacks' bottom is for a pet `size` times as big: as far above its head as at 1.
-pub fn stacks_bottom(size: f32) -> f32 {
-    STACKS_BOTTOM - SPRITE_ORIGIN.y * (size - 1.0)
+/// Where the bubble stacks' bottom is for a pet `size` times as big whose effects reach `reach` art px above its art
+/// box (negative; [`aipet_sprite::fx_reach`]): as far above its head, or above its effects where they reach higher,
+/// as at 1 (fn-2 R24).
+pub fn stacks_bottom(size: f32, reach: f32) -> f32 {
+    STACKS_BOTTOM - SPRITE_ORIGIN.y * (size - 1.0) + reach.min(0.0) * size
 }
 /// A bubble's height and corner radius.
 pub const CARD_H: f32 = 50.0;
@@ -364,6 +366,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_built_in_pets_effects_stay_below_the_bubbles_at_every_size() {
+        // fn-2 R24: the highest an effect gets, lifted by its mood's bounce, against the stacks' bottom
+        let mut failures = Vec::new();
+        for p in aipet_sprite::load::all(std::path::Path::new("/nonexistent")).pets {
+            let reach = aipet_sprite::fx_reach(&p.pack, &p.sheets) as f32;
+            let anchor = (p.pack.anchor.1 * p.pack.pixel_size) as f32;
+            for size in PET_SIZES.step_by(5) {
+                let s = size as f32 / 100.0;
+                let top = SPRITE.y + SPRITE_ORIGIN.y + (reach - anchor) * s;
+                let bottom = stacks_bottom(s, reach);
+                if top < bottom {
+                    failures.push(format!(
+                        "{} at {size}%: effects at {top}, bubbles end at {bottom}",
+                        p.pack.name
+                    ));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[test]
     fn the_sprite_sits_where_the_csharp_puts_it() {
         assert_eq!(
             SPRITE,
@@ -622,8 +646,11 @@ mod tests {
         assert_eq!(big.to_surface(feet), Motion::REST.to_surface(feet));
         let top = big.rect_to_surface(Rectangle::new(Point::ORIGIN, SPRITE.size()));
         assert_eq!(top.size(), SPRITE.size() * 1.5);
-        assert_eq!(STACKS_BOTTOM - stacks_bottom(1.5), SPRITE.y - top.y);
-        assert_eq!(stacks_bottom(1.0), STACKS_BOTTOM);
+        assert_eq!(STACKS_BOTTOM - stacks_bottom(1.5, 0.0), SPRITE.y - top.y);
+        assert_eq!(stacks_bottom(1.0, 0.0), STACKS_BOTTOM);
+        // effects that reach 10 px above the box lift the stacks 10 px, and 15 at 1.5
+        assert_eq!(stacks_bottom(1.0, -10.0), STACKS_BOTTOM - 10.0);
+        assert_eq!(stacks_bottom(1.5, -10.0), stacks_bottom(1.5, 0.0) - 15.0);
         // the shadow grows with it
         assert_eq!(big.shadow().size(), SHADOW * 1.5);
     }

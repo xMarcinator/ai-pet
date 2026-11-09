@@ -50,6 +50,10 @@ PALETTE = {
     "d": ps.DUSTC,
     "n": "#F4B236",  # notes take the accent
     "t": "#7FEFFF",  # the screen's glow
+    # fnt-72: the darker orange of the right side and bottom right, the blush, the yawning mouth, the news envelope's
+    # paper and its heart seal, tears, the poke's heart and the done's golden glow (its soft rings see-through)
+    "D": "#E39A2E", "B": "#FF9AAE", "M": "#8E4A3A", "P": ps.PAPER, "p": ps.PAPER_SHADE, "T": ps.TEAR,
+    "H": ps.HEART, "A": ps.AURA, "a": ps.AURA_HI, "1": ps.AURA + "88", "2": ps.AURA + "44",
 }
 
 # The colours a theme may change, by name: each an exact colour in the sheets of every layer but the effects (the
@@ -124,7 +128,9 @@ def hamster_cells():
     return grid(HAMSTER)
 
 
-def body():
+def body(yawn=False, blush=False):
+    """The body: light from the upper left, so the right side and the bottom right are a darker orange, its edge the
+    darkest (fnt-72); `yawn` opens the mouth (tired), `blush` pinks the cheeks (done)."""
     h = hamster_cells()
     for (r, c), v in BODY_FIX.items():
         h[r][c] = v
@@ -132,7 +138,47 @@ def body():
         h[r][c] = "S" if h[r][c] in "GO" else h[r][c]
     for r in FEET_ROWS:
         h[r] = [" "] * len(h[r])
+    for r in range(6, 26):
+        for c in range(len(h[r])):
+            if c >= 22 and h[r][c] in "YCS":
+                h[r][c] = "R"
+            elif c >= 25 and h[r][c] == "R":
+                h[r][c] = "D"
+            elif r >= 22 and c >= 18 and h[r][c] in "CS":
+                h[r][c] = "R"
+    if yawn:
+        for r, c in [(9, 9), (9, 10), (10, 9), (10, 10)]:
+            h[r][c] = "M"
+    if blush:
+        for r, c in BLUSH_CELLS:
+            h[r][c] = "B"
     return stamp(blank(), h, OX, OY)
+
+
+# the cheeks that blush (row, column of the reference): the near one wide, the far one small
+BLUSH_CELLS = [(9, 21), (9, 22), (9, 23), (9, 3)]
+
+
+def blush():
+    """The blush alone, for the poke's heart (the done's is the body's)."""
+    h = [[" "] * 28 for _ in range(28)]
+    for r, c in BLUSH_CELLS:
+        h[r][c] = "B"
+    return placed(h)
+
+
+def glow():
+    """The done's golden glow behind the pet (the owner's soft glow, fnt-72 task 7): two soft rings round its
+    outline, the inner one stronger."""
+    shape = body()
+    near = lambda x, y, d: any(0 <= y + j < BOX_H and 0 <= x + i < BOX_W and shape[y + j][x + i] != " "
+                               for j in range(-d, d + 1) for i in range(-d, d + 1))
+    out = blank()
+    for y in range(BOX_H):
+        for x in range(BOX_W):
+            if shape[y][x] == " ":
+                out[y][x] = "1" if near(x, y, 1) else ("2" if near(x, y, 3) else " ")
+    return out
 
 
 def diff(cells):
@@ -153,7 +199,6 @@ UP = ["OOO", "OCO", "OCO", "OSO", "OSO"]
 LEAN = ["OO   ", "OCO  ", " OCO ", "  OSO", "   OS"]
 SIDE = ["OCO", "OSO", "OO "]
 SIDE_BACK = ["OCO", "OSO", " OO"]
-HOLD_UP = [" OO", "OCO", "OSO"]
 
 
 def sprites(*parts):
@@ -161,20 +206,17 @@ def sprites(*parts):
     return [(art, x, y) for art, x, y in parts]
 
 
-def lens_paw():
-    """The right paw raised to the face, holding the magnifier's handle."""
-    return (HOLD_UP, 18, 11)
-
-
 ARMS = {
-    "rest": [(diff(ARM_CELLS), 0, 0)],
+    # at rest the paws are small nubs on the belly (fnt-72)
+    "rest": sprites((["OO", "OO"], 7, 17), (["OO", "OO"], 17, 17)),
     "raised": sprites((UP, -3, 4), (UP, 27, 4)),
     "wave-a": sprites((diff(LEFT_ARM), 0, 0), (UP, 28, 2)),
     "wave-b": sprites((diff(LEFT_ARM), 0, 0), (LEAN, 25, 4)),
     "run-a": sprites((SIDE, -2, 11), (SIDE_BACK, 27, 13)),
     "run-b": sprites((SIDE_BACK, -2, 13), (SIDE, 27, 11)),
     "hold": sprites((["OO", "OO"], 8, 16), (["OO", "OO"], 16, 16)),
-    "lens": sprites((diff(LEFT_ARM), 0, 0), lens_paw()),
+    # reading through its glasses, the paws stay nubs on the belly (fnt-72)
+    "lens": sprites((["OO", "OO"], 7, 17), (["OO", "OO"], 17, 17)),
 }
 
 
@@ -219,6 +261,8 @@ EYES = {
     "squint": ["  ", "EE"],
     "closed": ["  ", "  ", "EE"],
     "happy": [" EE ", "E  E"],
+    # tired (fnt-72): the lower half under a heavy lid
+    "sleepy": ["ee", "EE"],
 }
 
 
@@ -263,14 +307,35 @@ def screen():
 
 
 def lens():
-    art = [" rrr ", "rgggr", "rgWgr", "rgggr", " rrr ", "    h", "     "]
+    """The Hamster's prop for web search and reading (fnt-72): round dark glasses over its eyes, a bridge between
+    them and a temple back to the near ear, instead of the magnifier."""
+    # rims wider than the eyes, so the face shows round them (narrower rims read as sunglasses)
+    ring = [" KKKK ", "K    K", "K    K", "K    K", " KKKK "]
     a = [[" "] * 28 for _ in range(28)]
-    for j, row in enumerate(art):
-        for i, c in enumerate(row):
-            if c != " ":
-                a[5 + j][12 + i] = c
-    # the handle down to the paw
-    a[11][17] = a[12][18] = "h"
+    for x in (3, 12):
+        for j, row in enumerate(ring):
+            for i, c in enumerate(row):
+                if c != " ":
+                    a[5 + j][x + i] = c
+    for x in range(9, 12):
+        a[6][x] = "K"
+    for x, y in [(18, 6), (19, 6), (20, 5)]:
+        a[y][x] = "K"
+    return a
+
+
+def envelope():
+    """News (fnt-72): a white envelope where the laptop stands, its flap a V, sealed with a heart."""
+    w, h = 15, 8
+    a = [[" "] * 28 for _ in range(28)]
+    for j in range(h):
+        for i in range(w):
+            edge = j in (0, h - 1) or i in (0, w - 1)
+            a[15 + j][5 + i] = "K" if edge else "P"
+    for k in range(1, 6):
+        a[15 + k][5 + k] = a[15 + k][5 + w - 1 - k] = "p"
+    for x, y in [(11, 20), (13, 20), (11, 21), (12, 21), (13, 21), (12, 22)]:
+        a[y][x] = "H"
     return a
 
 
@@ -332,6 +397,32 @@ def fx_frames(kind):
             f = blank()
             stamp(f, [" dd", "ddd"], 8 - 2 * step, 34)
             stamp(f, ["dd"], 4 - 2 * step, 35 - step)
+            # speed lines behind it, beside the dust (fnt-72)
+            for y, w in [(16, 4), (20, 6), (24, 3)]:
+                stamp(f, ["d" * w], 1 - step + (6 - w), y)
+            frames.append(f)
+    elif kind == "tears":
+        # from under the screen-right eye: one on the cheek, one falling, both there from the first frame
+        for step in range(3):
+            f = blank()
+            stamp(f, ["T", "T"], OX + 15, OY + 9)
+            stamp(f, ["T"], OX + 16, OY + 11 + step)
+            frames.append(f)
+    elif kind == "heart":
+        big = ["HH HH", "HHHHH", " HHH ", "  H  "]
+        small = ["H H", "HHH", " H "]
+        for step in range(2):
+            f = blank()
+            stamp(f, big, 34, 6 - step)
+            stamp(f, small, 2, 12 - step)
+            frames.append(f)
+    elif kind == "aura":
+        star = [" a ", "aAa", " a "]
+        for step in range(2):
+            f = blank()
+            for k, (x, y) in enumerate([(5, 5), (33, 4), (20, 1)]):
+                stamp(f, star if (k + step) % 2 else ["A"], x + (1 if (k + step) % 2 == 0 else 0),
+                      y + (1 if (k + step) % 2 == 0 else 0))
             frames.append(f)
     return frames
 
@@ -343,8 +434,10 @@ def placed(art):
 
 # ---- the pack ----
 def colour(c):
-    v = int(PALETTE[c][1:], 16)
-    return (v >> 16 & 255, v >> 8 & 255, v & 255, 255)
+    """A cell's RGBA: `#RRGGBB`, or `#RRGGBBAA` for a see-through one (the glow's soft rings)."""
+    hexc = PALETTE[c][1:]
+    v = int(hexc[:6], 16)
+    return (v >> 16 & 255, v >> 8 & 255, v & 255, int(hexc[6:], 16) if len(hexc) == 8 else 255)
 
 
 def sheet(frames):
@@ -370,7 +463,9 @@ def png(w, h, rows):
 
 
 FX = ["zs", "dots", "notes", "alert"]
-FX_VALUES = ["none", "dust", "sparkles"] + FX + [f"{v}+sparkles" for v in FX + ["dust"]]
+# fnt-72's effects replace sparkles rather than come with them
+NEW_FX = ["tears", "aura", "heart"]
+FX_VALUES = ["none", "dust", "sparkles"] + FX + [f"{v}+sparkles" for v in FX + ["dust"]] + NEW_FX
 
 
 def pack():
@@ -395,13 +490,18 @@ def pack():
         layer["animations"] = anims
         layers.append(layer)
 
-    add("body", "state", "idle", {"idle": [body()]}, hit=True)
+    # the done's golden glow first, behind everything (fnt-72)
+    add("aura-glow", "fx", "aura", {"aura": [glow()]}, fallback={v: None for v in FX_VALUES if v != "aura"})
+    # fnt-72: the yawn when tired, the blush when done
+    add("body", "state", "idle", {"idle": [body()], "tired": [body(yawn=True)], "done": [body(blush=True)]},
+        hit=True)
     add("feet", "feet", "stand", {k: [placed(feet(k))] for k in
                                   ["stand", "tap", "dangle-a", "dangle-b", "run-a", "run-b"]}, hit=True)
-    add("prop", "prop", "laptop", {"laptop": [placed(laptop())], "lens": [placed(lens())]},
+    add("prop", "prop", "laptop", {"laptop": [placed(laptop())], "lens": [placed(lens())],
+                                   "envelope": [placed(envelope())]},
         fallback={"none": None})
     add("screen", "prop", "laptop", {"laptop": [placed(screen())]}, glow=True,
-        fallback={"lens": None, "none": None})
+        fallback={"lens": None, "none": None, "envelope": None})
     add("arms", "arms", "rest", {k: [arms(k)] for k in ARMS}, hit=True)
     add("headphones", "headphones", "on", {"on": [placed(headphones())]}, hit=True, fallback={"off": None})
     add("eyes", "eyes", "open", {k: [placed(eyes(k))] for k in EYES}, hit=True,
@@ -414,18 +514,29 @@ def pack():
     durations = {"zs": 420, "dots": 320, "notes": 360, "alert": 260}
     add("fx", "fx", "zs", {k: fx_frames(k) for k in FX}, ms=durations, clock="pet",
         fallback={**{f"{v}+sparkles": v for v in FX},
-                  **{v: None for v in ["none", "dust", "dust+sparkles", "sparkles"]}})
+                  **{v: None for v in ["none", "dust", "dust+sparkles", "sparkles"] + NEW_FX}})
     add("sparkles", "fx", "sparkles", {"sparkles": fx_frames("sparkles")}, ms=140, clock="pet",
-        fallback={v: None for v in ["none", "dust"] + FX})
+        fallback={v: None for v in ["none", "dust"] + FX + NEW_FX})
+    # fnt-72: tears, the poke's heart with a blush, and the glow's stars; each replaces sparkles
+    others = lambda value: {v: None for v in FX_VALUES if v != value}
+    add("tears", "fx", "tears", {"tears": fx_frames("tears")}, ms=300, clock="pet", fallback=others("tears"))
+    add("blush", "fx", "heart", {"heart": [blush()]}, fallback=others("heart"))
+    add("heart", "fx", "heart", {"heart": fx_frames("heart")}, ms=220, clock="pet", fallback=others("heart"))
+    add("aura", "fx", "aura", {"aura": fx_frames("aura")}, ms=200, clock="pet", fallback=others("aura"))
     add("dust", "fx", "dust", {"dust": fx_frames("dust")}, ms=110, clock="pet", mirror="flip",
         fallback={"dust+sparkles": "dust", **{v: None for v in FX_VALUES if v not in ("dust", "dust+sparkles")}})
     manifest = {
         "format_version": 1,
         "name": "Hamster (pixel)",
+        # a style of the Hamster (FNT-74): one entry in Settings, its drawings as styles
+        "pet": "Hamster",
         "kind": "pixel",
         "pixel_size": PIXEL,
         "anchor": list(ANCHOR),
-        "mirror": "none",
+        # drawn in perspective, turned to the left: the whole pet mirrors when it faces right (only perspective pets
+        # mirror whole; effects are drawn as for a pet facing right)
+        "mirror": "flip",
+        "faces": "left",
         "accent": "$orange",
         "glow": "$glow",
         "palette": {name: PALETTE[c] for name, c in NAMED.items()},

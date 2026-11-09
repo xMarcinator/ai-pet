@@ -51,6 +51,9 @@ pub struct Config {
     pub avatar: Option<String>,
     /// The avatar's colour theme (the Rust app's own): none for its default. Written only when it is set.
     pub avatar_theme: Option<String>,
+    /// The avatar's style, Pixel or Vector say (the Rust app's own, FNT-74): none for the pet's default. Written only
+    /// when it is set; the .NET pet drops it when it writes the file, and the pet then wears its default style.
+    pub avatar_style: Option<String>,
     pub music: bool,
     /// How big the pet is drawn and how big the bubbles are, in percent (the Rust app's own): none for 100. Written
     /// only when set; the app keeps them within its own limits.
@@ -71,6 +74,7 @@ impl Default for Config {
             on_top: true,
             avatar: Some("Sprout".into()),
             avatar_theme: None,
+            avatar_style: None,
             music: true,
             pet_size: None,
             bubble_size: None,
@@ -180,6 +184,7 @@ impl Fields for Config {
             "OnTop" => self.on_top = boolean(value)?,
             "Avatar" => self.avatar = nullable(value, string)?,
             "AvatarTheme" => self.avatar_theme = nullable(value, string)?,
+            "AvatarStyle" => self.avatar_style = nullable(value, string)?,
             "Music" => self.music = boolean(value)?,
             "PetSize" => self.pet_size = nullable(value, int)?,
             "BubbleSize" => self.bubble_size = nullable(value, int)?,
@@ -202,6 +207,9 @@ impl Fields for Config {
         fields.extend([("OnTop", Json::Bool(self.on_top)), ("Avatar", Json::of(&self.avatar))]);
         if self.avatar_theme.is_some() {
             fields.push(("AvatarTheme", Json::of(&self.avatar_theme)));
+        }
+        if self.avatar_style.is_some() {
+            fields.push(("AvatarStyle", Json::of(&self.avatar_style)));
         }
         fields.push(("Music", Json::Bool(self.music)));
         if let Some(size) = self.pet_size {

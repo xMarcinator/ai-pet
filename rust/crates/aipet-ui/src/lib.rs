@@ -23,6 +23,7 @@ pub mod demo;
 mod executor;
 mod geometry;
 mod menu;
+mod mood;
 pub mod platform;
 pub mod settings;
 mod shelf;
@@ -62,8 +63,6 @@ const TEXT_BESIDE: f32 = 190.0;
 /// The narrowest and widest a bubble gets (its Border's MinWidth and MaxWidth).
 const CARD_MIN: f32 = 240.0;
 const CARD_MAX: f32 = 350.0;
-/// How long a new review calls for attention (the C#'s NewReviews: `AlertUntil = Now + 6`).
-const ALERT: f64 = 6.0;
 /// A tooltip (Avalonia 12's ToolTip in the Fluent dark theme) opens 0.4 s after the pointer comes onto what has one, or
 /// at once within 0.1 s of the last one closing (ShowDelay, BetweenShowDelay); 20 px below where the pointer then is
 /// (Placement Pointer, VerticalOffset 20); and fades in over 0.15 s.
@@ -120,7 +119,10 @@ pub enum Message {
     Dismiss(Arc<str>),
     /// A menu item was chosen. The shell closes the menu.
     Menu(MenuItem),
+    /// Wear this drawing (a pet's tile wears its default style, or the style it wears now).
     SelectAvatar(usize),
+    /// Wear the worn pet in another of its styles, this drawing, keeping the theme where it has one by that name.
+    SelectStyle(usize),
     /// Wear the worn pet in its theme by this name.
     SelectTheme(String),
     /// Draw the pet this big, in percent (kept within [`geometry::PET_SIZES`]).
@@ -186,9 +188,12 @@ pub struct Prefs {
     pub bubbles: bool,
     pub on_top: bool,
     pub music: bool,
-    /// The avatar's name; the first avatar when none or an unknown one. An older name for a pet in one of its themes,
-    /// "<pet> (<theme>)" such as "Hood (green)", is that pet in that theme.
+    /// The avatar's pet (FNT-74); the first pet when none or an unknown one. An older name for one of a pet's
+    /// drawings, "Hood (vector)" say, is that pet in that style; one for a pet in one of its themes, "<pet> (<theme>)"
+    /// such as "Hood (green)", is that pet in that theme.
     pub avatar: Option<String>,
+    /// The pet's style (Pixel, Vector, …); its default when none or one it hasn't.
+    pub avatar_style: Option<String>,
     /// The avatar's colour theme; its default when none or one it hasn't.
     pub avatar_theme: Option<String>,
     /// How big the pet and the bubbles are drawn, in percent, within [`geometry::PET_SIZES`] and
@@ -204,6 +209,7 @@ impl From<&Config> for Prefs {
             on_top: config.on_top,
             music: config.music,
             avatar: config.avatar.clone(),
+            avatar_style: config.avatar_style.clone(),
             avatar_theme: config.avatar_theme.clone(),
             pet_size: config
                 .pet_size
@@ -348,6 +354,12 @@ pub struct PetUi {
     t: f64,
     motion: Motion,
     sprite: Sprite,
+    /// How high the worn pack's effects get above its art box (art px, negative above), lifted by their moods: the
+    /// bubbles start above it (fn-2 R24).
+    fx_reach: f32,
+    /// The mood step's memory (the news window), and the local hour, which a test can set (fnt-72).
+    moods: mood::Moods,
+    hour: fn() -> u32,
     /// The sprite's part of the input region, remade in place each tick.
     sprite_rects: Vec<Rect>,
     shadow: Handle,
@@ -449,9 +461,29 @@ impl FrameTimes {
 /// The avatar and theme the preferences name: the avatar by its name, or by an older "<pet> (<theme>)" name for one
 /// of a pet's themes (any case), as "Hood (green)" names the Hood in Green; else the first. The theme is the one
 /// the preferences name, else the one the older name does, else the avatar's default.
+/// The way a pet faces at rest: the way its art does (the Hamster is drawn turned to the left).
+fn drawn_facing(pack: &aipet_sprite::pack::Pack) -> i32 {
+    match pack.faces {
+        aipet_sprite::pose::Facing::Left => -1,
+        aipet_sprite::pose::Facing::Right => 1,
+    }
+}
+
 fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
     let name = prefs.avatar.as_deref().unwrap_or_default();
-    let by_name = avatars.iter().position(|a| a.name() == name).map(|i| (i, None));
+    let groups = pets(avatars);
+    // the pet by its name, in its style (else its default); then an older name for one of its drawings; then the
+    // older "<pet> (<theme>)"
+    let by_pet = groups.iter().find(|g| g.pet == name).map(|g| {
+        let style = prefs.avatar_style.as_deref();
+        let i = g
+            .styles
+            .iter()
+            .copied()
+            .find(|&i| Some(avatars[i].pack.style()) == style);
+        (i.unwrap_or(g.default), None)
+    });
+    let by_name = || avatars.iter().position(|a| a.name() == name).map(|i| (i, None));
     let by_theme = || {
         avatars.iter().enumerate().find_map(|(i, a)| {
             let theme = name.strip_prefix(a.name())?.strip_prefix(" (")?.strip_suffix(')')?;
@@ -459,7 +491,8 @@ fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
             Some((i, Some(theme.to_owned())))
         })
     };
-    let (i, old) = by_name.or_else(by_theme).unwrap_or((0, None));
+    let first = groups.first().map_or(0, |g| g.default);
+    let (i, old) = by_pet.or_else(by_name).or_else(by_theme).unwrap_or((first, None));
     let palette = &avatars[i].pack.palette;
     let theme = prefs
         .avatar_theme
@@ -468,6 +501,11 @@ fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
         .or(old)
         .unwrap_or_else(|| palette.theme.clone());
     (i, theme)
+}
+
+/// The avatars' pets, each with its styles (FNT-74).
+fn pets(avatars: &[shelf::Shelved]) -> Vec<aipet_sprite::load::Group> {
+    aipet_sprite::load::groups_of(avatars.iter().map(|a| &a.pack))
 }
 
 /// `pet` in its theme `theme`, which it has.
@@ -498,11 +536,19 @@ impl PetUi {
             host: setup.host,
             platform: setup.platform,
             pet,
-            input: PetInput::default(),
+            // fnt-72's moods: on in the app (the C# golden replays keep them off)
+            input: PetInput {
+                moods: true,
+                facing: drawn_facing(&worn.pack),
+                ..PetInput::default()
+            },
             start: None,
             t: 0.0,
             motion: Motion::REST,
             sprite: Sprite::new(&worn),
+            fx_reach: aipet_sprite::fx_reach(&worn.pack, &worn.sheets) as f32,
+            moods: mood::Moods::default(),
+            hour: || aipet_core::log::local_hour(std::time::SystemTime::now()),
             sprite_rects: Vec::new(),
             shadow: sprite::shadow_image(),
             avatars,
@@ -565,7 +611,7 @@ impl PetUi {
         if let Some(demo) = &mut self.demo {
             // a new review calls for attention, as the C#'s NewReviews does
             if demo::review_arrived(self.t, t) {
-                self.input.alert_until = t + ALERT;
+                self.moods.review(t);
             }
             self.board = Some(demo.board(t));
         }
@@ -573,7 +619,12 @@ impl PetUi {
         settings::tick(self);
 
         let board = self.board.as_deref();
-        let mood = board.map_or("sleep", Board::state);
+        let state = board.map_or("sleep", Board::state);
+        // the clock only matters to an idle or sleeping pet
+        let night = matches!(state, "idle" | "sleep") && mood::night((self.hour)());
+        let mood = self
+            .moods
+            .pick(state, t, night, board.and_then(Board::front_age), self.hover);
         #[cfg(any(test, feature = "demo"))]
         let mood = self.mood.unwrap_or(mood);
         if self.input.state != mood {
@@ -793,7 +844,8 @@ impl PetUi {
     pub fn update(&mut self, message: Message) -> Option<Effect> {
         match message {
             Message::Board(board) => self.board = Some(board),
-            Message::Alert => self.input.alert_until = self.t + ALERT,
+            // a review arrived: the pet shows the news (fnt-72; the C#'s attention alert is the golden replays' alone)
+            Message::Alert => self.moods.review(self.t),
             Message::PointerMoved(p) => {
                 self.pointer = Some(p);
                 self.left_at = None;
@@ -873,6 +925,7 @@ impl PetUi {
                     self.save_prefs();
                 }
             }
+            Message::SelectStyle(i) => settings::avatars::select_style(self, i),
             Message::SelectTheme(theme) => {
                 let has = self.avatars[self.avatar].pack.palette.names().any(|n| n == theme);
                 if has && theme != self.theme {
@@ -1002,14 +1055,20 @@ impl PetUi {
         Effect::OpenSettings
     }
 
-    /// The preferences now: the avatar's theme only when it isn't the avatar's default.
+    /// The preferences now: the avatar's pet, its style only when it isn't the pet's default, and its theme only when
+    /// it isn't the style's default.
     pub fn prefs(&self) -> Prefs {
         let avatar = &self.avatars[self.avatar];
+        let default = pets(&self.avatars)
+            .into_iter()
+            .find(|g| g.styles.contains(&self.avatar))
+            .map_or(self.avatar, |g| g.default);
         Prefs {
             bubbles: self.bubbles,
             on_top: self.on_top,
             music: self.music,
-            avatar: Some(avatar.name().to_owned()),
+            avatar: Some(avatar.pack.pet().to_owned()),
+            avatar_style: (default != self.avatar).then(|| avatar.pack.style().to_owned()),
             avatar_theme: (self.theme != avatar.pack.palette.theme).then(|| self.theme.clone()),
             pet_size: self.pet_size,
             bubble_size: self.bubble_size,
@@ -1027,11 +1086,13 @@ impl PetUi {
     }
 
     /// Lays the sprite and the bubbles out at their sizes: the sprite's pixels again on whole device pixels, and the
-    /// stacks above the pet's head.
+    /// stacks above the pet's head and its effects.
     fn sized(&mut self) {
         let pet = self.pet_factor();
-        self.stacks
-            .set_size(self.bubble_size as f32 / 100.0, geometry::stacks_bottom(pet));
+        self.stacks.set_size(
+            self.bubble_size as f32 / 100.0,
+            geometry::stacks_bottom(pet, self.fx_reach),
+        );
         let (pose, at) = self.pet.drawn();
         self.sprite.update(self.pet.pack(), pose, at, self.scale * pet);
     }
@@ -1061,6 +1122,12 @@ impl PetUi {
         self.theme = theme;
         self.pet.set_pack(worn.clone());
         self.sprite = Sprite::new(&worn);
+        // another pet's effects may reach higher or lower: the bubbles follow
+        self.fx_reach = aipet_sprite::fx_reach(&worn.pack, &worn.sheets) as f32;
+        if !self.input.dragging {
+            self.input.facing = drawn_facing(&worn.pack);
+        }
+        self.sized();
     }
 
     fn save_prefs(&mut self) {
@@ -1731,14 +1798,18 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn an_alert_calls_for_attention_for_six_seconds() {
+    fn a_review_alert_is_news_for_six_seconds() {
         let (mut ui, _) = detached();
         let start = Instant::now();
         run(&mut ui, start, 0.0, 2.0);
         ui.update(Message::Alert);
-        assert!((ui.input.alert_until - 8.0).abs() < 0.02, "{}", ui.input.alert_until);
+        assert!((ui.moods.news_until() - 8.0).abs() < 0.02, "{}", ui.moods.news_until());
         run(&mut ui, start, 2.0, 0.5);
-        assert_eq!(ui.pet.anim_state(), "attention");
+        assert_eq!(ui.input.state, "news");
+        // the worn pet, Sprout, holds its envelope (fnt-72)
+        assert_eq!(ui.pet.anim_state(), "news");
+        run(&mut ui, start, 2.5, 6.0);
+        assert_ne!(ui.input.state, "news");
         // news from the core becomes the same messages
         let alert = Message::from(News::Alert);
         assert!(matches!(alert, Message::Alert));
@@ -1820,6 +1891,7 @@ pub(crate) mod tests {
                 on_top: false,
                 music: true,
                 avatar: Some("Hood".into()),
+                avatar_style: None,
                 avatar_theme: None,
                 pet_size: 100,
                 bubble_size: 100,
@@ -1834,6 +1906,7 @@ pub(crate) mod tests {
                 on_top: false,
                 music: true,
                 avatar: Some("Hood".into()),
+                avatar_style: None,
                 avatar_theme: None,
                 pet_size: 100,
                 bubble_size: 100,
@@ -1852,6 +1925,7 @@ pub(crate) mod tests {
                 on_top: true,
                 music: true,
                 avatar: Some("Sprout".into()),
+                avatar_style: None,
                 avatar_theme: None,
                 pet_size: 100,
                 bubble_size: 100,
@@ -1904,6 +1978,70 @@ pub(crate) mod tests {
         let ui = start("Hood (vector)", Some("Blue"));
         assert_eq!(ui.theme(), "Blue");
         assert_eq!(start("Hood (vector)", None).theme(), "Green");
+    }
+
+    #[test]
+    fn a_pet_is_one_tile_with_its_styles_and_older_names_wear_the_right_one() {
+        // FNT-74 R3, R4
+        let start = |avatar: &str, style: Option<&str>, theme: Option<&str>| {
+            PetUi::new(Setup {
+                prefs: Prefs {
+                    avatar: Some(avatar.into()),
+                    avatar_style: style.map(str::to_owned),
+                    avatar_theme: theme.map(str::to_owned),
+                    ..Prefs::default()
+                },
+                ..Setup::detached()
+            })
+        };
+        let worn = |ui: &PetUi| {
+            let a = &ui.avatars[ui.avatar];
+            (
+                a.pack.pet().to_owned(),
+                a.pack.style().to_owned(),
+                ui.theme().to_owned(),
+            )
+        };
+        let it = |pet: &str, style: &str, theme: &str| (pet.to_owned(), style.to_owned(), theme.to_owned());
+        let mut ui = start("Hood", None, Some("Green"));
+        assert_eq!(
+            settings::avatars::tiles(&ui),
+            [("Sprout", false), ("Hood", true), ("Pip", false), ("Hamster", false)]
+        );
+        let styles: Vec<&str> = settings::avatars::styles(&ui).iter().map(|s| s.0).collect();
+        assert_eq!(styles, ["Pixel", "Vector"]);
+        // switching style keeps Green, which both have; the vector Hood's default is Green, so nothing is kept of it
+        let vector = settings::avatars::styles(&ui)[1].1;
+        ui.update(Message::SelectStyle(vector));
+        assert_eq!(worn(&ui), it("Hood", "Vector", "Green"));
+        let prefs = ui.prefs();
+        assert_eq!(
+            (
+                prefs.avatar.as_deref(),
+                prefs.avatar_style.as_deref(),
+                prefs.avatar_theme.as_deref()
+            ),
+            (Some("Hood"), Some("Vector"), None)
+        );
+        // the pet's tile still shows the style worn
+        assert_eq!(settings::avatars::tiles(&ui)[1], ("Hood", true));
+        // older names for a pet's drawings, and for a pet in a theme
+        assert_eq!(worn(&start("Hood (vector)", None, None)), it("Hood", "Vector", "Green"));
+        assert_eq!(worn(&start("Pip (painted)", None, None)), it("Pip", "Painted", "Peach"));
+        assert_eq!(worn(&start("Hamster (pixel)", None, None)).1, "Pixel");
+        assert_eq!(worn(&start("Sprout (vector)", None, None)).1, "Vector");
+        assert_eq!(worn(&start("Hood (green)", None, None)), it("Hood", "Pixel", "Green"));
+        assert_eq!(
+            worn(&start("Hood", Some("Vector"), Some("Blue"))),
+            it("Hood", "Vector", "Blue")
+        );
+        // a style or theme it hasn't: the default
+        assert_eq!(
+            worn(&start("Hood", Some("Chalk"), Some("Purple"))),
+            it("Hood", "Pixel", "Blue")
+        );
+        // the default style isn't kept
+        assert_eq!(start("Hamster", Some("Vector"), None).prefs().avatar_style, None);
     }
 
     #[test]
@@ -1993,6 +2131,32 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_slow_or_jittery_drag_runs_steadily_one_way() {
+        // the owner saw the pet flicker while dragged: a slow drag's small steps and a wobbling pointer must neither
+        // swap running for dangling nor turn the pet around
+        let (mut ui, _) = detached();
+        let start = Instant::now();
+        run(&mut ui, start, 0.0, 1.0);
+        ui.update(Message::DragStarted);
+        let (mut x, mut runs, mut turns) = (0.0f32, Vec::new(), Vec::new());
+        for i in 0..120 {
+            // right at 30 px/s, half a px a frame at 60 Hz, wobbling a px back and forth
+            x += 0.5;
+            let wobble = if i % 2 == 0 { 1.0 } else { -1.0 };
+            ui.update(Message::DragMoved(Vector::new(10.0 + x + wobble, 0.0)));
+            ui.tick(start + Duration::from_secs_f64(1.0 + f64::from(i) / 60.0));
+            if i >= 30 {
+                runs.push(ui.pet.pose().feet.key());
+                turns.push(ui.input.facing);
+            }
+        }
+        let changes = |v: &[_]| v.windows(2).filter(|w| w[0] != w[1]).count();
+        assert!(turns.iter().all(|&f| f == 1), "turned around: {turns:?}");
+        let runs: Vec<bool> = runs.iter().map(|k| k.starts_with("run")).collect();
+        assert!(runs.iter().all(|&r| r), "stopped running: {} changes", changes(&runs));
+    }
+
+    #[test]
     fn a_dismissed_bubble_comes_back_when_it_does_something_new() {
         let mut ui = demo();
         let start = Instant::now();
@@ -2035,15 +2199,16 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_demos_new_review_calls_for_attention_for_six_seconds() {
+    fn the_demos_new_review_is_news_for_six_seconds() {
         let mut ui = demo();
         let start = Instant::now();
         run(&mut ui, start, 0.0, 12.9);
-        assert_eq!(ui.input.alert_until, 0.0);
+        assert_eq!(ui.moods.news_until(), 0.0);
         run(&mut ui, start, 12.9, 1.0);
-        assert!((ui.input.alert_until - 19.0).abs() < 0.02, "{}", ui.input.alert_until);
-        // working, but the pet shows the alert
-        assert_eq!((ui.input.state.as_str(), ui.pet.anim_state()), ("working", "attention"));
+        assert!((ui.moods.news_until() - 19.0).abs() < 0.02, "{}", ui.moods.news_until());
+        // working, but the pet shows the news: Sprout holds its envelope (fnt-72)
+        assert_eq!((ui.input.state.as_str(), ui.pet.anim_state()), ("news", "news"));
+        assert_eq!(ui.input.alert_until, 0.0, "the C#'s alert is the golden replays' alone");
     }
 
     #[test]
@@ -2110,8 +2275,11 @@ pub(crate) mod tests {
         assert!(all(&ticks, 11.0, 12.9, CALM_FRAME), "working");
         // Claude's bubble slides in at 2 s (and the pet wakes): smooth for a while
         assert!(all(&ticks, 2.0, 2.5, SMOOTH_FRAME), "a bubble coming");
-        // the review's alert, then Claude needing you: the pet hops all along
-        assert!(all(&ticks, 13.1, 22.0, SMOOTH_FRAME), "attention");
+        // the review's news comes in smoothly; then the pet stands holding its envelope, calm (fnt-72)
+        assert!(all(&ticks, 13.1, 14.2, SMOOTH_FRAME), "news coming");
+        assert!(all(&ticks, 14.5, 15.9, CALM_FRAME), "holding the news");
+        // Claude needing you: the pet hops all along
+        assert!(all(&ticks, 16.1, 22.0, SMOOTH_FRAME), "attention");
         // the script's busy first 30 s: about 13 s of it calm
         let calm: Duration = ticks
             .iter()
@@ -2185,7 +2353,8 @@ pub(crate) mod tests {
         assert_eq!(ui.frame_interval(), CALM_FRAME);
         // the body's frame flips every 20 ms: quicker than the calm rate shows
         let mut quick = ui.pet.loaded();
-        let body = quick.pack.layers[0].animations.get_mut("body").unwrap();
+        let at = quick.pack.layers.iter().position(|l| l.name == "body").unwrap();
+        let body = quick.pack.layers[at].animations.get_mut("body").unwrap();
         body.frames = vec![body.frames[0].clone(), body.frames[0].clone()];
         body.frames.iter_mut().for_each(|f| f.ms = 20);
         body.mode = aipet_sprite::pack::LoopMode::Loop;

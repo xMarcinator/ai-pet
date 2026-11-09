@@ -296,19 +296,24 @@ struct App {
     quitting: bool,
 }
 
+/// The pet's preferences into the config the file keeps.
+#[cfg(any(test, not(feature = "demo")))]
+fn apply_prefs(config: &mut aipet_core::config::Config, prefs: &aipet_ui::Prefs) {
+    config.pills = prefs.bubbles;
+    config.on_top = prefs.on_top;
+    config.music = prefs.music;
+    config.avatar = prefs.avatar.clone();
+    config.avatar_theme = prefs.avatar_theme.clone();
+    config.avatar_style = prefs.avatar_style.clone();
+    // a size at 100 % is the default, which the file leaves out
+    config.pet_size = (prefs.pet_size != 100).then_some(prefs.pet_size);
+    config.bubble_size = (prefs.bubble_size != 100).then_some(prefs.bubble_size);
+}
+
 #[cfg(not(feature = "demo"))]
 impl aipet_ui::Host for App {
     fn prefs(&mut self, prefs: &aipet_ui::Prefs) {
-        let written = self.config.change(|config| {
-            config.pills = prefs.bubbles;
-            config.on_top = prefs.on_top;
-            config.music = prefs.music;
-            config.avatar = prefs.avatar.clone();
-            config.avatar_theme = prefs.avatar_theme.clone();
-            // a size at 100 % is the default, which the file leaves out
-            config.pet_size = (prefs.pet_size != 100).then_some(prefs.pet_size);
-            config.bubble_size = (prefs.bubble_size != 100).then_some(prefs.bubble_size);
-        });
+        let written = self.config.change(|config| apply_prefs(config, prefs));
         if let Err(e) = written {
             aipet_core::log::write(&format!("config: can't write config.json: {e}"));
         }
@@ -395,6 +400,36 @@ fn tests_spawn<T>(spawn: impl FnOnce() -> T) -> T {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_style_goes_into_config_json_and_comes_back() {
+        // FNT-74 R4: the app's own copy of the preferences writes AvatarStyle, only when it is set
+        let dir = std::env::temp_dir().join(format!("aipet-style-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        let mut config = aipet_core::config::Config::default();
+        let prefs = aipet_ui::Prefs {
+            avatar: Some("Hood".into()),
+            avatar_style: Some("Vector".into()),
+            ..aipet_ui::Prefs::default()
+        };
+        apply_prefs(&mut config, &prefs);
+        config.save_to(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains(r#""Avatar":"Hood","AvatarStyle":"Vector""#), "{text}");
+        let (read, _) = aipet_core::config::Config::load_from(&path);
+        assert_eq!(aipet_ui::Prefs::from(&read).avatar_style.as_deref(), Some("Vector"));
+        apply_prefs(
+            &mut config,
+            &aipet_ui::Prefs {
+                avatar_style: None,
+                ..prefs
+            },
+        );
+        config.save_to(&path).unwrap();
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("AvatarStyle"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn a_panic_says_what_it_panicked_with() {

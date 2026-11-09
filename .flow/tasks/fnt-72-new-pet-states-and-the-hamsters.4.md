@@ -29,9 +29,10 @@ The Sprout and Hood pixel packs (Hood's Green theme included) are baked in Rust,
 - [ ] `tests/golden.rs` still passes
 
 ## Done summary
-TBD
+Baked pixel Sprout and Hood (Blue and Green) draw sleepy eyes and a yawn (tired), an envelope (news), tears, hearts, and the golden glow with stars; dust/fx/sparkles skip the new values. R22 now covers every built-in pack and theme, the state channel through each mood's own art or sign, and drawn art per value (a null fallback alone fails; a negative test proves it). UI tests updated: Sprout now shows news as news, calm while holding the envelope.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: af5cc36
+- Tests: cargo test --workspace, cargo clippy --workspace --all-targets
 - PRs:

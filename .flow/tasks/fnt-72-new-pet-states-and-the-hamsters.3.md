@@ -25,6 +25,7 @@ The Hamster's own look for the new states and its accessories, in both generator
 - `avatars/reference/hamster.png` - the reference the Hamster was drawn from
 
 ### Key context
+- Layer limit: the vector Hamster already has 16 layers, the most a pack may have (`MAX_LAYERS`); its new effects go in task 2's single new fx layer, so merge two of its existing layers (for example zs and notes into one fx layer with both values) to make room, and check it still loads.
 - `hamster_pixel_gen.py`'s docstring says `packs/hamster/`; the folder is `hamster-pixel`.
 
 ## Acceptance
@@ -33,9 +34,10 @@ The Hamster's own look for the new states and its accessories, in both generator
 - [ ] The owner reviews the Hamster pages (screenshot or the page) and approves
 
 ## Done summary
-TBD
+Hamster, vector and pixel: round glasses for lens (paws nubs, the eye scan kept, no magnifier), envelope, tears, yawn and sleepy eyes, the golden glow (first layer), heart on poke with a blush layer, blush in the done body, speed lines (its own fx layer, vector; in the dust frames, pixel), and new shading (darker orange down the right and bottom right; paws as nubs on the belly), replacing the 'back in the head's yellow' decision. Pixel generator: #RRGGBBAA colours for the glow's soft rings. Checked: the vector sheet and a pixel preview of each new state rendered; workspace tests pass (the single.rs lock race flakes under the full parallel suite, passes alone 5/5, predates this). Owner review: renders sent 2026-11-09, awaiting approval; changes asked for land on top.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 5708fef
+- Tests: cargo test --workspace
 - PRs:

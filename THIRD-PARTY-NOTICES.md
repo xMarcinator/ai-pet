@@ -57,6 +57,9 @@ lists for flate2.
 The Aseprite files in `rust/crates/aipet-sprite/tests/fixtures/asefile/` (MIT, Copyright (c) 2020 Alpine Alpaca
 Games) are test data only: nothing of them is built into AiPet. Their license is beside them.
 
+The Hamster's design, and the ideas for its newer states, come from JLandbo's [hamster-pet](https://github.com/JLandbo/hamster-pet), used with its author's permission. That repository
+carries no license, so this rests on the author's permission rather than a license.
+
 ## License texts
 
 ### MIT License

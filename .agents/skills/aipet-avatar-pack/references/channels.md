@@ -6,14 +6,22 @@ is asked for.
 
 | Channel | Values | Resting value |
 |---|---|---|
-| `state` | `idle`, `idle-look`, `idle-hop`, `idle-stretch`, `idle-wiggle`, `idle-tap`, `sleep`, `thinking`, `working`, `attention`, `done`, `listen` | `idle` |
-| `eyes` | `open`, `closed`, `blink`, `happy`, `squint`, `wide`, `up`, `down` (and a look direction) | `open` |
+| `state` | `idle`, `idle-look`, `idle-hop`, `idle-stretch`, `idle-wiggle`, `idle-tap`, `sleep`, `thinking`, `working`, `attention`, `done`, `listen`, `sad`, `tired`, `news` | `idle` |
+| `eyes` | `open`, `closed`, `blink`, `happy`, `squint`, `wide`, `up`, `down`, `sleepy` (and a look direction) | `open` |
 | `arms` | `rest`, `raised`, `wave-a`, `wave-b`, `run-a`, `run-b`, `hold`, `lens` | `rest` |
 | `feet` | `stand`, `tap`, `dangle-a`, `dangle-b`, `run-a`, `run-b` | `stand` |
-| `prop` | `none`, `laptop`, `lens` | `none` |
+| `prop` | `none`, `laptop`, `lens`, `envelope` | `none` |
 | `headphones` | `on`, `off` | `off` |
-| `fx` | `none`, `zs`, `dots`, `notes`, `alert`, `sparkles`, `dust`, and `zs+sparkles`, `dots+sparkles`, `notes+sparkles`, `alert+sparkles`, `dust+sparkles` | `none` |
+| `fx` | `none`, `zs`, `dots`, `notes`, `alert`, `sparkles`, `dust`, and `zs+sparkles`, `dots+sparkles`, `notes+sparkles`, `alert+sparkles`, `dust+sparkles`, `tears`, `aura`, `heart` | `none` |
 | `facing` | `left`, `right` | `right` |
+
+`lens` is whatever the pack draws for reading: a magnifier, or glasses (the Hamster). `tears`, `aura` and `heart`
+never combine with sparkles.
+
+**The newer states** (`sad`, `tired`, `news`). A pack that draws neither the state nor its sign (`tears`, the
+`envelope`, `sleepy` eyes) shows `sad` and `news` as `attention` and `tired` as `idle`. A done opens with `aura` (a
+golden glow, about 1.8 s) and a poke shows `heart` only where the pack draws them; otherwise both are sparkles. So an
+older pack still works, but every built-in pack draws all of them, and a new pet should too.
 
 Any of these may also be asked as `<value>@left` while the pet faces left: a layer that has it draws it unmirrored.
 
@@ -37,9 +45,10 @@ An effects layer per effect is the clearest pattern (the built-ins do it):
 ```json
 { "name": "zs", "channel": "fx", "default": "zs",
   "fallback": { "zs+sparkles": "zs", "none": null, "dots": null, "notes": null, "alert": null,
-                "sparkles": null, "dust": null } }
+                "sparkles": null, "dust": null, "tears": null, "aura": null, "heart": null } }
 { "name": "sparkles", "channel": "fx", "default": "sparkles",
-  "fallback": { "none": null, "zs": null, "dots": null, "notes": null, "alert": null, "dust": null } }
+  "fallback": { "none": null, "zs": null, "dots": null, "notes": null, "alert": null, "dust": null,
+                "tears": null, "aura": null, "heart": null } }
 ```
 
 The second one draws its sparkles for every `…+sparkles` by step 3. The first needs `"zs+sparkles": "zs"`, or step 3
@@ -55,12 +64,12 @@ them to the pack's values:
 
 | Generator pose | Pack value |
 |---|---|
-| `expr`: `open`, `sleep`, `blink`, `happy`, `squint`, `wide`, `up`, `down` | eyes `open`, `closed`, `blink`, `happy`, `squint`, `wide`, `up`, `down` |
+| `expr`: `open`, `sleep`, `blink`, `happy`, `squint`, `wide`, `up`, `down`, `sleepy` | eyes `open`, `closed`, `blink`, `happy`, `squint`, `wide`, `up`, `down`, `sleepy` |
 | `arms`: `rest`, `raised`, `wave` (`phase` 0/1), `run` (0/1), `hold` (+ laptop), `lens` (+ lens) | arms `rest`, `raised`, `wave-a`/`wave-b`, `run-a`/`run-b`, `hold`, `lens` |
 | `feet`: `stand`, `tap`, `dangle` (0/1), `run` (0/1) | feet `stand`, `tap`, `dangle-a`/`dangle-b`, `run-a`/`run-b` |
-| `prop`: none, `laptop`, `lens` | prop `none`, `laptop`, `lens` |
+| `prop`: none, `laptop`, `lens`, `envelope` | prop `none`, `laptop`, `lens`, `envelope` |
 | `headphones`: true | headphones `on` |
-| `fx`: none, `zs`, `dots`, `notes`, `alert`, `sparkles`, `dust` | fx values of the same names |
+| `fx`: none, `zs`, `dots`, `notes`, `alert`, `sparkles`, `dust`, `tears`, `aura`, `heart` | fx values of the same names (`aura` also draws the glow behind the body) |
 | `look`, `dx`, `dy`, `sx`, `sy`, `shadow`, `mirror` | the app's (look offsets, whole-body motion, shadow, facing): not drawn in the pack |
 | `scan` | the lens part's keys (`vector_pack.scan_keys`) |
 

@@ -6,11 +6,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::pose::{ART_H, ART_W, Channel, HALO_PAD, Look};
+use crate::pose::{ART_H, ART_W, Channel, Facing, HALO_PAD, Look};
 use crate::vector::{Cap, Join, Seg};
 
 /// At most this many layers in a pack.
-pub const MAX_LAYERS: usize = 16;
+pub const MAX_LAYERS: usize = 24;
 /// At most this many frames in a pack, over all its layers and animations.
 pub const MAX_FRAMES: usize = 512;
 /// At most this many parts in a vector pack, over all its layers.
@@ -46,6 +46,15 @@ impl Kind {
             "vector" => Kind::Vector,
             _ => return None,
         })
+    }
+
+    /// The style a pack of this kind is, unless it names its own (FNT-74).
+    pub fn label(self) -> &'static str {
+        match self {
+            Kind::Pixel => "Pixel",
+            Kind::Painted => "Painted",
+            Kind::Vector => "Vector",
+        }
     }
 }
 
@@ -584,12 +593,19 @@ pub fn theme_name(name: &str) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pack {
     pub name: String,
+    /// The pet this pack is a style of, where not the one its `name` names (FNT-74): `Hood (vector)` is the Hood's.
+    pub pet: Option<String>,
+    /// Its style's label, where not its kind's (two vector styles of one pet need their own).
+    pub style: Option<String>,
     pub kind: Kind,
     /// The art's pixel size in logical px (a pixel pack's grid cell; 1 for painted and vector art).
     pub pixel_size: f64,
     /// The art pixel that sits on the ground shadow.
     pub anchor: (f64, f64),
     pub mirror: Mirror,
+    /// Which way its art faces: `Right` (the default), or `Left` for a pet drawn turned to the left, which is mirrored
+    /// when it faces right. Effects are drawn as for a pet facing right, whatever this says.
+    pub faces: Facing,
     /// 0xAARRGGBB.
     pub accent: u32,
     pub glow: u32,
@@ -599,6 +615,16 @@ pub struct Pack {
 }
 
 impl Pack {
+    /// The pet it is a style of: its `pet`, else its name.
+    pub fn pet(&self) -> &str {
+        self.pet.as_deref().unwrap_or(&self.name)
+    }
+
+    /// Its style: its `style`, else its kind's (Pixel, Vector, Painted).
+    pub fn style(&self) -> &str {
+        self.style.as_deref().unwrap_or(self.kind.label())
+    }
+
     /// The same pet in other colours: each named colour in `colours` replaces the palette's, wherever the pack's
     /// shapes, accent and glow name it (a pixel pack's sheets change with [`crate::load::LoadedPack::recoloured`]).
     /// A name the palette lacks is the reason it can't.
@@ -717,6 +743,9 @@ pub(crate) mod tests {
             pixel_size: 5.0,
             anchor: (13.0, 22.0),
             mirror: Mirror::Flip,
+            faces: Facing::Right,
+            pet: None,
+            style: None,
             accent: 0xFF5CFF9C,
             glow: 0xFF5CFF9C,
             layers,

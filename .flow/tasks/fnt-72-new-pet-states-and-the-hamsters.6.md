@@ -30,9 +30,10 @@ Credit JLandbo's hamster-pet as the Hamster's origin, and describe the new state
 - [ ] The Dewdrop sample regenerates with the new values and its test passes
 
 ## Done summary
-TBD
+Docs for the new moods and values (MAKING-A-PET, ARCHITECTURE 3.2/3.3/5.3 with the parity claim qualified, both skill copies identical, HANDOFF, CHANGELOG); the Hamster credit to JLandbo/hamster-pet in README, avatars/README.md and THIRD-PARTY-NOTICES; README's Avatars entry fixed for FNT-74's styles; the Dewdrop sample's EFFECTS include tears, aura and heart, regenerated and checked.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: b068334
+- Tests: cargo test -p aipet-sprite, AiPet --check-pack avatars/samples/skill-example, diff -r of the two skill copies
 - PRs:

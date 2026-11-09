@@ -34,6 +34,15 @@ struct PackJson {
     anchor: [f64; 2],
     #[serde(default = "flip")]
     mirror: String,
+    /// The pet it is a style of, and the style's label, where not its name and its kind's (FNT-74; not written when
+    /// absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pet: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    style: Option<String>,
+    /// `right` (the default, not written) or `left`: which way the art faces.
+    #[serde(default = "right", skip_serializing_if = "is_right")]
+    faces: String,
     accent: String,
     glow: String,
     /// The default theme's named colours: shapes, the accent and the glow may use them as `$name` (vector packs), or
@@ -52,6 +61,14 @@ struct PackJson {
 
 fn flip() -> String {
     "flip".to_owned()
+}
+
+fn right() -> String {
+    "right".to_owned()
+}
+
+fn is_right(faces: &String) -> bool {
+    faces == "right"
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -234,6 +251,9 @@ pub fn write(pack: &Pack) -> String {
         pixel_size: pack.pixel_size,
         anchor: [pack.anchor.0, pack.anchor.1],
         mirror: mirror_name(pack.mirror).to_owned(),
+        faces: pack.faces.key().to_owned(),
+        pet: pack.pet.clone(),
+        style: pack.style.clone(),
         accent: match &pack.palette.accent {
             Some(name) => format!("${name}"),
             None => colour(pack.accent),
@@ -616,6 +636,13 @@ pub fn read(text: &str, mut sheet: impl FnMut(&str) -> Result<Sheet, String>) ->
         pixel_size: json.pixel_size,
         anchor: (json.anchor[0], json.anchor[1]),
         mirror: parse_mirror(&json.mirror)?,
+        faces: match json.faces.as_str() {
+            "right" => crate::pose::Facing::Right,
+            "left" => crate::pose::Facing::Left,
+            other => return Err(format!("unknown faces {other:?} (left or right)")),
+        },
+        pet: json.pet.clone().filter(|p| !p.trim().is_empty()),
+        style: json.style.clone().filter(|s| !s.trim().is_empty()),
         accent: match paint(&json.accent).map_err(|e| format!("the accent: {e}"))? {
             (Some(c), name) if name.is_some() => c,
             _ => parse_colour(&json.accent)?,
@@ -888,8 +915,22 @@ mod tests {
         let none = |_: &str| -> Result<Sheet, String> { Err("missing".into()) };
         let newer = text.replacen("\"format_version\": 1", "\"format_version\": 2", 1);
         assert!(read(&newer, none).unwrap_err().contains("newer"));
-        let tail = text.replacen("\"channel\": \"state\"", "\"channel\": \"tail\"", 1);
+        // the first layer, so its channel is read before any of its sheets
+        let tail = text.replacen("\"channel\": \"fx\"", "\"channel\": \"tail\"", 1);
         assert!(read(&tail, none).unwrap_err().contains("unknown channel"));
+    }
+
+    #[test]
+    fn faces_reads_left_or_right_and_is_written_only_when_left() {
+        let b = bake(&Avatar::sprout());
+        let files = files(&b.pack, &b.sheets);
+        let text = write(&b.pack);
+        assert!(!text.contains("faces"), "right, the default, isn't written");
+        let with = |faces: &str| text.replacen("\"mirror\"", &format!("\"faces\": \"{faces}\",\n  \"mirror\""), 1);
+        let (left, _) = read(&with("left"), from(&files)).unwrap();
+        assert_eq!(left.faces, crate::pose::Facing::Left);
+        assert!(write(&left).contains("\"faces\": \"left\""));
+        assert!(read(&with("up"), from(&files)).unwrap_err().contains("unknown faces"));
     }
 
     /// A vector pack with a body shape and the given eyes layer, for the R18 fields.

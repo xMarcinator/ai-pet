@@ -50,9 +50,15 @@ pub struct Pick<'a> {
     pub mirrored: bool,
 }
 
-/// Whether the pose's facing mirrors a layer: by its own policy, else the pack's.
+/// Whether the pose's facing mirrors a layer: by its own policy, else the pack's, when the pet faces away from the way
+/// the art does (the pack's `faces`; effects are always drawn as for a pet facing right).
 pub fn mirrored(pack: &Pack, layer: &Layer, pose: &Pose) -> bool {
-    pose.facing == Facing::Left && layer.mirror.unwrap_or(pack.mirror) == Mirror::Flip
+    let drawn = if layer.channel == Channel::Fx {
+        Facing::Right
+    } else {
+        pack.faces
+    };
+    pose.facing != drawn && layer.mirror.unwrap_or(pack.mirror) == Mirror::Flip
 }
 
 /// The pose's look is a direction on screen; a layer mirrored for facing left draws the opposite one, so the
@@ -364,6 +370,72 @@ pub fn flatten(pack: &Pack, sheets: &[crate::bake::Sheet], pose: &Pose, t: f64) 
     (w as u32, h as u32, out)
 }
 
+/// How high a pack's `fx` value reaches, in art-box px from the box's top (negative above it), with the body at rest:
+/// the topmost drawn pixel of its `fx` layers, every 0.1 s through the first 3 s of their animations, to the nearest
+/// art-box px, so the bubbles can stay clear
+/// of it (fn-2 R24). `sparkles` asks for the value with sparkles on top (`dots+sparkles`). None when nothing is drawn.
+pub fn fx_top(pack: &Pack, sheets: &[crate::bake::Sheet], fx: crate::pose::Fx, sparkles: bool) -> Option<f64> {
+    const MARGIN: f64 = 60.0;
+    const SCALE: f64 = 1.0;
+    let pose = Pose::scripted(
+        crate::pose::Values {
+            fx,
+            sparkles,
+            ..crate::pose::Values::IDLE
+        },
+        0.0,
+    );
+    let is_fx = |i: usize| pack.layers[i].channel == Channel::Fx;
+    let mut top: Option<f64> = None;
+    let mut reach = |y: f64| top = Some(top.map_or(y, |t: f64| t.min(y)));
+    for step in 0..=30 {
+        let t = f64::from(step) * 0.1;
+        if pack.kind == Kind::Vector {
+            let placed = Parts::default().place(pack, &pose, t);
+            let items = crate::vector::scene(pack, &placed, &pose);
+            let view = crate::vector::View {
+                w: ((ART_W + 2.0 * MARGIN) * SCALE) as u32,
+                h: ((ART_H + MARGIN) * SCALE) as u32,
+                x0: -MARGIN,
+                y0: -MARGIN,
+                scale: SCALE,
+            };
+            let px = crate::vector::render(&items, view, |item| is_fx(item.layer));
+            if let Some(row) = px
+                .chunks(view.w as usize * 4)
+                .position(|r| r.chunks(4).any(|p| p[3] > 8))
+            {
+                reach(view.y0 + row as f64 / SCALE);
+            }
+            continue;
+        }
+        let offsets = Parts::default().raster_offsets(pack, &pose, t);
+        for p in pick(pack, &pose, t).into_iter().filter(|p| is_fx(p.layer)) {
+            let Some(crate::pack::Art::Raster {
+                sheet,
+                x,
+                y,
+                w,
+                h,
+                pivot,
+            }) = p
+                .frame
+                .map(|f| pack.layers[p.layer].animations[p.value].frames[f].art.clone())
+            else {
+                continue;
+            };
+            let s = &sheets[sheet];
+            let opaque =
+                (0..h).position(|fy| (0..w).any(|fx| s.pixels[((y + fy) * s.width + x + fx) as usize] >> 24 != 0));
+            if let Some(row) = opaque {
+                let oy = (offsets[p.layer].1 / pack.pixel_size).round() - pivot.1;
+                reach((oy + row as f64) * pack.pixel_size);
+            }
+        }
+    }
+    top
+}
+
 /// The rows of a frame's pixels with any alpha, as (x, y, length), from premultiplied `0xAARRGGBB` pixels in rows of
 /// `width`.
 pub fn runs_argb(pixels: &[u32], width: usize) -> Vec<(i32, i32, i32)> {
@@ -642,6 +714,23 @@ mod tests {
         let placed = Parts::default().place(&p, &left, 0.0);
         assert_eq!(placed[0].x, ART_W - x);
         assert!(placed[0].mirrored);
+    }
+
+    #[test]
+    fn art_drawn_facing_left_mirrors_when_the_pet_faces_right_and_effects_dont_follow_it() {
+        // the Hamster is drawn turned to the left: dragged right it must turn right, dragged left stay as drawn
+        let mut p = eyes_pack(Kind::Vector);
+        p.faces = Facing::Left;
+        p.layers.push(Layer::new("dust", Channel::Fx, "dust"));
+        let (body, dust) = (&p.layers[0], &p.layers[1]);
+        let mut pose = looking(Look::CENTER);
+        pose.facing = Facing::Right;
+        assert!(mirrored(&p, body, &pose) && !mirrored(&p, dust, &pose));
+        pose.facing = Facing::Left;
+        assert!(!mirrored(&p, body, &pose) && mirrored(&p, dust, &pose));
+        // a pack drawn facing right is as before
+        p.faces = Facing::Right;
+        assert!(mirrored(&p, &p.layers[0], &pose));
     }
 
     #[test]
