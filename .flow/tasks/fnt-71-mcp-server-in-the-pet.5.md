@@ -4,7 +4,7 @@ satisfies: [R7, R8, R11]
 # fnt-71-mcp-server-in-the-pet.5 Avatar, settings and board tools through the pet
 
 ## Description
-Give the listener a command channel to the pet (the scene that owns Prefs and the config store; the pet thread after FNT-75) with a reply, and build `list_avatars`, `wear_avatar`, `get_settings`, `set_settings`, `get_board` and `dismiss_card` on it. The pet applies each command as it applies the matching Settings message would and saves through the same `save_prefs` path. Nothing here may depend on Settings: the tools work with Settings closed, absent or (later) in another process.
+Give the listener a command channel to the pet (the scene that owns Prefs and the config store; the pet thread after FNT-75) with a reply, and build `list_avatars`, `wear_avatar`, `get_settings`, `set_settings`, `get_board` and `dismiss_card` on it. The pet applies each command as it applies the matching Settings message, and saves through the same `save_prefs` path. Nothing here may depend on Settings: the tools work with Settings closed, absent or (later) in another process.
 
 **Size:** M
 **Files:** `rust/crates/aipet-ui/src/lib.rs`, `rust/crates/aipet-desktop/src/shell.rs`, `rust/crates/aipet-wayland/src/**`, `rust/crates/aipet/src/core_thread.rs`, `rust/crates/aipet-mcp/src/tools.rs` (new)
