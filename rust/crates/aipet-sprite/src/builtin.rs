@@ -41,7 +41,8 @@ const HOOD_VECTOR: Files = pack!("hood-vector": "pack.json");
 const HAMSTER_VECTOR: Files = pack!("hamster-vector": "pack.json");
 const SPROUT_VECTOR: Files = pack!("sprout-vector": "pack.json");
 const HAMSTER_PIXEL: Files = pack!("hamster-pixel": "pack.json", "body.png", "feet.png", "prop.png", "screen.png",
-    "arms.png", "headphones.png", "eyes.png", "fx.png", "sparkles.png", "dust.png");
+    "arms.png", "headphones.png", "eyes.png", "fx.png", "sparkles.png", "dust.png", "aura-glow.png", "tears.png",
+    "blush.png", "heart.png", "aura.png");
 
 /// The built-in pets, in order.
 pub fn all() -> Vec<LoadedPack> {

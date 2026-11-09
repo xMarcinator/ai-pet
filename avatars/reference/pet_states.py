@@ -25,8 +25,9 @@ PAPER, PAPER_SHADE = "#FFFDF4", "#E6DCC4"
 AURA_BOX = (130, 132, 96, 104)
 
 # Every state, in the order the pages show them. Pose keys: expr, look (dx, dy), arms (rest, wave, raised, hold,
-# lens, run), feet (stand, tap, run, dangle), prop (None, laptop, lens), headphones, fx (None, zs, dots, notes, alert,
-# sparkles, dust), dx/dy (whole-body offset), sx/sy (squash about the ground), shadow (scale, opacity), mirror.
+# lens, run), feet (stand, tap, run, dangle), prop (None, laptop, lens, envelope), headphones, fx (None, zs, dots, notes,
+# alert, sparkles, dust, tears, aura, heart), dx/dy (whole-body offset), sx/sy (squash about the ground), shadow
+# (scale, opacity), mirror; fnt-72's yawn (tired) and blush (done and the poke's heart, for the pets that blush).
 STATES = [
     ("idle", "mood", {}),
     ("idle: look around", "idle act", {"look": (-6, 0)}),
@@ -40,8 +41,8 @@ STATES = [
     ("working: laptop", "mood", {"expr": "down", "look": (2, 0), "arms": "hold", "prop": "laptop"}),
     ("working: searching the web (magnifier)", "mood", {"arms": "lens", "prop": "lens", "scan": 0, "look": (-4, 0)}),
     ("attention", "mood", {"arms": "wave", "fx": "alert", "dy": -18, "shadow": (0.85, 0.8)}),
-    ("done (first 4 s)", "mood", {"expr": "happy", "arms": "wave", "fx": "sparkles", "dy": -16}),
-    ("done (after 4 s)", "mood", {"expr": "happy", "fx": "sparkles"}),
+    ("done (first 4 s)", "mood", {"expr": "happy", "arms": "wave", "fx": "sparkles", "dy": -16, "blush": True}),
+    ("done (after 4 s)", "mood", {"expr": "happy", "fx": "sparkles", "blush": True}),
     ("listen (music)", "mood", {"expr": "happy", "headphones": True, "fx": "notes", "dy": -6, "dx": 3}),
     ("music while busy (headphones)", "mood", {"expr": "down", "look": (2, 0), "arms": "hold", "prop": "laptop",
                                                "headphones": True}),
@@ -49,11 +50,13 @@ STATES = [
     ("sad (a turn failed)", "mood", {"expr": "down", "fx": "tears", "dy": 3}),
     ("tired (yawning)", "mood", {"expr": "sleepy", "yawn": True}),
     ("news (a review arrived)", "mood", {"arms": "hold", "prop": "envelope", "dy": -3}),
-    ("done: the aura (first 1.8 s)", "mood", {"expr": "happy", "arms": "wave", "fx": "aura", "dy": -16}),
+    ("done: the aura (first 1.8 s)", "mood", {"expr": "happy", "arms": "wave", "fx": "aura", "dy": -16,
+                                              "blush": True}),
     ("hover: eyes follow the pointer", "reaction", {"look": (-5, -4)}),
     ("hello wave", "reaction", {"expr": "happy", "arms": "wave"}),
     ("poked", "reaction", {"expr": "squint", "fx": "sparkles", "dy": -18, "sx": 1.04, "sy": 0.96}),
-    ("poked: the heart", "reaction", {"expr": "squint", "fx": "heart", "dy": -18, "sx": 1.04, "sy": 0.96}),
+    ("poked: the heart", "reaction", {"expr": "squint", "fx": "heart", "dy": -18, "sx": 1.04, "sy": 0.96,
+                                      "blush": True}),
     ("landing: in the air", "reaction", {"expr": "happy", "dy": -20, "shadow": (0.8, 0.7)}),
     ("landing: impact", "reaction", {"expr": "happy", "sx": 1.08, "sy": 0.9, "dy": 2}),
     ("dragged: running", "reaction", {"arms": "run", "feet": "run", "fx": "dust", "look": (6, 0), "dy": -6}),

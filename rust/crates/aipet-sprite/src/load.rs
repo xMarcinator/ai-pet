@@ -2096,7 +2096,8 @@ mod tests {
                 assert_eq!(before, after, "the effects layer {} is as it was", layer.name);
             }
         }
-        assert_ne!(hamster.sheets[0], blue.sheets[0], "the body is orange somewhere");
+        let body = hamster.pack.layers.iter().position(|l| l.name == "body").unwrap();
+        assert_ne!(hamster.sheets[body], blue.sheets[body], "the body is orange somewhere");
         let fx = hamster.pack.layers.iter().position(|l| l.name == "fx").unwrap();
         assert!(hamster.sheets[fx].pixels.contains(&orange), "the notes take the accent");
         assert!(
