@@ -1,10 +1,10 @@
 ---
 satisfies: [R7, R8, R11]
 ---
-# fnt-71-mcp-server-in-the-pet.5 Avatar, settings and board tools through the UI thread
+# fnt-71-mcp-server-in-the-pet.5 Avatar, settings and board tools through the pet
 
 ## Description
-Give the listener a command channel to the UI thread with a reply, and build `list_avatars`, `wear_avatar`, `get_settings`, `set_settings`, `get_board` and `dismiss_card` on it. The UI applies each command as the matching Settings message would and saves through the same `save_prefs` path.
+Give the listener a command channel to the pet (the scene that owns Prefs and the config store; the pet thread after FNT-75) with a reply, and build `list_avatars`, `wear_avatar`, `get_settings`, `set_settings`, `get_board` and `dismiss_card` on it. The pet applies each command as it applies the matching Settings message would and saves through the same `save_prefs` path. Nothing here may depend on Settings: the tools work with Settings closed, absent or (later) in another process.
 
 **Size:** M
 **Files:** `rust/crates/aipet-ui/src/lib.rs`, `rust/crates/aipet-desktop/src/shell.rs`, `rust/crates/aipet-wayland/src/**`, `rust/crates/aipet/src/core_thread.rs`, `rust/crates/aipet-mcp/src/tools.rs` (new)
@@ -28,7 +28,7 @@ Give the listener a command channel to the UI thread with a reply, and build `li
 - `config.json` must stay byte-compatible with the .NET pet (`aipet/src/config.rs`).
 
 ## Acceptance
-- [ ] Tests drive each tool against a headless UI and see the Prefs, worn avatar and saved `config.json` match what the Settings message produces
+- [ ] Tests drive each tool against a headless pet, with no Settings, and see the Prefs, worn avatar and saved `config.json` match what the Settings message produces
 - [ ] The six tools are in task 2's conformance table
 - [ ] An out-of-range size, unknown pet, style or theme, and unknown card id each give `isError` and change nothing
 - [ ] `wear_avatar {name: "Hood", style: "Vector"}` wears the vector Hood; `list_avatars` lists four built-in pets with their styles
