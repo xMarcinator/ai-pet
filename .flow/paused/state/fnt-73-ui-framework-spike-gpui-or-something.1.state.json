@@ -1,0 +1,17 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-11-09T12:44:30.677804Z",
+  "evidence": {
+    "commits": [
+      "054c817",
+      "0d2f01a",
+      "df8c5f6"
+    ],
+    "tests": [
+      "spikes/ui-framework/calm.sh with MAX_LOAD=3"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-09T19:05:59.862534Z"
+}

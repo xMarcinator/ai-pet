@@ -1,0 +1,18 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-11-09T12:45:25.147421Z",
+  "evidence": {
+    "commits": [
+      "b6c000a",
+      "ed0ab02"
+    ],
+    "prs": [],
+    "tests": [
+      "cargo test -p aipet-ui (every_built_in_pets_effects_stay_below_the_bubbles_at_every_size)",
+      "cargo test -p aipet-sprite (the_body_never_lifts_an_effect_further_than_fx_lift_says)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-09T12:55:02.273582Z"
+}

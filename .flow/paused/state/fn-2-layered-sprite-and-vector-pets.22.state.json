@@ -1,0 +1,16 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-11-09T09:45:01.937245Z",
+  "evidence": {
+    "commits": [
+      "30bfc47"
+    ],
+    "prs": [],
+    "tests": [
+      "cargo test -p aipet-sprite (87+5+5+2 passed)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-09T09:47:06.131318Z"
+}
