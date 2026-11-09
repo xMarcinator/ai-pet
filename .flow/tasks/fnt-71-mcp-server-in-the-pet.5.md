@@ -12,7 +12,7 @@ Give the listener a command channel to the UI thread with a reply, and build `li
 
 ### Approach
 - Add a `News` variant carrying a command and a oneshot reply (`aipet-ui/src/lib.rs:167-183`); the shells already drain `News` each frame (`aipet-desktop/src/shell.rs:361-366`, Wayland similar). Check the drain still runs when the pet is asleep or hidden; if frames stop, wake the shell.
-- Map commands onto existing messages: `SelectAvatar`, `SelectTheme`, `SetPetSize`, `SetBubbleSize`, `SetBubbles`, `SetOnTop`, `SetMusic` (`lib.rs:96-136`); validate ranges against `geometry.rs` before sending.
+- Map commands onto existing messages: `SelectAvatar` (a pet's default style, by `load::groups`), `SelectStyle` (FNT-74), `SelectTheme`, `SetPetSize`, `SetBubbleSize`, `SetBubbles`, `SetOnTop`, `SetMusic` (`lib.rs:96-136`); validate ranges against `geometry.rs` before sending.
 - Board: read the latest `Arc<Board>` the core thread publishes; dismiss through `Handle::dismiss` (`aipet/src/core_thread.rs`).
 - 5 s reply timeout -> `isError`.
 
@@ -30,7 +30,8 @@ Give the listener a command channel to the UI thread with a reply, and build `li
 ## Acceptance
 - [ ] Tests drive each tool against a headless UI and see the Prefs, worn avatar and saved `config.json` match what the Settings message produces
 - [ ] The six tools are in task 2's conformance table
-- [ ] An out-of-range size, unknown avatar or theme, and unknown card id each give `isError` and change nothing
+- [ ] An out-of-range size, unknown pet, style or theme, and unknown card id each give `isError` and change nothing
+- [ ] `wear_avatar {name: "Hood", style: "Vector"}` wears the vector Hood; `list_avatars` lists four built-in pets with their styles
 - [ ] A UI that never replies gives `isError` after 5 s
 - [ ] Hands-on: an open Settings window shows a size changed by the tool
 

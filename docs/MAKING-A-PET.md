@@ -184,7 +184,9 @@ The top-level keys:
 | Key | What it is |
 |---|---|
 | `format_version` | `1`. A pack with a newer version than the app reads is skipped. |
-| `name` | The pet's name, as the Avatars page shows it and `config.json` saves it. A built-in pet wins a name; of two of your own with one name, the first in sorted folder order loads and the other is skipped. |
+| `name` | This drawing's name, unique among all packs: the pet's name for its main style (`Hood`), else something like `Hood (vector)`. A built-in wins a name; of two of your own with one name, the first in sorted folder order loads and the other is skipped. |
+| `pet` | The pet this pack is a style of, where that isn't its `name` (`Hood (vector)` is the Hood's). A pack inside a pet folder is the folder's pet unless it says. |
+| `style` | The style's label, where it isn't the kind's (Pixel, Vector or Painted): two styles of one kind need their own, such as `Chibi`. |
 | `kind` | `pixel`, `painted` or `vector` (see below). |
 | `pixel_size` | How big one pixel of the art is, in logical px: 5 for the 26 × 24 grid of the original pets, 1 for vector art. |
 | `anchor` | `[x, y]`: the point of the art that stands on the ground shadow, in the art's own pixels. |
@@ -332,6 +334,23 @@ A value may only move parts: give it a pose or a part animation and no frames, a
 frames (else its default's) where the pose puts the part. A vector layer does the same with shapes. In an
 Aseprite file the part's slice gives the poses: draw the part in the same place on every tag, and move the slice
 on each tag's first frame to where the part should go, since the pet moves the frame by the slice's move.
+
+## Pets and styles
+
+A pet can be drawn more than one way: the built-in Hood is a pixel pack and a vector pack. Each drawing is a **style**
+of the pet, and the Avatars page shows the pet once, with a **Style** choice beside its themes. A style's name is its
+kind (Pixel, Vector, Painted) unless its manifest gives a `style` label.
+
+Ship several styles of one pet as a **pet folder**: a folder named for the pet with a pack folder per style inside,
+such as `avatars/Fox/pixel/pack.json` and `avatars/Fox/vector/pack.json`. Each style is a normal pack and checks on its
+own; `AiPet --check-pack avatars/Fox` checks them all, a line each. A pack folder elsewhere joins a pet with
+`"pet": "Fox"`, so a style can be added to a pet, a built-in one too.
+
+The pet wears its **default style** unless asked for another: the drawing whose `name` is the pet's, else the first
+loaded. Pack names stay unique, and no pack may be named as another pet: a pack that repeats a name, repeats a pet's
+style, or takes another pet's name is skipped with the reason, and a built-in always wins. Each style has its own
+themes, since styles name different colours; switching style keeps the theme where the new style has one by that
+name.
 
 ## Themes
 

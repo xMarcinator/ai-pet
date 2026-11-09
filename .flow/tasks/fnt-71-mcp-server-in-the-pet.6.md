@@ -14,7 +14,7 @@ Move the theme file logic out of the Avatars page into shared code, then build `
 - Extract naming, save and delete from `aipet-ui/src/settings/avatars.rs:103-120,372-470,589-640` into `aipet-sprite`; the page calls the extracted functions (equivalence: the page's existing tests plus a before/after file listing for New/Edit/Delete).
 - Name allowlist and path containment per the spec's Edge Cases; delete moves to `<data>/trash/` (outside `<data>/avatars/`, so the loader never lists it). Deleting the worn theme sends `SelectTheme` default through task 5's channel.
 - `check_pack` calls `load::check` (`aipet-sprite/src/load.rs:986`), the same function `--check-pack` uses (`aipet/src/main.rs:62-76`).
-- `install_pack`: canonicalize, require under the home dir, copy into `<data>/staging/<uuid>` without following symlinks, counting bytes and entries as it walks and stopping at 64 MiB or 2,000 entries. Then `check`. Refuse an existing name unless `replace`. Install with a serialized swap (one install at a time behind a mutex): rename an existing pack to `<data>/staging/<uuid>.old`, rename the staged pack into `<data>/avatars/<name>`, restore the backup if that rename fails, delete the backup only after success. Then reload via the UI channel. Clean staging on every exit path.
+- `install_pack`: canonicalize, require under the home dir, copy into `<data>/staging/<uuid>` without following symlinks, counting bytes and entries as it walks and stopping at 64 MiB or 2,000 entries. Then `check`. Refuse an existing pet and style, or name, unless `replace` (FNT-74: `load::groups`, the loader's clash rules); replacing a built-in style is refused; the folder to swap is the existing user style's own folder, found from where it loaded, not `<data>/avatars/<name>`. Install with a serialized swap (one install at a time behind a mutex): rename an existing pack to `<data>/staging/<uuid>.old`, rename the staged pack into `<data>/avatars/<name>`, restore the backup if that rename fails, delete the backup only after success. Then reload via the UI channel. Clean staging on every exit path.
 
 ### Investigation targets
 **Required:**
@@ -35,6 +35,7 @@ Move the theme file logic out of the Avatars page into shared code, then build `
 - [ ] The five tools are in task 2's conformance table
 - [ ] `check_pack` output equals `AiPet --check-pack` output for the fixture packs
 - [ ] An installed pack appears in `list_avatars` and can be worn
+- [ ] Tests: replacing a user style whose folder is named differently swaps that folder; replacing a built-in style is `isError`
 
 ## Done summary
 TBD

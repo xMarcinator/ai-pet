@@ -8,7 +8,9 @@ accept; `docs/MAKING-A-PET.md` ("The manifest", "Part motion") explains the same
 | Key | Required | Value |
 |---|---|---|
 | `format_version` | yes | `1`. Newer than the app reads: the pack is skipped. |
-| `name` | yes | The pet's name, shown on the Avatars page and saved as `Avatar` in `config.json`. A built-in pet wins a name; of two user packs with one name, the first folder in sorted order loads and the other is skipped ("a pet named … is already loaded"). |
+| `name` | yes | This drawing's name, unique among all packs: the pet's name for its main style, else like `Hood (vector)`. A built-in wins a name; of two user packs with one name, the first folder in sorted order loads and the other is skipped ("a pet named … is already loaded"). |
+| `pet` | no | The pet this pack is a style of, where not its `name`. A pack inside a pet folder (`avatars/<Pet>/<style>/`) is that pet's unless it says. One pet shows once on the Avatars page, its packs as styles; a pack repeating a pet's style, or named as another pet, is skipped. |
+| `style` | no | The style's label, where not the kind's (Pixel, Vector, Painted); needed for two styles of one kind. |
 | `kind` | yes | `pixel`, `painted` or `vector`. (`rive` is not read: see `rive.md`.) |
 | `pixel_size` | yes | Logical px per art pixel, above 0 and at most 130. 1 for vector; 5 for a 26 × 24 grid; below 1 for painted art drawn at more than 1 px per logical px. |
 | `anchor` | yes | `[x, y]`: the art point that stands on the ground shadow, in art pixels (vector: logical px, `[65, 110]`). |
