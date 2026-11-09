@@ -53,8 +53,9 @@ CROWN = "M121 51 C126 49 134 49 139 51"
 FACE_LIP = ("M84 104 C85 80 105 64 130 64 C155 64 175 80 176 104 C170 86 152 74 130 74 C108 74 90 86 84 104 Z")
 FACE = "M130 72 C155 72 174 88 174 110 C174 132 155 148 130 148 C105 148 86 132 86 110 C86 88 105 72 130 72 Z"
 
-# The drawstrings: from the hood opening's lower corners, curving in a little, to their tips.
-LACES = [("M109 141 C106 154 106 168 108 180", (108, 184)), ("M151 141 C154 154 154 168 152 180", (152, 184))]
+# The drawstrings: from the hood opening's lower corners, curving in a little, to their tips; pulled unevenly, so the
+# screen-left one hangs shorter than the screen-right one.
+LACES = [("M109 141 C106 151 106 162 108 171", (108, 175)), ("M151 141 C154 156 154 174 152 189", (152, 193))]
 
 EYE_L, EYE_R = (111, 110), (149, 110)   # local origins (eye centres)
 HAND_L, HAND_R = (70, 180), (190, 180)  # resting: in front of the robe; waving/raised float outside  # floating free beside the robe  # screen-left / screen-right in the unmirrored drawing
