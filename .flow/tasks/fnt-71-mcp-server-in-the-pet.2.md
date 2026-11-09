@@ -1,5 +1,5 @@
 ---
-satisfies: [R2, R3, R11, R13]
+satisfies: [R2, R3, R11, R13, R15]
 ---
 # fnt-71-mcp-server-in-the-pet.2 Listener thread, token, both MCP eras and the status tool, measured against R18
 
@@ -36,6 +36,7 @@ Add the pet's HTTP listener: a new crate with its own thread and current-thread 
 - If fnt-70's hakari workspace-hack exists by then, regenerate it.
 
 ## Acceptance
+- [ ] RSS with the listener on and an agent connected is at most 5 MB above the listener off, paired in one run; it settles back within 60 s after a cap-size hook body (R15)
 - [ ] Tests: no token or a wrong token gets 401; a bad Origin gets 403; a non-loopback Host gets 403; a 5 MiB body gets 413
 - [ ] Tests: a 2026-07-28 stateless `tools/call status` and a 2025-11-25 `initialize` + `Mcp-Session-Id` session both succeed; an unknown session id gets 404
 - [ ] A second pet on the same port logs once and keeps running without the listener

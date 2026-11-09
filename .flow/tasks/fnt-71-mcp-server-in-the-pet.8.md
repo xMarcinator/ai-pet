@@ -1,5 +1,5 @@
 ---
-satisfies: [R13, R14]
+satisfies: [R13, R14, R15]
 ---
 # fnt-71-mcp-server-in-the-pet.8 Docs, budgets and hands-on pass for the MCP server
 
@@ -26,6 +26,7 @@ Final measurement with every tool built, the Windows hands-on pass with the owne
 - Windows: Git Bash only, never PowerShell; GUI checks need the owner present.
 
 ## Acceptance
+- [ ] R15 measured on Linux and Windows and recorded
 - [ ] R13's numbers recorded for Linux and Windows and within budget
 - [ ] Windows hands-on pass recorded with the owner
 - [ ] Every doc in R14 updated; the two skill copies are identical
