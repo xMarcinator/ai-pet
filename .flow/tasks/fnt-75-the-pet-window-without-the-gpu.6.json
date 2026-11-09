@@ -4,7 +4,8 @@
   "claimed_at": null,
   "created_at": "2026-11-09T19:36:54.003586Z",
   "depends_on": [
-    "fnt-75-the-pet-window-without-the-gpu.4"
+    "fnt-75-the-pet-window-without-the-gpu.4",
+    "fnt-75-the-pet-window-without-the-gpu.5"
   ],
   "id": "fnt-75-the-pet-window-without-the-gpu.6",
   "priority": null,
@@ -12,5 +13,5 @@
   "spec_path": ".flow/tasks/fnt-75-the-pet-window-without-the-gpu.6.md",
   "status": "todo",
   "title": "The X11 shell: ARGB window, MIT-SHM and SHAPE, also for Wayland without layer-shell",
-  "updated_at": "2026-11-09T19:43:49.219530Z"
+  "updated_at": "2026-11-09T19:45:42.231932Z"
 }

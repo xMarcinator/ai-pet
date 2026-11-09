@@ -13,9 +13,9 @@
   "id": "fnt-75-the-pet-window-without-the-gpu",
   "impl_review_rounds": {},
   "next_task": 1,
-  "plan_review_rounds": 1,
+  "plan_review_rounds": 2,
   "plan_review_status": "needs_work",
-  "plan_reviewed_at": "2026-11-09T19:42:46.514496Z",
+  "plan_reviewed_at": "2026-11-09T19:45:21.686395Z",
   "review_attempts": [
     {
       "artifact_sha256": "0c5e83b70ed0af95904af5a11d01a23ae5b64744d1f1040ce5c6e33146270bf9",
@@ -125,6 +125,130 @@
       "timestamp": "2026-11-09T19:42:46.487548Z",
       "tool_calls": 17,
       "verdict": "NEEDS_WORK"
+    },
+    {
+      "artifact_sha256": "560bc84d123cd1798d0825954d9aee6736f7371307273e272384dd32454c6b6b",
+      "backend": "codex",
+      "base_sha": "61a47b6815e2349a7ae325fae2e06959b1e58094",
+      "counter_kind": "plan",
+      "effort": "high",
+      "failure_class": null,
+      "finalized": {
+        "digest": "complete",
+        "receipt": "complete",
+        "status": "complete"
+      },
+      "findings_digest": {
+        "backend": "codex",
+        "digest_truncated": false,
+        "items": [
+          {
+            "chainRoot": "finding-23c8a03730d3a669e0de14ae04e41c7f",
+            "classification": "introduced",
+            "findingId": "finding-23c8a03730d3a669e0de14ae04e41c7f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-f09aae5e38c08e4373d986c4fac76849",
+            "classification": "introduced",
+            "findingId": "finding-f09aae5e38c08e4373d986c4fac76849",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-15c3abbd607fe7ba77edd1df41f7c1cf",
+            "classification": "introduced",
+            "findingId": "finding-15c3abbd607fe7ba77edd1df41f7c1cf",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-e851fed3f675646bcfa57f88f1b29b1f",
+            "classification": "introduced",
+            "findingId": "finding-e851fed3f675646bcfa57f88f1b29b1f",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-bec80f0a45e3d70589e69269a9ac5aa6",
+            "classification": "introduced",
+            "findingId": "finding-bec80f0a45e3d70589e69269a9ac5aa6",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-094457c0010f5025b46dba50e078ec74",
+            "classification": "introduced",
+            "findingId": "finding-094457c0010f5025b46dba50e078ec74",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "not_fixed"
+          },
+          {
+            "chainRoot": "finding-ddad57ce5ecf0e216ead2339674679da",
+            "classification": "introduced",
+            "findingId": "finding-ddad57ce5ecf0e216ead2339674679da",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-36339a79f6d1302f52022209a2d4b694",
+            "classification": "introduced",
+            "findingId": "finding-36339a79f6d1302f52022209a2d4b694",
+            "firstSeenThisRound": true,
+            "severity": "P1",
+            "status": "open"
+          },
+          {
+            "chainRoot": "finding-8d4945ab5a17f779f049973a041e049a",
+            "classification": "introduced",
+            "findingId": "finding-8d4945ab5a17f779f049973a041e049a",
+            "firstSeenThisRound": false,
+            "severity": "P1",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-ff3c6eb371bb7fd84dd3e89026bb5eee",
+            "classification": "introduced",
+            "findingId": "finding-ff3c6eb371bb7fd84dd3e89026bb5eee",
+            "firstSeenThisRound": false,
+            "severity": "P2",
+            "status": "fixed"
+          },
+          {
+            "chainRoot": "finding-8d917c63054fbf04c21309f19b807bfa",
+            "classification": "introduced",
+            "findingId": "finding-8d917c63054fbf04c21309f19b807bfa",
+            "firstSeenThisRound": true,
+            "severity": "P2",
+            "status": "open"
+          }
+        ],
+        "reviewKind": "plan"
+      },
+      "forced": false,
+      "hash_epoch": 0,
+      "head_sha": "406edbd6ce04e6a7063afc0d5941973039f67070",
+      "head_sha_observed": true,
+      "kind": "plan",
+      "model": "gpt-5.6-sol",
+      "outcome": "verdict",
+      "output_bytes": 1581,
+      "output_sha256": "155c5e5f27020b3d881286560cb5558162ec9c069a577bbd99ea2b03348252e4",
+      "reservation_id": "79d18428e8ff42c2b972cc0f46ce5593",
+      "round_consumed": true,
+      "scope": "plan",
+      "superseded_by": null,
+      "task": null,
+      "timestamp": "2026-11-09T19:45:21.680065Z",
+      "verdict": "NEEDS_WORK"
     }
   ],
   "review_hash_epoch": {},
@@ -147,5 +271,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-09T19:43:44.767112Z"
+  "updated_at": "2026-11-09T19:45:21.687181Z"
 }

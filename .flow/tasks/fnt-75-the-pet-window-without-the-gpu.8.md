@@ -8,10 +8,11 @@ fn-1's gate and the per-pet calm runs on the new stack on Linux and Windows, the
 
 **Size:** M
 **Files:** `rust/proofs/{performance,memory,sprite-packs,ui-framework,linux-hands-on,windows-hands-on}.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/HANDOFF.md`, `CHANGELOG.md`, `THIRD-PARTY-NOTICES.md`, `rust/Cargo.toml` comments
-**Touches:** [rust/proofs/**, README.md, docs/**, CHANGELOG.md, THIRD-PARTY-NOTICES.md, rust/Cargo.toml, rust/crates/*/Cargo.toml, rust/SPIKE.md, rust/notes/**]
+**Touches:** [scripts/perf/**, rust/proofs/**, README.md, docs/**, CHANGELOG.md, THIRD-PARTY-NOTICES.md, rust/Cargo.toml, rust/crates/*/Cargo.toml, rust/SPIKE.md, rust/notes/**]
 
 ### Approach
 - R18 against the C# pet: `scripts/perf/pet-bench.sh` and `pets-calm.sh` on Linux; FNT-76's Windows script (fnt-76 task 1) on Windows, with the owner.
+- If fnt-76 task 1 isn't done when this task starts, this task writes that script and its dotnet sampler first, to FNT-76 R1's design (Git Bash, `TotalProcessorTime`, working set, `Process.Modules`), and fnt-76 task 1 then reuses them.
 - R1 against iced: the same scripts' pairing with the new pet against `AIPET_BACKEND=iced`, on Linux and Windows.
 - No GPU library: on Linux `grep` the pet's `/proc/<pid>/maps`; on Windows list the pet's loaded modules with FNT-76's dotnet sampler (`Process.Modules`: no `opengl32`, `d3d*`, `dxgi`, `vulkan-1`, `nvoglv*`, `ig*icd*`), with Settings open and closed.
 - Hands-on on Hyprland, X11 and GNOME/XWayland, and Windows with the owner: looks, moods, drag both modes, click-through, menu, scale changes, output loss, Settings live updates.
