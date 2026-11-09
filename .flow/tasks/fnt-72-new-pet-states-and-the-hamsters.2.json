@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-09T10:12:22.305633Z",
+  "depends_on": [
+    "fnt-72-new-pet-states-and-the-hamsters.1"
+  ],
+  "id": "fnt-72-new-pet-states-and-the-hamsters.2",
+  "priority": null,
+  "spec": "fnt-72-new-pet-states-and-the-hamsters",
+  "spec_path": ".flow/tasks/fnt-72-new-pet-states-and-the-hamsters.2.md",
+  "status": "todo",
+  "title": "Shared effects and the new states for Hood, Sprout (vector) and Pip",
+  "updated_at": "2026-11-09T10:12:22.305633Z"
+}
