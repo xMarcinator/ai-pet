@@ -7,7 +7,7 @@
   65.0,
   110.0
  ],
- "mirror": "flip",
+ "mirror": "none",
  "accent": "$accent",
  "glow": "$eye",
  "palette": {
@@ -120,7 +120,8 @@
     }
    },
    "transition_ms": 90,
-   "default": "stand"
+   "default": "stand",
+   "mirror": "flip"
   },
   {
    "name": "body",
@@ -611,6 +612,7 @@
    "name": "arms",
    "channel": "arms",
    "hit": true,
+   "mirror": "flip",
    "parts": [
     {
      "id": "arm-left",
@@ -1513,7 +1515,8 @@
     "notes+sparkles": null,
     "alert+sparkles": null
    },
-   "default": "dust"
+   "default": "dust",
+   "mirror": "flip"
   }
  ]
 }

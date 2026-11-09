@@ -178,7 +178,6 @@
   {
    "name": "laces",
    "channel": "state",
-   "mirror": "flip",
    "shapes": {
     "idle": [
      {

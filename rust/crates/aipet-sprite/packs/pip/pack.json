@@ -7,7 +7,7 @@
   65.0,
   110.0
  ],
- "mirror": "flip",
+ "mirror": "none",
  "accent": "$body",
  "glow": "#7FEFFF",
  "palette": {
@@ -32,6 +32,7 @@
    "name": "feet",
    "channel": "feet",
    "hit": true,
+   "mirror": "flip",
    "parts": [
     {
      "id": "foot-left",
@@ -933,6 +934,7 @@
    "name": "arms",
    "channel": "arms",
    "hit": true,
+   "mirror": "flip",
    "parts": [
     {
      "id": "hand-left",

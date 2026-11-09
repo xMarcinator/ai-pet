@@ -266,7 +266,7 @@ def pack():
     ids = ["arm-left", "arm-right"]
     poses = {value: {pid: list(d.at(pose, pid)[0]) for pid in ids} for value, pose in vp.ARMS.items()}
     bob = vp.keys(vp.drawn(vp.eased(STYLE, "bob-l", "bob", 16)))
-    arms = vp.layer("arms", "arms", "rest", hit=True,
+    arms = vp.layer("arms", "arms", "rest", hit=True, mirror="flip",
                     parts=[{"id": pid, "origin": poses["rest"][pid], "shape": "arm"} for pid in ids],
                     shapes={"arm": vp.drawing(d.inner({}, "arm-left"))}, poses=poses, transition_ms=120,
                     animations={
@@ -275,17 +275,20 @@ def pack():
                         "hold": vp.anim("arm-left", vp.keys(vp.drawn(vp.held(STYLE, "type", "type")))),
                         "lens": vp.anim("arm-right", vp.scan_keys()),
                     })
+    feet = {**vp.feet(d, ["foot-left", "foot-right"]), "mirror": "flip"}
+    effects = [{**fx, "mirror": "flip"} if fx["name"] == "dust" else fx
+               for fx in vp.effect_layers(C["accent"], C["outline"], d.norm)]
     return vp.named({
         "format_version": 1,
         "name": "Sprout (vector)",
         "kind": "vector",
         "pixel_size": 1,
         "anchor": list(a),
-        "mirror": "flip",
+        # Sprout faces the viewer: facing left, only its arms, feet and dust follow, never the body
+        "mirror": "none",
         "accent": C["accent"],
         "glow": C["glow"],
-        "layers": [vp.feet(d, ["foot-left", "foot-right"]), body, eyes, prop, screen, phones, arms,
-                   *vp.effect_layers(C["accent"], C["outline"], d.norm)],
+        "layers": [feet, body, eyes, prop, screen, phones, arms, *effects],
     }, C)
 
 

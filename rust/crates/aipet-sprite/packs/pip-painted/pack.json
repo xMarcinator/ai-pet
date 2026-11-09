@@ -7,7 +7,7 @@
     130.0,
     220.0
   ],
-  "mirror": "flip",
+  "mirror": "none",
   "accent": "#FFAA85",
   "glow": "#7FEFFF",
   "theme": "Peach",
@@ -25,6 +25,7 @@
       "name": "feet",
       "channel": "feet",
       "hit": true,
+      "mirror": "flip",
       "default": "stand",
       "animations": {
         "dangle-a": {
@@ -1636,6 +1637,7 @@
       "name": "arms",
       "channel": "arms",
       "hit": true,
+      "mirror": "flip",
       "default": "rest",
       "animations": {
         "hold": {

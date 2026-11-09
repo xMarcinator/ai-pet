@@ -45,6 +45,9 @@ and list them as fixed in the Codex review.
   draw one in the pack.
 - Draw facing right; mirroring makes the left. Put anything that must not mirror (text) on a layer with
   `"mirror": "none"`, or avoid it.
+- Mirror the whole pet only when it is drawn in perspective (turned to one side). A pet facing the viewer sets the
+  pack's `mirror` to `none` and gives `"mirror": "flip"` only to the arms or hands, the feet and the dust: its body and
+  what it wears (laces, a sprout, markings) never flip when it is dragged left.
 - Keep a pet recognisable from its original: the user's reference shows the proportions, colours and the turn;
   the review page shows the original beside the new drawing so drift is caught.
 

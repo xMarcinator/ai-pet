@@ -258,8 +258,8 @@ def pack():
     body = vp.layer("body", "state", "idle", hit=True,
                     shapes={"idle": vp.drawing(d.art({}, "aura", "body", "face")),
                             "sleep": vp.drawing(d.art({"glow": False}, "body", "face"))})
-    # the laces are the one asymmetric-looking part of the body, so they mirror on their own; the body never does
-    laces = vp.layer("laces", "state", "idle", mirror="flip", shapes={"idle": vp.drawing(d.art({}, "laces"))})
+    # the Hood faces the viewer, so nothing it wears mirrors when it faces left: only the hands and the dust follow
+    laces = vp.layer("laces", "state", "idle", shapes={"idle": vp.drawing(d.art({}, "laces"))})
     eyes = vp.eyes(d, lambda expr: {"expr": expr})
     prop = vp.layer("prop", "prop", "laptop",
                     parts=[{"id": "prop", "origin": list(a)}],

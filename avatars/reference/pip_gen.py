@@ -157,7 +157,7 @@ def feet():
     left, right = art(-30, -5), art(30, -5)
     lift = lambda p, dy, dx=0: pt((p[0] + dx, p[1] + dy))
     return layer(
-        "feet", "feet", "stand", hit=True,
+        "feet", "feet", "stand", hit=True, mirror="flip",
         parts=[{"id": "foot-left", "origin": pt(left), "shape": "foot"},
                {"id": "foot-right", "origin": pt(right), "shape": "foot"}],
         shapes={"foot": fill(ellipse(0, 0, k(17), k(8)), SHADE)},
@@ -268,7 +268,7 @@ def arms():
     # typing: the hands bob out of step
     typing = anim([("hand-left", 0), ("hand-right", 0.5)], [[0, 0, 110], [0, -1.5, 110]])
     return layer(
-        "arms", "arms", "rest", hit=True,
+        "arms", "arms", "rest", hit=True, mirror="flip",
         parts=[{"id": "hand-left", "origin": pt(art(*rest_l)), "shape": "hand"},
                {"id": "hand-right", "origin": pt(art(*rest_r)), "shape": "hand"}],
         shapes={"hand": fill(ellipse(0, 0, k(11), k(9)), SHADE)},
@@ -386,7 +386,8 @@ def pack():
         "kind": "vector",
         "pixel_size": 1,
         "anchor": list(ANCHOR),
-        "mirror": "flip",
+        # Pip faces the viewer: facing left, only its hands, feet and dust follow; the sprout on its head stays put
+        "mirror": "none",
         "accent": PET,
         "glow": GLOW,
         "layers": [feet(), sprout(), body(), mouth(), eyes(), headphones(), prop(), arms(), screen(), *fx(),

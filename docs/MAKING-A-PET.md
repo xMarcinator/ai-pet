@@ -85,6 +85,11 @@ first frame, and the pet doesn't bob, squash or play idle acts.
 if the pack's `mirror` is `flip`, unless the layer has a `mirror` of its own. A layer may also give a value's
 left-facing frames as `<value>@left` (for example `run-a@left`), which are drawn as they are, unmirrored.
 
+Mirror the whole pet only if it is drawn in perspective (turned, like the vector Hamster's three-quarter view). A pet
+drawn facing the viewer sets the pack's `mirror` to `none` and flips only what has a direction: its hands or arms,
+its feet and the dust. Its body and everything on it (a sprout, laces, markings) stay as drawn, as they would on a
+real thing that turns its head; the eyes already look the way it moves.
+
 ## The manifest
 
 This is a complete pack: a vector pet with a body that changes when it sleeps, eyes that follow the pointer, hands
