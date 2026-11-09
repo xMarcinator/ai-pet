@@ -1,0 +1,16 @@
+[package]
+name = "spike-slint"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# standalone: not a member of rust/'s workspace
+[workspace]
+
+[dependencies]
+spike-common = { path = "../common" }
+# Slint's software renderer only, behind a custom platform: Slint draws, the layer surface is ours (see main.rs)
+slint = { version = "1.18", default-features = false, features = ["std", "renderer-software", "compat-1-2"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+smithay-client-toolkit = { version = "0.21", default-features = false, features = ["calloop"] }

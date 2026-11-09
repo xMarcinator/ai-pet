@@ -1,0 +1,16 @@
+[package]
+name = "spike-minimal"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# standalone: not a member of rust/'s workspace
+[workspace]
+
+[dependencies]
+spike-common = { path = "../common" }
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+cosmic-text = { version = "0.19", default-features = false, features = ["std", "swash", "fontconfig"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+smithay-client-toolkit = { version = "0.21", default-features = false, features = ["calloop"] }

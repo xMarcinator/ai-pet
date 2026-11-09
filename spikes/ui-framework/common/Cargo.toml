@@ -1,0 +1,9 @@
+[package]
+name = "spike-common"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+aipet-sprite = { path = "../../../rust/crates/aipet-sprite" }
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }

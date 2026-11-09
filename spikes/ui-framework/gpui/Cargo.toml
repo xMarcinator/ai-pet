@@ -1,0 +1,16 @@
+[package]
+name = "spike-gpui"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# standalone: not a member of rust/'s workspace
+[workspace]
+
+[dependencies]
+spike-common = { path = "../common" }
+# gpui-pre: crates.io snapshots of Zed's own gpui (zed@d2a4fb6). gpui 0.2.2, the last "gpui" on crates.io, has no
+# layer-shell and no input region; gpui-ce 0.3.0 (the community fork) has layer-shell but its input region is a
+# no-op on Linux. See ui-framework.md.
+gpui = { package = "gpui-pre", version = "0.3.12" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.12", features = ["wayland", "x11"] }
