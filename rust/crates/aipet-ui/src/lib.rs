@@ -348,6 +348,9 @@ pub struct PetUi {
     t: f64,
     motion: Motion,
     sprite: Sprite,
+    /// How high the worn pack's effects get above its art box (art px, negative above), lifted by their moods: the
+    /// bubbles start above it (fn-2 R24).
+    fx_reach: f32,
     /// The sprite's part of the input region, remade in place each tick.
     sprite_rects: Vec<Rect>,
     shadow: Handle,
@@ -503,6 +506,7 @@ impl PetUi {
             t: 0.0,
             motion: Motion::REST,
             sprite: Sprite::new(&worn),
+            fx_reach: aipet_sprite::fx_reach(&worn.pack, &worn.sheets) as f32,
             sprite_rects: Vec::new(),
             shadow: sprite::shadow_image(),
             avatars,
@@ -1027,11 +1031,11 @@ impl PetUi {
     }
 
     /// Lays the sprite and the bubbles out at their sizes: the sprite's pixels again on whole device pixels, and the
-    /// stacks above the pet's head.
+    /// stacks above the pet's head and its effects.
     fn sized(&mut self) {
         let pet = self.pet_factor();
         self.stacks
-            .set_size(self.bubble_size as f32 / 100.0, geometry::stacks_bottom(pet));
+            .set_size(self.bubble_size as f32 / 100.0, geometry::stacks_bottom(pet, self.fx_reach));
         let (pose, at) = self.pet.drawn();
         self.sprite.update(self.pet.pack(), pose, at, self.scale * pet);
     }
@@ -1061,6 +1065,9 @@ impl PetUi {
         self.theme = theme;
         self.pet.set_pack(worn.clone());
         self.sprite = Sprite::new(&worn);
+        // another pet's effects may reach higher or lower: the bubbles follow
+        self.fx_reach = aipet_sprite::fx_reach(&worn.pack, &worn.sheets) as f32;
+        self.sized();
     }
 
     fn save_prefs(&mut self) {

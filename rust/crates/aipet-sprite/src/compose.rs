@@ -365,11 +365,12 @@ pub fn flatten(pack: &Pack, sheets: &[crate::bake::Sheet], pose: &Pose, t: f64) 
 }
 
 /// How high a pack's `fx` value reaches, in art-box px from the box's top (negative above it), with the body at rest:
-/// the topmost drawn pixel of its `fx` layers through the first 3 s of their animations, so the bubbles can stay clear
+/// the topmost drawn pixel of its `fx` layers, every 0.1 s through the first 3 s of their animations, to the nearest
+/// art-box px, so the bubbles can stay clear
 /// of it (fn-2 R24). `sparkles` asks for the value with sparkles on top (`dots+sparkles`). None when nothing is drawn.
 pub fn fx_top(pack: &Pack, sheets: &[crate::bake::Sheet], fx: crate::pose::Fx, sparkles: bool) -> Option<f64> {
     const MARGIN: f64 = 60.0;
-    const SCALE: f64 = 2.0;
+    const SCALE: f64 = 1.0;
     let pose = Pose::scripted(
         crate::pose::Values {
             fx,
@@ -381,8 +382,8 @@ pub fn fx_top(pack: &Pack, sheets: &[crate::bake::Sheet], fx: crate::pose::Fx, s
     let is_fx = |i: usize| pack.layers[i].channel == Channel::Fx;
     let mut top: Option<f64> = None;
     let mut reach = |y: f64| top = Some(top.map_or(y, |t: f64| t.min(y)));
-    for step in 0..=60 {
-        let t = f64::from(step) * 0.05;
+    for step in 0..=30 {
+        let t = f64::from(step) * 0.1;
         if pack.kind == Kind::Vector {
             let placed = Parts::default().place(pack, &pose, t);
             let items = crate::vector::scene(pack, &placed, &pose);
