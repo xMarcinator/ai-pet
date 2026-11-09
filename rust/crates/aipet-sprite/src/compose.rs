@@ -55,10 +55,21 @@ pub fn mirrored(pack: &Pack, layer: &Layer, pose: &Pose) -> bool {
     pose.facing == Facing::Left && layer.mirror.unwrap_or(pack.mirror) == Mirror::Flip
 }
 
+/// The pose's look is a direction on screen; a layer mirrored for facing left draws the opposite one, so the
+/// mirroring turns it back the way the pet looks (dragged left, it looks left).
+fn drawn_look(pack: &Pack, layer: &Layer, pose: &Pose) -> Look {
+    let look = pose.eyes.look;
+    if mirrored(pack, layer, pose) {
+        Look { dx: -look.dx, ..look }
+    } else {
+        look
+    }
+}
+
 /// How far a raster layer without parts is moved, in art-box px: the eyes channel's look offset, when it has a table.
 fn raster_offset(pack: &Pack, layer: &Layer, pose: &Pose) -> (f64, f64) {
     if layer.channel == Channel::Eyes && layer.parts.is_empty() && !layer.look.is_empty() {
-        look_offset(pack, layer, pose.eyes.look)
+        look_offset(pack, layer, drawn_look(pack, layer, pose))
     } else {
         (0.0, 0.0)
     }
@@ -244,7 +255,7 @@ impl Parts {
             let targets = layer.poses.get(value);
             let anim = layer.part_animations.get(value);
             let look = if layer.channel == Channel::Eyes && !layer.look.is_empty() {
-                look_offset(pack, layer, pose.eyes.look)
+                look_offset(pack, layer, drawn_look(pack, layer, pose))
             } else {
                 (0.0, 0.0)
             };
@@ -618,13 +629,14 @@ mod tests {
     #[test]
     fn parts_ride_with_the_body_and_mirror_last() {
         let p = eyes_pack(Kind::Vector);
-        let mut pose = looking(Look { dx: 1, dy: 0 });
+        // looking up, which mirroring leaves alone (a_mirrored_pet_looks_the_way_the_look_points_on_screen)
+        let mut pose = looking(Look { dx: 0, dy: -1 });
         pose.motion.x = 3.0;
         pose.motion.y = -4.0;
         pose.motion.scale_x = 1.1;
         let placed = Parts::default().place(&p, &pose, 0.0);
-        let x = ANCHOR.0 + (58.0 - ANCHOR.0) * 1.1 + 3.0;
-        assert_eq!((placed[0].x, placed[0].y), (x, 63.5 - 4.0));
+        let x = ANCHOR.0 + (55.5 - ANCHOR.0) * 1.1 + 3.0;
+        assert_eq!((placed[0].x, placed[0].y), (x, 61.0 - 4.0));
         let mut left = pose;
         left.facing = Facing::Left;
         let placed = Parts::default().place(&p, &left, 0.0);
