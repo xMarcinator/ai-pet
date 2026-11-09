@@ -37,9 +37,10 @@ Move the UI from a flat list of packs to pets with styles: one tile per pet, a S
 - [ ] The Settings page renders the style row (screenshot)
 
 ## Done summary
-TBD
+Settings → Avatars: one tile per pet (load::groups_of), showing the worn style for the worn pet; a Style pill row when a pet has more than one; SelectStyle keeps the theme by name where the new style has it. Config: AvatarStyle (written only when set; the app's copy is apply_prefs in main.rs, tested); Avatar is the pet's name; choose() maps the pet + style, then old drawing names (Hood (vector), Pip (painted), …), then '<pet> (<theme>)'. Reload falls back to the pet's default style, then the first pet (the hidden 'gone' entry is removed). Not checked: a screenshot of the Settings page (no GUI run while the owner is away).
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 26a975d
+- Tests: cargo test --workspace
 - PRs:
