@@ -4,6 +4,9 @@
 #   `dotnet hook/aipet-hook.dll`; the pet is the C#'s HookServer, as in CI.
 # - the .NET hook against the Rust pet: the Rust hook server's tests (rust/crates/aipet-core/tests/server.rs), with
 #   AIPET_TEST_HOOK naming the .NET hook's dll, which they run with `dotnet` instead of the Rust hook.
+# - the .NET pet against the Rust pet, on Linux: the single-instance lock both take (one pet per user), each pet
+#   started for real on a virtual X display, in either order, at the same moment, and with different or unset
+#   XDG_RUNTIME_DIR values or an AIPET_PIPE.
 # Nothing is published here.
 name: Cross-runtime
 
@@ -72,7 +75,7 @@ jobs:
           AIPET_TEST_HOOK: ${{ github.workspace }}/rust/target/release/${{ matrix.hook }}
         run: |
           classes=(HookContractTests HookSocketTests HookRequestSizeTests EndToEndTests HookServerTests NoPetTests
-                   HookServerUnixTests StarvedPoolTests PluginHooksTests RegistrationTests)
+                   HookServerUnixTests StarvedPoolTests PluginHooksTests RegistrationTests PackageInstallerTests)
           filter=$(printf 'FullyQualifiedName~AiPet.Tests.%s.|' "${classes[@]}")
           set -o pipefail
           dotnet test tests/AiPet.Tests -c Release --nologo --no-build --filter "${filter%|}" 2>&1 | tee test.log
@@ -172,3 +175,177 @@ jobs:
             --nocapture 2>&1 | tee peer.log
           grep -q '^test unix::a_peer_running_as_another_user_is_refused ... ok' peer.log
           ! grep -q 'skipped:' peer.log
+
+  # One pet per user, whichever runtime each is: the .NET pet (src/AiPet.UI/Program.cs) and the Rust pet
+  # (rust/crates/aipet/src/single.rs) both flock the lock file next to the hooks' socket, <AIPET_PIPE>.lock under that
+  # override. Each implementation was tested against a lock taken the contract's way; here the two real pets meet.
+  # Every case must end with exactly one pet running: the one started first, or either when they start together, and
+  # the other one gone, quietly (exit 0).
+  lock:
+    name: .NET pet and Rust pet, one at a time (Linux)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # a virtual X display, Mesa's software GL for the Rust pet, and libxkbcommon to build it
+      - name: Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libegl1 libgl1-mesa-dri libegl-mesa0 pkg-config libxkbcommon-dev
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Build the Rust pet
+        working-directory: rust
+        run: cargo build -p aipet --release --locked
+      - name: Build the .NET pet
+        run: dotnet build src/AiPet.UI -c Release --nologo -o out/dotnet
+      - name: Start them against each other
+        run: |
+          dotnet_pet=$PWD/out/dotnet/AiPet
+          rust_pet=$PWD/rust/target/release/AiPet
+          uid=$(id -u)
+          # The socket's rule puts it in /run/user/<uid> first, whatever XDG_RUNTIME_DIR says: that's what keeps pets
+          # with different values on one lock. A login session has the folder; make sure this runner has it too.
+          if [ ! -d "/run/user/$uid" ]; then sudo install -d -m 700 -o "$uid" -g "$(id -g)" "/run/user/$uid"; fi
+          logs=$RUNNER_TEMP/pet-logs
+          mkdir -p "$logs" "$RUNNER_TEMP/xdg-a" "$RUNNER_TEMP/xdg-b"
+          chmod 700 "$RUNNER_TEMP/xdg-a" "$RUNNER_TEMP/xdg-b"
+          Xvfb :99 -screen 0 1920x1080x24 > "$logs/xvfb.log" 2>&1 &
+          export DISPLAY=:99
+          # the pets' own data (settings, logs) in a folder of the runner's temp folder, and no Wayland
+          export AIPET_DATA_DIR=$RUNNER_TEMP/aipet-data
+          unset WAYLAND_DISPLAY
+          sleep 2
+
+          # (no command substitutions around the pets: wait works only on this shell's own children)
+          failed=0 n=0 what= pid= status=
+          fail() { echo "::error::$what: $*"; failed=1; }
+          # running, not ended: a pet that has exited stays a zombie until it's waited for, which kill -0 still finds
+          alive() { local state; state=$(sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | cut -c1); [ -n "$state" ] && [ "$state" != Z ]; }
+          # start <dotnet|rust> [env options and settings...]: sets pid
+          start() {
+            local pet=$1 bin=$rust_pet
+            shift
+            if [ "$pet" = dotnet ]; then bin=$dotnet_pet; fi
+            env "$@" "$bin" > "$logs/$n-$pet.log" 2>&1 &
+            pid=$!
+          }
+          # settle <pid> <seconds>: sets status to the pet's exit status, or to running if it still runs by then
+          settle() {
+            local i=0
+            status=running
+            while :; do
+              if ! alive "$1"; then status=0; wait "$1" || status=$?; return; fi
+              ((i++ < $2 * 10)) || return 0
+              sleep 0.1
+            done
+          }
+          # stop <pid>...: ends whichever still run, and waits for them
+          stop() {
+            local p i
+            for p in "$@"; do kill "$p" 2>/dev/null || true; done
+            for ((i = 0; i < 50; i++)); do
+              alive "$1" || alive "${2:-$1}" || break
+              sleep 0.1
+            done
+            for p in "$@"; do kill -9 "$p" 2>/dev/null || true; wait "$p" 2>/dev/null || true; done
+          }
+          show_logs() { for f in "$logs/$n"-*.log; do echo "--- $(basename "$f")"; cat "$f"; done; }
+          # split <args>: the settings before -- go to a, the ones after it to b
+          split() {
+            a=() b=()
+            while [ $# -gt 0 ] && [ "$1" != -- ]; do a+=("$1"); shift; done
+            if [ $# -gt 0 ]; then shift; fi
+            b=("$@")
+          }
+
+          # one_after_the_other <first> <second> <first's env> -- <second's env>: the first runs, the second quits
+          one_after_the_other() {
+            local first=$1 second=$2 p1 p2
+            shift 2
+            split "$@"
+            n=$((n + 1)) what="case $n: $first, then $second (${a[*]:-as the runner has it} / ${b[*]:-as the runner has it})"
+            local before=$failed
+            failed=0
+            start "$first" "${a[@]}"; p1=$pid
+            sleep 8
+            if ! alive "$p1"; then
+              fail "the $first pet didn't keep running on its own"
+            else
+              start "$second" "${b[@]}"; p2=$pid
+              settle "$p2" 20
+              if [ "$status" = running ]; then fail "the $second pet runs next to the $first pet"
+              elif [ "$status" != 0 ]; then fail "the $second pet exited with $status, not quietly"
+              elif ! alive "$p1"; then fail "the $first pet stopped"
+              else echo "ok - $what"; fi
+            fi
+            if [ "$failed" = 1 ]; then show_logs; fi
+            stop "$p1" ${p2:+"$p2"}
+            if [ "$before" = 1 ]; then failed=1; fi
+          }
+
+          # together <dotnet's env> -- <rust's env>: started at the same moment, exactly one runs
+          together() {
+            local p1 p2 s1 s2
+            split "$@"
+            n=$((n + 1)) what="case $n: both at once (${a[*]:-as the runner has it} / ${b[*]:-as the runner has it})"
+            local before=$failed
+            failed=0
+            start dotnet "${a[@]}"; p1=$pid
+            start rust "${b[@]}"; p2=$pid
+            sleep 12
+            settle "$p1" 0; s1=$status
+            settle "$p2" 0; s2=$status
+            if [ "$s1" = running ] && [ "$s2" = running ]; then fail "both pets run"
+            elif [ "$s1" != running ] && [ "$s2" != running ]; then fail "neither pet runs (exits $s1 and $s2)"
+            elif [ "$s1" != running ] && [ "$s1" != 0 ]; then fail "the .NET pet exited with $s1, not quietly"
+            elif [ "$s2" != running ] && [ "$s2" != 0 ]; then fail "the Rust pet exited with $s2, not quietly"
+            elif [ "$s1" = running ]; then echo "ok - $what: the .NET pet runs"
+            else echo "ok - $what: the Rust pet runs"; fi
+            if [ "$failed" = 1 ]; then show_logs; fi
+            stop "$p1" "$p2"
+            if [ "$before" = 1 ]; then failed=1; fi
+          }
+
+          unset_xdg=(-u XDG_RUNTIME_DIR)
+          xdg_a=(XDG_RUNTIME_DIR="$RUNNER_TEMP/xdg-a")
+          xdg_b=(XDG_RUNTIME_DIR="$RUNNER_TEMP/xdg-b")
+          pipe=(AIPET_PIPE="$RUNNER_TEMP/pets.sock")
+          # the runner's own environment, unset, different values, and one unset against one set
+          for envs in "unset_xdg unset_xdg" "xdg_a xdg_b" "unset_xdg xdg_b" "xdg_a unset_xdg"; do
+            read -r x y <<< "$envs"
+            declare -n ea=$x eb=$y
+            one_after_the_other dotnet rust "${ea[@]}" -- "${eb[@]}"
+            one_after_the_other rust dotnet "${ea[@]}" -- "${eb[@]}"
+            for _ in 1 2 3; do together "${ea[@]}" -- "${eb[@]}"; done
+            unset -n ea eb
+          done
+          one_after_the_other dotnet rust --
+          one_after_the_other rust dotnet --
+          together --
+          # AIPET_PIPE ending in .sock: the lock is <AIPET_PIPE>.lock on both sides, whatever XDG_RUNTIME_DIR says
+          one_after_the_other dotnet rust "${pipe[@]}" "${xdg_a[@]}" -- "${unset_xdg[@]}" "${pipe[@]}"
+          one_after_the_other rust dotnet "${unset_xdg[@]}" "${pipe[@]}" -- "${pipe[@]}" "${xdg_b[@]}"
+          for _ in 1 2 3; do together "${pipe[@]}" "${xdg_a[@]}" -- "${pipe[@]}" "${xdg_b[@]}"; done
+          if [ ! -f "$RUNNER_TEMP/pets.sock.lock" ]; then what=AIPET_PIPE; fail "no lock at <AIPET_PIPE>.lock"; fi
+          echo "$n cases" >> "$GITHUB_STEP_SUMMARY"
+          exit "$failed"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: lock-logs
+          path: ${{ runner.temp }}/pet-logs
+          if-no-files-found: warn
+          retention-days: 7

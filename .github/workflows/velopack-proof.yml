@@ -9,6 +9,11 @@
 #              full    the feed has only the full package
 #              delta   the feed lists both, but only the delta's file is there: a delta the .NET client can't apply,
 #                      or won't take, fails the job instead of falling back to the full package
+#   rust-update  the real Rust pet, as release.yml builds and packs it, as FROM_VERSION and TO_VERSION: install
+#            FROM_VERSION, register the hook it ships, start the pet on a local feed (AIPET_TEST_UPDATE_FEED, which
+#            makes it check at once and log each update status), let it download TO_VERSION, quit it so the update
+#            installs, and check the status texts against the C#'s, the data, the hook and its registration; then
+#            uninstall it, which must remove that registration (the pet's uninstall hook)
 #
 # Nothing is published and no release is read. Run it from the Actions tab, or push to the branch proof/velopack.
 name: Velopack proof
@@ -184,5 +189,145 @@ jobs:
         with:
           name: velopack-proof-logs-${{ matrix.mode }}
           path: logs
+          if-no-files-found: warn
+          retention-days: 7
+
+  rust-update:
+    name: The Rust pet updates itself
+    runs-on: windows-2022
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # vpk is a .NET tool
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      - name: Build the pet and the hook, as both versions
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static   # as release.yml builds them
+        run: |
+          # The version is built in (AIPET_VERSION), and the update tells the two packages apart by the one vpk gives them
+          for v in "$FROM_VERSION" "$TO_VERSION"; do
+            (cd rust && AIPET_VERSION="$v" cargo build -p aipet -p aipet-hook --release --locked --target x86_64-pc-windows-msvc)
+            mkdir -p "out/app-$v"
+            cp rust/target/x86_64-pc-windows-msvc/release/AiPet.exe rust/target/x86_64-pc-windows-msvc/release/aipet-hook.exe "out/app-$v/"
+          done
+      - name: Pack both, as release.yml packs a release
+        env:
+          DOTNET_ROLL_FORWARD: Major   # vpk may target an older .NET than the one installed
+        run: |
+          vpk=$(tr -d '\r' < .github/workflows/release.yml | sed -n 's/^ *VPK_VERSION: *\([^ #]*\).*/\1/p')
+          dotnet tool install vpk --version "$vpk" --tool-path out/tools
+          mkdir -p out/feed
+          for v in "$FROM_VERSION" "$TO_VERSION"; do
+            out/tools/vpk pack --packId AiPetApp --packVersion "$v" --packDir "out/app-$v" --mainExe AiPet.exe \
+              --packTitle AiPet --packAuthors xMarcinator --icon assets/icon/aipet.ico \
+              --channel win --shortcuts StartMenuRoot --noPortable --outputDir out/feed
+            if [ "$v" = "$FROM_VERSION" ]; then
+              shopt -s nullglob
+              setups=(out/feed/*-Setup.exe)
+              cp "${setups[0]}" "out/setup-$v.exe"
+            fi
+          done
+          ls -la out/feed
+      - name: Install ${{ env.FROM_VERSION }} and register its hook
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          root=$local_app/AiPetApp data=$local_app/AiPet
+          # a file the pet doesn't know, which every step must leave alone
+          mkdir -p "$data"
+          echo "the user's own" > "$data/keep.txt"
+          "out/setup-$FROM_VERSION.exe" --silent
+          taskkill //F //IM AiPet.exe > /dev/null 2>&1 || true   # a Setup may start the app
+          grep -q "$FROM_VERSION" "$root/current/sq.version"
+          test -f "$root/current/aipet-hook.exe"
+          # as install.ps1 registers it where Git Bash is missing
+          mkdir -p "$HOME/.claude"
+          "$root/current/aipet-hook.exe" --install claude
+          grep -F 'AiPetApp' "$HOME/.claude/settings.json"
+      - name: Download ${{ env.TO_VERSION }} from the local feed, and install it on quit
+        env:
+          # GL, the pet's default, has no driver on a runner: Direct3D 12 has WARP, its software adapter
+          WGPU_BACKEND: dx12
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          root=$local_app/AiPetApp log=$local_app/AiPet/aipet.log
+          AIPET_TEST_UPDATE_FEED=$(cygpath -w "$PWD/out/feed") "$root/current/AiPet.exe" > out/pet.log 2>&1 &
+          ready=no
+          for _ in $(seq 180); do
+            if grep -qF "updates: status: AiPet $TO_VERSION is ready" "$log" 2>/dev/null; then ready=yes; break; fi
+            sleep 1
+          done
+          cat "$log" || true
+          cat out/pet.log || true
+          if [ "$ready" != yes ]; then echo "::error::The pet didn't download $TO_VERSION in 3 minutes"; exit 1; fi
+          # quit as Alt+F4 does (a close, not a kill): the update installs once the pet has exited
+          taskkill //IM AiPet.exe
+          for _ in $(seq 180); do
+            if grep -q "$TO_VERSION" "$root/current/sq.version" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if ! grep -q "$TO_VERSION" "$root/current/sq.version"; then
+            echo "::error::$TO_VERSION wasn't installed at quit"; cat "$root/current/sq.version" || true; exit 1
+          fi
+          # the pet stays closed after an update at quit
+          sleep 5
+          if tasklist //FI "IMAGENAME eq AiPet.exe" | grep -qi aipet; then echo "::error::The pet started again"; exit 1; fi
+      - name: Check the status texts, the data and the hook
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          root=$local_app/AiPetApp data=$local_app/AiPet
+          # Settings' texts are the C#'s (src/AiPet.Core/UpdateStatus.cs), in the order the update went through them
+          cs=src/AiPet.Core/UpdateStatus.cs
+          checking=$(tr -d '\r' < "$cs" | sed -n 's/.*Kinds\.Checking => "\(.*\)",$/\1/p')
+          downloading=$(tr -d '\r' < "$cs" | sed -n 's/.*Kinds\.Downloading => \$"\(.*\) {Percent}%",$/\1/p' | sed "s/{Version}/$TO_VERSION/")
+          ready=$(tr -d '\r' < "$cs" | sed -n 's/.*Kinds\.Ready => \$"\(.*\)",$/\1/p' | sed "s/{Version}/$TO_VERSION/")
+          for t in "$checking" "$downloading" "$ready"; do
+            if [ -z "$t" ]; then echo "::error::Couldn't read the C#'s status texts from $cs"; exit 1; fi
+          done
+          tr -d '\r' < "$data/aipet.log" | sed -n 's/.*updates: status: //p' > statuses.txt
+          cat statuses.txt
+          first() { grep -nF -- "$1" statuses.txt | head -n 1 | cut -d: -f1; }
+          c=$(first "$checking") d=$(first "$downloading 100%") r=$(first "$ready")
+          if [ -z "$c" ] || [ -z "$d" ] || [ -z "$r" ] || [ "$c" -gt "$d" ] || [ "$d" -gt "$r" ]; then
+            echo "::error::The statuses aren't the C#'s: '$checking', '$downloading 100%', '$ready', in that order"; exit 1
+          fi
+          grep -qx "the user's own" "$data/keep.txt"
+          test -f "$data/config.json"
+          # the update replaced current\ completely, and brought the hook the registration runs
+          test -f "$root/current/aipet-hook.exe"
+          grep -F 'AiPetApp' "$HOME/.claude/settings.json"
+          "$root/current/aipet-hook.exe" --doctor claude || true
+      - name: Uninstall, which removes the hook's registration
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          root=$local_app/AiPetApp data=$local_app/AiPet
+          # what Settings > Apps runs, made silent
+          "$root/Update.exe" --uninstall --silent
+          for _ in $(seq 60); do [ -d "$root/current" ] || break; sleep 1; done
+          if [ -d "$root/current" ]; then echo "::error::The uninstall left $root/current"; exit 1; fi
+          if grep -F 'aipet-hook' "$HOME/.claude/settings.json"; then
+            echo "::error::The uninstall left the hook's registration in ~/.claude/settings.json"; exit 1
+          fi
+          grep -qx "the user's own" "$data/keep.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: rust-update-logs
+          path: |
+            out/pet.log
+            statuses.txt
+            ~/AppData/Local/AiPet/aipet.log
+            ~/AppData/Local/AiPetApp/*.log
           if-no-files-found: warn
           retention-days: 7
