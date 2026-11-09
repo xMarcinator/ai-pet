@@ -138,7 +138,10 @@ pub(super) fn apply(chats: &mut Chats, e: &Event, now: f64) -> &'static str {
             Some("laptop"),
         ),
         "Stop" => set(s, "done", "Done", None),
-        "StopFailure" => set(s, "attention", stop_error(text("error_type")), None),
+        "StopFailure" => {
+            set(s, "attention", stop_error(text("error_type")), None);
+            s.failed = true;
+        }
         _ => {} // EVENTS has no other
     }
     // ts only moves when what the chat shows changes: an idle_prompt on a done chat mustn't show it as just done
@@ -150,6 +153,7 @@ pub(super) fn apply(chats: &mut Chats, e: &Event, now: f64) -> &'static str {
 }
 
 pub(super) fn set(s: &mut Entry, state: &'static str, detail: impl Into<String>, prop: Option<&'static str>) {
+    s.failed = false;
     s.state = Some(state);
     s.detail = Some(detail.into());
     s.prop = prop;
@@ -475,6 +479,29 @@ mod tests {
         let mut text = Vec::new();
         like_stj(json, &mut |bytes| text.extend_from_slice(bytes));
         String::from_utf8(text).unwrap()
+    }
+
+    #[test]
+    fn a_stop_failure_marks_the_chat_failed_until_its_next_change() {
+        // fnt-72 R1: the state stays attention (the C#'s); the mark is what the Board shows as failed
+        let sessions = super::super::AgentSessions::new();
+        let event = |name: &str, at: f64| {
+            format!(
+                r#"{{"v":1,"type":"event","agent":"claude","at":{at},"payload":{{"session_id":"s1","hook_event_name":"{name}","error_type":"rate_limit"}}}}"#
+            )
+        };
+        let failed = |sessions: &super::super::AgentSessions| {
+            let e = sessions.snapshot().into_iter().find(|e| e.id == "claude:s1").expect("the chat");
+            (e.state, e.failed)
+        };
+        let line = event("UserPromptSubmit", 100.0);
+        sessions.apply(&Envelope::parse(&line).unwrap(), 100.0);
+        let line = event("StopFailure", 101.0);
+        sessions.apply(&Envelope::parse(&line).unwrap(), 101.0);
+        assert_eq!(failed(&sessions), (Some("attention"), true));
+        let line = event("UserPromptSubmit", 102.0);
+        sessions.apply(&Envelope::parse(&line).unwrap(), 102.0);
+        assert_eq!(failed(&sessions), (Some("thinking"), false));
     }
 
     /// The hash is the same whether the text came as a command or as the JSON of a whole input, as the C#'s string

@@ -63,6 +63,9 @@ pub struct Entry {
     pub state: Option<&'static str>,
     /// The bubble's second line: "Running command", "Needs your permission", …
     pub detail: Option<String>,
+    /// Claude: the turn ended on an API error (StopFailure). The state stays `attention`, as the C#'s; the Board shows
+    /// it as failed where asked to (fnt-72 R1). The chat's next state change clears it.
+    pub failed: bool,
     /// `laptop`, `lens` or none.
     pub prop: Option<&'static str>,
     /// The first line of the chat's latest prompt that isn't a /command.

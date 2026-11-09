@@ -160,6 +160,8 @@ fn session(v: &Value) -> Session {
         source: word(&v["source"]),
         turn: text(&v["turn"]),
         turn_ended: v["turn_ended"] == json!(true),
+        // the C# has no failed turns (fnt-72): its board shows them as attention
+        failed: false,
         ts: number(&v["ts"]),
     }
 }
