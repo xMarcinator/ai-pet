@@ -35,7 +35,8 @@ const HOOD: Files = baked!("hood");
 const PIP: Files = pack!("pip": "pack.json");
 const PIP_PAINTED: Files = pack!("pip-painted": "pack.json", "feet.png", "sprout.png", "body.png", "mouth.png", "eyes.png",
     "headphones.png", "prop.png", "arms.png", "screen.png", "zs.png", "notes.png", "dots.png", "alert.png",
-    "sparkles.png", "dust.png", "feet-lilac.png", "body-lilac.png", "arms-lilac.png");
+    "sparkles.png", "dust.png", "feet-lilac.png", "body-lilac.png", "arms-lilac.png", "aura-glow.png", "tears.png",
+    "heart.png", "aura.png");
 const HOOD_VECTOR: Files = pack!("hood-vector": "pack.json");
 const HAMSTER_VECTOR: Files = pack!("hamster-vector": "pack.json");
 const SPROUT_VECTOR: Files = pack!("sprout-vector": "pack.json");

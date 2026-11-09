@@ -14,7 +14,7 @@ aseprite_file}.rs`). `…` and `<…>` stand for names and numbers the line fill
 | A PNG sheet | 8 MB, 2048 px a side, 8 bits a channel |
 | All of a pack's sheets, decoded | 64 MB (width × height × 4 summed) |
 | An `.aseprite` file | 8 MB, 512 frames, 64 layers, 2048 px a side, 64 MB decoded, square pixels |
-| Layers | 1 to 16 |
+| Layers | 1 to 24 |
 | Frames | at most 512 in the pack |
 | Parts | at most 256 in a vector pack; at most 1 per layer in a pixel or painted pack |
 | Frame durations | 1 to 60 000 ms |
@@ -72,7 +72,7 @@ aseprite_file}.rs`). `…` and `<…>` stand for names and numbers the line fill
 | `the default theme's name "<t>" is empty, or starts or ends with a space` | Fix `theme`. |
 | `the accent: no palette colour named "<n>"` / `the glow: …` | `$name` the palette lacks. |
 | `colour "<c>" doesn't start with #` / `isn't hex` / `isn't #RRGGBB or #AARRGGBB` | A plain `accent` or `glow` (or an Aseprite `pack.json`'s): `#RRGGBB` or `#AARRGGBB`, alpha first. |
-| `<n> layers (1 to 16)` | Too many or no layers. Merge layers (one effects layer can hold several particles as parts). |
+| `<n> layers (1 to 24)` | Too many or no layers. Merge layers (one effects layer can hold several particles as parts). |
 | `pixel_size is <n>` | Above 0, at most 130. |
 | `layer "-": the anchor is (<x>, <y>)` | The anchor isn't a finite number within ±10 000. |
 | `<n> frames (at most 512)` | Too many frames. Reuse frames, use `pingpong`, drop near-duplicates. |

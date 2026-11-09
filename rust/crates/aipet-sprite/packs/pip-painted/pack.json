@@ -23,6 +23,93 @@
   },
   "layers": [
     {
+      "name": "aura-glow",
+      "channel": "fx",
+      "hit": false,
+      "default": "aura",
+      "fallback": {
+        "alert": null,
+        "alert+sparkles": null,
+        "dots": null,
+        "dots+sparkles": null,
+        "dust": null,
+        "dust+sparkles": null,
+        "heart": null,
+        "none": null,
+        "notes": null,
+        "notes+sparkles": null,
+        "sparkles": null,
+        "tears": null,
+        "zs": null,
+        "zs+sparkles": null
+      },
+      "animations": {
+        "aura": {
+          "frames": [
+            [
+              0,
+              0,
+              194,
+              171,
+              300
+            ],
+            [
+              194,
+              0,
+              202,
+              179,
+              300
+            ],
+            [
+              396,
+              0,
+              206,
+              181,
+              300
+            ],
+            [
+              602,
+              0,
+              202,
+              179,
+              300
+            ],
+            [
+              804,
+              0,
+              194,
+              171,
+              300
+            ]
+          ],
+          "loop": "loop",
+          "pivot": [
+            [
+              -33.0,
+              -71.0
+            ],
+            [
+              -29.0,
+              -67.0
+            ],
+            [
+              -27.0,
+              -66.0
+            ],
+            [
+              -29.0,
+              -67.0
+            ],
+            [
+              -33.0,
+              -71.0
+            ]
+          ],
+          "sheet": "aura-glow.png"
+        }
+      }
+    },
+    {
       "name": "feet",
       "channel": "feet",
       "hit": true,
@@ -1274,10 +1361,29 @@
           ],
           "sheet": "mouth.png"
         },
-        "sleep": {
+        "sad": {
           "frames": [
             [
               80,
+              0,
+              24,
+              8,
+              1000
+            ]
+          ],
+          "loop": "loop",
+          "pivot": [
+            [
+              -118.0,
+              -165.0
+            ]
+          ],
+          "sheet": "mouth.png"
+        },
+        "sleep": {
+          "frames": [
+            [
+              104,
               0,
               14,
               6,
@@ -1296,7 +1402,7 @@
         "thinking": {
           "frames": [
             [
-              94,
+              118,
               0,
               20,
               4,
@@ -1312,10 +1418,29 @@
           ],
           "sheet": "mouth.png"
         },
+        "tired": {
+          "frames": [
+            [
+              138,
+              0,
+              16,
+              20,
+              1000
+            ]
+          ],
+          "loop": "loop",
+          "pivot": [
+            [
+              -122.0,
+              -160.0
+            ]
+          ],
+          "sheet": "mouth.png"
+        },
         "working": {
           "frames": [
             [
-              114,
+              154,
               0,
               22,
               6,
@@ -1496,10 +1621,29 @@
           ],
           "sheet": "eyes.png"
         },
-        "squint": {
+        "sleepy": {
           "frames": [
             [
               376,
+              0,
+              82,
+              15,
+              1000
+            ]
+          ],
+          "loop": "loop",
+          "pivot": [
+            [
+              -89.0,
+              -135.0
+            ]
+          ],
+          "sheet": "eyes.png"
+        },
+        "squint": {
+          "frames": [
+            [
+              458,
               0,
               72,
               15,
@@ -1518,7 +1662,7 @@
         "up": {
           "frames": [
             [
-              448,
+              530,
               0,
               72,
               25,
@@ -1537,7 +1681,7 @@
         "wide": {
           "frames": [
             [
-              520,
+              602,
               0,
               74,
               28,
@@ -1594,10 +1738,29 @@
         "none": null
       },
       "animations": {
-        "laptop": {
+        "envelope": {
           "frames": [
             [
               0,
+              0,
+              82,
+              46,
+              1000
+            ]
+          ],
+          "loop": "loop",
+          "pivot": [
+            [
+              -89.0,
+              -166.0
+            ]
+          ],
+          "sheet": "prop.png"
+        },
+        "laptop": {
+          "frames": [
+            [
+              82,
               0,
               92,
               46,
@@ -1616,7 +1779,7 @@
         "lens": {
           "frames": [
             [
-              92,
+              174,
               0,
               40,
               47,
@@ -1813,6 +1976,7 @@
       "glow": true,
       "default": "laptop",
       "fallback": {
+        "envelope": null,
         "lens": null,
         "none": null
       },
@@ -1846,14 +2010,17 @@
       "fallback": {
         "alert": null,
         "alert+sparkles": null,
+        "aura": null,
         "dots": null,
         "dots+sparkles": null,
         "dust": null,
         "dust+sparkles": null,
+        "heart": null,
         "none": null,
         "notes": null,
         "notes+sparkles": null,
         "sparkles": null,
+        "tears": null,
         "zs+sparkles": "zs"
       },
       "animations": {
@@ -2073,13 +2240,16 @@
       "fallback": {
         "alert": null,
         "alert+sparkles": null,
+        "aura": null,
         "dots": null,
         "dots+sparkles": null,
         "dust": null,
         "dust+sparkles": null,
+        "heart": null,
         "none": null,
         "notes+sparkles": "notes",
         "sparkles": null,
+        "tears": null,
         "zs": null,
         "zs+sparkles": null
       },
@@ -2190,13 +2360,16 @@
       "fallback": {
         "alert": null,
         "alert+sparkles": null,
+        "aura": null,
         "dots+sparkles": "dots",
         "dust": null,
         "dust+sparkles": null,
+        "heart": null,
         "none": null,
         "notes": null,
         "notes+sparkles": null,
         "sparkles": null,
+        "tears": null,
         "zs": null,
         "zs+sparkles": null
       },
@@ -2317,14 +2490,17 @@
       "default": "alert",
       "fallback": {
         "alert+sparkles": "alert",
+        "aura": null,
         "dots": null,
         "dots+sparkles": null,
         "dust": null,
         "dust+sparkles": null,
+        "heart": null,
         "none": null,
         "notes": null,
         "notes+sparkles": null,
         "sparkles": null,
+        "tears": null,
         "zs": null,
         "zs+sparkles": null
       },
@@ -2362,16 +2538,360 @@
       }
     },
     {
+      "name": "tears",
+      "channel": "fx",
+      "hit": false,
+      "default": "tears",
+      "fallback": {
+        "alert": null,
+        "alert+sparkles": null,
+        "aura": null,
+        "dots": null,
+        "dots+sparkles": null,
+        "dust": null,
+        "dust+sparkles": null,
+        "heart": null,
+        "none": null,
+        "notes": null,
+        "notes+sparkles": null,
+        "sparkles": null,
+        "tears+sparkles": "tears",
+        "zs": null,
+        "zs+sparkles": null
+      },
+      "animations": {
+        "tears": {
+          "frames": [
+            [
+              0,
+              0,
+              12,
+              26,
+              400
+            ],
+            [
+              12,
+              0,
+              12,
+              26,
+              300
+            ],
+            [
+              24,
+              0,
+              12,
+              26,
+              300
+            ],
+            [
+              36,
+              0,
+              12,
+              26,
+              300
+            ]
+          ],
+          "loop": "loop",
+          "pivot": [
+            [
+              -156.0,
+              -146.0
+            ],
+            [
+              -156.0,
+              -149.0
+            ],
+            [
+              -156.0,
+              -152.0
+            ],
+            [
+              -156.0,
+              -155.0
+            ]
+          ],
+          "sheet": "tears.png"
+        }
+      }
+    },
+    {
+      "name": "heart",
+      "channel": "fx",
+      "hit": false,
+      "default": "heart",
+      "fallback": {
+        "alert": null,
+        "alert+sparkles": null,
+        "aura": null,
+        "dots": null,
+        "dots+sparkles": null,
+        "dust": null,
+        "dust+sparkles": null,
+        "heart+sparkles": "heart",
+        "none": null,
+        "notes": null,
+        "notes+sparkles": null,
+        "sparkles": null,
+        "tears": null,
+        "zs": null,
+        "zs+sparkles": null
+      },
+      "animations": {
+        "heart": {
+          "frames": [
+            [
+              0,
+              0,
+              182,
+              34,
+              160
+            ],
+            [
+              182,
+              0,
+              182,
+              34,
+              160
+            ],
+            [
+              364,
+              0,
+              182,
+              34,
+              160
+            ],
+            [
+              546,
+              0,
+              182,
+              44,
+              160
+            ],
+            [
+              728,
+              0,
+              182,
+              44,
+              160
+            ],
+            [
+              910,
+              0,
+              182,
+              44,
+              160
+            ]
+          ],
+          "loop": "loop",
+          "pivot": [
+            [
+              -42.0,
+              -77.0
+            ],
+            [
+              -42.0,
+              -75.0
+            ],
+            [
+              -42.0,
+              -73.0
+            ],
+            [
+              -42.0,
+              -72.0
+            ],
+            [
+              -42.0,
+              -70.0
+            ],
+            [
+              -42.0,
+              -68.0
+            ]
+          ],
+          "sheet": "heart.png"
+        }
+      }
+    },
+    {
+      "name": "aura",
+      "channel": "fx",
+      "hit": false,
+      "default": "aura",
+      "fallback": {
+        "alert": null,
+        "alert+sparkles": null,
+        "aura+sparkles": "aura",
+        "dots": null,
+        "dots+sparkles": null,
+        "dust": null,
+        "dust+sparkles": null,
+        "heart": null,
+        "none": null,
+        "notes": null,
+        "notes+sparkles": null,
+        "sparkles": null,
+        "tears": null,
+        "zs": null,
+        "zs+sparkles": null
+      },
+      "animations": {
+        "aura": {
+          "frames": [
+            [
+              0,
+              0,
+              134,
+              39,
+              43
+            ],
+            [
+              134,
+              0,
+              134,
+              40,
+              39
+            ],
+            [
+              268,
+              0,
+              132,
+              40,
+              38
+            ],
+            [
+              400,
+              0,
+              130,
+              38,
+              43
+            ],
+            [
+              530,
+              0,
+              130,
+              39,
+              39
+            ],
+            [
+              660,
+              0,
+              132,
+              39,
+              38
+            ],
+            [
+              792,
+              0,
+              130,
+              37,
+              43
+            ],
+            [
+              922,
+              0,
+              130,
+              36,
+              39
+            ],
+            [
+              1052,
+              0,
+              132,
+              36,
+              38
+            ],
+            [
+              1184,
+              0,
+              134,
+              38,
+              43
+            ],
+            [
+              1318,
+              0,
+              134,
+              37,
+              39
+            ],
+            [
+              1452,
+              0,
+              132,
+              37,
+              38
+            ]
+          ],
+          "loop": "loop",
+          "pivot": [
+            [
+              -66.0,
+              -60.0
+            ],
+            [
+              -66.0,
+              -59.0
+            ],
+            [
+              -66.0,
+              -59.0
+            ],
+            [
+              -68.0,
+              -59.0
+            ],
+            [
+              -68.0,
+              -58.0
+            ],
+            [
+              -68.0,
+              -58.0
+            ],
+            [
+              -70.0,
+              -58.0
+            ],
+            [
+              -70.0,
+              -59.0
+            ],
+            [
+              -70.0,
+              -59.0
+            ],
+            [
+              -68.0,
+              -59.0
+            ],
+            [
+              -68.0,
+              -60.0
+            ],
+            [
+              -68.0,
+              -60.0
+            ]
+          ],
+          "sheet": "aura.png"
+        }
+      }
+    },
+    {
       "name": "sparkles",
       "channel": "fx",
       "hit": false,
       "default": "sparkles",
       "fallback": {
         "alert": null,
+        "aura": null,
         "dots": null,
         "dust": null,
+        "heart": null,
         "none": null,
         "notes": null,
+        "tears": null,
         "zs": null
       },
       "animations": {
@@ -2526,13 +3046,16 @@
       "fallback": {
         "alert": null,
         "alert+sparkles": null,
+        "aura": null,
         "dots": null,
         "dots+sparkles": null,
         "dust+sparkles": "dust",
+        "heart": null,
         "none": null,
         "notes": null,
         "notes+sparkles": null,
         "sparkles": null,
+        "tears": null,
         "zs": null,
         "zs+sparkles": null
       },

@@ -15,6 +15,14 @@ import os
 RING, GLASS, HANDLE = "#D5DCEB", "#A9E4FF", "#7A5236"
 SPARK, SPARK_HI, ZZ, DOT, BANG, DUSTC = "#FFE27A", "#FFFFFF", "#E3E8FF", "#FFFFFF", "#FFD24A", "#E6DED3"
 HP_DARK, HP_CUP = "#26262C", "#3A3A43"
+# fnt-72's fixed colours: they mean something, so themes never change them
+TEAR, TEAR_HI = "#7CC8FF", "#E8F7FF"
+AURA, AURA_HI, AURA_DEEP = "#FFC83D", "#FFF1B0", "#E39B12"
+HEART, HEART_HI = "#FF6F91", "#FFD3DE"
+PAPER, PAPER_SHADE = "#FFFDF4", "#E6DCC4"
+# Where the golden glow sits about a pet that doesn't say (the owner's choice, "B: soft glow", fnt-72 task 7): centre
+# and half sizes, on the 260 x 250 canvas.
+AURA_BOX = (130, 132, 96, 104)
 
 # Every state, in the order the pages show them. Pose keys: expr, look (dx, dy), arms (rest, wave, raised, hold,
 # lens, run), feet (stand, tap, run, dangle), prop (None, laptop, lens), headphones, fx (None, zs, dots, notes, alert,
@@ -37,9 +45,15 @@ STATES = [
     ("listen (music)", "mood", {"expr": "happy", "headphones": True, "fx": "notes", "dy": -6, "dx": 3}),
     ("music while busy (headphones)", "mood", {"expr": "down", "look": (2, 0), "arms": "hold", "prop": "laptop",
                                                "headphones": True}),
+    # fnt-72's moods: a failed turn, late or long, a review arriving; and the aura that opens every done
+    ("sad (a turn failed)", "mood", {"expr": "down", "fx": "tears", "dy": 3}),
+    ("tired (yawning)", "mood", {"expr": "sleepy", "yawn": True}),
+    ("news (a review arrived)", "mood", {"arms": "hold", "prop": "envelope", "dy": -3}),
+    ("done: the aura (first 1.8 s)", "mood", {"expr": "happy", "arms": "wave", "fx": "aura", "dy": -16}),
     ("hover: eyes follow the pointer", "reaction", {"look": (-5, -4)}),
     ("hello wave", "reaction", {"expr": "happy", "arms": "wave"}),
     ("poked", "reaction", {"expr": "squint", "fx": "sparkles", "dy": -18, "sx": 1.04, "sy": 0.96}),
+    ("poked: the heart", "reaction", {"expr": "squint", "fx": "heart", "dy": -18, "sx": 1.04, "sy": 0.96}),
     ("landing: in the air", "reaction", {"expr": "happy", "dy": -20, "shadow": (0.8, 0.7)}),
     ("landing: impact", "reaction", {"expr": "happy", "sx": 1.08, "sy": 0.9, "dy": 2}),
     ("dragged: running", "reaction", {"arms": "run", "feet": "run", "fx": "dust", "look": (6, 0), "dy": -6}),
@@ -89,6 +103,39 @@ def magnifier(scan=0):
             + "</g></g>")
 
 
+def heart_path(x, y, s):
+    """A heart about (x, y), `s` times 12 units wide each side."""
+    return (f"M{x} {y + 8 * s} C{x - 12 * s} {y - 2 * s} {x - 6 * s} {y - 12 * s} {x} {y - 5 * s} "
+            f"C{x + 6 * s} {y - 12 * s} {x + 12 * s} {y - 2 * s} {x} {y + 8 * s} Z")
+
+
+def envelope(box, accent, outline):
+    """The news prop: a white envelope held where the pet's hands hold the laptop, sealed with a heart in the pet's
+    accent. `box` is its (left, top, right, bottom) on the canvas."""
+    x0, y0, x1, y1 = box
+    w, h, cx = x1 - x0, y1 - y0, (x0 + x1) / 2
+    return ('<g id="prop">'
+            + el("rect", x=x0, y=y0, width=w, height=h, rx=5, fill=PAPER, stroke=outline, stroke_width=4)
+            + el("path", d=f"M{x0 + 4} {y1 - 4} L{cx} {y0 + h * 0.5} L{x1 - 4} {y1 - 4}", fill="none",
+                 stroke=PAPER_SHADE, stroke_width=3, stroke_linejoin="round")
+            + el("path", d=f"M{x0 + 2} {y0 + 2} L{cx} {y0 + h * 0.55} L{x1 - 2} {y0 + 2}", fill="none",
+                 stroke=outline, stroke_width=3.5, stroke_linejoin="round")
+            + el("path", d=heart_path(cx, y0 + h * 0.55, 0.62), fill=accent, stroke=outline, stroke_width=2.5,
+                 stroke_linejoin="round")
+            + "</g>")
+
+
+def aura_glow(box=AURA_BOX):
+    """The golden glow behind the pet that opens a done: three stacked gold ellipses, each a part of its own."""
+    cx, cy, rx, ry = box
+    rings = [(22, "0.10"), (12, "0.16"), (2, "0.24")]
+    return ('<g id="fxback">'
+            + "".join(f'<g id="glow-{i}">' + el("ellipse", cx=cx, cy=cy - 4, rx=rx + d, ry=ry + d, fill=AURA,
+                                                  opacity=op) + "</g>"
+                      for i, (d, op) in enumerate(rings, 1))
+            + "</g>")
+
+
 def headphones(left, right, cup_y, top_y, accent, outline):
     """A band over the head from cup to cup, and two cups at the head's sides."""
     cx = (left + right) / 2
@@ -104,9 +151,10 @@ def headphones(left, right, cup_y, top_y, accent, outline):
             + cups + "</g>")
 
 
-def effects(fx, accent, outline):
+def effects(fx, accent, outline, face=None, box=AURA_BOX):
     """The effects layer: drawn over the pet, at the pixel pet's places (top right, or behind a runner). Every
-    particle is its own part with a stable id (z-1, dot-1, note-1, spark-1, dust-1, ...), so it can animate alone."""
+    particle is its own part with a stable id (z-1, dot-1, note-1, spark-1, dust-1, ...), so it can animate alone.
+    `face` is where a tear starts (under the pet's screen-right eye), `box` the glow's (for the aura's stars)."""
     if not fx:
         return ""
     o = []
@@ -145,6 +193,29 @@ def effects(fx, accent, outline):
     elif fx == "dust":
         for i, (x, y, r, op) in enumerate([(46, 222, 9, 0.75), (26, 212, 7, 0.6), (10, 202, 5, 0.45)], 1):
             part(f"dust-{i}", el("circle", cx=x, cy=y, r=r, fill=DUSTC, opacity=op))
+    elif fx == "tears":
+        # one on the cheek, one falling: the cue is there from the first frame (reduced motion)
+        fx_, fy = face or (150, 150)
+        for i, (x, y, s, op) in enumerate([(fx_, fy, 1.0, 1), (fx_ + 1, fy + 16, 0.75, 0.85)], 1):
+            drop = (f"M{x} {y - 8 * s} C{x + 6 * s} {y - 1 * s} {x + 6 * s} {y + 6 * s} {x} {y + 7 * s} "
+                    f"C{x - 6 * s} {y + 6 * s} {x - 6 * s} {y - 1 * s} {x} {y - 8 * s} Z")
+            part(f"tear-{i}", el("path", d=drop, fill=TEAR, stroke=outline, stroke_width=2.5, stroke_linejoin="round",
+                                 opacity=op)
+                 + el("circle", cx=x - 1.5 * s, cy=y + 1.5 * s, r=1.6 * s, fill=TEAR_HI, opacity=op))
+    elif fx == "heart":
+        for i, (x, y, s) in enumerate([(222, 40, 1.25), (40, 70, 0.8)], 1):
+            part(f"heart-{i}", el("path", d=heart_path(x, y, s), fill=HEART, stroke=outline, stroke_width=2.5,
+                                  stroke_linejoin="round")
+                 + el("circle", cx=x - 4 * s, cy=y - 4 * s, r=2 * s, fill=HEART_HI))
+    elif fx == "aura":
+        # the soft glow's stars over the head; the glow itself is behind the pet (aura_glow)
+        cx, cy, rx, ry = box
+        for i, (x, y, s) in enumerate([(cx - 52, cy - ry + 4, 0.8), (cx + 58, cy - ry - 6, 1.1),
+                                       (cx + 8, cy - ry - 22, 0.7)], 1):
+            star = (f"M{x} {y - 9 * s} Q{x + 1.5 * s} {y - 1.5 * s} {x + 9 * s} {y} Q{x + 1.5 * s} {y + 1.5 * s} {x} "
+                    f"{y + 9 * s} Q{x - 1.5 * s} {y + 1.5 * s} {x - 9 * s} {y} Q{x - 1.5 * s} {y - 1.5 * s} {x} {y - 9 * s} Z")
+            part(f"aura-star-{i}", el("path", d=star, fill=AURA_HI, stroke=AURA_DEEP, stroke_width=1.5,
+                                      stroke_linejoin="round"))
     return '<g id="fx">' + "".join(o) + "</g>"
 
 
@@ -158,7 +229,8 @@ def compose(figure, shadow, ground, pose, accent, outline):
     body = (f'<g transform="translate(130 {ground}) scale({ss} {ss}) translate(-130 {-ground})" opacity="{so}">'
             f"{shadow}</g>"
             f'<g transform="translate({dx} {dy}) translate(130 {ground}) scale({sx} {sy}) translate(-130 {-ground})">'
-            f"{figure}{effects(pose.get('fx'), accent, outline)}</g>")
+            f"{aura_glow(pose.get('aura_box', AURA_BOX)) if pose.get('fx') == 'aura' else ''}{figure}"
+            f"{effects(pose.get('fx'), accent, outline, pose.get('face'), pose.get('aura_box', AURA_BOX))}</g>")
     if pose.get("mirror"):
         body = f'<g transform="translate(260 0) scale(-1 1)">{body}</g>'
     return body

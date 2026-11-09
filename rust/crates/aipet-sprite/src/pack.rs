@@ -10,7 +10,7 @@ use crate::pose::{ART_H, ART_W, Channel, Facing, HALO_PAD, Look};
 use crate::vector::{Cap, Join, Seg};
 
 /// At most this many layers in a pack.
-pub const MAX_LAYERS: usize = 16;
+pub const MAX_LAYERS: usize = 24;
 /// At most this many frames in a pack, over all its layers and animations.
 pub const MAX_FRAMES: usize = 512;
 /// At most this many parts in a vector pack, over all its layers.

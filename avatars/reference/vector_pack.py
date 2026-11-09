@@ -54,10 +54,12 @@ FEET = {
 }
 EYES = {
     "open": "open", "closed": "sleep", "blink": "blink", "happy": "happy", "squint": "squint", "wide": "wide",
-    "up": "up", "down": "down",
+    "up": "up", "down": "down", "sleepy": "sleepy",
 }
 FX = ["zs", "dots", "notes", "alert"]
-FX_VALUES = ["none", "dust", "sparkles"] + FX + [f"{v}+sparkles" for v in FX + ["dust"]]
+# fnt-72's effects replace sparkles rather than come with them
+NEW_FX = ["tears", "aura", "heart"]
+FX_VALUES = ["none", "dust", "sparkles"] + FX + [f"{v}+sparkles" for v in FX + ["dust"]] + NEW_FX
 
 
 # ------------------------------------------------------------------ numbers and transforms
@@ -524,12 +526,13 @@ def float_up(rise, steps, step_ms, drift=0.0):
                  for i in range(steps)])
 
 
-def effect_layers(accent, outline, norm):
+def effect_layers(accent, outline, norm, face=None, box=pet_states.AURA_BOX):
     """The effects, as pet_states draws them (every particle a part about its own centre), each value its own
-    layer so a value with sparkles draws both; with a little motion of the pixel pet's kind."""
+    layer so a value with sparkles draws both; with a little motion of the pixel pet's kind. `face` is where the
+    pet's tears start, `box` its glow (fnt-72); put [`aura_layer`] first, behind the pet."""
 
     def particles(fx):
-        root = tree(pet_states.effects(fx, accent, outline))
+        root = tree(pet_states.effects(fx, accent, outline, face, box))
         fxg, m = find(root, "fx")
         parts, shapes_ = [], {}
         for g in fxg:
@@ -560,9 +563,33 @@ def effect_layers(accent, outline, norm):
         only("alert", lambda ps: anim(ps[0]["id"], keys([(180, {}), (180, {"dy": -1.5})]))),
         layer("sparkles", "fx", "sparkles", parts=sparkle_parts, shapes=sparkle_shapes,
               animations={"sparkles": staggered(sparkle_parts, twinkle)},
-              fallback={v: None for v in ["none", "dust"] + FX}),
+              fallback={v: None for v in ["none", "dust"] + FX + NEW_FX}),
         only("dust", lambda ps: staggered(ps, drift)),
+        # fnt-72: the first key shows each cue (reduced motion)
+        only("tears", lambda ps: anim([(p["id"], 0) for p in ps],
+                                      keys([(400, {}), (300, {"dy": 3}), (300, {"dy": 6, "opacity": 0.7}),
+                                            (300, {"dy": 9, "opacity": 0.3})]))),
+        only("heart", lambda ps: staggered(ps, float_up(8, 6, 160))),
+        only("aura", lambda ps: staggered(ps, twinkle)),
     ]
+
+
+def aura_layer(norm, box=pet_states.AURA_BOX):
+    """The golden glow that opens a done, behind the pet (the owner's soft glow, fnt-72 task 7): its three rings
+    breathe once in, fully built at the first key."""
+    root = tree(pet_states.aura_glow(box))
+    g, m = find(root, "fxback")
+    parts, shapes_ = [], {}
+    for ring in g:
+        items = shapes(ring, m.then(norm), inside=True)
+        o = centre(items)
+        parts.append({"id": ring.get("id"), "origin": list(o), "shape": ring.get("id")})
+        shapes_[ring.get("id")] = drawing(relative(items, o))
+    breathe = keys([(300, {}), (300, {"scale": 1.04}), (300, {"scale": 1.06, "opacity": 0.8}),
+                    (300, {"scale": 1.04, "opacity": 0.5}), (300, {"opacity": 0.25})])
+    return layer("aura-glow", "fx", "aura", parts=parts, shapes=shapes_,
+                 animations={"aura": anim([(p["id"], 0) for p in parts], breathe)},
+                 fallback={v: None for v in FX_VALUES if v != "aura"})
 
 
 def caret(d, pose):

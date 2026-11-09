@@ -21,7 +21,7 @@ accept; `docs/MAKING-A-PET.md` ("The manifest", "Part motion") explains the same
 | `palette` | no | `{name: colour}`, the default theme's colours (`themes.md`). |
 | `theme` | no | The default theme's name; "Default" if absent. |
 | `themes` | no | `{theme: {name: colour}}` or `{theme: {"sheets": {sheet: file}}}`. |
-| `layers` | yes | 1 to 16 layers, drawn bottom first. |
+| `layers` | yes | 1 to 24 layers, drawn bottom first. |
 
 Unknown keys are ignored everywhere except in a vector shape, so a pack may carry notes; but a misspelt key is
 silently ignored too.

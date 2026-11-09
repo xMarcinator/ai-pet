@@ -195,7 +195,7 @@ The top-level keys:
 | `accent` | The pet's accent colour, which Settings and the menu take on while the pet is worn. A colour, or `$name` for a palette colour. |
 | `glow` | The colour of the glow around glowing layers. A colour, or `$name`. |
 | `palette`, `theme`, `themes` | Named colours and the pet's themes (see [Themes](#themes)). Optional. |
-| `layers` | The layers, bottom first. 1 to 16 of them. |
+| `layers` | The layers, bottom first. 1 to 24 of them. |
 
 Each layer has:
 
@@ -451,7 +451,7 @@ down or crashing the pet.
 | A PNG sheet | 8 MB, 2048 px a side, checked from its header before it is decoded |
 | A pack's sheets, decoded | 64 MB in all |
 | An `.aseprite` file | 8 MB, 512 frames, 64 layers, 2048 px a side, 64 MB decoded |
-| Layers | 1 to 16 |
+| Layers | 1 to 24 |
 | Frames | 512 in the pack |
 | Parts | 256 in a vector pack; one per layer in a raster pack |
 | Frame durations | 1 ms to 60 s |
