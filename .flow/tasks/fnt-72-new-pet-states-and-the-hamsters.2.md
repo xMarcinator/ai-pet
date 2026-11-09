@@ -37,9 +37,10 @@ Draw the shared pieces once in `pet_states.py` (tears, aura, heart, the envelope
 - [ ] Each new state's first frame or key shows its cue
 
 ## Done summary
-TBD
+Shared effects in pet_states.py / vector_pack.py: tears (from under the screen-right eye), hearts (poke), the owner's soft golden glow (its own layer, first, behind the pet) with three stars, and a sealed envelope prop where the laptop sits; fixed colours tear blue, gold, heart pink, paper. Hood, Sprout (vector) and Pip draw sleepy eyes and a yawn; Pip's in its own generator. Packs regenerated, painted Pip rebaked (four new sheets embedded). MAX_LAYERS 16 -> 24 (the glow layer would push the vector Hamster to 19), with docs. First keys carry each cue (tear on the cheek, glow full, heart shown). Checked: the Hood and Sprout sheets rendered; workspace tests pass. Not checked: Pip rendered through the compositor in the new states.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: c739df2
+- Tests: cargo test --workspace
 - PRs:
