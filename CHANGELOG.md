@@ -8,6 +8,17 @@ app, `aipet-hook` and the plugin share one version number.
 The end of AiPet's move to Rust: the .NET code is gone from the repository. The pet, the hook and the plugin work as
 in the milestone 2 release, and an installed copy of any earlier release updates to this one as before.
 
+### Added
+- The flow-next tracker: Settings › Tracker enrolls the pet as the tracker's companion device with a one-time code,
+  on this computer (`http://127.0.0.1:3210`) or a hosted tracker over mutual TLS (`https://`, its certificate
+  authority pinned by the code). Each task the tracker works on gets a bubble: its phase or what waits on you,
+  acceptance criteria met, a strip for its subtasks and a badge for its agents, amber when it needs you and red when
+  its run failed; the chats that are its runs join it, and a click opens the task in the tracker's client. Where you
+  allow it in the tracker, the bubble answers a permission prompt or pauses or stops the run. Chats that aren't
+  tracker tasks can hide while it's connected. Nothing the hooks report is sent to the tracker but a chat's id.
+- Protocol version 2 between the hook and the pet: a v2 event is a v1 event, and the tracker's task messages are the
+  pet's own (the pipe and socket refuse them). Hooks keep sending version 1.
+
 ### Removed
 - The C# projects (`src/AiPet.Core`, `src/AiPet.UI`, `src/AiPet.Hook`), their tests (`tests/AiPet.Tests`), the
   solution (`AiPet.slnx`), `Directory.Build.props` and `build/Win32Resources.targets`. Every C# test has Rust tests

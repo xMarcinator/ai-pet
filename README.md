@@ -160,6 +160,12 @@ shortly after the mouse leaves the pet.
   the app is brought forward instead.
 - Clicking a Jira or GitHub bubble opens the issue or pull request. Clicking the music bubble brings the player
   forward.
+- With the flow-next tracker connected (Settings › Tracker), each task it's working on has a bubble with a teal
+  border: its id and title, what waits on you ("Needs your permission: Edit", "Needs your decision", ...) or its
+  phase ("Reviewing · round 2"), how many acceptance criteria are met, a strip along the bottom for its subtasks done,
+  and a badge with how many agents work on it when there's more than one. Amber means it needs you, red that its run
+  failed or was paused. The chats that are the tracker's runs join their task's bubble. Clicking it opens the task
+  in the tracker's desktop client (`fnt://task/<id>`).
 
 Hover over the front bubble (or any bubble of a spread stack) for its buttons:
 - ✕ dismisses the bubble.
@@ -167,6 +173,9 @@ Hover over the front bubble (or any bubble of a spread stack) for its buttons:
   keys in another app.
 - Jira and GitHub bubbles have buttons that open the Jira issue and the pull request, when the pet knows them.
 - The music bubble has previous, play/pause and next.
+- A tracker task's bubble has **Allow once** and **Deny** while a prompt waits, else **Pause** and **Stop** for its
+  run, only when you've switched "Answers and pause/stop" on for this pet in the tracker. The bubble says how it went
+  (someone may have answered first).
 
 The pet never sends anything to a chat.
 
@@ -208,6 +217,13 @@ Right-click the pet for its menu:
 - **GitHub**: the host (github.com, or a GitHub Enterprise Server host), an access token, and the organisations to
   search for the pull request of a Jira issue. A pull request that mentions a Jira key (in its title, branch,
   description or commits) joins that issue's bubble. GitHub stays off until you save a token.
+- **Tracker**: follows a flow-next tracker's active tasks as the
+  tracker's companion device. Make a companion code on the tracker's Devices & runners page, enter the tracker's
+  address and the code here, and click **Enroll**. A tracker on this computer is `http://127.0.0.1:3210` (its own
+  service); a hosted one is its `https://` address, and its code (`<secret>.<fingerprint>`) also tells the pet which
+  certificate authority to trust. The page says whether the pet is connected and whether its answers and pause/stop
+  are on, and can hide chats that aren't tracker tasks while the tracker is connected. **Forget this tracker** removes
+  the pet's credential; revoke the pet in the tracker to cut it off there.
 
 **Presets.** A team can share its Jira and GitHub defaults as a JSON file, for **Import defaults…**:
 
@@ -278,17 +294,22 @@ keeps nothing.
 (`~/.codex/session_index.jsonl` and `~/.codex/sessions/`), and never writes to them. In its data folder it stores:
 - `config.json`: the pet's position, avatar and its theme, sizes and switches.
 - `jira.json` and `github.json`: your Jira and GitHub settings (site, email, search, host, organisations), without
-  the tokens.
+  the tokens; `tracker.json`: the tracker's address and whether chats without a task hide, without its credential.
 - `aipet.log` and `hook-events.log`. The event log has no prompt text.
 - `avatars/`: your own pets (pack folders and avatar `.json` files), and in `avatars/themes/` your own themes.
 
 **Tokens.** The Jira and GitHub tokens are only ones you paste into Settings, and Settings can remove them again.
+The tracker's credential is what enrolling gave the pet (a token, and for a hosted tracker a certificate and the key
+the pet made for it); Forget removes it.
 They're kept in Windows Credential Manager, or on Linux in your keyring through `secret-tool`. Without a keyring,
 Linux keeps them in `secrets.json` in the data folder, a file only you can read (mode `0600`). AiPet reads no other
 credentials on the machine.
 
 **Network.** The pet contacts:
 - your Jira site and GitHub, only once you turn them on in Settings and save a token;
+- the flow-next tracker, only once you enroll the pet there. It reads the tracker's active tasks, and sends it
+  nothing your agents' hooks report except a chat's id, to ask whether that chat is one of the tracker's runs; with
+  your switch on in the tracker, also your answer to a prompt or a pause or stop;
 - GitHub's releases, to check for updates, only in the app installed on Windows. The check sends no token. The
   portable zip and Linux never check.
 

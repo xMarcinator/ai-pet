@@ -159,6 +159,8 @@ fn session(v: &Value) -> Session {
         // the C# has no failed turns (fnt-72): its board shows them as attention
         failed: false,
         ts: number(&v["ts"]),
+        // nor tracker tasks (fnt-81)
+        task: None,
     }
 }
 
@@ -217,6 +219,8 @@ fn sources(i: &Value) -> Sources {
             track_since: number(&i["media"]["track_since"]),
         }),
         music_on: i["music_on"] == json!(true),
+        // the C# has no tracker (fnt-81)
+        tracker: Default::default(),
     }
 }
 

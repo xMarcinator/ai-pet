@@ -1,4 +1,6 @@
-//! A request's answer: the version check, then a ping or an event, else a refusal (`HookServer.cs:266-299`).
+//! A request's answer: the version check, then a ping or an event, else a refusal (`HookServer.cs:266-299`). Version 2
+//! (fnt-81) adds an event like version 1's and a task message, which is refused here: task messages come from the
+//! tracker watcher only.
 //!
 //! The line is read as the C#'s `JsonNode.Parse` reads it: valid JSON nesting at most 128 deep, and an object. Nested
 //! values are only checked for being JSON (numbers past a double's range, lone surrogates in escapes and repeated
@@ -11,7 +13,9 @@
 use std::collections::HashSet;
 use std::fmt::{self, Write};
 
-use aipet_ipc::protocol::{APP, ERROR, KIND, MAX_DEPTH, OK, OUTCOME, PID, RECENT, V, VERSION};
+use aipet_ipc::protocol::{
+    APP, ERROR, KIND, MAX_DEPTH, OK, OUTCOME, PID, RECENT, TASK, TASK_ONLY_FROM_WATCHER, V, VERSION, VERSION_2,
+};
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::value::RawValue;
 
@@ -22,7 +26,8 @@ use crate::sessions::Envelope;
 pub(super) fn answer(server: &Shared, line: &str) -> Option<String> {
     let request = Request::parse(line)?;
     let version = request.v.and_then(|v| serde_json::from_str::<f64>(v.get()).ok());
-    if version != Some(f64::from(VERSION)) {
+    let v2 = version == Some(f64::from(VERSION_2));
+    if version != Some(f64::from(VERSION)) && !v2 {
         return Some(refuse("unsupported version"));
     }
     let kind = match request.kind {
@@ -31,8 +36,11 @@ pub(super) fn answer(server: &Shared, line: &str) -> Option<String> {
         _ => None,
     };
     match kind.as_deref() {
+        // version 2 has no ping, and the C# refuses {"v":2,"type":"ping"} as a version it doesn't know
+        Some("ping") if v2 => Some(refuse("unsupported version")),
         Some("ping") => Some(ping(server)),
         Some("event") => event(server, line),
+        Some(TASK) if v2 => Some(refuse(TASK_ONLY_FROM_WATCHER)),
         _ => Some(refuse("unknown request")),
     }
 }

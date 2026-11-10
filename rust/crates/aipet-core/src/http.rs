@@ -27,7 +27,7 @@ use serde_json::Value;
 use ureq::Agent;
 use ureq::config::{Config, ConfigBuilder};
 use ureq::http::Uri;
-use ureq::tls::{RootCerts, TlsConfig};
+use ureq::tls::{Certificate, ClientCert, PemItem, PrivateKey, RootCerts, TlsConfig};
 use ureq::typestate::AgentScope;
 use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver};
 use ureq::unversioned::transport::{Buffers, ConnectionDetails, Connector, DefaultConnector, NextTimeout, Transport};
@@ -73,6 +73,33 @@ impl Http {
             agent: agent(like_dotnet(config).build(), ThisComputer::default()),
             local: true,
         }
+    }
+
+    /// HTTPS to a hosted tracker (fnt-81): trusting only its CA (`ca_pem`), and presenting the pet's certificate
+    /// chain and key when it has them (none while it enrolls), with `timeout` for each request.
+    pub(crate) fn tracker(ca_pem: &str, client: Option<(&str, &str)>, timeout: Duration) -> Result<Http, String> {
+        let certificates = |pem: &str| -> Result<Vec<Certificate<'static>>, String> {
+            ureq::tls::parse_pem(pem.as_bytes())
+                .filter_map(|item| match item {
+                    Ok(PemItem::Certificate(certificate)) => Some(Ok(certificate)),
+                    Ok(_) => None,
+                    Err(e) => Some(Err(format!("Unreadable certificate: {e}"))),
+                })
+                .collect()
+        };
+        let mut tls = TlsConfig::builder().root_certs(RootCerts::Specific(Arc::new(certificates(ca_pem)?)));
+        if let Some((chain, key)) = client {
+            let key = PrivateKey::from_pem(key.as_bytes()).map_err(|e| format!("Unreadable key: {e}"))?;
+            tls = tls.client_cert(Some(ClientCert::new_with_certs(&certificates(chain)?, key)));
+        }
+        let config = Agent::config_builder()
+            .https_only(true)
+            .tls_config(tls.build())
+            .timeout_global(Some(timeout));
+        Ok(Http {
+            agent: agent(like_dotnet(config).build(), DefaultResolver::default()),
+            local: false,
+        })
     }
 
     /// The scheme a watcher's address is reached with: `https`, or `http` for [`Http::local`].

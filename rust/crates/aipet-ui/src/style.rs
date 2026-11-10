@@ -100,6 +100,8 @@ pub enum Icon {
     Pause,
     Play,
     Next,
+    /// A tracker run's Stop (fnt-81): a filled square.
+    Stop,
 }
 
 /// Icons are rasterised at this many pixels per logical pixel (enough for a 300 % screen) and drawn scaled down.
@@ -180,6 +182,11 @@ impl Icon {
             }
             // M5,3 L13,8 L5,13 Z, filled
             Icon::Play => d.triangle(1.6, [p(5.0, 3.0), p(13.0, 8.0), p(5.0, 13.0)]),
+            // M4.5,4.5 H11.5 V11.5 H4.5 Z, filled: two triangles
+            Icon::Stop => {
+                d.triangle(1.2, [p(4.5, 4.5), p(11.5, 4.5), p(11.5, 11.5)]);
+                d.triangle(1.2, [p(4.5, 4.5), p(11.5, 11.5), p(4.5, 11.5)]);
+            }
         }
         d
     }

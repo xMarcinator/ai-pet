@@ -8,7 +8,7 @@ use iced::widget::image::{FilterMethod, Handle};
 use iced::widget::{Space, button, canvas, container, image, mouse_area, opaque, pin, row, stack, text};
 use iced::{Border, Color, ContentFit, Element, Length, Padding, Point, Rectangle, Shadow, Vector, mouse};
 
-use crate::cards::{Button, Card};
+use crate::cards::{Button, Card, Progress};
 use crate::geometry::{
     CARD_GLOW_BLUR, CARD_H, CARD_RADIUS, CARD_SHADOW_BLUR, CARD_SHADOW_Y, CLOSE_SIZE, CardFrame, HALO_PAD, HEADER_H,
     HEADER_RADIUS, INLINE_MENU,
@@ -21,6 +21,13 @@ use crate::{Message, PetUi, TIP_FADE, TIP_TEXT};
 /// 18 px box with 8 px after it, the two lines of text centred in the 50 px).
 const DOT: Point = Point::new(1.0 + 14.0 + 9.0, CARD_H / 2.0);
 const TEXT_X: f32 = 1.0 + 14.0 + 18.0 + 8.0;
+/// A tracker task's subtask strip: its height and its gap above the bubble's bottom edge; its agent badge's size,
+/// text size and offset from the dot's centre (fnt-81).
+const STRIP_H: f32 = 2.5;
+const STRIP_BOTTOM: f32 = 5.0;
+const BADGE: f32 = 13.0;
+const BADGE_TEXT: f32 = 8.5;
+const BADGE_OFFSET: f32 = 7.0;
 const TITLE_SIZE: f32 = 13.5;
 const DETAIL_SIZE: f32 = 12.0;
 /// The title's top: the lines' heights ([`style::LINE_SPACING`] em each) and the detail's 1 px margin, centred.
@@ -189,6 +196,9 @@ impl PetUi {
                 argb(0xFFA8A8AE).scale_alpha(o),
                 frame.map(Point::new(TEXT_X, DETAIL_Y)),
             ));
+            if let Some(progress) = card.progress {
+                progress_marks(progress, colour, &frame, o, layers);
+            }
         }
 
         if card.interactive() {
@@ -282,6 +292,10 @@ fn round_button<'a>(card: &Card, b: Button, r: Rectangle, o: f32, s: f32) -> Ele
         Button::PlayPause if card.state == "music" => Icon::Pause,
         Button::PlayPause => Icon::Play,
         Button::Next => Icon::Next,
+        Button::Allow => Icon::Check,
+        Button::Deny => Icon::Close,
+        Button::PauseRun => Icon::Pause,
+        Button::StopRun => Icon::Stop,
     };
     button(container(icon.view(style::ICON.scale_alpha(o), s)).center(Length::Fill))
         .width(r.width)
@@ -319,6 +333,66 @@ fn pixels<'a>(handle: &Handle, r: Rectangle, filter: FilterMethod) -> Element<'a
         .filter_method(filter))
     .position(r.position())
     .into()
+}
+
+/// A tracker task's counts (fnt-81): its subtasks done of total as a strip along the bubble's bottom, between the
+/// text's start and the rounded end, in the dot's colour on a faint track; and, when more than one agent works on
+/// it, their number on a badge at the dot's top right.
+fn progress_marks<'a>(
+    progress: Progress,
+    colour: Color,
+    frame: &CardFrame,
+    o: f32,
+    layers: &mut Vec<Element<'a, Message>>,
+) {
+    let s = frame.scale;
+    if progress.total > 0 {
+        let (left, right) = (TEXT_X, frame.width - CARD_RADIUS * 0.6);
+        let length = (right - left).max(0.0);
+        let filled = length * (progress.done.min(progress.total) as f32 / progress.total as f32);
+        let y = CARD_H - STRIP_BOTTOM - STRIP_H;
+        for (width, fill) in [(length, argb(0x33FFFFFF)), (filled, colour)] {
+            if width <= 0.0 {
+                continue;
+            }
+            let bar = container(Space::new().width(width * s).height(STRIP_H * s)).style(move |_| container::Style {
+                background: Some(fill.scale_alpha(o).into()),
+                border: Border {
+                    radius: (STRIP_H / 2.0 * s).into(),
+                    ..Border::default()
+                },
+                ..container::Style::default()
+            });
+            layers.push(pin(bar).position(frame.map(Point::new(left, y))).into());
+        }
+    }
+    if progress.agents > 1 {
+        let center = frame.map(Point::new(DOT.x + BADGE_OFFSET, DOT.y - BADGE_OFFSET));
+        let size = BADGE * s;
+        let count = progress.agents.min(99).to_string();
+        let badge = container(
+            text(count)
+                .size(BADGE_TEXT * s)
+                .font(style::UI_SEMIBOLD)
+                .color(Color::WHITE.scale_alpha(o))
+                .center(),
+        )
+        .center(size)
+        .style(move |_| container::Style {
+            background: Some(argb(0xFF3A3A3E).scale_alpha(o).into()),
+            border: Border {
+                color: colour.scale_alpha(o),
+                width: s,
+                radius: (size / 2.0).into(),
+            },
+            ..container::Style::default()
+        });
+        layers.push(
+            pin(badge)
+                .position(Point::new(center.x - size / 2.0, center.y - size / 2.0))
+                .into(),
+        );
+    }
 }
 
 /// A filled circle `diameter` across, centred on `center`.

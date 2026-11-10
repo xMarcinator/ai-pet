@@ -6,6 +6,7 @@
 //! - one bubble per chat. A Codex chat that both its hook and Codex's own log report is the newer report, by the
 //!   chat's turns first, else by time (the hook's on a tie), with the winner's own time and the best name either has;
 //! - a bubble per Jira issue, with its pull request, and per review request that no Jira issue has;
+//! - a bubble per active tracker task (fnt-81), into which the chats that are its runs collapse;
 //! - the music player's, and an error bubble for a watcher whose last poll failed;
 //! - sorted by priority, then time. Each stack shows so many, a watcher's error first. A bubble the user dismissed
 //!   stays hidden until it does something new.
@@ -17,13 +18,14 @@
 //!   text with characters a culture ignores or combines (Claude's entry points are ASCII).
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::codex_watcher::CodexWatcher;
 use crate::github::{GitHubSettings, GitHubWatcher, PullRequest};
-use crate::http::{equals_ignoring_case, escape_data_string};
+use crate::http::{equals_ignoring_case, escape_data_string, unix_seconds};
 use crate::jira::{Issue, JiraSettings, JiraWatcher};
 use crate::sessions::{AgentSessions, Entry};
+use crate::tracker::{Need, SessionsWithoutTask, Status, Tone, TrackerTask, TrackerWatcher};
 
 /// How many bubbles each stack shows, in the order the stacks are laid out; the rest are counted in
 /// [`Board::extra`]. There is only ever one music bubble.
@@ -31,6 +33,8 @@ pub const MAX_CARDS: [(&str, usize); 3] = [("chats", 4), ("reviews", 4), ("music
 
 /// A GitHub review's dot colour (0xAARRGGBB).
 pub const GITHUB_PURPLE: u32 = 0xFFA371F7;
+/// A tracker task bubble's border (0xAARRGGBB), as a chat's is its app's (fnt-81).
+pub const TRACKER_TEAL: u32 = 0xFF3FB8AF;
 
 /// How much a bubble's state counts in the order: more first; a state not listed counts 1.
 pub fn priority(eff: &str) -> i32 {
@@ -62,6 +66,8 @@ pub fn status_color(state: &str) -> Option<u32> {
 
 /// The stack a kind of bubble lives in: the music player (right above the pet, so no chat ever hides it), agent chats
 /// (above it) and reviews (on top).
+///
+/// Tracker tasks and the tracker's error are chats' company: they're agents' work.
 pub fn section_of(kind: &str) -> &'static str {
     match kind {
         "jira" | "jira-error" | "github" | "github-error" => "reviews",
@@ -70,13 +76,15 @@ pub fn section_of(kind: &str) -> &'static str {
     }
 }
 
-/// One bubble: an agent chat, a Jira or GitHub review, the music player, or a watcher's error (`Session`).
+/// One bubble: an agent chat, a tracker task, a Jira or GitHub review, the music player, or a watcher's error
+/// (`Session`).
 ///
 /// The C#'s null `Name` (a Codex chat its index doesn't name yet) and `Cwd` (on every bubble but a chat) are empty
 /// here: nothing tells them from empty text.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Session {
-    /// `claude:<sid>` or `codex:<sid>` for a chat, `jira:<key>`, `gh:<url>`, `music`, `jira:_error` or `gh:_error`.
+    /// `claude:<sid>` or `codex:<sid>` for a chat, `task:<task id>`, `jira:<key>`, `gh:<url>`, `music`, `jira:_error`,
+    /// `gh:_error` or `tracker:_error`.
     pub id: String,
     /// Its state as shown: idle, thinking, working, attention, done, review, music, paused or error.
     pub eff: &'static str,
@@ -85,9 +93,9 @@ pub struct Session {
     /// `laptop`, `lens` or none.
     pub prop: Option<&'static str>,
     pub cwd: String,
-    /// `claude`, `codex`, `jira`, `github` or `music`.
+    /// `claude`, `codex`, `tracker`, `jira`, `github` or `music`.
     pub agent: &'static str,
-    /// `chat`, `jira`, `jira-error`, `github`, `github-error` or `music`.
+    /// `chat`, `task`, `jira`, `jira-error`, `github`, `github-error`, `tracker-error` or `music`.
     pub kind: &'static str,
     pub url: Option<String>,
     pub ticket_url: Option<String>,
@@ -107,6 +115,8 @@ pub struct Session {
     pub failed: bool,
     /// Unix seconds.
     pub ts: f64,
+    /// A tracker task's bubble: the task, for its counts, badge and actions.
+    pub task: Option<Box<TrackerTask>>,
 }
 
 impl Default for Session {
@@ -130,6 +140,7 @@ impl Default for Session {
             turn_ended: false,
             failed: false,
             ts: 0.0,
+            task: None,
         }
     }
 }
@@ -170,6 +181,7 @@ pub fn agent_label(agent: &str) -> &'static str {
         "codex" => "ChatGPT",
         "jira" => "Jira",
         "github" => "GitHub",
+        "tracker" => "Tracker",
         _ => "Claude",
     }
 }
@@ -216,6 +228,35 @@ pub struct Sources {
     pub media: Option<Media>,
     /// Whether the user wants the music bubble (`config.json`'s `Music`).
     pub music_on: bool,
+    /// The tracker's active tasks (fnt-81); empty without a tracker.
+    pub tracker: TrackerSources,
+}
+
+/// The tracker's part of the sources (fnt-81).
+#[derive(Clone, Debug, Default)]
+pub struct TrackerSources {
+    /// Red first, then amber, each with the session ids of the chats that are its runs.
+    pub tasks: Vec<TrackerTask>,
+    /// Why the tracker can't be followed, while it can't.
+    pub error: Option<String>,
+    pub connected: bool,
+    /// Whether the user allows this pet to answer prompts and pause or stop runs (the tracker's switch).
+    pub actions_allowed: bool,
+    pub sessions_without_task: SessionsWithoutTask,
+}
+
+impl TrackerSources {
+    /// What the watcher holds now.
+    pub fn read(watcher: &TrackerWatcher) -> TrackerSources {
+        let status = watcher.status();
+        TrackerSources {
+            tasks: watcher.tasks(),
+            error: watcher.last_error(),
+            connected: matches!(status, Status::Connected { .. }),
+            actions_allowed: status == Status::Connected { actions_allowed: true },
+            sessions_without_task: watcher.settings().sessions_without_task,
+        }
+    }
 }
 
 impl Sources {
@@ -240,6 +281,7 @@ impl Sources {
             github_error: github.last_error(),
             media,
             music_on,
+            tracker: TrackerSources::default(),
         }
     }
 }
@@ -273,6 +315,8 @@ pub struct Board {
     /// fnt-72: a chat whose turn failed shows as `error` ("Failed: …", red) instead of `attention`. The app turns it
     /// on; the C# golden replays never do.
     pub moods: bool,
+    /// fnt-81: whether the tracker lets this pet answer prompts and pause or stop runs, as of the last refresh.
+    tracker_actions: bool,
     /// When each chat was first seen (Unix seconds): a chat already open when the pet starts counts from then.
     first_seen: HashMap<String, f64>,
     /// How long the front chat has been going, at the last refresh.
@@ -290,6 +334,7 @@ impl Default for Board {
             dismissed: HashMap::new(),
             music_last_playing: 0.0,
             moods: false,
+            tracker_actions: false,
             first_seen: HashMap::new(),
             front_age: None,
         }
@@ -336,6 +381,11 @@ impl Board {
     }
 
     /// Bubbles the user closed, with what they showed then (see [`Board::dismiss`]).
+    /// Whether a task bubble may offer answers, pause and stop (fnt-81).
+    pub fn tracker_actions(&self) -> bool {
+        self.tracker_actions
+    }
+
     pub fn dismissed(&self) -> &HashMap<String, Dismissal> {
         &self.dismissed
     }
@@ -389,6 +439,8 @@ impl Board {
             })
             .collect();
 
+        tasks(&sources.tracker, &mut sessions, now);
+        self.tracker_actions = sources.tracker.actions_allowed;
         reviews(sources, &mut sessions);
 
         // music
@@ -431,6 +483,16 @@ impl Board {
         {
             sessions.push(error_bubble("jira:_error", "jira-error", "jira", "Jira", error, now));
         }
+        if let Some(error) = &sources.tracker.error {
+            sessions.push(error_bubble(
+                "tracker:_error",
+                "tracker-error",
+                "tracker",
+                "Tracker",
+                error,
+                now,
+            ));
+        }
 
         // stable, as LINQ's OrderByDescending(...).ThenByDescending(...) is
         sessions.sort_by(|a, b| priority(b.eff).cmp(&priority(a.eff)).then_with(|| compare(b.ts, a.ts)));
@@ -441,10 +503,11 @@ impl Board {
         self.dismissed.retain(|id, d| {
             sessions.iter().find(|s| s.id == *id).is_some_and(|s0| {
                 let detail_changed = d.detail.as_deref() != Some(s0.detail.as_str());
-                let changed = if matches!(s0.kind, "jira-error" | "github-error") {
+                let changed = if is_error(s0.kind) {
                     detail_changed
                 } else {
-                    s0.ts > d.ts + 2.0 || s0.kind == "chat" && (d.eff != Some(s0.eff) || detail_changed)
+                    s0.ts > d.ts + 2.0
+                        || matches!(s0.kind, "chat" | "task") && (d.eff != Some(s0.eff) || detail_changed)
                 };
                 !changed
             })
@@ -462,7 +525,7 @@ impl Board {
                 .iter()
                 .copied()
                 .filter(|x| x.section() == *section)
-                .partition(|x| matches!(x.kind, "jira-error" | "github-error"));
+                .partition(|x| is_error(x.kind));
             let room = max.saturating_sub(errors.len());
             cards.extend(errors.into_iter().cloned());
             cards.extend(rest.iter().take(room).copied().cloned());
@@ -470,7 +533,8 @@ impl Board {
         }
         self.cards = cards;
 
-        let chats: Vec<&Session> = sessions.iter().filter(|s| s.kind == "chat").collect();
+        // the pet works on tracker tasks as on chats (golden replays have none)
+        let chats: Vec<&Session> = sessions.iter().filter(|s| matches!(s.kind, "chat" | "task")).collect();
         let latest = chats.iter().map(|s| s.ts).reduce(linq_max).unwrap_or(0.0);
         let primary = chats.first();
         let mut state = primary.map_or("sleep", |p| p.eff);
@@ -655,6 +719,99 @@ fn reviews(sources: &Sources, sessions: &mut Vec<Session>) {
     }
 }
 
+/// A watcher's error bubble: always shown, first in its stack, and back only with another error.
+fn is_error(kind: &str) -> bool {
+    matches!(kind, "jira-error" | "github-error" | "tracker-error")
+}
+
+/// A bubble per tracker task (fnt-81). The chats that are its runs collapse into it and lend it their state and prop,
+/// unless the tracker's tone says more: red (a failed run, a paused guard) or amber (something needs the user). With
+/// "sessions without a task: hide", the other chats go too while the tracker is connected.
+fn tasks(tracker: &TrackerSources, sessions: &mut Vec<Session>, now: f64) {
+    let hide = tracker.connected && tracker.sessions_without_task == SessionsWithoutTask::Hide;
+    if tracker.tasks.is_empty() && !hide {
+        return;
+    }
+    let mut collapsed = HashSet::new();
+    let mut bubbles = Vec::new();
+    for task in &tracker.tasks {
+        let runs: Vec<&Session> = sessions
+            .iter()
+            .filter(|s| s.kind == "chat" && task.sessions.iter().any(|sid| sid == sid_of(&s.id)))
+            .collect();
+        collapsed.extend(runs.iter().map(|s| s.id.clone()));
+        let busiest = runs
+            .iter()
+            .max_by(|a, b| priority(a.eff).cmp(&priority(b.eff)).then_with(|| compare(a.ts, b.ts)));
+        let eff = match task.tone {
+            Tone::Red => "error",
+            Tone::Amber => "attention",
+            Tone::Normal => match busiest.map(|s| s.eff).filter(|eff| *eff != "idle") {
+                Some(eff) => eff,
+                None if task.agents.total > 0 => "working",
+                None => "idle",
+            },
+        };
+        let at = unix_seconds(&task.at).unwrap_or(now);
+        bubbles.push(Session {
+            id: format!("task:{}", task.id),
+            kind: "task",
+            agent: "tracker",
+            eff,
+            name: task_name(task),
+            detail: task_detail(task),
+            prop: busiest.and_then(|s| s.prop),
+            link: task.links.task.clone(),
+            ts: runs.iter().map(|s| s.ts).fold(at, linq_max),
+            task: Some(Box::new(task.clone())),
+            ..Session::default()
+        });
+    }
+    sessions.retain(|s| !collapsed.contains(&s.id) && !(hide && s.kind == "chat"));
+    sessions.extend(bubbles);
+}
+
+/// A task bubble's first line: `FNT-12 · Its title`, or the short id alone when the tracker sent no title of its own
+/// (it sends the short id for a title that failed its secret check).
+pub fn task_name(task: &TrackerTask) -> String {
+    let title = task.title.trim();
+    if title.is_empty() || title == task.short_id {
+        task.short_id.clone()
+    } else {
+        format!("{} · {title}", task.short_id)
+    }
+}
+
+/// A task bubble's second line: what waits on the user first, else what went wrong, else its phase ("Reviewing ·
+/// round 2"), else its status.
+pub fn task_detail(task: &TrackerTask) -> String {
+    if let Some(need) = task.needs.first() {
+        return match need {
+            Need::Permission { tool: Some(tool), .. } => format!("Needs your permission: {tool}"),
+            Need::Permission { .. } => "Needs your permission".into(),
+            Need::Decision { .. } => "Needs your decision".into(),
+            Need::Input { .. } => "Waiting for your reply".into(),
+            Need::Review => "Review requested".into(),
+        };
+    }
+    if task.tone == Tone::Red {
+        return "The run failed or was paused".into();
+    }
+    match task.phase.as_deref().filter(|p| !p.is_empty()) {
+        Some(phase) => {
+            let mut word = phase.replace('_', " ");
+            if let Some(first) = word.get(..1) {
+                word = first.to_uppercase() + &word[1..];
+            }
+            match task.review_round.filter(|_| phase == "reviewing") {
+                Some(round) => format!("{word} · round {round}"),
+                None => word,
+            }
+        }
+        None => task.status.replace('_', " "),
+    }
+}
+
 fn error_bubble(id: &str, kind: &'static str, agent: &'static str, name: &str, error: &str, now: f64) -> Session {
     Session {
         id: id.into(),
@@ -714,6 +871,180 @@ fn linq_max(max: f64, x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tracker::wire::{Agents, Count, Links};
+
+    fn chat(id: &str, state: &'static str, ts: f64) -> Entry {
+        let mut chat = Entry::default();
+        chat.id = id.into();
+        chat.agent = Some("claude");
+        chat.state = Some(state);
+        chat.prop = Some("laptop");
+        chat.ts = ts;
+        chat
+    }
+
+    fn tracker_task(id: &str, tone: Tone, sessions: &[&str]) -> TrackerTask {
+        TrackerTask {
+            id: id.into(),
+            short_id: id.to_uppercase(),
+            title: format!("{id} title"),
+            status: "in_progress".into(),
+            phase: Some("reviewing".into()),
+            review_round: Some(2),
+            subtasks: Count { done: 1, total: 3 },
+            agents: Agents {
+                total: 1,
+                runs: 1,
+                ..Agents::default()
+            },
+            tone,
+            sessions: sessions.iter().map(|s| (*s).to_owned()).collect(),
+            links: Links {
+                task: Some(format!("fnt://task/{}", id.to_uppercase())),
+                run: None,
+            },
+            at: "2026-11-10T10:00:00Z".into(),
+            ..TrackerTask::default()
+        }
+    }
+
+    fn with_tracker(chats: Vec<Entry>, tracker: TrackerSources) -> Sources {
+        Sources {
+            chats,
+            tracker,
+            ..Sources::default()
+        }
+    }
+
+    #[test]
+    fn a_tracker_task_is_a_bubble_its_runs_collapse_into() {
+        // fnt-81 R3
+        // after the task's last change (2026-11-10T10:00:00Z), so its run is the more recent
+        let t = 1_800_000_000.0;
+        let sources = with_tracker(
+            vec![
+                chat("claude:run", "working", t),
+                chat("claude:mine", "thinking", t - 5.0),
+            ],
+            TrackerSources {
+                tasks: vec![tracker_task("fnt-1", Tone::Normal, &["run"])],
+                connected: true,
+                ..TrackerSources::default()
+            },
+        );
+        let mut board = Board::new();
+        board.refresh(&sources, t + 1.0);
+        assert!(board.find("claude:run").is_none(), "the run shows only as its task");
+        let task = board.find("task:fnt-1").unwrap();
+        assert_eq!(
+            (task.kind, task.agent, task.eff, task.prop, task.section()),
+            ("task", "tracker", "working", Some("laptop"), "chats")
+        );
+        assert_eq!(
+            (task.name.as_str(), task.detail.as_str()),
+            ("FNT-1 · fnt-1 title", "Reviewing · round 2")
+        );
+        assert_eq!(task.link.as_deref(), Some("fnt://task/FNT-1"));
+        assert_eq!(task.ts, t, "as recent as its run");
+        assert_eq!(
+            task.task.as_ref().map(|t| t.subtasks),
+            Some(Count { done: 1, total: 3 })
+        );
+        assert!(board.find("claude:mine").is_some(), "other chats show by default");
+        assert_eq!(board.state(), "working", "the pet works on the newest, the task");
+    }
+
+    #[test]
+    fn the_trackers_tone_wins_and_says_what_waits() {
+        let t = 1_790_000_000.0;
+        let mut amber = tracker_task("fnt-2", Tone::Amber, &[]);
+        amber.needs = vec![Need::Permission {
+            run_id: Some("r".into()),
+            request_id: Some("q".into()),
+            tool: Some("Edit".into()),
+        }];
+        let red = tracker_task("fnt-3", Tone::Red, &[]);
+        let mut quiet = tracker_task("fnt-4", Tone::Normal, &[]);
+        quiet.agents = Agents::default();
+        let sources = with_tracker(
+            vec![],
+            TrackerSources {
+                tasks: vec![red, amber, quiet],
+                connected: true,
+                ..TrackerSources::default()
+            },
+        );
+        let mut board = Board::new();
+        board.refresh(&sources, t);
+        let shown = |id: &str| board.find(id).map(|s| (s.eff, s.detail.clone()));
+        assert_eq!(
+            shown("task:fnt-2"),
+            Some(("attention", "Needs your permission: Edit".into()))
+        );
+        assert_eq!(
+            shown("task:fnt-3"),
+            Some(("error", "The run failed or was paused".into()))
+        );
+        // no agent and no run: active in the tracker, but nothing to show
+        assert_eq!(shown("task:fnt-4"), Some(("idle", "Reviewing · round 2".into())));
+        assert!(!board.cards().iter().any(|c| c.id == "task:fnt-4"));
+        assert_eq!(board.cards()[0].id, "task:fnt-2", "attention outranks an error");
+    }
+
+    #[test]
+    fn hiding_chats_without_a_task_applies_only_while_connected() {
+        let t = 1_790_000_000.0;
+        let hide = |connected| TrackerSources {
+            tasks: vec![tracker_task("fnt-1", Tone::Normal, &["run"])],
+            connected,
+            sessions_without_task: SessionsWithoutTask::Hide,
+            ..TrackerSources::default()
+        };
+        let chats = || vec![chat("claude:run", "working", t), chat("claude:mine", "thinking", t)];
+        let mut board = Board::new();
+        board.refresh(&with_tracker(chats(), hide(true)), t);
+        assert!(board.find("claude:mine").is_none());
+        assert!(board.find("task:fnt-1").is_some());
+        // the tasks shown as of the last snapshot, the connection lost: every chat shows again
+        board.refresh(&with_tracker(chats(), hide(false)), t);
+        assert!(board.find("claude:mine").is_some());
+    }
+
+    #[test]
+    fn the_trackers_error_is_a_bubble_of_its_own() {
+        let t = 1_790_000_000.0;
+        let sources = with_tracker(
+            vec![],
+            TrackerSources {
+                error: Some("this pet was revoked; enroll it again".into()),
+                ..TrackerSources::default()
+            },
+        );
+        let mut board = Board::new();
+        board.refresh(&sources, t);
+        let error = board.find("tracker:_error").unwrap();
+        assert_eq!(
+            (error.kind, error.eff, error.section()),
+            ("tracker-error", "error", "chats")
+        );
+        assert_eq!(error.detail, "this pet was revoked; enroll it again. Click to fix");
+        assert_eq!(board.cards()[0].id, "tracker:_error");
+    }
+
+    #[test]
+    fn a_task_names_itself_by_its_short_id_without_a_title_of_its_own() {
+        let mut task = tracker_task("fnt-5", Tone::Normal, &[]);
+        task.title = "FNT-5".into();
+        assert_eq!(task_name(&task), "FNT-5");
+        task.title = "  ".into();
+        assert_eq!(task_name(&task), "FNT-5");
+        task.phase = Some("implementing".into());
+        assert_eq!(task_detail(&task), "Implementing");
+        task.phase = None;
+        assert_eq!(task_detail(&task), "in progress");
+        task.needs = vec![Need::Input { run_id: None }, Need::Review];
+        assert_eq!(task_detail(&task), "Waiting for your reply");
+    }
 
     // What the golden data can't reach: the C#'s real clock can't move 600 s between two refreshes, and a turn id
     // with a `+` inside makes the C#'s Refresh throw.
