@@ -23,7 +23,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime};
 
 use aipet_ipc::connect::{NoPet, connect};
-use aipet_ipc::event::{self, mended, trimmed, twice};
+use aipet_ipc::event::{self, READ_DEPTH, mended, trimmed, twice};
 use aipet_ipc::json::{self, Node, Object};
 use aipet_ipc::protocol::{
     CLAUDE_ENV, CONNECT, HOOK_BUDGET, MAX_REQUEST, OK, SENT, STDIN, TIMEOUT, format_seconds, unix_time,
@@ -47,10 +47,6 @@ impl Launched {
         }
     }
 }
-
-/// How deep stdin may nest: System.Text.Json's default depth, which the C# hook reads it with. `MAX_DEPTH` (128)
-/// leaves the envelope a level more.
-const READ_DEPTH: usize = 64;
 
 /// What the request line leaves under [`MAX_REQUEST`] for `sent`, which is added once the pet is reached
 /// (`,"sent":1758800000.123` is 22 bytes).

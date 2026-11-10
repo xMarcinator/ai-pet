@@ -58,6 +58,14 @@ pub fn codex_home() -> PathBuf {
     codex_home_in(&process_vars, &folders().home)
 }
 
+/// Claude Code's folder, where its transcripts are: `$CLAUDE_CONFIG_DIR` when it is set, else `~/.claude`
+/// (`ClaudeConfig.Dir`). Read on every call.
+pub fn claude_home() -> PathBuf {
+    nonempty(&process_vars, "CLAUDE_CONFIG_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| folders().home.join(".claude"))
+}
+
 /// .NET's `Environment.GetFolderPath(SpecialFolder.UserProfile)`, which the hook's registration and doctor read too
 /// (`Install.cs:79`, `Doctor.cs:328`). Empty when .NET would give none (on Unix, a home folder that can't be read).
 pub fn home() -> &'static Path {

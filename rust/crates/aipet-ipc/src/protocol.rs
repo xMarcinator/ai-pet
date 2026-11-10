@@ -54,6 +54,11 @@ pub const TOOL_INPUT_KEYS: [&str; 4] = ["file_path", "notebook_path", "skill", "
 /// Claude's environment variables that say where a chat runs; the hook passes them in `env`.
 pub const CLAUDE_ENV: [&str; 2] = ["CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_HOST_SESSION_ID"];
 
+/// Where Claude's HTTP hooks post their events on the pet's listener (fnt-71), at [`MCP_PORT`].
+pub const CLAUDE_HOOK_PATH: &str = "/hook/claude";
+/// The headers Claude's HTTP hooks carry [`CLAUDE_ENV`] in, in its order (through the hooks' `allowedEnvVars`).
+pub const CLAUDE_ENV_HEADERS: [&str; 2] = ["X-AiPet-Entrypoint", "X-AiPet-Host-Session"];
+
 // The envelope's and the replies' field names.
 pub const V: &str = "v";
 pub const KIND: &str = "type";

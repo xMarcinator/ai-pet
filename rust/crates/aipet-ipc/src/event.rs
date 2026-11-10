@@ -14,6 +14,12 @@ use crate::protocol::{
     AGENT, AT, ENV, KIND, MAX_STRING, PAYLOAD, PID, TOOL_INPUT_KEYS, V, VERSION, format_seconds, unix_time,
 };
 
+/// How deep an event may nest: System.Text.Json's default depth, which the C# hook reads stdin with. `MAX_DEPTH`
+/// (128) leaves the envelope a level more.
+///
+/// [`MAX_DEPTH`]: crate::protocol::MAX_DEPTH
+pub const READ_DEPTH: usize = 64;
+
 /// `Mended`: the JSON with each escaped lone surrogate as `�`. Node's `JSON.stringify` (so Claude's) writes one
 /// for text cut in the middle of an emoji. System.Text.Json parses such an escape but then can neither read nor
 /// write back the string that holds it, which would lose the whole event; serde_json refuses it outright. The text

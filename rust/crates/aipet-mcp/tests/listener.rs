@@ -1,5 +1,5 @@
-//! The listener over real HTTP, on a port of the test's own: its checks (R2, R3), both MCP eras, the port taken, and
-//! the tools' conformance (R11), which tasks 4-6 extend with their tools.
+//! The listener over real HTTP, on a port of the test's own: its checks (R2, R3), both MCP eras, the port taken, the
+//! tools' conformance (R11), which tasks 4-6 extend with their tools, and Claude's HTTP hooks (R4, R5).
 //!
 //! The requests are written by hand on a TCP stream, so a test can send any Host, Origin or body it likes.
 
@@ -9,10 +9,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use aipet_core::server::Ingress;
-use aipet_core::sessions::{AgentSessions, Envelope};
+use aipet_core::sessions::{AgentSessions, Entry, Envelope};
+use aipet_ipc::event;
+use aipet_ipc::json::{self as aipet_json, Node, Object};
+use aipet_ipc::protocol::unix_time;
 use aipet_mcp::{Listener, Options, TOOLS};
 use serde_json::{Value, json};
 
@@ -547,4 +550,194 @@ fn more_than_16_requests_at_once_all_get_answers() {
         thread.join().unwrap();
     }
     assert_eq!(answered.load(Ordering::SeqCst), 40);
+}
+
+// ------------------------------------------------------------------------------------- R4, R5: Claude's HTTP hooks
+
+impl Pet {
+    /// A hook's POST to `/hook/claude`.
+    fn hook(&self, headers: &[(&str, &str)], body: &Value) -> Reply {
+        let mut all = vec![("Content-Type", "application/json")];
+        all.extend_from_slice(headers);
+        request(self.port(), "POST", "/hook/claude", &all, body.to_string().as_bytes())
+    }
+
+    /// Waits until the record has `lines` lines (at most the 30 it keeps): the events queued so far are applied.
+    fn applied(&self, lines: usize) -> Vec<String> {
+        until(|| self.ingress.recent().len() >= lines);
+        self.ingress.recent()
+    }
+
+    fn chat(&self, sid: &str) -> Option<Entry> {
+        let id = format!("claude:{sid}");
+        self.ingress.sessions().snapshot().into_iter().find(|e| e.id == id)
+    }
+}
+
+/// Waits up to 10 s for `done`.
+fn until(done: impl Fn() -> bool) {
+    for _ in 0..1000 {
+        if done() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    panic!("not done in 10 s");
+}
+
+/// What a chat shows (the times aside).
+fn shows(e: &Entry) -> impl PartialEq + std::fmt::Debug {
+    (
+        e.state,
+        e.detail.clone(),
+        e.prop,
+        e.failed,
+        e.title.clone(),
+        e.cwd.clone(),
+        e.r#where.clone(),
+        e.host_id.clone(),
+        e.ended.is_some(),
+    )
+}
+
+/// Every event the exe's registration reports, posted as Claude posts it, leaves the chat as the pipe leaves it for
+/// the envelope the exe makes of the same input; the two headers land in `env`, so the chat runs in the desktop app
+/// with its deep link.
+#[test]
+fn every_claude_event_over_http_gives_the_pipes_state() {
+    let pet = Pet::start("events");
+    let host = "local_0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+    let headers = [("X-AiPet-Entrypoint", "claude-desktop"), ("X-AiPet-Host-Session", host)];
+    let pipe = AgentSessions::with_codex_home(pet.root.join("codex"));
+    let bash = json!({"command": "cargo build"});
+    let edit = json!({"file_path": "/w/src/lib.rs", "old_string": "a", "new_string": "b"});
+    let events = [
+        json!({"hook_event_name": "SessionStart", "source": "startup"}),
+        json!({"hook_event_name": "UserPromptSubmit", "prompt": "Fix the build\nplease"}),
+        json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": bash, "tool_use_id": "t1"}),
+        json!({"hook_event_name": "PermissionRequest", "tool_name": "Bash", "tool_input": {"command": "cargo build", "description": "Build"}}),
+        json!({"hook_event_name": "Notification", "notification_type": "permission_prompt", "message": "Claude needs your permission"}),
+        json!({"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_input": bash, "tool_use_id": "t1", "tool_response": {"stdout": "x".repeat(300_000)}}),
+        json!({"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": edit, "tool_use_id": "t2"}),
+        json!({"hook_event_name": "PostToolUseFailure", "tool_name": "Edit", "tool_input": edit, "tool_use_id": "t2", "error": "no match"}),
+        json!({"hook_event_name": "PermissionDenied", "tool_name": "Bash", "tool_input": {"command": "rm -rf /"}}),
+        json!({"hook_event_name": "Elicitation", "mcp_server_name": "jira"}),
+        json!({"hook_event_name": "ElicitationResult", "mcp_server_name": "jira"}),
+        json!({"hook_event_name": "PreCompact", "trigger": "auto"}),
+        json!({"hook_event_name": "PostCompact", "trigger": "auto"}),
+        json!({"hook_event_name": "SubagentStart", "agent_type": "Explore"}),
+        json!({"hook_event_name": "SubagentStop", "agent_type": "Explore"}),
+        json!({"hook_event_name": "StopFailure", "error_type": "rate_limit"}),
+        json!({"hook_event_name": "UserPromptSubmit", "prompt": "Again"}),
+        json!({"hook_event_name": "Notification", "notification_type": "idle_prompt", "message": "Claude is waiting for your input"}),
+        json!({"hook_event_name": "UserPromptSubmit", "prompt": "/compact"}),
+        json!({"hook_event_name": "Stop", "stop_hook_active": false}),
+        json!({"hook_event_name": "SessionEnd", "reason": "exit"}),
+    ];
+    let env = [
+        ("CLAUDE_CODE_ENTRYPOINT", "claude-desktop"),
+        ("CLAUDE_CODE_HOST_SESSION_ID", host),
+    ];
+    // the pipe's hooks start a second apart; the posts a few ms apart, never in the same ms, which would order them by
+    // their place in a turn
+    let start = SystemTime::now();
+    for (n, mut event) in events.into_iter().enumerate() {
+        thread::sleep(Duration::from_millis(2));
+        event["session_id"] = json!("s1");
+        event["cwd"] = json!("/w");
+        let name = event["hook_event_name"].as_str().unwrap().to_owned();
+        let reply = pet.hook(&headers, &event);
+        assert_eq!((reply.status, reply.body.as_str()), (200, "{}"), "{name}");
+        assert_eq!(reply.header("content-type"), Some("application/json"), "{name}");
+        let recent = pet.applied(n + 1);
+
+        // the pipe: the exe's envelope of the same input
+        let Ok(Node::Object(payload)) = aipet_json::parse(&event.to_string(), event::READ_DEPTH) else {
+            panic!()
+        };
+        let mut vars = Object::default();
+        for (name, value) in env {
+            vars.push(name, Node::String(value.into()));
+        }
+        let at = start + Duration::from_secs(n as u64);
+        let line = event::envelope("claude", at, Some(4242), Some(vars), event::trimmed(payload).unwrap()).to_json();
+        let applied = pipe.apply(&Envelope::parse(&line).unwrap(), unix_time(at));
+
+        let outcome = recent[n].rsplit("-> ").next().unwrap();
+        assert_eq!(outcome, applied.outcome, "{name}: {}", recent[n]);
+        let by_pipe = pipe.snapshot().into_iter().find(|e| e.id == "claude:s1").unwrap();
+        let by_http = pet.chat("s1").unwrap();
+        assert_eq!(shows(&by_http), shows(&by_pipe), "{name}");
+        if name == "SubagentStop" {
+            assert_eq!(by_http.r#where.as_deref(), Some("desktop"));
+            assert_eq!(by_http.host_id.as_deref(), Some(host));
+            assert!(recent[n].contains("where=desktop"), "{}", recent[n]);
+        }
+    }
+    assert!(pet.chat("s1").unwrap().ended.is_some(), "SessionEnd left its tombstone");
+    assert!(pet.ingress.seen("claude"));
+}
+
+/// A body that isn't an event is answered as any other and logged; an unknown event is applied and ignored, and
+/// makes no chat.
+#[test]
+fn malformed_bodies_and_unknown_events_get_200_and_a_log_line() {
+    let pet = Pet::start("malformed");
+    for body in [
+        &b"{not json"[..],
+        b"[1,2]",
+        br#"{"hook_event_name":"Stop","a":1,"a":2}"#,
+    ] {
+        let reply = request(pet.port(), "POST", "/hook/claude", &[], body);
+        assert_eq!((reply.status, reply.body.as_str()), (200, "{}"));
+    }
+    // one line, which counts the others within 10 s
+    assert_eq!(
+        pet.logged("mcp: dropped an event: Claude's hook sent what isn't JSON"),
+        1,
+        "{:?}",
+        pet.log.lock().unwrap()
+    );
+    let reply = pet.hook(&[], &json!({"hook_event_name": "TeleportStart", "session_id": "u"}));
+    assert_eq!((reply.status, reply.body.as_str()), (200, "{}"));
+    let recent = pet.applied(1);
+    assert!(
+        recent[0].ends_with("TeleportStart u where=? -> ignored"),
+        "{}",
+        recent[0]
+    );
+    assert!(pet.chat("u").is_none());
+}
+
+/// Hooks of many chats posting at once all get their answer, and every chat ends as its own events left it: each
+/// chat's events in its order, as one chat's hooks come one after another.
+#[test]
+fn parallel_posts_all_land_in_their_chats() {
+    let pet = Arc::new(Pet::start("parallel"));
+    let threads: Vec<_> = (0..24)
+        .map(|i| {
+            let pet = Arc::clone(&pet);
+            thread::spawn(move || {
+                let sid = format!("p{i}");
+                for ev in ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"] {
+                    let event = json!({"hook_event_name": ev, "session_id": sid, "prompt": "Go",
+                        "tool_name": "Read", "tool_input": {"file_path": "/w/a.rs"}});
+                    assert_eq!(pet.hook(&[], &event).status, 200);
+                }
+            })
+        })
+        .collect();
+    for thread in threads {
+        thread.join().unwrap();
+    }
+    until(|| (0..24).all(|i| pet.chat(&format!("p{i}")).is_some_and(|c| c.state == Some("done"))));
+    for i in 0..24 {
+        let chat = pet.chat(&format!("p{i}")).unwrap();
+        assert_eq!(
+            (chat.state, chat.detail.as_deref()),
+            (Some("done"), Some("Done")),
+            "p{i}"
+        );
+    }
+    assert_eq!(pet.logged("mcp: dropped"), 0);
 }

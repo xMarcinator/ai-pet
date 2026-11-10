@@ -3,7 +3,8 @@
 //!
 //! It runs on a thread of its own with a current-thread tokio runtime, never on the shells' executor (aipet-ui's
 //! one-worker `Executor`), and it reaches the rest of the pet only through the core's [`Ingress`], which the pipe
-//! server shares: events from either side land in the same chats and the same record.
+//! server shares: events from either side land in the same chats and the same record. Its status events go there
+//! through one bounded queue and a thread of their own ([`events`]), in the order they arrived.
 //!
 //! Every request passes the same checks first ([`guard`]): a body over [`MAX_REQUEST`] gets 413, a Host that isn't
 //! loopback or an Origin that isn't the listener's own gets 403 (both empty), and at most 16 requests are handled at
@@ -15,6 +16,7 @@
 //! When the port is taken (another user's pet, another program) the start fails with one line in the log, and the
 //! pet runs without the listener: Settings and the pipe still work.
 
+mod events;
 mod guard;
 mod hook;
 mod token;
@@ -105,6 +107,7 @@ impl Listener {
         socket.set_nonblocking(true)?;
         let port = socket.local_addr()?.port();
         let token = token::load_or_make(&token_file, &*log)?;
+        let events = events::Events::start(Arc::clone(&ingress), Arc::clone(&log))?;
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_io()
             .enable_time()
@@ -114,6 +117,7 @@ impl Listener {
             token,
             version,
             ingress,
+            events,
             log,
             refused: Mutex::new(None),
         });
@@ -150,6 +154,8 @@ pub(crate) struct State {
     pub(crate) token: String,
     pub(crate) version: String,
     pub(crate) ingress: Arc<Ingress>,
+    /// Where the status events go on their way to the ingress, in the order they arrived.
+    pub(crate) events: events::Events,
     log: Arc<dyn Fn(&str) + Send + Sync>,
     /// When the log last got a line about a request without the right token.
     pub(crate) refused: Mutex<Option<Instant>>,
