@@ -60,6 +60,23 @@ const ARMS_DOWN: &[Cell] = &[
     (21, 16),
 ];
 const ARM_L: &[Cell] = ARMS_DOWN.split_at(4).0;
+/// At the laptop: the screen-right paw holds the lid's far edge, the screen-left one types at the keyboard, a
+/// keystroke pressing it a pixel down onto the base (the vector Hood's typing rhythm: three taps, then a rest).
+const HOLD_PAW: &[Cell] = &[(22, 17), (23, 17), (22, 18), (23, 18)];
+const TYPE_PAW: [&[Cell]; 2] = [
+    &[(11, 18), (12, 18), (11, 19), (12, 19)],
+    &[(11, 19), (12, 19), (11, 20), (12, 20)],
+];
+/// The typing loop's keys, (ms, pressed).
+const TYPING: [(u32, bool); 7] = [
+    (88, false),
+    (88, true),
+    (110, false),
+    (88, true),
+    (110, false),
+    (88, true),
+    (528, false),
+];
 const WAVE_A: &[Cell] = &[(21, 10), (22, 10), (21, 11), (22, 11)];
 const WAVE_B: &[Cell] = &[(22, 9), (23, 9), (22, 10), (23, 10)];
 const ARMS_UP: &[Cell] = &[
@@ -519,6 +536,11 @@ fn diff(with: &Buf, without: &Buf) -> Buf {
 /// `draw` sampled every millisecond over `ms` milliseconds, as frames with their durations: a new frame wherever
 /// the pixels change. A sample is taken in the middle of its millisecond. `ms` is a whole number of the animation's
 /// periods, so a loop of it stays in step with the pet clock however long the pet runs.
+/// The typing loop ([`TYPING`]) as frames: `draw` with the paw pressed or not.
+fn typing(draw: impl Fn(bool) -> Buf) -> Vec<(Buf, u32)> {
+    TYPING.iter().map(|&(ms, pressed)| (draw(pressed), ms)).collect()
+}
+
 fn sampled(ms: u32, draw: impl Fn(f64) -> Buf) -> Vec<(Buf, u32)> {
     let mut frames: Vec<(Buf, u32)> = Vec::new();
     for m in 0..ms {
@@ -682,7 +704,18 @@ pub fn bake(a: &Avatar) -> Baked {
             .still("raised", limb(ARMS_UP))
             .still("wave-a", limb(&wave_a))
             .still("wave-b", limb(&wave_b))
-            .falls(&[("hold", "rest"), ("lens", "rest")])
+            .timed(
+                "hold",
+                typing(|pressed| {
+                    // the typing paw is in front of the robe, so it is drawn on its own, outlined, over the holding one
+                    let mut buf = limb(HOLD_PAW);
+                    let paw = TYPE_PAW[usize::from(pressed)];
+                    outlined(&mut buf, paw.iter().copied(), a.body, a.outline);
+                    put(&mut buf, paw[0], a.hi);
+                    buf
+                }),
+            )
+            .falls(&[("lens", "rest")])
             .empty_for(&["run-a", "run-b"]),
         Making::new("arms-run", Channel::Arms, "run-a")
             .still("run-a", limb(RUN_ARMS[0]))
