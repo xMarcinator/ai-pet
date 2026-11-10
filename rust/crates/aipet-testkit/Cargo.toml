@@ -1,0 +1,23 @@
+[package]
+name = "aipet-testkit"
+description = "Where the tests that run programs run: a sandbox of fresh folders (HOME, the XDG folders, the agents' config folders, the data and temp folders) with an endpoint no pet listens on and a PATH of allowed tools and stand-ins, and the black-box suites that run the repository's scripts and the built binaries in it. The port of the C# tests' TestEnv and Scripts.Sandbox."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+# the hook's limits and the line it sends (tests/hook_contract.rs)
+aipet-ipc = { path = "../aipet-ipc" }
+# the update feed's channel and repository (tests/velopack.rs)
+aipet-core = { path = "../aipet-core" }
+serde_json.workspace = true
+
+# the trace log's name has the effective uid
+[target.'cfg(unix)'.dev-dependencies]
+libc.workspace = true
+
+# Windows' own reading of the exes' version resources (tests/resources.rs)
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }

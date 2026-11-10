@@ -122,6 +122,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "aipet-testkit"
+version = "0.1.0"
+dependencies = [
+ "aipet-core",
+ "aipet-ipc",
+ "libc",
+ "serde_json",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "aipet-ui"
 version = "0.1.0"
 dependencies = [
