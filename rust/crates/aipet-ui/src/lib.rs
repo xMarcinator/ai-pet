@@ -41,6 +41,7 @@ use std::time::{Duration, Instant};
 
 use aipet_core::board::{self, Board, Session};
 use aipet_core::config::Config;
+use aipet_core::tracker;
 use aipet_sprite::{Pet, PetFrame, PetInput};
 use iced::widget::image::Handle;
 use iced::{Point, Rectangle, Size, Vector};
@@ -55,6 +56,11 @@ use settings::{Page, Settings};
 use sprite::Sprite;
 
 /// The bubble an empty pet shows while you point at it.
+/// A tracker action under way: its bubble, the action, and where its outcome comes.
+type TrackerAct = (Arc<str>, tracker::Action, Receiver<Result<(), String>>);
+/// How long a task bubble says what a tracker action did (fnt-81), and at most how long it says it's sending one.
+const TRACKER_NOTE: f64 = 6.0;
+const TRACKER_NOTE_SENDING: f64 = 30.0;
 const GHOST: &str = "_ghost";
 /// The widest a bubble's title or detail gets (TextBlock.MaxWidth): at rest, and beside the bubble's buttons while the
 /// pointer is on it (UpdateChrome).
@@ -382,6 +388,10 @@ pub struct PetUi {
     stacks: Stacks,
     /// The core's last Board, if one came.
     board: Option<Arc<Board>>,
+    /// fnt-81: the tracker actions under way, by bubble, and what each bubble says of the last one's outcome, until
+    /// when (the pet's clock).
+    tracker_acts: Vec<TrackerAct>,
+    tracker_notes: HashMap<Arc<str>, (String, f64)>,
     /// The bubbles shown, in stack order (each tick refills it from the Board).
     show: Vec<Bubble>,
     /// How many reviews wait: the review bubbles shown, and those the stack leaves out.
@@ -585,6 +595,8 @@ impl PetUi {
             bubble_size: setup.prefs.bubble_size,
             stacks: Stacks::default(),
             board: None,
+            tracker_acts: Vec::new(),
+            tracker_notes: HashMap::new(),
             show: Vec::new(),
             waiting: 0,
             header: None,
@@ -643,6 +655,7 @@ impl PetUi {
         }
         self.t = t;
         settings::tick(self);
+        self.tracker_tick();
 
         let board = self.board.as_deref();
         let state = board.map_or("sleep", Board::state);
@@ -772,6 +785,11 @@ impl PetUi {
                 _ => s.detail.clone(),
             };
             let task = s.task.as_deref();
+            // what a tracker action of this bubble's said last, for a while
+            let detail = match self.tracker_notes.get(s.id.as_str()) {
+                Some((note, _)) => note.clone(),
+                None => detail,
+            };
             let detail = match task.map(|t| t.acceptance) {
                 Some(criteria) if criteria.total > 0 => {
                     format!("{detail} · {}/{} criteria", criteria.done, criteria.total)
@@ -788,7 +806,7 @@ impl PetUi {
                 detail: Cow::Owned(detail),
                 more: if last { board.extra(s.section()) } else { 0 },
                 app,
-                buttons: buttons(s),
+                buttons: buttons(s, board.tracker_actions()),
                 progress: task.map(|t| Progress {
                     done: t.subtasks.done,
                     total: t.subtasks.total,
@@ -1085,8 +1103,69 @@ impl PetUi {
                 }
             }
             Button::Open => return self.open_item(id),
+            Button::Allow | Button::Deny | Button::PauseRun | Button::StopRun => self.act(id, button),
         }
         None
+    }
+
+    /// A task bubble's Allow once, Deny, Pause or Stop (fnt-81): done in the tracker on a thread of its own, the
+    /// bubble saying so meanwhile and then how it went ([`PetUi::tracker_acts`], picked up in `tick`).
+    fn act(&mut self, id: &str, button: Button) {
+        let task = self
+            .board
+            .as_deref()
+            .and_then(|board| board.find(id))
+            .and_then(|s| s.task.as_deref());
+        let action = task.and_then(|task| match button {
+            Button::Allow | Button::Deny => task.prompt().map(|(run, request)| {
+                let (run, request) = (run.to_owned(), request.to_owned());
+                if button == Button::Allow {
+                    tracker::Action::Allow { run, request }
+                } else {
+                    tracker::Action::Deny { run, request }
+                }
+            }),
+            Button::PauseRun => task.run_id().map(|run| tracker::Action::Pause { run: run.into() }),
+            Button::StopRun => task.run_id().map(|run| tracker::Action::Stop { run: run.into() }),
+            _ => None,
+        });
+        let (Some(action), Some(watcher)) = (action, self.settings.services.tracker.clone()) else {
+            return;
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let doing = action.clone();
+        let spawned = std::thread::Builder::new()
+            .name("aipet-tracker-act".into())
+            .spawn(move || {
+                // a pet that stopped waiting misses nothing it wants
+                let _ = sender.send(watcher.act(&doing));
+            });
+        let id: Arc<str> = id.into();
+        let note = match spawned {
+            Ok(_) => {
+                self.tracker_acts.push((Arc::clone(&id), action, receiver));
+                "Sending to the tracker…".to_owned()
+            }
+            Err(error) => format!("Couldn't reach the tracker: {error}"),
+        };
+        self.tracker_notes.insert(id, (note, self.t + TRACKER_NOTE_SENDING));
+    }
+
+    /// Picks the tracker actions' outcomes up, and lets the notes they left run out.
+    fn tracker_tick(&mut self) {
+        let t = self.t;
+        let notes = &mut self.tracker_notes;
+        self.tracker_acts
+            .retain(|(id, action, outcome)| match outcome.try_recv() {
+                Ok(outcome) => {
+                    let note = outcome.map_or_else(|why| why, |()| action.done_text().to_owned());
+                    notes.insert(Arc::clone(id), (note, t + TRACKER_NOTE));
+                    false
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => true,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
+            });
+        notes.retain(|_, (_, until)| *until > t);
     }
 
     fn set_on_top(&mut self, on: bool) -> Option<Effect> {
@@ -1425,11 +1504,19 @@ fn section_of(s: &Session) -> Section {
 /// The round buttons a bubble shows while the pointer is on it (UpdateChrome): Open in Jira where it has a ticket,
 /// the pull request's where it has one, the player's three on the player's, and Open on a working or thinking chat in
 /// its agent's desktop app, where the C#'s Stop stood.
-fn buttons(s: &Session) -> Buttons {
+fn buttons(s: &Session, tracker_actions: bool) -> Buttons {
     let music = s.kind == "music";
     let busy_in_app =
         s.kind == "chat" && matches!(s.eff, "working" | "thinking") && s.r#where.as_deref() == Some("desktop");
+    // a tracker task's, when the tracker lets this pet act: its prompt's answers, else its live run's pause and stop
+    let task = s.task.as_deref().filter(|_| tracker_actions);
+    let prompt = task.is_some_and(|t| t.prompt().is_some());
+    let run = !prompt && task.is_some_and(|t| t.agents.runs > 0 && t.run_id().is_some());
     Buttons::default()
+        .with(Button::Allow, prompt)
+        .with(Button::Deny, prompt)
+        .with(Button::PauseRun, run)
+        .with(Button::StopRun, run)
         .with(Button::Ticket, s.ticket_url.is_some())
         .with(Button::PullRequest, s.pr_url.is_some())
         .with(Button::Previous, music)
@@ -1733,6 +1820,60 @@ pub(crate) mod tests {
         }));
         ui.update(Message::CardPressed("tracker:_error".into()));
         assert_eq!(ui.settings.page, Page::Tracker);
+    }
+
+    /// fnt-81: a task bubble offers its prompt's answers, else its run's pause and stop, only where the tracker lets
+    /// this pet act; a press without a tracker to ask does nothing.
+    #[test]
+    fn a_task_bubble_offers_actions_only_where_the_tracker_allows_them() {
+        use aipet_core::board::TrackerSources;
+        use aipet_core::tracker::wire::{Agents, Links};
+        use aipet_core::tracker::{Need, TrackerTask};
+
+        let task = |id: &str, prompt: bool| TrackerTask {
+            id: id.into(),
+            short_id: id.to_uppercase(),
+            agents: Agents {
+                total: 1,
+                runs: 1,
+                ..Agents::default()
+            },
+            needs: if prompt {
+                vec![Need::Permission {
+                    run_id: Some("run-7".into()),
+                    request_id: Some("req-3".into()),
+                    tool: Some("Bash".into()),
+                }]
+            } else {
+                Vec::new()
+            },
+            links: Links {
+                task: None,
+                run: Some("fnt://run/run-7".into()),
+            },
+            ..TrackerTask::default()
+        };
+        let with = |actions_allowed| {
+            shown(board(&Sources {
+                tracker: TrackerSources {
+                    tasks: vec![task("asks", true), task("runs", false)],
+                    connected: true,
+                    actions_allowed,
+                    ..TrackerSources::default()
+                },
+                ..Sources::default()
+            }))
+        };
+        let names = |ui: &PetUi, id: &str| bubble(ui, id).buttons.iter().collect::<Vec<_>>();
+        let (ui, _) = with(false);
+        assert!(names(&ui, "task:asks").is_empty() && names(&ui, "task:runs").is_empty());
+        let (mut ui, _) = with(true);
+        assert_eq!(names(&ui, "task:asks"), [Button::Allow, Button::Deny]);
+        assert_eq!(names(&ui, "task:runs"), [Button::PauseRun, Button::StopRun]);
+        assert_eq!(Button::StopRun.tip(None), "Stop the run");
+        // the detached pet has no tracker to ask
+        ui.update(Message::Button("task:asks".into(), Button::Allow));
+        assert!(ui.tracker_acts.is_empty() && ui.tracker_notes.is_empty());
     }
 
     #[test]

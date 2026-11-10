@@ -119,6 +119,29 @@ impl<'de> Deserialize<'de> for Tone {
     }
 }
 
+impl TrackerTask {
+    /// Its current run's id, from its run link (`fnt://run/<id>`).
+    pub fn run_id(&self) -> Option<&str> {
+        self.links
+            .run
+            .as_deref()?
+            .strip_prefix("fnt://run/")
+            .filter(|id| !id.is_empty() && !id.contains('/'))
+    }
+
+    /// The permission prompt waiting on the user, if one does: its run and request.
+    pub fn prompt(&self) -> Option<(&str, &str)> {
+        self.needs.iter().find_map(|need| match need {
+            Need::Permission {
+                run_id: Some(run),
+                request_id: Some(request),
+                ..
+            } => Some((run.as_str(), request.as_str())),
+            _ => None,
+        })
+    }
+}
+
 /// `fnt://` deep links into the tracker's desktop client; they never carry a token.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -260,6 +283,22 @@ mod tests {
             let theirs: Value = serde_json::from_str(doc).unwrap();
             assert_eq!(ours, theirs);
         }
+    }
+
+    #[test]
+    fn a_task_names_its_run_and_its_prompt() {
+        let task = example();
+        assert_eq!(task.run_id(), Some("run-7"));
+        assert_eq!(task.prompt(), Some(("run-7", "req-3")));
+        let bare = TrackerTask {
+            links: Links {
+                task: None,
+                run: Some("fnt://task/FNT-1".into()),
+            },
+            needs: vec![Need::Review],
+            ..TrackerTask::default()
+        };
+        assert_eq!((bare.run_id(), bare.prompt()), (None, None));
     }
 
     #[test]

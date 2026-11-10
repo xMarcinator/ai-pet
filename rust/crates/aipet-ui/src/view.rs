@@ -292,6 +292,10 @@ fn round_button<'a>(card: &Card, b: Button, r: Rectangle, o: f32, s: f32) -> Ele
         Button::PlayPause if card.state == "music" => Icon::Pause,
         Button::PlayPause => Icon::Play,
         Button::Next => Icon::Next,
+        Button::Allow => Icon::Check,
+        Button::Deny => Icon::Close,
+        Button::PauseRun => Icon::Pause,
+        Button::StopRun => Icon::Stop,
     };
     button(container(icon.view(style::ICON.scale_alpha(o), s)).center(Length::Fill))
         .width(r.width)

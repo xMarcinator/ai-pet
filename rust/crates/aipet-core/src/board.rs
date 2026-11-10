@@ -240,16 +240,20 @@ pub struct TrackerSources {
     /// Why the tracker can't be followed, while it can't.
     pub error: Option<String>,
     pub connected: bool,
+    /// Whether the user allows this pet to answer prompts and pause or stop runs (the tracker's switch).
+    pub actions_allowed: bool,
     pub sessions_without_task: SessionsWithoutTask,
 }
 
 impl TrackerSources {
     /// What the watcher holds now.
     pub fn read(watcher: &TrackerWatcher) -> TrackerSources {
+        let status = watcher.status();
         TrackerSources {
             tasks: watcher.tasks(),
             error: watcher.last_error(),
-            connected: matches!(watcher.status(), Status::Connected { .. }),
+            connected: matches!(status, Status::Connected { .. }),
+            actions_allowed: status == Status::Connected { actions_allowed: true },
             sessions_without_task: watcher.settings().sessions_without_task,
         }
     }
@@ -311,6 +315,8 @@ pub struct Board {
     /// fnt-72: a chat whose turn failed shows as `error` ("Failed: …", red) instead of `attention`. The app turns it
     /// on; the C# golden replays never do.
     pub moods: bool,
+    /// fnt-81: whether the tracker lets this pet answer prompts and pause or stop runs, as of the last refresh.
+    tracker_actions: bool,
     /// When each chat was first seen (Unix seconds): a chat already open when the pet starts counts from then.
     first_seen: HashMap<String, f64>,
     /// How long the front chat has been going, at the last refresh.
@@ -328,6 +334,7 @@ impl Default for Board {
             dismissed: HashMap::new(),
             music_last_playing: 0.0,
             moods: false,
+            tracker_actions: false,
             first_seen: HashMap::new(),
             front_age: None,
         }
@@ -374,6 +381,11 @@ impl Board {
     }
 
     /// Bubbles the user closed, with what they showed then (see [`Board::dismiss`]).
+    /// Whether a task bubble may offer answers, pause and stop (fnt-81).
+    pub fn tracker_actions(&self) -> bool {
+        self.tracker_actions
+    }
+
     pub fn dismissed(&self) -> &HashMap<String, Dismissal> {
         &self.dismissed
     }
@@ -428,6 +440,7 @@ impl Board {
             .collect();
 
         tasks(&sources.tracker, &mut sessions, now);
+        self.tracker_actions = sources.tracker.actions_allowed;
         reviews(sources, &mut sessions);
 
         // music

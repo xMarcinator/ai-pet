@@ -47,19 +47,29 @@ pub enum Button {
     /// A working or thinking chat in its agent's desktop app: opens the chat, or brings the app forward. It stands
     /// where the C#'s Stop did, which opened the chat this way whenever it couldn't stop it.
     Open,
+    /// A tracker task's, when the tracker lets this pet act (fnt-81): answer its permission prompt once, or pause or
+    /// stop its run.
+    Allow,
+    Deny,
+    PauseRun,
+    StopRun,
 }
 
 impl Button {
-    const ALL: [Button; 6] = [
+    const ALL: [Button; 10] = [
         Button::Ticket,
         Button::PullRequest,
         Button::Previous,
         Button::PlayPause,
         Button::Next,
         Button::Open,
+        Button::Allow,
+        Button::Deny,
+        Button::PauseRun,
+        Button::StopRun,
     ];
 
-    fn bit(self) -> u8 {
+    fn bit(self) -> u16 {
         1 << self as u8
     }
 
@@ -72,13 +82,17 @@ impl Button {
             Button::PlayPause => "Play / pause".into(),
             Button::Next => "Next".into(),
             Button::Open => format!("Open in the {}", app.unwrap_or("app")),
+            Button::Allow => "Allow once".into(),
+            Button::Deny => "Deny".into(),
+            Button::PauseRun => "Pause the run".into(),
+            Button::StopRun => "Stop the run".into(),
         }
     }
 }
 
 /// A set of [`Button`]s.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Buttons(u8);
+pub struct Buttons(u16);
 
 /// A round button's size, the margin before each, and the margin before the first (Button.round, MakeCard's Actions).
 const BUTTON: f32 = 32.0;

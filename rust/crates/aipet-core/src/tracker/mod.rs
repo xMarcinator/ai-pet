@@ -10,5 +10,5 @@ pub mod view;
 pub mod watcher;
 pub mod wire;
 
-pub use watcher::{Event, SessionsWithoutTask, Status, TrackerSettings, TrackerWatcher};
+pub use watcher::{Action, Event, SessionsWithoutTask, Status, TrackerSettings, TrackerWatcher};
 pub use wire::{Need, Tone, TrackerTask};

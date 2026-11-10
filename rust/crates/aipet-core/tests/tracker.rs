@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use aipet_core::secrets::{MemorySecrets, SecretStore, TRACKER};
 use aipet_core::tracker::watcher::{CREDENTIAL_REVOKED, REVOKED_TEXT};
-use aipet_core::tracker::{Event, Status, Tone, TrackerWatcher};
+use aipet_core::tracker::{Action, Event, Status, Tone, TrackerWatcher};
 use serde_json::{Value, json};
 use tungstenite::Message;
 use tungstenite::protocol::CloseFrame;
@@ -43,6 +43,8 @@ struct Fake {
     feeds: Vec<String>,
     /// The session ids looked up.
     lookups: Vec<String>,
+    /// The actions posted: their target and body.
+    posts: Vec<(String, String)>,
     /// The open feed's sender.
     feed: Option<Sender<Out>>,
 }
@@ -179,9 +181,24 @@ fn serve(mut stream: TcpStream, fake: &Mutex<Fake>) {
                 None => (404, json!({"error": "no run has that session"})),
             }
         }
+        ("POST", path) if path.starts_with("/api/runs/") => {
+            let mut fake = fake.lock().unwrap();
+            if !fake.actions {
+                (403, json!({"error": "companion actions are off for this device"}))
+            } else if path.contains("/permissions/") && fake.posts.iter().any(|(p, _)| p == path) {
+                (409, json!({"error": "already answered by desk-client"}))
+            } else {
+                fake.posts.push((path.to_owned(), body));
+                (204, Value::Null)
+            }
+        }
         _ => (404, json!({"error": "not found"})),
     };
-    let reply = reply.to_string();
+    let reply = if status == 204 {
+        String::new()
+    } else {
+        reply.to_string()
+    };
     let _ = write!(
         stream,
         "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
@@ -366,5 +383,61 @@ fn an_unreachable_tracker_is_tried_again() {
     assert!(
         error.starts_with(&format!("can't reach the tracker at {base}")),
         "{error}"
+    );
+}
+
+#[test]
+fn actions_post_the_trackers_routes_only_when_allowed() {
+    let tracker = Tracker::start(json!({"type": "snapshot", "feed": "f1", "seq": 1, "tasks": []}));
+    let pet = Pet::new("actions");
+    pet.watcher.enroll(&tracker.base, CODE).unwrap();
+    until("connected", || {
+        pet.watcher.status() == Status::Connected { actions_allowed: false }
+    });
+    let allow = Action::Allow {
+        run: "run-7".into(),
+        request: "req-3".into(),
+    };
+    assert_eq!(
+        pet.watcher.act(&allow),
+        Err("Answers and pause/stop are off for this pet".into())
+    );
+    assert!(tracker.fake().posts.is_empty(), "nothing is sent while they're off");
+
+    // the user switches them on in the tracker; hello says so on the next connection
+    tracker.fake().actions = true;
+    pet.watcher.restart();
+    until("allowed", || {
+        pet.watcher.status() == Status::Connected { actions_allowed: true }
+    });
+    pet.watcher.act(&allow).unwrap();
+    assert_eq!(pet.watcher.act(&allow), Err("already answered by desk-client".into()));
+    pet.watcher.act(&Action::Pause { run: "run-7".into() }).unwrap();
+    pet.watcher.act(&Action::Stop { run: "run-7".into() }).unwrap();
+    let deny = Action::Deny {
+        run: "run-7".into(),
+        request: "req-4".into(),
+    };
+    pet.watcher.act(&deny).unwrap();
+    assert_eq!(
+        tracker.fake().posts,
+        [
+            (
+                "/api/runs/run-7/permissions/req-3".into(),
+                r#"{"decision":"allow"}"#.into()
+            ),
+            ("/api/runs/run-7/pause".into(), "{}".into()),
+            ("/api/runs/run-7/cancel".into(), "{}".into()),
+            (
+                "/api/runs/run-7/permissions/req-4".into(),
+                r#"{"decision":"deny"}"#.into()
+            ),
+        ]
+    );
+    // the switch turned off again in the tracker: its refusal is what the bubble says
+    tracker.fake().actions = false;
+    assert_eq!(
+        pet.watcher.act(&Action::Stop { run: "run-7".into() }),
+        Err("companion actions are off for this device".into())
     );
 }

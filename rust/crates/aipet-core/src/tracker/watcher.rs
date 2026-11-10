@@ -121,6 +121,55 @@ pub enum Status {
     Revoked,
 }
 
+/// What the pet may do to a tracker run, when the user allows it for this pet (the tracker's switch).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Action {
+    /// Answer a permission prompt, once.
+    Allow {
+        run: String,
+        request: String,
+    },
+    Deny {
+        run: String,
+        request: String,
+    },
+    Pause {
+        run: String,
+    },
+    Stop {
+        run: String,
+    },
+}
+
+impl Action {
+    /// The route and body it posts.
+    fn request(&self) -> (String, &'static str) {
+        let path = |run: &str, rest: &str| format!("/api/runs/{}/{rest}", escape_data_string(run));
+        match self {
+            Action::Allow { run, request } => (
+                path(run, &format!("permissions/{}", escape_data_string(request))),
+                r#"{"decision":"allow"}"#,
+            ),
+            Action::Deny { run, request } => (
+                path(run, &format!("permissions/{}", escape_data_string(request))),
+                r#"{"decision":"deny"}"#,
+            ),
+            Action::Pause { run } => (path(run, "pause"), "{}"),
+            Action::Stop { run } => (path(run, "cancel"), "{}"),
+        }
+    }
+
+    /// What the bubble says once it's done.
+    pub fn done_text(&self) -> &'static str {
+        match self {
+            Action::Allow { .. } => "Allowed",
+            Action::Deny { .. } => "Denied",
+            Action::Pause { .. } => "Paused",
+            Action::Stop { .. } => "Stopped",
+        }
+    }
+}
+
 /// What the watcher tells its owner.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Event {
@@ -294,6 +343,31 @@ impl TrackerWatcher {
         Ok(())
     }
 
+    /// Does `action` in the tracker, as this pet. Blocks for the request (at most [`TIMEOUT`]): call it off the UI
+    /// thread. Refused here unless the tracker said this pet may; the error is what the bubble shows: the tracker's
+    /// refusal (a prompt someone else answered first, say), or why it couldn't be reached.
+    pub fn act(&self, action: &Action) -> Result<(), String> {
+        if !matches!(self.status(), Status::Connected { actions_allowed: true }) {
+            return Err("Answers and pause/stop are off for this pet".into());
+        }
+        let credential = self.shared.credential().ok_or("The pet isn't enrolled")?;
+        let base = &credential.base_url;
+        let bearer = format!("Bearer {}", credential.token);
+        let (path, body) = action.request();
+        let answer = http_for(base)
+            .post(
+                &format!("{base}{path}"),
+                &[("Authorization", &bearer), ("Content-Type", "application/json")],
+                body,
+            )
+            .map_err(|failure| unreachable(base, &failure))?;
+        if answer.success() {
+            Ok(())
+        } else {
+            Err(api::refusal(&answer.status_line(), &answer.body))
+        }
+    }
+
     /// Forgets the credential and the tasks; the watcher is off until the pet is enrolled again. The device stays
     /// listed in the tracker until the user revokes it there.
     pub fn forget(&self) {
@@ -365,8 +439,18 @@ impl Shared {
         (self.events)(Event::Changed);
     }
 
-    fn set_status(&self, status: Status) {
-        let mut state = self.lock();
+    /// The state, for the watcher thread `stop` belongs to to change: none once that thread was stopped. The flag is
+    /// read under the lock, so a thread that a restart stopped can't write over what the new one found (a restart
+    /// stops the old thread before it clears the state).
+    fn state(&self, stop: &Stop) -> Option<MutexGuard<'_, State>> {
+        let state = self.lock();
+        (!stop.stopped()).then_some(state)
+    }
+
+    fn set_status(&self, stop: &Stop, status: Status) {
+        let Some(mut state) = self.state(stop) else {
+            return;
+        };
         if state.status != status {
             if matches!(status, Status::Connected { .. }) {
                 state.lost = None;
@@ -386,17 +470,18 @@ impl Shared {
             match self.connection(credential, stop) {
                 End::Stopped => return,
                 End::Revoked => {
-                    {
-                        let mut state = self.lock();
+                    if let Some(mut state) = self.state(stop) {
                         state.view.clear();
                         state.runs.clear();
                     }
-                    self.set_status(Status::Revoked);
+                    self.set_status(stop, Status::Revoked);
                     self.changed();
                     return;
                 }
                 End::Resync => {
-                    self.lock().view.forget_point();
+                    if let Some(mut state) = self.state(stop) {
+                        state.view.forget_point();
+                    }
                     wait = BACKOFF_FIRST;
                     continue;
                 }
@@ -404,7 +489,7 @@ impl Shared {
                     if connected {
                         wait = BACKOFF_FIRST;
                     }
-                    self.set_status(Status::Unreachable(why));
+                    self.set_status(stop, Status::Unreachable(why));
                     if stop.wait(wait) {
                         return;
                     }
@@ -443,7 +528,7 @@ impl Shared {
             Err(Opened::Refused) => return End::Revoked,
             Err(Opened::Failed(why)) => return End::Failed { why, connected: false },
         };
-        self.set_status(Status::Connected { actions_allowed });
+        self.set_status(stop, Status::Connected { actions_allowed });
         let mut next_lookup = Instant::now();
         loop {
             if stop.stopped() {
@@ -451,7 +536,7 @@ impl Shared {
                 return End::Stopped;
             }
             if Instant::now() >= next_lookup {
-                if self.look_up_runs(&http, base, &headers) {
+                if self.look_up_runs(stop, &http, base, &headers) {
                     return End::Revoked;
                 }
                 next_lookup = Instant::now() + LOOKUP_EVERY;
@@ -460,7 +545,11 @@ impl Shared {
                 Ok(Message::Text(text)) => {
                     // a message this pet can't read is skipped; the next snapshot puts the view right
                     if let Ok(message) = FeedMessage::parse(text.as_str()) {
-                        let applied = self.lock().view.apply(message);
+                        let Some(mut state) = self.state(stop) else {
+                            return End::Stopped;
+                        };
+                        let applied = state.view.apply(message);
+                        drop(state);
                         match applied {
                             Applied::Changed => self.changed(),
                             Applied::Unchanged => {}
@@ -489,14 +578,16 @@ impl Shared {
 
     /// Asks the tracker which of the pet's chats are its runs: new chats, and misses a minute old. Forgets chats
     /// the pet no longer shows. True when the tracker refused the token.
-    fn look_up_runs(&self, http: &Http, base: &str, headers: &[(&str, &str)]) -> bool {
+    fn look_up_runs(&self, stop: &Stop, http: &Http, base: &str, headers: &[(&str, &str)]) -> bool {
         let shown: Vec<String> = (lock(&self.chats))()
             .iter()
             .filter_map(|id| id.split_once(':').map(|(_, sid)| sid.to_owned()))
             .filter(|sid| !sid.is_empty())
             .collect();
         let due: Vec<String> = {
-            let mut state = self.lock();
+            let Some(mut state) = self.state(stop) else {
+                return false;
+            };
             state.runs.retain(|sid, _| shown.contains(sid));
             shown
                 .iter()
@@ -518,7 +609,9 @@ impl Shared {
                 // asked again at the next lookup
                 _ => continue,
             };
-            let mut state = self.lock();
+            let Some(mut state) = self.state(stop) else {
+                return false;
+            };
             let before = state.runs.insert(sid, (task.clone(), Instant::now()));
             changed |= before.map(|(t, _)| t) != Some(task);
         }
