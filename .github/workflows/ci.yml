@@ -2,7 +2,8 @@
 # It also checks that the plugin's hook files are what the hook makes of its event tables, that the install and build
 # scripts at least parse and stay executable, that the agent skills' Codex copies match, that the parity ledger
 # (rust/PARITY.md) still maps every C# test to Rust tests that are there, and that nothing names what the cutover to
-# Rust removed. No .NET is installed here. Nothing is published here: see release.yml.
+# Rust removed, and that THIRD-PARTY-NOTICES.md is what cargo-about generates. No .NET is installed here. Nothing is
+# published here: see release.yml.
 name: CI
 
 on:
@@ -166,6 +167,32 @@ jobs:
           workspaces: rust
       - name: Check
         run: cargo check --workspace --all-targets --locked
+
+  # THIRD-PARTY-NOTICES.md must be exactly what cargo-about makes of rust/about.toml and rust/about.hbs, and give a
+  # license text for every crate the release builds compile in (spec fn-1, R19).
+  notices:
+    name: Third-party notices
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: 1.98.1
+      # the cargo registry and ~/.cargo/bin, so cargo-about is built once per cache
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      # the version check-notices.sh asks for; the binary needs the cli feature
+      - name: Install cargo-about
+        run: cargo install cargo-about --version 0.9.3 --locked --features cli
+      # every target's crates, since the check runs offline (--frozen)
+      - name: Fetch the crates
+        working-directory: rust
+        run: cargo fetch --locked
+      - name: Check the notices
+        run: bash scripts/check-notices.sh
 
   scripts:
     name: Shell scripts
