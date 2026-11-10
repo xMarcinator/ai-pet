@@ -85,8 +85,24 @@ exit 2
 
 `scripts/test-sweep.sh` covers the rest with a fake cargo-sweep: both sweeps run in `rust/` with `--time 7` (or
 `DAYS`) and `--installed`, the size before and after is printed, a build in a folder that only shares the checkout's
-name as a prefix doesn't block it, and bad arguments are refused. A sweep with the real cargo-sweep, and the space it
-frees, is still to be recorded here (see the end).
+name as a prefix doesn't block it, and bad arguments are refused.
+
+**A real sweep**, with cargo-sweep 0.8.0, in a worktree with stale output: `cargo test -p aipet-mcp --no-run` at
+ab856a3 (1.2 GB), every file in the target then dated 10 days back with `touch` (standing in for the time a long-lived
+target sits), the worktree switched to bfdbd75 and the same command run again (1.8 GB). What the second build reused
+was read again and so counts as used; what only the first build made stayed 10 days old.
+
+```
+$ scripts/sweep.sh ../ai-pet-fnt70-sweep
+[INFO] Cleaned 441.70 MiB from "…/ai-pet-fnt70-sweep/rust/target"
+[INFO] Using all installed toolchains: ["stable-x86_64-unknown-linux-gnu", "nightly-x86_64-unknown-linux-gnu"]
+[INFO] Cleaned nothing from "…/ai-pet-fnt70-sweep/rust/target"
+swept …/ai-pet-fnt70-sweep/rust/target: 1.8 GiB -> 1.3 GiB, freed 431 MiB
+exit 0
+```
+
+The same `cargo test -p aipet-mcp --no-run` afterwards compiled nothing: the sweep took only the stale output.
+`--installed` found nothing, as both toolchains that built here are still installed.
 
 ## What to do
 
@@ -94,8 +110,3 @@ frees, is still to be recorded here (see the end).
 - Keep the hack crate: it saves about a quarter of the time of per-crate work and a fifth of the duplicate copies.
 - sccache is worth sourcing for worktrees and for slower machines; on this one it saves little time, and its first
   build is slower.
-
-## Still to record
-
-The real cargo-sweep run: installing cargo-sweep 0.8.0 (`cargo install cargo-sweep --version 0.8.0 --locked`) needs
-the owner's go, because it builds code downloaded from crates.io.
