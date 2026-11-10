@@ -100,8 +100,8 @@ pub fn no_pet() -> OsString {
     }
 }
 
-/// A binary of the workspace's, built with the tests (`cargo test --workspace` builds every binary first): `name`
-/// in the target folder above this test's own executable.
+/// A binary of the workspace's, built before the tests (`cargo build --workspace`: `cargo test` builds a package's
+/// binaries only for that package's own tests): `name` in the target folder above this test's own executable.
 pub fn built(name: &str) -> PathBuf {
     // <target>/<profile>/deps/<test>-<hash>: the binaries are a folder up
     let exe = std::env::current_exe().unwrap();
@@ -112,7 +112,7 @@ pub fn built(name: &str) -> PathBuf {
         .join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
     assert!(
         path.is_file(),
-        "{name} isn't built at {}: cargo build --workspace (cargo test --workspace does)",
+        "{name} isn't built at {}: run cargo build --workspace first",
         path.display()
     );
     path
