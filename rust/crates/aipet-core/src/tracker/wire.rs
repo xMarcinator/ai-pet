@@ -84,7 +84,15 @@ pub enum Need {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tool: Option<String>,
     },
-    Decision,
+    Decision {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        decision_id: Option<String>,
+    },
+    /// A run waits for the user's reply to its message.
+    Input {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        run_id: Option<String>,
+    },
     Review,
 }
 
@@ -261,7 +269,15 @@ mod tests {
             panic!("not read");
         };
         assert_eq!(task.tone, Tone::Normal);
-        assert_eq!(task.needs, [Need::Review, Need::Decision]);
+        assert_eq!(
+            task.needs,
+            [
+                Need::Review,
+                Need::Decision {
+                    decision_id: Some("d1".into())
+                }
+            ]
+        );
         assert_eq!(
             (task.subtasks, task.agents.total, task.phase),
             (Count::default(), 0, None)

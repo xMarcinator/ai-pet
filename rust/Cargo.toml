@@ -65,6 +65,8 @@ flate2 = "1"
 # The pet's MCP server (aipet-mcp, fnt-71): Streamable HTTP at /mcp, both MCP eras, and the tool macros. No default
 # features beyond the server's: no client, no auth (the bearer check is our own middleware).
 rmcp = { version = "3.9.0", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
+# The tracker watcher's change feed (aipet-core, fnt-81): a blocking WebSocket client, as the watchers are threads.
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 # The listener's router and server (aipet-mcp): HTTP/1.1 only, on tokio, without axum's extractors' extras.
 axum = { version = "0.8.9", default-features = false, features = ["tokio", "http1"] }
 # One limit of 16 requests at once across the listener's routes (aipet-mcp)
