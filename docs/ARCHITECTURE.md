@@ -322,12 +322,14 @@ A bubble the pointer is on, while it is the front one or its stack is spread, sh
 
 | Control | Shown | Action |
 |---|---|---|
-| Body click | always | A folded stack of more than one bubble spreads (§4.4). Otherwise `open_item`: an error bubble opens Settings on its Jira or GitHub page; the music bubble brings the player forward; a review opens its page; a chat opens its deep link (§5.4), else brings its agent's app forward (`Platform::focus_agent`). |
+| Body click | always | A folded stack of more than one bubble spreads (§4.4). Otherwise `open_item`: an error bubble opens Settings on its Jira, GitHub or Tracker page; a tracker task opens its `fnt://` link; the music bubble brings the player forward; a review opens its page; a chat opens its deep link (§5.4), else brings its agent's app forward (`Platform::focus_agent`). |
 | ✕ Dismiss | on hover | The core dismisses it (§5.5). |
 | Open | a working or thinking chat in its agent's desktop app | Opens the chat as a click on the bubble does. It stands where the .NET pet's Stop button was: the Rust pet has no Stop, and never sends another app simulated keys. |
 | Open in Jira | a Jira issue, or a pull request that names one | Opens the issue. |
 | Open pull request | a bubble with a pull request | Opens it. |
 | ⏮ ⏯ ⏭ | the music bubble | The player's previous, play/pause and next. |
+| Allow once, Deny | a tracker task with a permission prompt waiting, when the tracker allows this pet's actions | `TrackerWatcher::act` answers the prompt in the tracker, on a thread; the bubble's detail says "Sending to the tracker…", then what happened, for 6 s (§8.7). |
+| Pause, Stop | a tracker task with a live run and no prompt, under the same switch | Pauses or stops the run in the tracker, the same way. |
 
 **`focus_agent`** ([aipet-desktop/src/platform/](../rust/crates/aipet-desktop/src/platform/)) brings the agent's desktop app forward, and opens at most one URL when no window of it is found: the chat's link when given, else on Windows `claude://` for Claude, and nothing for Codex. It never runs the agent's CLI.
 
@@ -423,12 +425,13 @@ The store is keyed `claude:<sid>` or `codex:<sid>` and kept in the order the cha
    - The name comes from the report with the higher name rank; a tie goes to the report offered later.
    - `CodexWatcher` sessions are offered after the hook entries: rank 2 if Codex's index named the chat, else rank 0 with the folder name or "Codex".
 3. **Timeouts** (`effective`), applied to the merged chats only.
-4. **Review, music and error bubbles** (below).
-5. **Sort** by `Priority` descending, then `Ts` descending, into `All`.
-6. **Dismiss pruning** (§5.5), then **cards**: `live = Eff != "idle" && !dismissed`. `MaxCards` gives each stack a cap: 4 for `chats`, 4 for `reviews`, 1 for `music` (`board.rs`). A section's `jira-error` and `github-error` bubbles are always taken, first, so an error is the front card of the reviews stack. The remaining room goes to the other bubbles in `All` order, and `Extra` counts only those left out. The reviews header's count (`PetUi::fill`, [aipet-ui](../rust/crates/aipet-ui/src/lib.rs)) is therefore the number of reviews, errors excluded.
-7. **Mood** (§5.3).
+4. **Tracker tasks** (`tasks`, fnt-81, §8.7): one `task:<id>` bubble per active task, in the chats stack. The chats whose session ids the watcher matched to the task's runs leave `All` and lend it their state (the busiest), prop and time; the tracker's tone wins over them: red is `error`, amber `attention`. Without a run state it is `working` while the tracker counts agents, else `idle`. With "sessions without a task: hide" and the tracker connected, every other chat leaves too. The mood (§5.3) counts tasks as chats; the golden replays have none.
+5. **Review, music and error bubbles** (below).
+6. **Sort** by `Priority` descending, then `Ts` descending, into `All`.
+7. **Dismiss pruning** (§5.5), then **cards**: `live = Eff != "idle" && !dismissed`. `MaxCards` gives each stack a cap: 4 for `chats`, 4 for `reviews`, 1 for `music` (`board.rs`). A section's error bubbles (`jira-error`, `github-error`, and `tracker-error` in the chats stack) are always taken, first, so an error is the front card of the reviews stack. The remaining room goes to the other bubbles in `All` order, and `Extra` counts only those left out. The reviews header's count (`PetUi::fill`, [aipet-ui](../rust/crates/aipet-ui/src/lib.rs)) is therefore the number of reviews, errors excluded.
+8. **Mood** (§5.3).
 
-A session's `Kind` is `chat`, `jira`, `github`, `music`, `jira-error` or `github-error`. `section_of` (`board.rs`) gives three stacks: the Jira and GitHub kinds, errors included, go to `reviews`; `music` to `music`; chats to `chats`.
+A session's `Kind` is `chat`, `task`, `jira`, `github`, `music`, `jira-error`, `github-error` or `tracker-error`. `section_of` (`board.rs`) gives three stacks: the Jira and GitHub kinds, errors included, go to `reviews`; `music` to `music`; chats to `chats`.
 
 **The hook against CodexWatcher** (`by_turn`, `board.rs`). Their times don't compare. The hook's `Ts` is when its hook started, which on Windows is 1-4 s late (PowerShell). The log's is when Codex wrote the line. By time alone, an interrupt or an error, which only the log reports, would lose to a hook event Codex sent just before it. So when one report is the hook's and the other the log's, and both name a turn:
 - The log's end of a turn beats the hook's report of that turn, unless the hook has that turn's end too.
@@ -1083,7 +1086,7 @@ The music bubble has a stack of its own, right above the pet, with priority 0. I
 
 ### 8.4 Secrets
 
-Tokens are only ever the ones the user types into Settings, stored under `AiPet:Jira` (user = email) and `AiPet:GitHub` (user `github`). Nothing reads gh CLI config or environment tokens. The keys and stores are the .NET app's, so a token either app saved is the other's too ([secrets/](../rust/crates/aipet-core/src/secrets/)). A saved token is never shown again.
+Tokens are only ever the ones the user types into Settings, stored under `AiPet:Jira` (user = email) and `AiPet:GitHub` (user `github`), and the tracker's credential, which enrolling gives (`AiPet:Tracker`, user = the device id; the pet's own, §8.7). Nothing reads gh CLI config or environment tokens. The keys and stores are the .NET app's, so a token either app saved is the other's too ([secrets/](../rust/crates/aipet-core/src/secrets/)). A saved token is never shown again.
 
 | OS | Store |
 |---|---|
@@ -1118,6 +1121,19 @@ What the pet asks of the operating system beyond its windows is the `Platform` t
 The Rust pet never sends another app a key: the .NET pet's `SendEscape` (its Stop button) wasn't ported (§4.5). On Linux each tool is looked for on `PATH` once, misses included (`Tools`, as the C#'s `Sh.Which`). Native Wayland windows can't be found or brought forward with xdotool or wmctrl: for them nothing comes forward, and at most the chat's link opens. The BSDs get `NoPlatform`, which does nothing.
 
 ---
+
+### 8.7 The flow-next tracker (fnt-81)
+
+Files: [tracker/](../rust/crates/aipet-core/src/tracker/) in aipet-core (`watcher.rs`, `api.rs`, `view.rs`, `wire.rs`, `tls.rs`), the Board's `tasks` (§5.2), and in the UI [settings/tracker.rs](../rust/crates/aipet-ui/src/settings/tracker.rs) and the task bubble's marks (`view.rs`). The tracker's side is its FNT-64 and its `docs/integrations/aipet.md`.
+
+The pet is the tracker's **companion device**: it reads the tracker's active tasks and never the other way round. Nothing the hooks report goes to the tracker but a chat's session id, in the run lookup below; no webhook comes from it, and neither starts the other.
+
+- **Enrolling** (`TrackerWatcher::enroll`, Settings › Tracker). A tracker on this computer (`http://<loopback>:<port>`; any other `http://` address is refused) redeems a one-time code at `POST /enroll {code, role: "companion"}` for a bearer token. A hosted tracker (`https://<host>[:<port>]`, its mutual-TLS listener) takes the code `<secret>.<fingerprint>`: a first handshake trusts the server only if its chain holds the CA with that SHA-256 and the CA issued its certificate for the host (`tls::pin_ca`), the pet makes a P-256 key and posts a CSR for it, and checks that the chain it gets back comes from that CA. The credential `{base_url, device_id, token, cert?, key?}` is `AiPet:Tracker` in the secret store (§8.4); `tracker.json` keeps only the address and the hidden-chats choice.
+- **Following** (the `aipet-tracker` thread). `GET /api/attach/hello` (whether the user switched on this pet's answers and pause/stop; read again every 10 s while connected, as the user may switch it meanwhile), then `/api/v1/companion/feed` (a WebSocket: a snapshot, then changes, each with its `seq`), resumed by `?feed=&since=` after a reconnect, with backoff from 1 s to 60 s; another feed id means a new snapshot (`view.rs`). Loopback calls carry the bearer token; hosted ones present the certificate (`Http::tracker`, tungstenite over rustls) and no token. After 2 min without a connection the tasks drop. Every write the thread makes checks its stop flag under the state's lock, so a thread a restart stopped can't write over the new one.
+- **Revocation.** A feed closed with the policy code and "Device credential no longer valid", or a 401 or 403 from any route, drops the tasks and stops the thread, with the error bubble "this pet was revoked; enroll it again" until the pet is enrolled again.
+- **Chats into tasks.** The tracker's task records name no sessions, so while connected the watcher asks `GET /api/v1/runs/by-session/{id}` about each chat the hooks report (new ones, misses again after a minute), and fills each task's `sessions`.
+- **Protocol version 2** (`aipet-ipc` `protocol.rs`, `tracker/wire.rs`). A v2 event is a v1 event; a v2 task message (`op: upsert | remove`) is what the watcher hands the Board, never accepted on the pipe or socket ("task messages come from the tracker watcher only"), so no local process can make a task bubble. A v2 ping keeps the C#'s "unsupported version".
+- **Actions** (`TrackerWatcher::act`, §4.5): `POST /api/runs/{run}/permissions/{request} {"decision": "allow" | "deny"}`, `/pause` and `/cancel`, refused in the pet unless hello allowed them; the tracker's refusal (a prompt answered first by another device) is what the bubble says.
 
 ## 9. Runtime files
 
@@ -1223,6 +1239,7 @@ The move to Rust began as a spike, and each step that needed proof before it was
 | [rust/notes/exwlshell.md](../rust/notes/exwlshell.md), [iced.md](../rust/notes/iced.md), [native.md](../rust/notes/native.md) | Source-verified API notes for iced_exwlshell 0.20.1, iced 0.14, and the winit shell's native click-through, with the compile-checked prototypes in `notes/prototypes/` (built on their own, outside the workspace). `exwlshell.md`'s known-bug list says what to check on each iced_exwlshell upgrade. | aipet-wayland's `drag.rs` (known bug 20); spec fn-1's references; spec fn-3 |
 | [rust/proofs/windows.md](../rust/proofs/windows.md), [windows-hands-on.md](../rust/proofs/windows-hands-on.md), [linux-hands-on.md](../rust/proofs/linux-hands-on.md) | The desktop shell on Windows 11 (transparency per wgpu backend, the window region, mixed-DPI monitors), and the hands-on passes with real data on Windows and on Hyprland. | aipet's `main.rs`, aipet-desktop's `shell.rs` and `native/win32.rs`; specs fn-3, fnt-75, fnt-76 |
 | [rust/proofs/velopack.md](../rust/proofs/velopack.md), [install.md](../rust/proofs/install.md) | A .NET install updating in place to a Rust release, the uninstall hook, and the milestone 2 install, update and rollback checks. | release.yml, velopack-proof.yml; spec fn-1 |
+| [rust/proofs/tracker.md](../rust/proofs/tracker.md) | The tracker watcher against a real flow-next tracker's FNT-64 build: enrolling, the snapshot, a change on the feed, revocation, the actions switch and an action; what is still unchecked. | tests/tracker_real.rs; spec fnt-81 |
 | [rust/proofs/performance.md](../rust/proofs/performance.md), [memory.md](../rust/proofs/memory.md), [sprite-packs.md](../rust/proofs/sprite-packs.md) | The performance gate against the C# pet, the memory audit (Mesa's EGL only, two malloc arenas), and each built-in pet's CPU, memory and size. | aipet's `main.rs` and `mesa.rs`; specs fnt-75, fnt-76 |
 | [rust/proofs/aseprite.md](../rust/proofs/aseprite.md), [rive.md](../rust/proofs/rive.md) | The pack spikes: the direct Aseprite reader, Rive packs (parked), and the Hamster's turnaround. | aipet-sprite's `aseprite_file.rs`; specs fn-2, fnt-67, fnt-72; the avatar-pack skill |
 | [rust/proofs/ui-framework.md](../rust/proofs/ui-framework.md), [mcp-spike.md](../rust/proofs/mcp-spike.md) | gpui, a minimal stack and Slint against iced; Codex `mcp_tool` hooks and Claude HTTP hooks. | specs fnt-73, fnt-75, fnt-71 |

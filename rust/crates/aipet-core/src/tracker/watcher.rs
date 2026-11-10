@@ -4,7 +4,8 @@
 //!   secret store: `{base_url, device_id, token}` as JSON.
 //! - **Enrolling:** [`TrackerWatcher::enroll`] redeems the one-time code the tracker's client made
 //!   (`POST {base}/enroll {"code", "role": "companion"}`) for a bearer token.
-//! - **Following:** a thread of its own reads `hello` (whether the user allows answers and pause/stop), then follows
+//! - **Following:** a thread of its own reads `hello` (whether the user allows answers and pause/stop; read again
+//!   every few seconds, as the user may switch it in the tracker), then follows
 //!   the change feed (`/api/v1/companion/feed`): a snapshot, then the changes, resumed by `(feed, seq)` after a
 //!   reconnect. A connection that fails is tried again after 1 s, doubling to a minute.
 //! - **Revocation:** the tracker closes the feed with "Device credential no longer valid", or refuses the token
@@ -48,7 +49,7 @@ pub const BACKOFF_FIRST: Duration = Duration::from_secs(1);
 pub const BACKOFF_MAX: Duration = Duration::from_secs(60);
 /// How long a request or the feed's handshake may take.
 pub const TIMEOUT: Duration = Duration::from_secs(20);
-/// How often the feed's loop looks up new chats.
+/// How often the feed's loop looks up new chats and reads hello again (whether actions are allowed).
 const LOOKUP_EVERY: Duration = Duration::from_secs(10);
 /// How soon a chat that is no run is asked about again.
 const MISS_AGAIN: Duration = Duration::from_secs(60);
@@ -604,6 +605,16 @@ impl Shared {
             if Instant::now() >= next_lookup {
                 if self.look_up_runs(stop, &http, base, &headers) {
                     return End::Revoked;
+                }
+                // the user may switch this pet's answers and pause/stop on or off in the tracker meanwhile
+                match http.get(&format!("{base}/api/attach/hello"), &headers) {
+                    Ok(answer) if matches!(answer.status, 401 | 403) => return End::Revoked,
+                    Ok(answer) if answer.success() => {
+                        let actions_allowed = api::actions_allowed(&answer.body);
+                        self.set_status(stop, Status::Connected { actions_allowed });
+                    }
+                    // a hello that fails now changes nothing: the feed says whether the tracker is there
+                    _ => {}
                 }
                 next_lookup = Instant::now() + LOOKUP_EVERY;
             }

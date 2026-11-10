@@ -404,9 +404,8 @@ fn actions_post_the_trackers_routes_only_when_allowed() {
     );
     assert!(tracker.fake().posts.is_empty(), "nothing is sent while they're off");
 
-    // the user switches them on in the tracker; hello says so on the next connection
+    // the user switches them on in the tracker: the connected pet reads it in hello within a lookup's interval
     tracker.fake().actions = true;
-    pet.watcher.restart();
     until("allowed", || {
         pet.watcher.status() == Status::Connected { actions_allowed: true }
     });
