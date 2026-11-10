@@ -469,6 +469,8 @@ mod tests {
 
         #[test]
         fn pets_started_at_the_same_moment_give_one() {
+            // a process another test starts holds these locks until its exec, as above
+            let _quiet = crate::tests_spawning();
             let scratch = Scratch::new();
             for _ in 0..20 {
                 let names = scratch.names();
