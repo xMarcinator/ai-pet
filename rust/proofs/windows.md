@@ -286,10 +286,10 @@ logical cores. The backend was the default, Vulkan on the Intel GPU.
 
 ## Re-running it
 
-From the repository root, in Git Bash (no PowerShell), after `(cd rust && cargo build --release -p aipet-spike)`, which leaves you at the root:
+From the repository root, in Git Bash (no PowerShell), after `(cd rust && cargo build --release -p aipet --features demo)`, which leaves you at the root. The runs above used the spike's binary, `aipet-spike.exe`; the pet's demo plays the same scripted day without the core or the data folder:
 
 ```bash
-SPIKE=rust/target/release/aipet-spike.exe
+SPIKE=rust/target/release/AiPet.exe
 AIPET_DEBUG=1 timeout -k 5 420 "$SPIKE" 2> default.log            # the default backend (Vulkan here)
 AIPET_DEBUG=1 WGPU_BACKEND=dx12 timeout -k 5 180 "$SPIKE" 2> dx12.log
 AIPET_DEBUG=1 WGPU_BACKEND=vulkan timeout -k 5 180 "$SPIKE" 2> vulkan.log
@@ -302,7 +302,7 @@ Every run ends through `timeout` or the pet's menu (right-click the sprite, then
 For the CPU runs, start the pet and the sampler together:
 
 ```bash
-timeout -k 5 140 "$SPIKE" 2> perf.log & dotnet sampler/bin/aipet-sampler.dll aipet-spike 60 pet 60; wait
+timeout -k 5 140 "$SPIKE" 2> perf.log & dotnet sampler/bin/aipet-sampler.dll AiPet 60 pet 60; wait
 ```
 
 The sampler is a small C# console program, built with `dotnet build -c Release -p:UseAppHost=false -o bin` (a
