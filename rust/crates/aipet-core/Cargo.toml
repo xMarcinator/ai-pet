@@ -13,8 +13,11 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 # Jira and GitHub
 ureq.workspace = true
-# the tracker's change feed
+# the tracker's change feed, and a hosted tracker's mutual TLS
 tungstenite.workspace = true
+rcgen.workspace = true
+ring.workspace = true
+rustls.workspace = true
 aipet-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
 # the hook server's socket (bound, chmodded, then listening; the peer's uid), and the secrets file's mode

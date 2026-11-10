@@ -13,13 +13,14 @@
 //!   (`/api/v1/runs/by-session/{id}`): a chat that is a tracker run collapses into its task's bubble. A miss is asked
 //!   again a minute later, as a run's session can start after its chat.
 //!
-//! Only a tracker on this computer (loopback, plain HTTP and a bearer token) is followed for now; a hosted tracker's
-//! mutual TLS is fnt-81 task 6. Nothing the pet's hooks hear is sent to the tracker except a chat's session id in
-//! that lookup.
+//! Two kinds of tracker: one on this computer (`http://127.0.0.1:<port>`, loopback only), which the pet calls with
+//! its bearer token, and a hosted one (`https://<host>[:<port>]`), its mutual-TLS listener, which the pet calls with
+//! the certificate it enrolled for ([`super::tls`]). Nothing the pet's hooks hear is sent to the tracker except a
+//! chat's session id in that lookup.
 
 use std::collections::HashMap;
-use std::io::{self, ErrorKind};
-use std::net::{IpAddr, TcpStream, ToSocketAddrs};
+use std::io::{self, ErrorKind, Read, Write};
+use std::net::{IpAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
@@ -31,10 +32,10 @@ use tungstenite::client::IntoClientRequest;
 use tungstenite::http::HeaderValue;
 use tungstenite::protocol::CloseFrame;
 use tungstenite::protocol::frame::coding::CloseCode;
-use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{Message, WebSocket};
 
 use super::api::{self, FeedMessage};
+use super::tls;
 use super::view::{Applied, TaskView};
 use super::wire::{Tone, TrackerTask};
 use crate::http::{Failure, Http, escape_data_string, lock};
@@ -97,12 +98,42 @@ impl TrackerSettings {
     }
 }
 
-/// The secret: what enrolling gave, and for which tracker.
+/// The secret: what enrolling gave, and for which tracker. A hosted tracker's adds the pet's certificate (then the
+/// tracker's CA) and its key.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Credential {
     base_url: String,
     device_id: String,
     token: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cert: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    key: Option<String>,
+}
+
+impl Credential {
+    /// The client for the tracker's routes: loopback HTTP, or the certificate over HTTPS.
+    fn http(&self) -> Result<Http, String> {
+        match (&self.cert, &self.key) {
+            (Some(chain), Some(key)) => Http::tracker(&tls::ca_of(chain)?, Some((chain, key)), TIMEOUT),
+            _ => Ok(Http::local(TIMEOUT)),
+        }
+    }
+
+    /// The `Authorization` header's value: the bearer token on loopback; none on a hosted tracker, where the
+    /// certificate says who the pet is.
+    fn bearer(&self) -> Option<String> {
+        self.cert.is_none().then(|| format!("Bearer {}", self.token))
+    }
+}
+
+/// The headers of a call with `bearer`, and `more`.
+fn headers<'a>(bearer: Option<&'a str>, more: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
+    bearer
+        .map(|b| ("Authorization", b))
+        .into_iter()
+        .chain(more.iter().copied())
+        .collect()
 }
 
 /// Where the watcher is.
@@ -309,22 +340,53 @@ impl TrackerWatcher {
         if code.is_empty() {
             return Err("Enter the code from the tracker's Devices & runners page".into());
         }
-        let body = serde_json::json!({"code": code, "role": "companion"}).to_string();
-        let answer = http_for(&base)
+        // a hosted tracker: its CA pinned by the code, and a certificate for a key made here
+        let hosted = match base.strip_prefix("https://") {
+            Some(_) => {
+                let (_, fingerprint) = tls::split_code(code)?;
+                let (host, port) = host_port(&base);
+                let ca = tls::pin_ca(&host, port, &fingerprint, TIMEOUT)?;
+                let (key, csr) = tls::key_and_csr()?;
+                Some((fingerprint, Http::tracker(&ca, None, TIMEOUT)?, key, csr))
+            }
+            None => None,
+        };
+        let mut body = serde_json::json!({"code": code, "role": "companion"});
+        if let Some((_, _, _, csr)) = &hosted {
+            body["csr"] = csr.as_str().into();
+        }
+        let http = match &hosted {
+            Some((_, http, _, _)) => http.clone(),
+            None => Http::local(TIMEOUT),
+        };
+        let answer = http
             .post(
                 &format!("{base}/enroll"),
                 &[("Content-Type", "application/json")],
-                &body,
+                &body.to_string(),
             )
             .map_err(|failure| unreachable(&base, &failure))?;
         if !answer.success() {
             return Err(api::refusal(&answer.status_line(), &answer.body));
         }
         let (device_id, token) = api::enrolled(&answer.body)?;
+        let (cert, key) = match hosted {
+            Some((fingerprint, _, key, _)) => {
+                let chain = api::certificate(&answer.body).ok_or("The tracker sent no certificate")?;
+                let ca = tls::certificates(&tls::ca_of(&chain)?)?;
+                if tls::fingerprint(&ca[0]) != fingerprint {
+                    return Err("The tracker's certificate comes from another CA than the code names".into());
+                }
+                (Some(chain), Some(key))
+            }
+            None => (None, None),
+        };
         let credential = Credential {
             base_url: base.clone(),
             device_id,
             token,
+            cert,
+            key,
         };
         let secret = serde_json::to_string(&credential).map_err(|e| e.to_string())?;
         self.shared
@@ -352,12 +414,13 @@ impl TrackerWatcher {
         }
         let credential = self.shared.credential().ok_or("The pet isn't enrolled")?;
         let base = &credential.base_url;
-        let bearer = format!("Bearer {}", credential.token);
+        let bearer = credential.bearer();
         let (path, body) = action.request();
-        let answer = http_for(base)
+        let answer = credential
+            .http()?
             .post(
                 &format!("{base}{path}"),
-                &[("Authorization", &bearer), ("Content-Type", "application/json")],
+                &headers(bearer.as_deref(), &[("Content-Type", "application/json")]),
                 body,
             )
             .map_err(|failure| unreachable(base, &failure))?;
@@ -502,9 +565,12 @@ impl Shared {
     /// One connection: hello, then the feed until it ends.
     fn connection(&self, credential: &Credential, stop: &Stop) -> End {
         let base = &credential.base_url;
-        let http = http_for(base);
-        let bearer = format!("Bearer {}", credential.token);
-        let headers = [("Authorization", bearer.as_str())];
+        let http = match credential.http() {
+            Ok(http) => http,
+            Err(why) => return End::Failed { why, connected: false },
+        };
+        let bearer = credential.bearer();
+        let headers = headers(bearer.as_deref(), &[]);
         let hello = match http.get(&format!("{base}/api/attach/hello"), &headers) {
             Ok(answer) if matches!(answer.status, 401 | 403) => return End::Revoked,
             Ok(answer) if !answer.success() => {
@@ -523,7 +589,7 @@ impl Shared {
         };
         let actions_allowed = api::actions_allowed(&hello);
         let point = self.lock().view.point().cloned();
-        let mut socket = match open_feed(base, &bearer, point.as_ref()) {
+        let mut socket = match open_feed(credential, point.as_ref()) {
             Ok(socket) => socket,
             Err(Opened::Refused) => return End::Revoked,
             Err(Opened::Failed(why)) => return End::Failed { why, connected: false },
@@ -629,13 +695,60 @@ enum Opened {
     Failed(String),
 }
 
-type Feed = WebSocket<MaybeTlsStream<TcpStream>>;
+/// The feed's connection: plain on loopback, TLS with the pet's certificate to a hosted tracker.
+enum FeedStream {
+    Plain(TcpStream),
+    Tls(Box<rustls::StreamOwned<rustls::ClientConnection, TcpStream>>),
+}
+
+impl FeedStream {
+    fn tcp(&self) -> &TcpStream {
+        match self {
+            FeedStream::Plain(tcp) => tcp,
+            FeedStream::Tls(tls) => tls.get_ref(),
+        }
+    }
+}
+
+impl Read for FeedStream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            FeedStream::Plain(tcp) => tcp.read(buf),
+            FeedStream::Tls(tls) => tls.read(buf),
+        }
+    }
+}
+
+impl Write for FeedStream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            FeedStream::Plain(tcp) => tcp.write(buf),
+            FeedStream::Tls(tls) => tls.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            FeedStream::Plain(tcp) => tcp.flush(),
+            FeedStream::Tls(tls) => tls.flush(),
+        }
+    }
+}
+
+type Feed = WebSocket<FeedStream>;
 
 /// The change feed's WebSocket, resuming at `point` when there is one, reading with a short timeout so its loop sees
 /// a stop.
-fn open_feed(base: &str, bearer: &str, point: Option<&api::Point>) -> Result<Feed, Opened> {
-    let authority = base.trim_start_matches("http://");
-    let mut url = format!("ws://{authority}/api/v1/companion/feed");
+fn open_feed(credential: &Credential, point: Option<&api::Point>) -> Result<Feed, Opened> {
+    let base = &credential.base_url;
+    let (host, port) = host_port(base);
+    let failed = |e: &dyn std::fmt::Display| Opened::Failed(format!("can't reach the tracker at {base}: {e}"));
+    let (scheme, authority) = match base.split_once("://") {
+        Some(("https", authority)) => ("wss", authority),
+        Some((_, authority)) => ("ws", authority),
+        None => return Err(failed(&"no scheme")),
+    };
+    let mut url = format!("{scheme}://{authority}/api/v1/companion/feed");
     if let Some(point) = point {
         url.push_str(&format!(
             "?feed={}&since={}",
@@ -643,20 +756,28 @@ fn open_feed(base: &str, bearer: &str, point: Option<&api::Point>) -> Result<Fee
             point.seq
         ));
     }
-    let failed = |e: &dyn std::fmt::Display| Opened::Failed(format!("can't reach the tracker at {base}: {e}"));
     let mut request = url.into_client_request().map_err(|e| failed(&e))?;
-    request
-        .headers_mut()
-        .insert("authorization", HeaderValue::from_str(bearer).map_err(|e| failed(&e))?);
-    let address = authority
-        .to_socket_addrs()
-        .map_err(|e| failed(&e))?
-        .next()
-        .ok_or_else(|| failed(&"no address"))?;
-    let stream = TcpStream::connect_timeout(&address, TIMEOUT).map_err(|e| failed(&e))?;
-    stream.set_read_timeout(Some(TIMEOUT)).map_err(|e| failed(&e))?;
-    stream.set_write_timeout(Some(TIMEOUT)).map_err(|e| failed(&e))?;
-    let (socket, _) = match tungstenite::client(request, MaybeTlsStream::Plain(stream)) {
+    if let Some(bearer) = credential.bearer() {
+        request
+            .headers_mut()
+            .insert("authorization", HeaderValue::from_str(&bearer).map_err(|e| failed(&e))?);
+    }
+    let stream = match (&credential.cert, &credential.key) {
+        (Some(chain), Some(key)) => {
+            let config =
+                tls::client_config(&tls::ca_of(chain).map_err(|e| failed(&e))?, chain, key).map_err(|e| failed(&e))?;
+            FeedStream::Tls(Box::new(
+                tls::connect(&host, port, config, TIMEOUT).map_err(|e| failed(&e))?,
+            ))
+        }
+        _ => {
+            let tcp = tls::connect_tcp(&host, port, TIMEOUT).map_err(|e| failed(&e))?;
+            tcp.set_read_timeout(Some(TIMEOUT)).map_err(|e| failed(&e))?;
+            tcp.set_write_timeout(Some(TIMEOUT)).map_err(|e| failed(&e))?;
+            FeedStream::Plain(tcp)
+        }
+    };
+    let (socket, _) = match tungstenite::client(request, stream) {
         Ok(opened) => opened,
         Err(tungstenite::HandshakeError::Failure(tungstenite::Error::Http(answer)))
             if matches!(answer.status().as_u16(), 401 | 403) =>
@@ -666,9 +787,11 @@ fn open_feed(base: &str, bearer: &str, point: Option<&api::Point>) -> Result<Fee
         Err(tungstenite::HandshakeError::Failure(e)) => return Err(failed(&e)),
         Err(tungstenite::HandshakeError::Interrupted(_)) => return Err(failed(&"the handshake timed out")),
     };
-    if let MaybeTlsStream::Plain(stream) = socket.get_ref() {
-        stream.set_read_timeout(Some(TICK)).map_err(|e| failed(&e))?;
-    }
+    socket
+        .get_ref()
+        .tcp()
+        .set_read_timeout(Some(TICK))
+        .map_err(|e| failed(&e))?;
     Ok(socket)
 }
 
@@ -691,28 +814,43 @@ fn closed(frame: Option<CloseFrame>) -> End {
     }
 }
 
-/// The address as the watcher keeps it: `http://<loopback host>:<port>` without a trailing slash. Only a tracker on
-/// this computer for now.
+/// The address as the watcher keeps it, without a trailing slash: a tracker on this computer,
+/// `http://<loopback host>:<port>`, or a hosted one's mutual-TLS listener, `https://<host>[:<port>]`.
 fn base(address: &str) -> Result<String, String> {
     let address = address.trim().trim_end_matches('/');
-    let rest = address
-        .strip_prefix("http://")
-        .ok_or("Enter the tracker's address, e.g. http://127.0.0.1:3210")?;
-    let host = match rest.rsplit_once(':') {
-        Some((host, port)) if !port.is_empty() && port.parse::<u16>().is_ok() => host,
-        _ => return Err("The tracker's address needs its port, e.g. http://127.0.0.1:3210".into()),
+    let (hosted, rest) = match (address.strip_prefix("https://"), address.strip_prefix("http://")) {
+        (Some(rest), _) => (true, rest),
+        (None, Some(rest)) => (false, rest),
+        _ => {
+            return Err(
+                "Enter the tracker's address: http://127.0.0.1:3210 on this computer, or its https:// address".into(),
+            );
+        }
+    };
+    if rest.is_empty() || rest.contains(['/', '?', '#', '@']) {
+        return Err("Enter only the tracker's address, without a path".into());
+    }
+    let host = match rest.rsplit_once(':').filter(|(_, port)| !port.ends_with(']')) {
+        Some((host, port)) if port.parse::<u16>().is_ok_and(|p| p > 0) => host,
+        Some(_) => return Err("The tracker's port isn't a port".into()),
+        None if hosted => rest,
+        None => return Err("The tracker's address needs its port, e.g. http://127.0.0.1:3210".into()),
     };
     let host = host.trim_start_matches('[').trim_end_matches(']');
     let loopback = host.eq_ignore_ascii_case("localhost") || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback());
-    if !loopback || rest.contains('/') {
-        return Err("Only a tracker on this computer can be followed for now (http://127.0.0.1:<port>)".into());
+    if !hosted && !loopback {
+        return Err("A tracker on another computer is reached over https:// (its mutual-TLS listener)".into());
     }
     Ok(address.to_owned())
 }
 
-/// The HTTP client for a tracker on this computer: plain HTTP, never another host.
-fn http_for(_base: &str) -> Http {
-    Http::local(TIMEOUT)
+/// A kept address's host and port (443 when an https:// address names none).
+fn host_port(base: &str) -> (String, u16) {
+    let (scheme, rest) = base.split_once("://").unwrap_or(("http", base));
+    match rest.rsplit_once(':').filter(|(_, port)| !port.ends_with(']')) {
+        Some((host, port)) => (host.to_owned(), port.parse().unwrap_or(0)),
+        None => (rest.to_owned(), if scheme == "https" { 443 } else { 80 }),
+    }
 }
 
 /// What a failed request says.
@@ -756,20 +894,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_a_tracker_on_this_computer_with_its_port() {
+    fn loopback_by_http_with_its_port_and_hosted_by_https() {
         for (address, kept) in [
             ("http://127.0.0.1:3210", Some("http://127.0.0.1:3210")),
             (" http://localhost:3210/ ", Some("http://localhost:3210")),
             ("http://[::1]:3210", Some("http://[::1]:3210")),
+            ("https://tracker.example.com", Some("https://tracker.example.com")),
+            (
+                "https://tracker.example.com:8443/",
+                Some("https://tracker.example.com:8443"),
+            ),
+            ("https://[2001:db8::1]:8443", Some("https://[2001:db8::1]:8443")),
             ("http://127.0.0.1", None),
             ("http://127.0.0.1:99999", None),
-            ("https://tracker.example.com:443", None),
             ("http://192.168.1.4:3210", None),
             ("http://127.0.0.1:3210/api", None),
+            ("https://tracker.example.com/api", None),
+            ("https://user@tracker.example.com", None),
             ("127.0.0.1:3210", None),
         ] {
             assert_eq!(base(address).ok().as_deref(), kept, "{address}");
         }
+        assert_eq!(
+            host_port("https://tracker.example.com"),
+            ("tracker.example.com".into(), 443)
+        );
+        assert_eq!(host_port("https://[2001:db8::1]:8443"), ("[2001:db8::1]".into(), 8443));
+        assert_eq!(host_port("http://127.0.0.1:3210"), ("127.0.0.1".into(), 3210));
     }
 
     #[test]

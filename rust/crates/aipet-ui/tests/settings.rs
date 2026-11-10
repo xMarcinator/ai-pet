@@ -924,7 +924,7 @@ fn the_tracker_page_enrolls_says_why_not_and_saves_the_hidden_chats_choice() {
     assert_eq!(
         pet.ui.settings().tracker.status,
         Some((
-            "Only a tracker on this computer can be followed for now (http://127.0.0.1:<port>)".into(),
+            "A tracker on another computer is reached over https:// (its mutual-TLS listener)".into(),
             Tone::Bad
         ))
     );

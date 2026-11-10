@@ -281,7 +281,7 @@ fn a_pet_enrolls_follows_the_feed_resumes_and_is_revoked() {
     assert!(!pet.watcher.is_enrolled());
     assert_eq!(
         pet.watcher.enroll("http://192.168.1.4:3210", CODE).unwrap_err(),
-        "Only a tracker on this computer can be followed for now (http://127.0.0.1:<port>)"
+        "A tracker on another computer is reached over https:// (its mutual-TLS listener)"
     );
     pet.watcher.enroll(&tracker.base, CODE).unwrap();
     assert!(pet.watcher.is_enrolled());

@@ -2,7 +2,8 @@
 //! Forget, whether chats that aren't tracker tasks hide while it's connected, and where the watcher stands, through
 //! [`super::Services`]' watcher.
 //!
-//! The code box is write-only and single-use: Enroll empties it. Enroll runs on a thread of its own (the tracker may
+//! A tracker on this computer gives the pet a token; a hosted one a certificate for a key made here, its CA pinned by
+//! the code (`<secret>.<fingerprint>`). The code box is write-only and single-use: Enroll empties it. Enroll runs on a thread of its own (the tracker may
 //! take its time), and [`tick`] picks its outcome up. Revoking the pet is done in the tracker's client; Forget only
 //! deletes the pet's own credential.
 
@@ -107,12 +108,12 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
         field("Tracker address", "", &page.address, false, |s| send(Message::Address(
             s
         ))),
-        hint("Where the tracker runs on this computer, e.g. http://127.0.0.1:3210"),
+        hint("http://127.0.0.1:3210 for a tracker on this computer, or a hosted tracker's https:// address"),
     ]
     .spacing(6);
     let code = column![
         field("Companion code", "", &page.code, true, |s| send(Message::Code(s))),
-        hint("Made on the tracker's Devices & runners page (Companion code); it works once, for 15 minutes"),
+        hint("Made on the tracker's Devices & runners page (a companion code); it works once, for 15 minutes"),
     ]
     .spacing(6);
     let busy = page.enrolling.is_some();

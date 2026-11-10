@@ -182,6 +182,16 @@ pub fn enrolled(text: &str) -> Result<(String, String), String> {
     }
 }
 
+/// `POST /enroll`'s certificate for a companion on a hosted tracker: the pet's certificate, then the CA's (PEM).
+pub fn certificate(text: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(text).ok()?;
+    value
+        .get("certificate")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+}
+
 /// Whether the user switched on answers and pause/stop for this device: `hello`'s `companion.actions_allowed`.
 pub fn actions_allowed(hello: &str) -> bool {
     serde_json::from_str::<Value>(hello)
