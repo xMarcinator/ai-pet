@@ -68,6 +68,7 @@ name = "aipet-core"
 version = "0.1.0"
 dependencies = [
  "aipet-ipc",
+ "aipet-workspace-hack",
  "libc",
  "serde",
  "serde_json",
@@ -117,6 +118,7 @@ version = "0.1.0"
 dependencies = [
  "aipet-core",
  "aipet-ipc",
+ "aipet-workspace-hack",
  "axum",
  "getrandom 0.4.3",
  "libc",
@@ -133,6 +135,7 @@ dependencies = [
 name = "aipet-sprite"
 version = "0.1.0"
 dependencies = [
+ "aipet-workspace-hack",
  "flate2",
  "png",
  "serde",
@@ -146,6 +149,7 @@ version = "0.1.0"
 dependencies = [
  "aipet-core",
  "aipet-ipc",
+ "aipet-workspace-hack",
  "libc",
  "serde_json",
  "windows-sys 0.52.0",
@@ -172,6 +176,25 @@ dependencies = [
  "iced",
  "iced_exwlshell",
  "wayland-client",
+]
+
+[[package]]
+name = "aipet-workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "http",
+ "httparse",
+ "memchr",
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_core",
+ "serde_json",
+ "socket2",
+ "syn 3.0.6",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

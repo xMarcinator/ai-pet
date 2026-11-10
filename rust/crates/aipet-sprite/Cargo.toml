@@ -13,3 +13,4 @@ flate2.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tiny-skia.workspace = true
+aipet-workspace-hack = { version = "0.1", path = "../workspace-hack" }

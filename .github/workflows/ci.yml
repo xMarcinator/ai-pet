@@ -2,8 +2,8 @@
 # It also checks that the plugin's hook files are what the hook makes of its event tables, that the install and build
 # scripts at least parse and stay executable, that the agent skills' Codex copies match, that the parity ledger
 # (rust/PARITY.md) still maps every C# test to Rust tests that are there, and that nothing names what the cutover to
-# Rust removed, and that THIRD-PARTY-NOTICES.md is what cargo-about generates. No .NET is installed here. Nothing is
-# published here: see release.yml.
+# Rust removed, that THIRD-PARTY-NOTICES.md is what cargo-about generates, and that the workspace-hack crate is what
+# cargo-hakari generates. No .NET is installed here. Nothing is published here: see release.yml.
 name: CI
 
 on:
@@ -193,6 +193,14 @@ jobs:
         run: cargo fetch --locked
       - name: Check the notices
         run: bash scripts/check-notices.sh
+      # The workspace-hack crate (rust/crates/workspace-hack) must be what cargo-hakari makes of
+      # rust/.config/hakari.toml, with every member that should depend on it doing so. Here because this job has the
+      # crates and ~/.cargo/bin cached; it reads metadata only and builds nothing.
+      - name: Install cargo-hakari
+        run: cargo install cargo-hakari --version 0.9.39 --locked
+      - name: Check the workspace-hack crate
+        working-directory: rust
+        run: cargo hakari generate --diff && cargo hakari manage-deps --dry-run && cargo hakari verify
 
   scripts:
     name: Shell scripts
