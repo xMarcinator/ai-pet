@@ -27,7 +27,13 @@ the tarball's `install.sh --no-start`.
   On Windows, the token check is part of the owner's run.
 - Velopack's in-app update. Linux has no in-app update; the tarball installer is the update path.
 
-## Windows
+## Windows (2026-11-10, the owner's machine)
 
-The owner runs these checks on their own machine with `AiPet-Setup-0.2.0-dry.3-win-x64.exe` from the same run. They
-are not yet recorded.
+The owner installed `AiPet-Setup-0.2.0-dry.3-win-x64.exe` from the same run and reported that the installation works.
+Their run was not itemised step by step: the update from 0.1.0, the rollback and the tokens are covered by "the setup
+seems to work".
+
+The same run turned up three things outside installing, now in fn-2's polish task:
+- **Ghosts:** stale copies of the pet show when it jumps and when its size changes.
+- **Bubble gap:** the vector Hood's bubbles sat higher than the pixel Hood's.
+- **Settings:** a pet's style and theme weren't remembered when switching pets.
