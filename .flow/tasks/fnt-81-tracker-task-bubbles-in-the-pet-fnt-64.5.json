@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-10T16:44:09.933530Z",
+  "depends_on": [
+    "fnt-81-tracker-task-bubbles-in-the-pet-fnt-64.4"
+  ],
+  "id": "fnt-81-tracker-task-bubbles-in-the-pet-fnt-64.5",
+  "priority": null,
+  "spec": "fnt-81-tracker-task-bubbles-in-the-pet-fnt-64",
+  "spec_path": ".flow/tasks/fnt-81-tracker-task-bubbles-in-the-pet-fnt-64.5.md",
+  "status": "todo",
+  "title": "Bubble actions: answer a prompt, pause and stop",
+  "updated_at": "2026-11-10T16:44:09.933530Z"
+}
