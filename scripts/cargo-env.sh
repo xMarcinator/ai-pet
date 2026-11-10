@@ -54,7 +54,9 @@ emit() { # name, value
   if $env_form; then
     # the caller's shell splits and globs the --env words
     case "$2" in
-      *[[:space:]*?[]*|"") echo "cargo-env.sh: --env can't carry '$2' (whitespace or a glob character); use eval" >&2; exit 2 ;;
+      *[[:space:]*?[]*|"")
+        echo "cargo-env.sh: --env can't carry '$2' (whitespace or a glob character); use eval" >&2
+        exit 2 ;;
     esac
     printf '%s=%s\n' "$1" "$2"
   else
@@ -84,7 +86,11 @@ fi
 
 if $cargo_env_sourced; then
   cargo_env_file=${BASH_SOURCE:-${ZSH_VERSION:+$0}}
-  case "$cargo_env_file" in */*) cargo_env_here=${cargo_env_file%/*} ;; "") cargo_env_here=scripts ;; *) cargo_env_here=. ;; esac
+  case "$cargo_env_file" in
+    */*) cargo_env_here=${cargo_env_file%/*} ;;
+    "") cargo_env_here=scripts ;; # dash and ash don't name it: the repository root is assumed
+    *) cargo_env_here=. ;;
+  esac
   # The status rides on the output's last line, outside any `if` (set -e is off in a condition) and with set +e, so
   # a caller's set -e can't end the substitution before the cleanup below.
   cargo_env_out=$(set +e; cargo_env_print "$cargo_env_here"; echo "$?")
