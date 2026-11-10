@@ -8,8 +8,8 @@ use std::io::{self, Write};
 
 use crate::claude::{self, EVENTS};
 use crate::install::warn;
-use crate::json::{Node, Object};
 use crate::json_out;
+use aipet_ipc::json::{Node, Object};
 
 pub(crate) const USAGE: &str = "usage: aipet-hook --print-plugin-hooks claude|codex";
 

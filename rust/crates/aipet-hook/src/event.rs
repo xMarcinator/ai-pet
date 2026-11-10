@@ -6,7 +6,8 @@
 //!   surrogates become U+FFFD ([`mended`]); what isn't a JSON object's text becomes `{}`, and once the pet is reached
 //!   the trace log says why.
 //! - the envelope: `v`, `type`, `agent`, `at`, `pid`, `env` (Claude's only) and the payload, which is the event
-//!   without `tool_response` and with every string cut to [`MAX_STRING`] ([`trimmed`]).
+//!   without `tool_response` and with every string cut to `MAX_STRING` ([`trimmed`]). The pet's HTTP listener makes
+//!   its envelopes with the same code ([`aipet_ipc::event`]).
 //! - the request line. Over [`MAX_REQUEST`] less the room `sent` needs, `tool_input` keeps only what the pet reads of
 //!   it ([`request`]).
 //! - the pet, waited for with what the run's budget has left once the reply's [`TIMEOUT`] is set aside. Not there:
@@ -16,19 +17,18 @@
 //! Nothing is written before the pet is reached, and nothing is ever printed: `main` runs this so that not even a
 //! panic reaches stdout or stderr.
 
-use std::borrow::Cow;
 use std::ffi::OsString;
 use std::io::Read;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime};
 
 use aipet_ipc::connect::{NoPet, connect};
+use aipet_ipc::event::{self, mended, trimmed, twice};
+use aipet_ipc::json::{self, Node, Object};
 use aipet_ipc::protocol::{
-    AGENT, AT, CLAUDE_ENV, CONNECT, ENV, HOOK_BUDGET, KIND, MAX_REQUEST, MAX_STRING, OK, PAYLOAD, PID, SENT, STDIN,
-    TIMEOUT, TOOL_INPUT_KEYS, V, VERSION, format_seconds, unix_time,
+    CLAUDE_ENV, CONNECT, HOOK_BUDGET, MAX_REQUEST, OK, SENT, STDIN, TIMEOUT, format_seconds, unix_time,
 };
 
-use crate::json::{self, Node, Object};
 use crate::trace::trace;
 
 /// When `main` started, before stdin was read: the event's `at` (the hook looks at no process, its own or another),
@@ -189,58 +189,6 @@ pub(crate) fn decoded(input: &[u8]) -> String {
     }
 }
 
-/// `Mended`: the JSON with each escaped lone surrogate as `\uFFFD`. Node's `JSON.stringify` (so Claude's) writes one
-/// for text cut in the middle of an emoji. System.Text.Json parses such an escape but then can neither read nor
-/// write back the string that holds it, which would lose the whole event; serde_json refuses it outright. The text
-/// itself is decoded, so it has no lone surrogate of its own.
-///
-/// Every character it looks at is ASCII, so it works on bytes where the C# works on UTF-16 units.
-fn mended(json: &str) -> Cow<'_, str> {
-    let b = json.as_bytes();
-    // the UTF-16 unit of the 4 hex digits at `at`, when there are 4
-    let hex = |at: usize| -> Option<u16> {
-        let digits = b.get(at..at + 4)?;
-        digits
-            .iter()
-            .try_fold(0u16, |unit, &d| Some(unit << 4 | (d as char).to_digit(16)? as u16))
-    };
-    let next = |from: usize| b[from..].iter().position(|&c| c == b'\\').map(|i| from + i);
-    let mut mended: Option<String> = None;
-    let mut done = 0;
-    let mut at = next(0);
-    while let Some(i) = at.filter(|&i| i + 1 < b.len()) {
-        // a backslash is only valid in a string, where it starts an escape: two characters, or six for \uXXXX
-        let len = match (b[i + 1], hex(i + 2)) {
-            (b'u', Some(c)) if !(0xD800..=0xDFFF).contains(&c) => 6,
-            (b'u', Some(c))
-                if c <= 0xDBFF
-                    && i + 11 < b.len()
-                    && b[i + 6] == b'\\'
-                    && b[i + 7] == b'u'
-                    && hex(i + 8).is_some_and(|low| (0xDC00..=0xDFFF).contains(&low)) =>
-            {
-                12
-            }
-            (b'u', Some(_)) => {
-                let out = mended.get_or_insert_with(|| String::with_capacity(json.len()));
-                out.push_str(&json[done..i]);
-                out.push_str("\\uFFFD");
-                done = i + 6;
-                6
-            }
-            _ => 2,
-        };
-        at = if i + len < b.len() { next(i + len) } else { None };
-    }
-    match mended {
-        Some(mut out) => {
-            out.push_str(&json[done..]);
-            Cow::Owned(out)
-        }
-        None => Cow::Borrowed(json),
-    }
-}
-
 /// `ClaudeHook.Envelope` or `CodexHook.Envelope`, and the event's name for the trace log (`lastEvent`). As in the
 /// C#, it is made before the pet is reached, and a failure is traced only after.
 ///
@@ -256,91 +204,26 @@ fn envelope(
         return ("?".to_owned(), Err(twice(key)));
     }
     let last_event = payload.str("hook_event_name").unwrap_or("").to_owned();
-    let mut envelope = Object::default();
-    envelope.push(V, Node::Number(VERSION.to_string()));
-    envelope.push(KIND, Node::String("event".to_owned()));
-    envelope.push(AGENT, Node::String(if codex { "codex" } else { "claude" }.to_owned()));
-    envelope.push(AT, Node::Number(format_seconds(unix_time(at))));
-    envelope.push(PID, Node::Number(std::process::id().to_string()));
-    if !codex {
-        // where the chat runs, and the desktop app's own id for it, are only in the hook's environment
+    // where the chat runs, and the desktop app's own id for it, are only in the hook's environment
+    let env = (!codex).then(|| {
         let mut env = Object::default();
         for name in CLAUDE_ENV {
             if let Some(value) = vars(name) {
                 env.push(name, Node::String(value.to_string_lossy().into_owned()));
             }
         }
-        envelope.push(ENV, Node::Object(env));
-    }
-    let envelope = trimmed(payload).map(|payload| {
-        envelope.push(PAYLOAD, Node::Object(payload));
-        envelope
+        env
     });
+    let agent = if codex { "codex" } else { "claude" };
+    let envelope = trimmed(payload).map(|p| event::envelope(agent, at, Some(std::process::id()), env, p));
     (last_event, envelope)
-}
-
-fn twice(key: &str) -> String {
-    format!("the event names the member {key:?} twice")
-}
-
-/// `Trimmed`: the event as the pet needs it, without the tool's output (often large, and never used), and with
-/// every string cut to [`MAX_STRING`] so the request usually stays well within the pet's limit.
-fn trimmed(mut payload: Object) -> Result<Object, String> {
-    payload.remove("tool_response");
-    cap_object(&mut payload)?;
-    Ok(payload)
-}
-
-/// `Cap`, which reads every object and array of the event.
-fn cap(node: &mut Node) -> Result<(), String> {
-    match node {
-        Node::String(s) => cut(s),
-        Node::Array(items) => items.iter_mut().try_for_each(cap)?,
-        Node::Object(object) => cap_object(object)?,
-        Node::Null | Node::Bool(_) | Node::Number(_) => {}
-    }
-    Ok(())
-}
-
-fn cap_object(object: &mut Object) -> Result<(), String> {
-    if let Some(key) = object.duplicate() {
-        return Err(twice(key));
-    }
-    object.values_mut().try_for_each(cap)
-}
-
-/// `Cut`: a string longer than [`MAX_STRING`] UTF-16 units, cut to it (not in the middle of a surrogate pair).
-fn cut(s: &mut String) {
-    // a string's UTF-16 units are never more than its UTF-8 bytes
-    if s.len() <= MAX_STRING {
-        return;
-    }
-    let mut units = 0;
-    for (at, c) in s.char_indices() {
-        units += c.len_utf16();
-        if units > MAX_STRING {
-            s.truncate(at);
-            return;
-        }
-    }
 }
 
 /// `Request`: the envelope as the request line. Cut strings can still add up past the pet's limit (a MultiEdit of
 /// several big files, say); then the tool call keeps only what the pet reads of it, rather than being dropped whole.
 /// The limit leaves room for `sent`, and counts the bytes this writes.
 fn request(envelope: &mut Object) -> String {
-    let line = envelope.to_json();
-    if line.len() <= MAX_REQUEST - SENT_ROOM {
-        return line;
-    }
-    let Some(Node::Object(payload)) = envelope.get_mut(PAYLOAD) else {
-        return line;
-    };
-    let Some(Node::Object(input)) = payload.get_mut("tool_input") else {
-        return line;
-    };
-    input.retain(|key| TOOL_INPUT_KEYS.contains(&key));
-    envelope.to_json()
+    event::fit(envelope, MAX_REQUEST - SENT_ROOM)
 }
 
 /// `Sent`: the request line with `sent`, when it is sent. The line is made before the pet is reached, and `sent` is
@@ -364,6 +247,10 @@ fn taken(reply: Option<&str>) -> Result<bool, json::Error> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
+    use aipet_ipc::protocol::{MAX_STRING, PAYLOAD};
+
     use super::*;
 
     fn object(text: &str) -> Object {
@@ -469,38 +356,6 @@ mod tests {
                 String::from_utf8_lossy(&input)
             );
         }
-    }
-
-    /// Every string cut to MAX_STRING UTF-16 units, wherever it is, and never between the halves of a pair; names
-    /// aren't cut, and only the event's own `tool_response` is dropped.
-    #[test]
-    fn strings_are_capped() {
-        let n = MAX_STRING;
-        let x = |len: usize| "x".repeat(len);
-        let mut payload = Object::default();
-        payload.push("exact", Node::String(x(n)));
-        payload.push("over", Node::String(x(n + 1)));
-        payload.push("pair", Node::String(format!("{}😀", x(n - 1))));
-        payload.push("wide", Node::String("é".repeat(n + 1)));
-        payload.push(
-            x(n + 1),
-            Node::Array(vec![
-                Node::String(x(n + 5)),
-                Node::Object(object(r#"{"tool_response":1}"#)),
-            ]),
-        );
-        payload.push("tool_response", Node::String("gone".into()));
-        let payload = trimmed(payload).unwrap();
-        assert_eq!(payload.str("exact"), Some(x(n).as_str()));
-        assert_eq!(payload.str("over"), Some(x(n).as_str()));
-        assert_eq!(payload.str("pair"), Some(x(n - 1).as_str()));
-        assert_eq!(payload.str("wide"), Some("é".repeat(n).as_str()));
-        let Some(Node::Array(items)) = payload.get(&x(n + 1)) else {
-            panic!("the long name was cut")
-        };
-        assert_eq!(items[0], Node::String(x(n)));
-        assert_eq!(items[1], Node::Object(object(r#"{"tool_response":1}"#)));
-        assert_eq!(payload.get("tool_response"), None);
     }
 
     /// A member named twice fails the envelope, as it throws in the C#: before the event's name is read when it is

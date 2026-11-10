@@ -11,8 +11,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::install::{NEWLINE, backup, is_file, read_text, real_path, save, thrown, upper};
-use crate::json::{Node, Object};
 use crate::json_out::{self, deep_equals, member, read};
+use aipet_ipc::json::{Node, Object};
 
 /// One of Claude's hook events AiPet registers for.
 pub(crate) struct Event {

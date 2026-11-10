@@ -13,7 +13,7 @@
 use std::cmp::Ordering;
 use std::fmt::Write as _;
 
-use crate::json::{self, Node, Object};
+use aipet_ipc::json::{self, Node, Object};
 
 /// How deep `JsonNode.Parse` reads by default (`JsonDocumentOptions.MaxDepth`).
 pub(crate) const MAX_DEPTH: usize = 64;

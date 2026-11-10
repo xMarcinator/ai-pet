@@ -24,9 +24,9 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::install::{NEWLINE, StagedBackup, backup, is_file, read_text, real_path, save, stage, thrown, upper};
-use crate::json::{Node, Object};
 use crate::json_out::{self, deep_equals, member, read};
 use crate::toml_text::{self, Segment};
+use aipet_ipc::json::{Node, Object};
 
 /// One of Codex's hook events AiPet registers for.
 pub(crate) struct Event {

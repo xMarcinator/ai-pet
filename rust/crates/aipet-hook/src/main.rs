@@ -13,7 +13,6 @@ mod codex;
 mod doctor;
 mod event;
 mod install;
-mod json;
 mod json_out;
 mod plugin_hooks;
 mod toml_text;

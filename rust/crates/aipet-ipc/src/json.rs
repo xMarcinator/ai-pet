@@ -1,8 +1,9 @@
 //! A JSON tree that keeps an event as it came: read as System.Text.Json's `JsonNode.Parse` reads text, and written
-//! as the hook's request line (`src/AiPet.Hook/Program.cs:176-187`).
+//! as the hook's request line (`src/AiPet.Hook/Program.cs:176-187`). The hook and the pet's HTTP listener both make
+//! their envelopes with it ([`event`](crate::event)).
 //!
-//! The hook changes little of an event (it cuts long strings and drops `tool_response`) and passes the rest on as it
-//! came: members in their order, and numbers as their text (`1.0`, `-0` and `1e400` stay as they are written). The
+//! An envelope changes little of an event (long strings are cut and `tool_response` dropped) and passes the rest on as
+//! it came: members in their order, and numbers as their text (`1.0`, `-0` and `1e400` stay as they are written). The
 //! C#'s `JsonNode` keeps both, and the pet tells tool calls apart by their input's JSON text (`AgentSessions.CallKey`),
 //! so both matter. serde_json's `Value` sorts the members and reads numbers into doubles, so it isn't used here.
 //!
@@ -17,7 +18,7 @@ use std::fmt;
 
 /// A JSON value.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Node {
+pub enum Node {
     Null,
     Bool(bool),
     /// The number's text, as it came.
@@ -29,22 +30,22 @@ pub(crate) enum Node {
 
 /// An object's members, in their order.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct Object {
+pub struct Object {
     members: Vec<(String, Node)>,
 }
 
 impl Object {
     /// The first member named `key`.
-    pub(crate) fn get(&self, key: &str) -> Option<&Node> {
+    pub fn get(&self, key: &str) -> Option<&Node> {
         self.members.iter().find(|(k, _)| k == key).map(|(_, v)| v)
     }
 
-    pub(crate) fn get_mut(&mut self, key: &str) -> Option<&mut Node> {
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut Node> {
         self.members.iter_mut().find(|(k, _)| k == key).map(|(_, v)| v)
     }
 
     /// `Program.Str`: the member's value when it is a string.
-    pub(crate) fn str(&self, key: &str) -> Option<&str> {
+    pub fn str(&self, key: &str) -> Option<&str> {
         match self.get(key) {
             Some(Node::String(s)) => Some(s),
             _ => None,
@@ -52,44 +53,44 @@ impl Object {
     }
 
     /// Adds a member at the end (the caller knows the name is new).
-    pub(crate) fn push(&mut self, key: impl Into<String>, value: Node) {
+    pub fn push(&mut self, key: impl Into<String>, value: Node) {
         self.members.push((key.into(), value));
     }
 
     /// Removes the first member named `key`.
-    pub(crate) fn remove(&mut self, key: &str) -> Option<Node> {
+    pub fn remove(&mut self, key: &str) -> Option<Node> {
         let at = self.members.iter().position(|(k, _)| k == key)?;
         Some(self.members.remove(at).1)
     }
 
     /// Keeps the members whose names `keep` accepts, in their order.
-    pub(crate) fn retain(&mut self, mut keep: impl FnMut(&str) -> bool) {
+    pub fn retain(&mut self, mut keep: impl FnMut(&str) -> bool) {
         self.members.retain(|(k, _)| keep(k));
     }
 
-    #[cfg(test)]
-    pub(crate) fn keys(&self) -> impl Iterator<Item = &str> {
+    /// The members' names, in their order.
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
         self.members.iter().map(|(k, _)| k.as_str())
     }
 
     /// The members, in their order.
-    pub(crate) fn iter(&self) -> impl ExactSizeIterator<Item = (&str, &Node)> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&str, &Node)> {
         self.members.iter().map(|(k, v)| (k.as_str(), v))
     }
 
-    pub(crate) fn values_mut(&mut self) -> impl Iterator<Item = &mut Node> {
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Node> {
         self.members.iter_mut().map(|(_, v)| v)
     }
 
     /// The first name that a later member has too. System.Text.Json's `JsonObject` reads its members into a
     /// dictionary the first time it is used, and throws there when a name comes twice.
-    pub(crate) fn duplicate(&self) -> Option<&str> {
+    pub fn duplicate(&self) -> Option<&str> {
         let mut seen = std::collections::HashSet::with_capacity(self.members.len());
         self.members.iter().map(|(k, _)| k.as_str()).find(|k| !seen.insert(*k))
     }
 
     /// The object as one line of JSON.
-    pub(crate) fn to_json(&self) -> String {
+    pub fn to_json(&self) -> String {
         let mut out = String::new();
         write_object(self, &mut out);
         out
@@ -98,7 +99,7 @@ impl Object {
 
 /// Why a text isn't JSON, and where: the byte it was found at.
 #[derive(Debug, PartialEq)]
-pub(crate) struct Error {
+pub struct Error {
     at: usize,
     what: &'static str,
 }
@@ -110,7 +111,7 @@ impl fmt::Display for Error {
 }
 
 /// `JsonNode.Parse(text)` with at most `depth` objects and arrays inside each other (System.Text.Json's `MaxDepth`).
-pub(crate) fn parse(text: &str, depth: usize) -> Result<Node, Error> {
+pub fn parse(text: &str, depth: usize) -> Result<Node, Error> {
     let mut p = Parser {
         text,
         bytes: text.as_bytes(),
