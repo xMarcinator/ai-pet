@@ -48,9 +48,10 @@ against the C# pet; this task looks inside.
 
 
 ## Done summary
-TBD
+Linux half done: rust/proofs/memory.md (bd51713, 14b976f) with the breakdown by mapping (RSS and PSS), the cuts kept, each measured on its own, and a same-run comparison with the C# pet; scripts/perf/memory.sh runs it again. The Windows half moved to fnt-76-windows-checks-with-the-owner.3 (R4) on the owner's word, 2026-11-10, to go with the other Windows checks that need the owner at a Windows machine.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
+- Commits: bd517135296b14af3f20394ad9d3a585b37d30c2, 14b976fdca849e4a41a25575070ae79e321b8025
 - Tests:
 - PRs:

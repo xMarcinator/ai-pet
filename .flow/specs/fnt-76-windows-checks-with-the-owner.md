@@ -2,7 +2,7 @@
 
 ## Goal & Context
 
-fn-1's performance gate (task 28) and fn-2's verification (task 8) are done on Linux; only their Windows halves are left, and those need the owner at a Windows machine. They are moved here (owner, 2026-11-09) so fn-1 can ship and fn-2 can close without waiting for that session. This spec carries them unchanged: fn-1 R18's budgets on Windows, every built-in pet's calm CPU and memory on Windows, and the Windows hands-on pass.
+fn-1's performance gate (task 28) and fn-2's verification (task 8) are done on Linux; only their Windows halves are left, and those need the owner at a Windows machine. They are moved here (owner, 2026-11-09) so fn-1 can ship and fn-2 can close without waiting for that session. This spec carries them unchanged: fn-1 R18's budgets on Windows, every built-in pet's calm CPU and memory on Windows, and the Windows hands-on pass. The Windows half of fn-1 task 29's memory audit (where the pet's memory goes) joined them on the owner's word, 2026-11-10, for the same Windows session; its Linux half is in `rust/proofs/memory.md`.
 
 ## Architecture & Data Models
 
@@ -22,9 +22,11 @@ fn-1's performance gate (task 28) and fn-2's verification (task 8) are done on L
 - **R2:** Every built-in pet, style and theme meets fn-1 R18's calm-CPU and RSS budgets on Windows, recorded in `rust/proofs/sprite-packs.md` beside the Linux figures. Errors: a pet over budget is recorded and goes back to its own spec as a fix.
 - **R3:** The Windows hands-on pass is recorded with the owner: every pet's look and the newer moods, eye-follow, props, headphones, effects, mirroring while dragged, click-through on the art, crisp pixels, reduced motion, the Settings page (Style and Theme pickers), and fn-2's leftovers (the closed laptop lid, no fragments round the bubbles, the window coming back when a monitor goes). Errors: each failed item is recorded with what was seen, and fixed or filed.
 
+- **R4:** Where the Rust pet's memory goes on Windows, calm and lively, beside the C# pet: working set, private bytes and commit, and the per-module picture, from a breakdown script run from Git Bash (no PowerShell; a small helper such as task 1's sampler). Recorded in `rust/proofs/memory.md` next to the Linux breakdown, with whichever of the Linux cuts help on Windows and what can't be reduced there (memory the GPU driver maps). Errors: a cut that costs CPU beyond fn-1 R18's calm budget, transparency or the sprite's goldens is recorded and not kept.
+
 ## Boundaries
 
-- No new measurements beyond fn-1 task 28's and fn-2 task 8's; the bubble stack's dropped frames (task 27's E-x9) move to FNT-75, whose new bubble drawing replaces the code that drops them.
+- No new measurements beyond fn-1 task 28's, fn-2 task 8's and fn-1 task 29's Windows breakdown; the bubble stack's dropped frames (task 27's E-x9) move to FNT-75, whose new bubble drawing replaces the code that drops them.
 - No Windows work for FNT-75's layered window: that spec's own task does it.
 
 ## Decision Context
