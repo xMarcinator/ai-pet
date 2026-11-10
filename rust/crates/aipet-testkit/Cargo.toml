@@ -21,3 +21,6 @@ libc.workspace = true
 # Windows' own reading of the exes' version resources (tests/resources.rs)
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+
+[dependencies]
+aipet-workspace-hack = { version = "0.1", path = "../workspace-hack" }

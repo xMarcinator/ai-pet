@@ -1,0 +1,5 @@
+# Pinned tools for building from source: `mise trust` once (your choice), then `mise install`. No [env] here: the
+# build environment comes from scripts/cargo-env.sh, which shells without mise's hook can run too.
+[tools]
+sccache = "0.19.0"
+"cargo:cargo-hakari" = "0.9.39"
