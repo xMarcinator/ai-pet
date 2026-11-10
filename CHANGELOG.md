@@ -48,7 +48,9 @@ AiPet's move to Rust: the hook is written in Rust, and the packages ship the Rus
   keeps its settings, logs, tokens and avatars where they were, and an installed copy updates itself as before: the
   update from a .NET release keeps them, and so do the hooks it registered. The packages are much smaller, since
   they carry no .NET runtime.
-- On Windows, `AiPet.exe` keeps its icon and version details, and needs no Visual C++ runtime.
+- On Windows, `AiPet.exe` keeps its icon and version details, and needs no Visual C++ runtime. It draws through
+  Vulkan, which leaves no stale copies of the pet behind when it jumps or changes size; it takes a few seconds to
+  appear. `WGPU_BACKEND=gl` picks GL instead.
 - Linux: the pet runs on glibc 2.27 and newer, like the hook, and needs no runtime of its own.
 - Building from source needs only Rust: `build.sh`, `build.ps1` and `install-from-source` build the pet and the hook
   with cargo.
