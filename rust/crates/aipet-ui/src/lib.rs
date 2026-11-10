@@ -33,7 +33,7 @@ pub mod vector_view;
 mod view;
 
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -369,11 +369,13 @@ pub struct PetUi {
     skipped: Vec<aipet_sprite::load::Skipped>,
     /// Device px per logical px on the pet's output, as the shell says: a pixel pack's pixels are snapped to them.
     scale: f32,
-    /// Each avatar standing still, for the picker: the worn one in its theme, the others in their default.
+    /// Each avatar standing still, for the picker: in the theme it was last worn in, else its default.
     stills: Vec<Handle>,
     avatar: usize,
     /// The worn avatar's theme: one it has.
     theme: String,
+    /// The style and theme each pet was last worn in this run, by pet: its tile shows them and puts them back on.
+    chosen: HashMap<String, (String, String)>,
     /// How big the pet and the bubbles are drawn, in percent.
     pet_size: i32,
     bubble_size: i32,
@@ -529,6 +531,10 @@ impl PetUi {
         let (avatar, theme) = choose(&avatars, &setup.prefs);
         let worn = themed(&avatars[avatar].unpacked(), &theme);
         stills[avatar] = sprite::still(&worn);
+        let chosen = HashMap::from([(
+            worn.pack.pet().to_owned(),
+            (worn.pack.style().to_owned(), theme.clone()),
+        )]);
         let mut pet = Pet::new();
         pet.set_pack(worn.clone());
         pet.set_reduced_motion(reduce_motion(&*setup.platform));
@@ -557,6 +563,7 @@ impl PetUi {
             stills,
             avatar,
             theme,
+            chosen,
             pet_size: setup.prefs.pet_size,
             bubble_size: setup.prefs.bubble_size,
             stacks: Stacks::default(),
@@ -918,7 +925,11 @@ impl PetUi {
             },
             Message::SelectAvatar(i) => {
                 if let Some(avatar) = self.avatars.get(i).filter(|_| i != self.avatar) {
-                    let theme = avatar.pack.palette.theme.clone();
+                    // the theme it was last worn in (wear takes the default where it has none by that name)
+                    let theme = match self.chosen.get(avatar.pack.pet()) {
+                        Some((_, theme)) => theme.clone(),
+                        None => avatar.pack.palette.theme.clone(),
+                    };
                     // the theme editor was for the pet taken off
                     self.settings.avatars.theme = None;
                     self.wear(i, &theme);
@@ -1115,9 +1126,14 @@ impl PetUi {
         if i != self.avatar
             && let Some(old) = self.avatars.get(self.avatar)
         {
-            self.stills[self.avatar] = sprite::still(&old.unpacked());
+            // its tile keeps the theme it was worn in
+            self.stills[self.avatar] = sprite::still(&themed(&old.unpacked(), &self.theme));
         }
         self.stills[i] = sprite::still(&worn);
+        self.chosen.insert(
+            base.pack.pet().to_owned(),
+            (base.pack.style().to_owned(), theme.clone()),
+        );
         self.avatar = i;
         self.theme = theme;
         self.pet.set_pack(worn.clone());
@@ -1978,6 +1994,57 @@ pub(crate) mod tests {
         let ui = start("Hood (vector)", Some("Blue"));
         assert_eq!(ui.theme(), "Blue");
         assert_eq!(start("Hood (vector)", None).theme(), "Green");
+    }
+
+    #[test]
+    fn a_pets_tile_puts_back_the_style_and_theme_it_was_last_worn_in() {
+        let mut ui = PetUi::new(Setup {
+            prefs: Prefs {
+                avatar: Some("Hood".into()),
+                ..Prefs::default()
+            },
+            ..Setup::detached()
+        });
+        let worn = |ui: &PetUi| {
+            let a = &ui.avatars[ui.avatar];
+            (
+                a.pack.pet().to_owned(),
+                a.pack.style().to_owned(),
+                ui.theme().to_owned(),
+            )
+        };
+        let tile = |ui: &PetUi, pet: &str| {
+            settings::avatars::shown(ui)
+                .find(|(_, a)| a.pack.pet() == pet)
+                .map(|(i, _)| i)
+                .unwrap()
+        };
+        let vector = settings::avatars::styles(&ui)[1].1;
+        ui.update(Message::SelectStyle(vector));
+        ui.update(Message::SelectTheme("Blue".into()));
+        assert_eq!(worn(&ui), ("Hood".into(), "Vector".into(), "Blue".into()));
+        // another pet, then the Hood's tile again: the vector Hood in Blue, not its pixel style in its default
+        ui.update(Message::SelectAvatar(tile(&ui, "Sprout")));
+        assert_eq!(worn(&ui).0, "Sprout");
+        let hood = tile(&ui, "Hood");
+        assert_eq!(
+            ui.avatars[hood].pack.style(),
+            "Vector",
+            "the tile shows the style last worn"
+        );
+        // and in the theme last worn (handles differ by id: the pixels are compared)
+        let rgba = |h: &Handle| match h {
+            Handle::Rgba { pixels, .. } => pixels.clone(),
+            other => panic!("{other:?}"),
+        };
+        let blue = sprite::still(&themed(&ui.avatars[hood].unpacked(), "Blue"));
+        assert_eq!(rgba(&ui.stills[hood]), rgba(&blue));
+        ui.update(Message::SelectAvatar(hood));
+        assert_eq!(worn(&ui), ("Hood".into(), "Vector".into(), "Blue".into()));
+        // a pet not worn yet goes on in its default style and theme
+        ui.update(Message::SelectAvatar(tile(&ui, "Hamster")));
+        let hamster = &ui.avatars[ui.avatar];
+        assert_eq!(ui.theme(), hamster.pack.palette.theme);
     }
 
     #[test]

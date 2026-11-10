@@ -117,19 +117,26 @@ pub(crate) fn select_style(pet: &mut PetUi, i: usize) {
     pet.save_prefs();
 }
 
+/// The drawing of `g` in the style its pet was last worn in, while it still has that style.
+fn chosen_style(pet: &PetUi, g: &aipet_sprite::load::Group) -> Option<usize> {
+    let (style, _) = pet.chosen.get(&g.pet)?;
+    g.styles.iter().copied().find(|&i| pet.avatars[i].pack.style() == style)
+}
+
 /// The pet worn, as drawn: its pack and sheets, in its theme.
 #[doc(hidden)]
 pub fn worn(pet: &PetUi) -> LoadedPack {
     pet.pet.loaded()
 }
 
-/// Each pet's tile, in order: the drawing it shows (the worn one for the worn pet, else its default style) and it.
-fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &LoadedPack)> {
+/// Each pet's tile, in order: the drawing it shows (the worn one for the worn pet, else the style it was last worn
+/// in, else its default style) and it.
+pub(crate) fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &LoadedPack)> {
     crate::pets(&pet.avatars).into_iter().map(move |g| {
         let i = if g.styles.contains(&pet.avatar) {
             pet.avatar
         } else {
-            g.default
+            chosen_style(pet, &g).unwrap_or(g.default)
         };
         (i, &*pet.avatars[i])
     })
@@ -588,12 +595,21 @@ fn reload(pet: &mut PetUi, avatars: Vec<LoadedPack>) {
         pet.pet.set_pack(worn.clone());
         pet.sprite = crate::sprite::Sprite::new(&worn);
     }
+    // the others in the theme their pet was last worn in, where they have it
     pet.stills = avatars
         .iter()
         .enumerate()
-        .map(|(i, a)| crate::sprite::still(if i == index { &worn } else { a }))
+        .map(|(i, a)| match pet.chosen.get(a.pack.pet()) {
+            _ if i == index => crate::sprite::still(&worn),
+            Some((_, theme)) => crate::sprite::still(&crate::themed(a, theme)),
+            None => crate::sprite::still(a),
+        })
         .collect();
     pet.avatars = crate::shelf::shelve(avatars);
+    pet.chosen.insert(
+        pet.avatars[index].pack.pet().to_owned(),
+        (pet.avatars[index].pack.style().to_owned(), theme.clone()),
+    );
     pet.avatar = index;
     pet.theme = theme;
 }
