@@ -20,13 +20,14 @@ use std::sync::{Arc, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime};
 
-use aipet_core::board::{Board, Media, Session, Sources};
+use aipet_core::board::{Board, Media, Session, Sources, TrackerSources};
 use aipet_core::codex_watcher::CodexWatcher;
 use aipet_core::github::{self, GitHubWatcher};
 use aipet_core::jira::{self, Http, JiraWatcher};
 use aipet_core::secrets::SecretStore;
 use aipet_core::server::{self, HookServer, Ingress};
 use aipet_core::sessions::AgentSessions;
+use aipet_core::tracker::{self, TrackerWatcher};
 use aipet_ipc::protocol::unix_time;
 use aipet_ui::News;
 use aipet_ui::platform::Platform;
@@ -100,6 +101,7 @@ enum Event {
     Changed,
     Jira(jira::Event),
     GitHub(github::Event),
+    Tracker(tracker::Event),
     /// What the player plays now.
     Media(Media),
     Dismiss(String),
@@ -116,6 +118,12 @@ impl From<jira::Event> for Event {
 impl From<github::Event> for Event {
     fn from(event: github::Event) -> Event {
         Event::GitHub(event)
+    }
+}
+
+impl From<tracker::Event> for Event {
+    fn from(event: tracker::Event) -> Event {
+        Event::Tracker(event)
     }
 }
 
@@ -139,7 +147,14 @@ pub fn start(options: Options, news: Sender<News>) -> Core {
         http.clone(),
         events.clone(),
     ));
-    let github = Arc::new(GitHubWatcher::new(&data_dir, secrets, http, events.clone()));
+    let github = Arc::new(GitHubWatcher::new(
+        &data_dir,
+        Arc::clone(&secrets),
+        http,
+        events.clone(),
+    ));
+    // fnt-81: the tracker's active tasks, with the credential beside Jira's and GitHub's tokens
+    let tracker = Arc::new(TrackerWatcher::new(&data_dir, secrets, events.clone()));
     // weak: the GitHub watcher doesn't keep the Jira watcher alive
     let keys: Weak<JiraWatcher> = Arc::downgrade(&jira);
     github.set_jira_keys(move || {
@@ -158,6 +173,15 @@ pub fn start(options: Options, news: Sender<News>) -> Core {
     };
     codex.start();
     let sessions = Arc::new(sessions);
+    // the chats the tracker is asked about, which are its runs: the hooks' (a tracker run is a Claude Code chat)
+    let chats = Arc::downgrade(&sessions);
+    tracker.set_chats(move || {
+        chats
+            .upgrade()
+            .map(|sessions| sessions.snapshot().into_iter().map(|chat| chat.id).collect())
+            .unwrap_or_default()
+    });
+    tracker.restart();
     let changed = events.clone();
     let server::Options {
         endpoint,
@@ -192,6 +216,7 @@ pub fn start(options: Options, news: Sender<News>) -> Core {
         codex,
         jira: Arc::clone(&jira),
         github: Arc::clone(&github),
+        tracker,
         media: None,
         music,
         listening,
@@ -274,6 +299,7 @@ struct CoreThread {
     codex: CodexWatcher,
     jira: Arc<JiraWatcher>,
     github: Arc<GitHubWatcher>,
+    tracker: Arc<TrackerWatcher>,
     /// What the player played when last asked.
     media: Option<Media>,
     music: bool,
@@ -286,7 +312,10 @@ impl CoreThread {
         let mut next = Instant::now();
         loop {
             let refresh = match heard.recv_timeout(next.saturating_duration_since(Instant::now())) {
-                Ok(Event::Changed | Event::GitHub(github::Event::Changed)) | Err(RecvTimeoutError::Timeout) => true,
+                Ok(
+                    Event::Changed | Event::GitHub(github::Event::Changed) | Event::Tracker(tracker::Event::Changed),
+                )
+                | Err(RecvTimeoutError::Timeout) => true,
                 Ok(Event::Jira(jira::Event::Changed)) => {
                     self.github.jira_changed();
                     true
@@ -319,7 +348,7 @@ impl CoreThread {
 
     /// Rebuilds the Board from the sources as they are now, and sends it to the pet if what it shows changed.
     fn refresh(&mut self) {
-        let sources = Sources::read(
+        let mut sources = Sources::read(
             &self.sessions,
             &self.jira,
             &self.github,
@@ -327,6 +356,7 @@ impl CoreThread {
             self.media.clone(),
             self.music,
         );
+        sources.tracker = TrackerSources::read(&self.tracker);
         self.board.refresh(&sources, unix_time(SystemTime::now()));
         let shown = Shown::of(&self.board);
         if self.shown.as_ref() != Some(&shown) {
