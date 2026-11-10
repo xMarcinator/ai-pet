@@ -2,26 +2,18 @@
 
 This file tracks where the work stands, so it can continue on another machine. Delete it once everything below is done.
 
-## Where the work stands (2026-11-06)
+## Where the work stands (2026-11-10)
 
 Everything is on the branch `fn-1-migrate-aipet-from-net-to-rust` (draft PR https://github.com/xMarcinator/ai-pet/pull/1). To pick it up:
 
-1. **Restore flowctl's task state** first: [.flow/paused/README.md](../.flow/paused/README.md). Git doesn't carry it, and without it the 23 done tasks read as todo.
+1. **Restore flowctl's task state** first: [.flow/paused/README.md](../.flow/paused/README.md). Git doesn't carry it, and without it the done tasks read as todo.
 2. **Set the commit identity in the clone** (see Decisions, last item).
 
 ### The migration (flow-next spec `fn-1-migrate-aipet-from-net-to-rust`)
 
-- **Done:** 23 of 30 tasks.
-  - The Rust hook, registration and doctor;
-  - the core, watchers and Board;
-  - the hook server;
-  - the pet app with its Settings, updates, placement, bubble actions and platform services;
-  - the Windows proofs;
-  - the Windows hands-on pass (task 27, `rust/proofs/windows-hands-on.md`; its second Codex review round was skipped at the owner's request after round 1's findings were fixed);
-  - the release pipeline fix and dry run.
-- **Next:** task 22, the Linux hands-on parity pass, which needs a person at a Linux (Hyprland) machine. Then 28 (performance gate, which also owns task 27's E-x9 frame drops), 23 (ship the Rust pet, milestone 2), 24, 25 (cutover), 26 (docs) and 29 (memory audit).
-- **The cutover (task 25)** is on the branch `fn-1-cutover`, cut from `fn-2-layered-sprite-and-vector-pets` after task 24: it removes the C# (the last commit with it is `bf3696ea4a`) and merges only after milestone 2 (0.2.0) is released from fn-2. Milestone 3 is released from main after that merge.
-- **The .NET pet is still the shipped one** (release 0.1.0); the Rust pet runs from the branch: `cd rust && cargo build --release -p aipet`, then `target/release/AiPet.exe` (Windows) or `target/release/AiPet`.
+- **Done:** 28 of 30 tasks: the Rust hook, registration and doctor; the core, watchers and Board; the hook server; the pet app with its Settings, updates, placement, bubble actions and platform services; the Windows proofs and hands-on pass (task 27, `rust/proofs/windows-hands-on.md`); the Linux hands-on pass (task 22); the performance gate (task 28, Linux); shipping the Rust pet (task 23, milestone 2); the parity ledger (task 24); and the cutover (task 25).
+- **Left:** task 29 (the memory audit; Windows still to do with the owner) and task 26 (these docs, on the branch `fn-1-docs`, cut from `fn-1-cutover`).
+- **The cutover (task 25)** is on the branch `fn-1-cutover`, cut from `fn-2-layered-sprite-and-vector-pets`: it removes the C# (the last commit with it is `bf3696ea4a`) and merges only after milestone 2 (0.2.0) is released from fn-2. Milestone 3 is released from main after that merge. On that branch, and from milestone 2 on, the shipped pet and hook are the Rust ones; build them with `cd rust && cargo build --release -p aipet -p aipet-hook` (README, "Building from source").
 
 ### The pets' new look (flow-next spec `fn-2-layered-sprite-and-vector-pets`)
 
@@ -52,59 +44,31 @@ Parts carry their own positions and motion as data (R18), and a pack-making agen
 
 ## State of this commit
 
-The first snapshot has been reviewed, fixed and tested on Linux (Arch, Hyprland 0.56), together with the second part of the distribution work. What's left to check needs Windows or a machine other than the developer's. Release 0.1.0 is out (see Next steps, 1).
+The .NET app's state at release 0.1.0, with what was tested where, is this section as it stood at commit `bf3696ea4a`, the last with the C#. The Rust pet and hook replace it; what is proven of them is in [rust/proofs/](../rust/proofs/) and [rust/PARITY.md](../rust/PARITY.md), and the architecture in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-This section is the .NET app's state at 0.1.0. The C# files it cites were removed at the cutover to Rust (task 25); they are at commit `bf3696ea4a`.
-
-**Done and tested on Linux:**
-- **The tests.** `dotnet build` of the solution with `-p:UseAppHost=false` builds with no warnings, and `dotnet test AiPet.Tests --no-build` passes all 234 tests. They run the hook as `dotnet aipet-hook.dll` against a temporary socket and folders, and never reach your pet, config or data (TestEnv.cs:15). `claude plugin validate` passes for `plugins/aipet` and for the marketplace, and so does `scripts/check-plugin.sh --marketplaces . plugins/aipet --hook dotnet <the hook's dll>`.
-- **The socket protocol and the listeners.** On Linux the pet listens on a plain blocking Unix socket: mode 0600 before it listens, accepts on 8 threads of its own, checks each peer's uid and cuts off silent clients with socket timeouts. At most 64 connections are handled at once (HookServer.cs:36). The starved thread-pool test passes (StarvedPoolTests.cs:21).
-- **Hook hardening.** A 2 s stdin deadline (nothing is sent after it), room in the line for `sent`, escaped lone surrogates mended, a time limit on the Linux connect, a per-user 0600 trace log on Linux, and a launcher that maps only known platforms and always exits 0. See [ARCHITECTURE.md](ARCHITECTURE.md).
-- **Ordering.** Claude's PreToolUse and PermissionRequest are paired, the Codex rules cover late prompts, reruns of the same command, manual `/compact` and a clock set back, and Board orders the hook against Codex's session files by turn. The end-to-end ordering tests pass (HookServerTests.cs:22).
-- **Registration and the doctor.** `--install` changes nothing while the plugin is enabled, refuses to run as `dotnet aipet-hook.dll`, and keeps the config files' modes. The Codex doctor understands the plugin's hooks.
-- **The UI.** The toolbar is gone and music has its own stack. Only one stack spreads out at a time, and Stop shows only for desktop-app chats. Avatars the pet can't draw are skipped, `secrets.json` is 0600 from the start, and "Import defaults…" reads a preset (the parsing and the token rule are tested).
-- **Linux and Hyprland,** tried on Hyprland 0.56.2 through XWayland. Menus and tooltips are drawn inside the window (Program.cs:48), the menu opens above the pet, and the Avatar submenu became "Avatars…". The window is fitted to what it shows (MainWindow.axaml.cs:691): 164x160 with only the pet, and the whole menu shows. The window rules in `packaging/linux/hyprland/` work. The installers' Hyprland hint and the uninstall's removal of the include line were tried in sandboxes, including a symlinked config, and so was a round trip of `scripts/install-from-source.sh` and its new `--uninstall`.
-- **Distribution files.** `aipet-hook --print-plugin-hooks` prints both hook files byte for byte, and CI compares them on both OSes. CI checks the scripts' executable bits. The release workflow's latest check, re-trust note and deploy-key check are tested with stand-ins (ReleaseWorkflowTests.cs:150). The icon and version resources are in both dlls (ResourceTests.cs:39), and a win-x64 build made on Linux copied them into the `AiPet.exe` apphost.
-- **Velopack's wiring,** as tests can see it: Main calls `VelopackApp.Run` first, `Updates.Start` comes after the single-instance mutex, auto-apply is off (VelopackTests.cs:127), and `VPK_VERSION` is the package's version. The uninstall cleanup's matching, and the `--uninstall` runs it starts, are tested with stand-in configs and a stand-in hook.
-
-**Done, but only Windows or the first CI or release run can show that it works:**
-- **Velopack at run time.** That vpk pack accepts the app (it checks that Main calls `VelopackApp.Run`), the installer, the update check and download, "Restart to update" and the install on Quit. That `Updates.Start` hands a pending update to `Update.exe` and the pet comes back (Updates.cs:73), and that a second launch with an update pending leaves the running pet alone. That the uninstall removes the hooks (HookCleanup.cs:66). That the portable zip and `dotnet AiPet.dll` write no `velopack.log`, while the installed copy keeps Velopack's locator and its log.
-- **The Rust hook's win-x64 build.** The icon, manifest and version resource that its build script ([build.rs](../rust/crates/aipet-hook/build.rs)) embeds in `aipet-hook.exe`, the C runtime linked in (`+crt-static`), and both exes' versions as Windows reads them. release.yml's "Check the exes' version resources" step ([release.yml:169](../.github/workflows/release.yml)), the hook step's check that the exe names no C runtime DLL, and `ResourceTests.RustHook_CarriesTheDotnetHooksResources` on windows-2022 check them. That test has passed against a local `+crt-static` build on Windows.
-- **The pipe server.** The silent-client cut-off that repeats `CancelIoEx` every `Ipc.TimeoutMs` (HookServer.cs:243) is only reasoned about. The starved thread-pool test runs on windows-2022 in CI, but hasn't been seen to run there.
-- **The Linux release jobs.** The Rust hooks that the `linux-hook` job builds with cargo-zigbuild for glibc 2.27, the arm64 one cross-compiled on x64, and the guard that fails when a hook needs a glibc newer than 2.27 ([release.yml:298](../.github/workflows/release.yml)). A release dry run (0.2.0-dry.1, run 36871332176, 2026-10-01) built both with zig 0.13.0 and cargo-zigbuild 0.23.4 (0.19.8 couldn't link the arm64 one: it passed rustc's `-Wl,--fix-cortex-a53-843419` on to zig), and the guard passed them: neither needs more than `GLIBC_2.27`. The same run's Windows job passed the resource and C runtime checks, and it pushed and published nothing. The app is still published in Microsoft's cross-build containers (pinned by digest), as for 0.1.0.
-- **The deploy-key check** in the check job ([release.yml:77](../.github/workflows/release.yml)), tested only with a stand-in ssh, and the plugin job's push.
-- **CI on windows-2022.** check-plugin.sh with Git Bash, jq and diff, and the tests that only check something on Windows (such as `InstallClaude_WithAPluginThatCantRun_Registers`). The executable-bit guard has only run locally.
+**Still unproven, whichever runtime:**
 - **install.ps1** (there's no pwsh here): removing the old `Run` values, keeping `GITHUB_TOKEN` from the pet, and the fallback without Git Bash.
-- **Windows registration and UI.** The Git Bash lookup (Install.cs:136), config writes and the Codex plugin probe on Windows, a real `--install` from the released Rust exe, `FocusAgent` opening the chat's link when no window is found, and the quiet exit when an elevated pet holds the mutex.
+- **The deploy-key check** in the release's check job, tested only with a stand-in ssh.
 - **Codex and Claude behaviour the ordering rules assume.** That a manual `/compact` has its own turn and no Stop, that `turn_aborted` carries `turn_id`, and that Claude's PermissionRequest has the same command or file path as its PreToolUse. Real traffic hasn't shown these yet.
-
-**Known limits:**
-- On Hyprland the transparent parts inside the fitted window (around the pet, between the bubbles) still take the mouse, because Hyprland ignores the X11 input shape. Outside the window everything clicks through.
-- Tooltips drawn in the fitted window can be cut off at its edges.
-- On Windows, a pet whose listeners only partly start logs "can't listen" although it serves hooks (older than this work; Linux logs it correctly).
+- **The Linux desktops beyond Hyprland** (KDE, Sway, GNOME, X11): flow-next spec `fn-3-linux-desktops-beyond-hyprland-hands-on`.
 
 ## Next steps
 
 1. **Release 0.1.0 is out** (2026-09-26, all six jobs green on the first run). It proved the deploy key and the plugin repository, the cross-container Linux hooks (at most `GLIBC_2.16`, under the 2.27 floor), the exes' version resources (`AiPet.exe`, `aipet-hook.exe`, 0.1.0), Velopack's pack, the plugin push and the marketplace pins; CI on windows-2022 passes too. Still untried: installing and updating the Windows app, and the plugins, from a machine other than the developer's (the repositories are private, so the installers need `GITHUB_TOKEN` until they're public).
 2. **Small leftovers:**
-   - Add the test that `packaging/linux/install.sh` creates a new data folder with mode 0700 and leaves an existing one's mode alone. It belongs in PackageInstallerTests, before `Uninstall_RemovesTheHooksRegisteredAtTheAppsHook` (InstallerTests.cs).
+   - Add the test that `packaging/linux/install.sh` creates a new data folder with mode 0700 and leaves an existing one's mode alone, in the testkit's installer tests (`rust/crates/aipet-testkit/tests/installer.rs`).
    - release.yml's header says the check job checks that "the plugin files are consistent" ([release.yml:6](../.github/workflows/release.yml)). It checks the manifests and marketplaces, and the hook files only as JSON; the plugin job compares the hook files with what the released Linux hook prints.
    - The Windows job's `vpk download github` fetches the latest release for the delta package; releasing a version that isn't newer than it (a hotfix number after a newer release) makes `vpk pack` refuse. Download it only when the new version is newer.
    - Try "Import defaults…" (the file picker) and the ABOUT card in the GUI.
    - If branch protection on main requires ci.yml's old "Plugin files" check, replace it with "Build (windows-2022)" and "Build (ubuntu-22.04)".
-3. **A native Wayland front end for the pet.** On Hyprland the transparent parts inside the fitted window still take clicks, because Hyprland ignores X11 input shapes. Only layer-shell (Hyprland, Sway, KDE, COSMIC; not GNOME, not X11) gives exact input regions (`wl_surface.set_input_region`), placement and always-on-top without window rules. A research report (2026-09-26) found:
-   - **Stay on .NET; don't port to Rust.** Rust's general windowing layers don't solve it either (winit has only all-or-nothing click-through and no positioning on Wayland; Tauri's tao is GTK3, where stay-on-top and positioning do nothing on Wayland), so a rewrite of the core (~12k lines, 105 test methods) would buy nothing for the UI. Rust has the pieces if a port is ever wanted (interprocess for the socket and pipe, keyring, an official velopack crate).
-   - **Avalonia can't do it:** its Wayland backend (12.1, experimental, opt-in with `UseWayland()`) has no layer-shell, returns a null native handle, and a maintainer declined exposing `wl_surface`/`wl_display` (AvaloniaUI/Avalonia#22223); a render-thread interop path (PR #21713) is under discussion.
-   - **Recommended:** keep Avalonia for Windows, X11, macOS and Settings; add a Wayland-only backend for the pet window with GTK4 + gtk4-layer-shell, through GirCore in the same process (bindings generated from `Gtk4LayerShell-1.0.gir`; there's no GirCore package for it). Fallback: a small Rust overlay process (gtk4-rs + the `gtk4-layer-shell` crate, or `iced_exwlshell`, which has a working input-region example) talking to the C# core over the socket, which would need a new subscribe/stream message in HookServer. GNOME and X11 keep today's XWayland/X11 window.
-   - **Superseded:** the iced spike (`spike/iced`, [rust/SPIKE.md](../rust/SPIKE.md)) became the full migration to Rust, flow-next spec `fn-1-migrate-aipet-from-net-to-rust`, now 23 of 30 tasks done. See "Where the work stands" above.
-   - **Plan for the recommended GTK4 route** (not the iced spike; one developer, rough): a 1-2 week spike on Hyprland (60 fps sprite, an input region updated every frame, dragging by margins, the menu as a popover, fractional scaling, also on Sway and KDE); then an `IPetSurface` abstraction behind the pet window (1 week), the production backend with runtime detection and the XWayland fallback (3-5 weeks), packaging GTK4 and gtk4-layer-shell (1-2 weeks) and testing the GNOME/X11 fallback (1 week): about 7-12 weeks. A full Rust rewrite was estimated at 4-7 months.
+3. **A native Wayland front end for the pet: done, by moving to Rust.** On Hyprland the .NET pet's transparent parts took clicks, because Hyprland ignores X11 input shapes, and Avalonia had no layer-shell. A research report (2026-09-26) advised staying on .NET and adding a GTK4 layer-shell backend; the iced spike ([rust/SPIKE.md](../rust/SPIKE.md)) showed a Rust front end could do it instead, and became the migration (Decisions, first item). The Rust pet is a layer surface with an exact input region on compositors with layer-shell, and an X11 window elsewhere (ARCHITECTURE §4).
 4. **Before going public:** squash the history, and report the false positives to Microsoft and AhnLab.
 5. **Then the next-meeting bubble** (Outlook calendar, optionally Teams' local API for live meeting state), planned and built with flow-next.
 
 ## Decisions
 
-- **Windows antivirus (Trend Micro) reacts to PowerShell and to freshly built `.exe` files.**
-  - Leave publishing to GitHub Actions. Cargo can't build the pet or the hook without an `.exe`, so a freshly built one may be held for a scan for a while.
+- **AiPet is written in Rust (flow-next spec `fn-1-migrate-aipet-from-net-to-rust`).** This supersedes the decision of 2026-09-26 to stay on .NET and add a GTK4 layer-shell backend to the Avalonia app. The iced spike showed that Rust has a front end that does what Avalonia couldn't on Wayland (a layer surface with an exact input region, placement and always-on-top without window rules), so the hook, the core and the pet were ported, kept byte for byte where users or agents can see it (`rust/PARITY.md`), and the C# was removed at the cutover (it is at commit `bf3696ea4a`).
+  - The Windows antivirus workaround is retired with it: local .NET builds used `-p:UseAppHost=false` and ran as `dotnet <dll>` so that no fresh `.exe` was made. Cargo always makes an `.exe`, so a freshly built pet or hook may be held for a scan for a while; publishing is still left to GitHub Actions, and nothing here needs PowerShell to build.
 - **Codex on Windows keeps its command hooks,** even though Codex runs them through PowerShell (that's Codex's choice).
   - No MCP server and no watcher-only mode.
   - Don't change the registered command strings: Codex would ask users to trust the hooks again.
@@ -113,10 +77,9 @@ This section is the .NET app's state at 0.1.0. The C# files it cites were remove
 - **No autostart at sign-in, and hooks never start the pet.** Users start the pet themselves. The hook never writes to stdout on the hook path, always exits 0, and writes and starts nothing when the pet isn't running.
 - **Never rename the marketplace or plugin `aipet`.** `aipet@aipet` is part of every Codex trust key. Codex hook definitions are frozen after the first release.
 - **The plugin repository `xMarcinator/ai-pet-plugin` is separate,** and only CI writes to it.
-- **Velopack's packId is `AiPetApp`, never `AiPet`:** `%LOCALAPPDATA%\AiPet` is the data folder. Velopack's auto-apply stays off, because `VelopackApp.Run` comes before the single-instance mutex, where a second launch would have `Update.exe` stop the running pet. `Updates.Start` installs a pending update instead (Updates.cs:43).
-- **Hyprland window rules are shipped as files** (`packaging/linux/hyprland/aipet.lua` and `aipet.conf`) that users include themselves. The installers print the include line and never edit the config. The uninstall removes that line again, after a backup.
-- **No override-redirect pet window, and never `no_focus`.** Hyprland didn't follow an override-redirect window's own moves (dragging broke) and still blurred it. An XWayland window with `no_focus` gets no mouse input at all.
-- **On Linux the pet's window is fitted to what it shows,** because a compositor that ignores the X11 input shape (Hyprland) would let no click through the whole 380x600 window. `config.json` still stores the full window's position. `AIPET_NOFIT=1` turns fitting off (LinuxPlatform.cs:95).
-- **Overlay popups on X11.** Menus and tooltips are drawn inside the pet's window, so no compositor can stack the pet above them and focus following the mouse can't close them. So the menu opens above the pet and has no submenu.
-- **The Linux hook is built for glibc 2.27,** with cargo-zigbuild, which links it against zig's glibc 2.27 stubs, and the release fails if it needs anything newer. Linked on a runner, it would need the runner's much newer glibc, and older distributions would refuse it on every event.
+- **Velopack's packId is `AiPetApp`, never `AiPet`:** `%LOCALAPPDATA%\AiPet` is the data folder. Velopack's auto-apply stays off, because Velopack's startup comes before the single instance, where a second launch would have `Update.exe` stop the running pet. `updates::start` installs a pending update instead (`rust/crates/aipet/src/updates.rs`).
+- **Hyprland rules are shipped as files** (`packaging/linux/hyprland/aipet.lua` and `aipet.conf`: the pet's layer surface without animation, and Settings without Hyprland's frame) that users include themselves. The installers print the include line and never edit the config. The uninstall removes that line again, after a backup.
+- **On Wayland compositors with layer-shell the pet is a layer surface; elsewhere an X11 window** (`AIPET_BACKEND` overrides the choice). The .NET pet's X11-era decisions (no override-redirect window, never `no_focus`, fitting the window to what it shows, overlay popups) went with it: the layer surface's input region is exact, and the desktop shell's window is the full 380x600 with an input shape.
+- **No keys sent to other apps.** The .NET pet's Stop button pressed Escape in the agent's app; the Rust pet has an Open button that opens the chat instead.
+- **The Linux pet and hook are built for glibc 2.27,** with cargo-zigbuild, which links them against zig's glibc 2.27 stubs, and the release fails if either needs anything newer. Linked on a runner, they would need the runner's much newer glibc, and older distributions would refuse them (the hook on every event).
 - **Commits use this identity:** `xMarcinator <25668644+xMarcinator@users.noreply.github.com>`, set in the repository-local git config. A fresh clone doesn't have it, so in each clone run `git config user.name xMarcinator && git config user.email 25668644+xMarcinator@users.noreply.github.com` before committing (61a47b6 went out under a global identity by mistake).
