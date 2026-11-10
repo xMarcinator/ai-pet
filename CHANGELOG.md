@@ -3,7 +3,7 @@
 All notable changes to AiPet are listed here. Versions follow [Semantic Versioning](https://semver.org/). The
 app, `aipet-hook` and the plugin share one version number.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-10
 
 AiPet's move to Rust: the hook is written in Rust, and the packages ship the Rust pet in place of the .NET one
 (milestone 2). It draws its pets from layered packs, listed under Added. A release of the milestone 1 hook with the
