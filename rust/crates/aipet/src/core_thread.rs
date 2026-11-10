@@ -1,7 +1,8 @@
 //! The core, on a thread of its own: what MainWindow's constructor starts and its Refresh does
 //! (`AiPet.UI/MainWindow.axaml.cs:83-141, 303-314`).
 //!
-//! - the hook server, over the chats' store (AgentSessions);
+//! - the hook server, over the chats' store (AgentSessions), through the [`Ingress`] the pet's HTTP listener shares
+//!   ([`Core::ingress`]);
 //! - Codex's log watcher, and the Jira and GitHub watchers: GitHub reads the keys of Jira's issues, and looks again
 //!   when Jira's change;
 //! - the music player, polled every second while the user listens along (on a thread of its own, since a poll may
@@ -24,7 +25,7 @@ use aipet_core::codex_watcher::CodexWatcher;
 use aipet_core::github::{self, GitHubWatcher};
 use aipet_core::jira::{self, Http, JiraWatcher};
 use aipet_core::secrets::SecretStore;
-use aipet_core::server::{self, HookServer};
+use aipet_core::server::{self, HookServer, Ingress};
 use aipet_core::sessions::AgentSessions;
 use aipet_ipc::protocol::unix_time;
 use aipet_ui::News;
@@ -71,6 +72,7 @@ pub struct Core {
     thread: Option<JoinHandle<()>>,
     jira: Arc<JiraWatcher>,
     github: Arc<GitHubWatcher>,
+    ingress: Arc<Ingress>,
 }
 
 /// What the pet asks of the core.
@@ -157,13 +159,21 @@ pub fn start(options: Options, news: Sender<News>) -> Core {
     codex.start();
     let sessions = Arc::new(sessions);
     let changed = events.clone();
-    let server = HookServer::with_options(
+    let server::Options {
+        endpoint,
+        events_log,
+        log,
+    } = server_options;
+    // one way in for hook events, the pipe's and the HTTP listener's: the same chats, record and `changed`
+    let ingress = Arc::new(Ingress::new(
         Arc::clone(&sessions),
         move || {
             let _ = changed.send(Event::Changed);
         },
-        server_options,
-    );
+        events_log,
+        log,
+    ));
+    let server = HookServer::serving(Arc::clone(&ingress), endpoint);
     // the single-instance check has passed, so this is the only pet taking the endpoint. Whether it could goes to
     // the log; the pet runs on without hooks when it couldn't
     let _ = server.start();
@@ -196,6 +206,7 @@ pub fn start(options: Options, news: Sender<News>) -> Core {
         thread: Some(thread),
         jira,
         github,
+        ingress,
     }
 }
 
@@ -214,6 +225,11 @@ impl Core {
 
     pub fn github(&self) -> Arc<GitHubWatcher> {
         Arc::clone(&self.github)
+    }
+
+    /// Where hook events go in, for the HTTP listener: the pipe server's own.
+    pub fn ingress(&self) -> Arc<Ingress> {
+        Arc::clone(&self.ingress)
     }
 }
 
@@ -487,6 +503,26 @@ mod tests {
         board_where(&heard, |b| {
             b.dismissed().contains_key(&id) && b.cards().iter().all(|s| s.id != id)
         });
+
+        // the HTTP listener's way in is the pipe's: the pipe's event is in its record (its id cut short), and an
+        // event it applies reaches the same chats and the Board
+        let ingress = core.ingress();
+        assert!(
+            ingress.recent().iter().any(|l| l.contains(&sid[..13])),
+            "{:?}",
+            ingress.recent()
+        );
+        assert!(ingress.seen("claude") && !ingress.seen("codex"));
+        let other = "0b5e4a7c-1d2e-4f3a-8b9c-0d1e2f3a4b5c";
+        let at = unix_time(SystemTime::now());
+        let line = format!(
+            r#"{{"v":1,"type":"event","agent":"claude","at":{at},"sent":{at},"pid":4242,"env":{{}},"payload":{{"hook_event_name":"UserPromptSubmit","session_id":"{other}","prompt":"Over HTTP"}}}}"#
+        );
+        let envelope = aipet_core::sessions::Envelope::parse(&line).unwrap();
+        assert_ne!(ingress.apply(&envelope), "ignored");
+        board_where(&heard, |b| b.cards().iter().any(|s| s.id == format!("claude:{other}")));
+        assert_eq!(ingress.recent().len(), 2);
+        drop(ingress);
 
         // stopping it stops the server
         drop(core);

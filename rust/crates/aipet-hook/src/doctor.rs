@@ -29,9 +29,9 @@ use crate::claude::{self, Vars};
 use crate::codex;
 use crate::event::decoded;
 use crate::install::{NEWLINE, file_not_found, is_file, say, thrown};
-use crate::json::{Node, Object};
 use crate::json_out::{self, member, read};
 use crate::plugin_hooks::CODEX_EVENTS;
+use aipet_ipc::json::{Node, Object};
 
 /// `Doctor.Run`'s usage, for an agent it doesn't know.
 pub(crate) const USAGE: &str = "usage: aipet-hook --doctor claude|codex";

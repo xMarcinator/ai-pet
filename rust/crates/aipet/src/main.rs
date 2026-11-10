@@ -6,8 +6,10 @@
 //!    another pet runs, .NET or Rust, this one quits quietly;
 //! 3. the GPU's and the shell's environment, while no other thread reads or writes it;
 //! 4. the update checks ([`updates::start`]);
-//! 5. the core ([`core_thread`]), with `config.json` read ([`config`]) and the platform's services;
-//! 6. the shell, until the pet quits; then the core stops, and the single instance is let go.
+//! 5. the core ([`core_thread`]), with `config.json` read ([`config`]) and the platform's services, and beside its
+//!    pipe server the HTTP listener for MCP and Claude's HTTP hooks (`aipet_mcp`), which shares the core's way in for
+//!    hook events; when its port is taken, the log says so once and the pet runs without it;
+//! 6. the shell, until the pet quits; then the listener and the core stop, and the single instance is let go.
 //!
 //! The app's side of the pet ([`App`], the pet's [`Host`]) keeps `config.json`, tells the core of dismissed bubbles and
 //! of music, places the window ([`placement`]) and does Settings' actions.
@@ -224,6 +226,8 @@ fn pet(wayland: bool, instance: single::Instance) -> Result<(), String> {
     let (secrets, http) = (Arc::clone(&options.secrets), options.http.clone());
     let (news, heard) = mpsc::channel();
     let core = core_thread::start(options, news);
+    // a pet without the listener (its port taken) still has the pipe and Settings: the start logged why
+    let listener = aipet_mcp::Listener::start(aipet_mcp::Options::app(updates::version()), core.ingress()).ok();
     let services = Services {
         data_dir: data_dir.clone(),
         jira: Some(core.jira()),
@@ -249,7 +253,8 @@ fn pet(wayland: bool, instance: single::Instance) -> Result<(), String> {
         services,
     });
     let shown = shell(wayland, Launch { ui, news: heard });
-    // the core stops (its server and watchers with it) before the single instance is let go
+    // the listener and the core stop (its server and watchers with it) before the single instance is let go
+    drop(listener);
     drop(core);
     drop(instance);
     shown.inspect_err(|e| aipet_core::log::write(e))

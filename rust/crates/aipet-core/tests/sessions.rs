@@ -2,7 +2,9 @@
 //! - the golden data (tests/golden/sessions/claude.json and codex.json), which the golden generator wrote with the C#'s
 //!   AgentSessions, is replayed through the port: every outcome, hook-events.log line and snapshot must match, the
 //!   times bit for bit;
-//! - AiPet.Tests/OrderingTests.cs's cases, ported (`ordering` for Claude's, `codex_ordering` for Codex's).
+//! - AiPet.Tests/OrderingTests.cs's cases, ported (`ordering` for Claude's, `codex_ordering` for Codex's);
+//! - the Claude golden data again, as the pet's HTTP listener gets it: in any order within 500 ms, stamped with its
+//!   arrival (`jitter`, fnt-71 R5).
 //!
 //! The corpus is frozen: the C# and its generator are gone (tests/golden/README.md), so it is the contract as it
 //! stands. Never edit the golden files by hand.
@@ -1415,5 +1417,369 @@ mod codex_ordering {
         assert_eq!(c.apply("UserPromptSubmit", turn1, t0 + 3.0, none()), "stale");
         assert_eq!(c.apply("Stop", turn2, t0 + 4.0, none()), "done");
         assert_eq!(c.apply("UserPromptSubmit", turn3, t0 + 5.0, none()), "thinking");
+    }
+}
+
+/// fnt-71 R5: Claude's HTTP hooks carry no time of their own, so the pet's listener stamps each event with when it got
+/// it (`at` = arrival, `"via":"http"`) and applies events in arrival order. Each Claude golden case is replayed so:
+/// every event dispatched at its golden `at`, arriving up to [`JITTER`] later at random, and applied in arrival order
+/// with its arrival as `at` and `now`. Its chats and the Board they make must end as the C#'s do when every event
+/// arrives in the order Claude dispatched it: the golden's own last snapshot where its steps come in that order (checked
+/// here), else the port's in-order replay, which matches the C# step for step on every golden case (above).
+///
+/// The cases replayed are the golden's chats: its random ones and its ordering tests. A transcript write or delete
+/// stays where it is between the events (a real one is seconds apart from them), so only the events between two such
+/// steps change places. A chat whose hooks' clock was set back (an `at` past `now`) is left out: with one clock, the
+/// pet's, that can't happen. So are the golden's tables (`claude/…`), rows of single events 10 ms apart in a chat,
+/// each checked on its own, and the ordering tests in [`KEPT_IN_ORDER`].
+mod jitter {
+    use std::collections::{HashMap, HashSet};
+
+    use aipet_core::board::{Board, Sources};
+    use aipet_ipc::protocol::{AT, VIA};
+
+    use super::*;
+
+    /// How much later than its dispatch an event can arrive, in seconds.
+    const JITTER: f64 = 0.5;
+
+    /// The arrival orders tried for each case.
+    const SEEDS: u64 = 40;
+
+    /// Ordering tests that pin an order of two events of one call or of one chat a few ms to 0.4 s apart, which 500 ms
+    /// of jitter turns round by design. Over HTTP Claude keeps them in order itself: it waits for each hook's answer
+    /// (200 `{}`, sent at once) before it goes on (task 1's spike timed Stop's), so a PreToolUse arrives before its
+    /// PermissionRequest and a PostToolUse before the next call's PreToolUse. The ties of the same millisecond were
+    /// two hooks' clocks agreeing; there is one clock now.
+    const KEPT_IN_ORDER: [&str; 4] = [
+        "ordering/SameTick_InTurnOrder_IsTaken",
+        "ordering/PreToolUse_StartedJustAfterItsPermissionRequest_ArrivingAfterIt_IsStale",
+        "ordering/SameCommandAgain_AfterAPairedRequest_IsTaken",
+        // two calls run in parallel, and the second's PreToolUse arrives last: the chat needs permission for the
+        // first, which the HTTP path shows and the hook's clocks didn't
+        "ordering/PermissionRequest_BehindAnotherCallsPreToolUse_GoesByAt",
+    ];
+
+    /// SplitMix64: random enough for arrival times, and the same run after run.
+    struct Random(u64);
+
+    impl Random {
+        fn next(&mut self) -> f64 {
+            self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            (z ^ (z >> 31)) as f64 / u64::MAX as f64
+        }
+    }
+
+    /// What a chat shows, without the times the arrivals moved: id, state, detail, prop, title, chat title, folder,
+    /// where, host id, and whether it ended.
+    type Shown = (
+        String,
+        Option<&'static str>,
+        Option<String>,
+        Option<&'static str>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        bool,
+    );
+
+    fn shown(entries: &[Entry]) -> Vec<Shown> {
+        let mut shown: Vec<Shown> = entries
+            .iter()
+            .map(|e| {
+                (
+                    e.id.clone(),
+                    e.state,
+                    e.detail.clone(),
+                    e.prop,
+                    e.title.clone(),
+                    e.chat_title.clone(),
+                    e.cwd.clone(),
+                    e.r#where.clone(),
+                    e.host_id.clone(),
+                    e.ended.is_some(),
+                )
+            })
+            .collect();
+        shown.sort_by(|a, b| a.0.cmp(&b.0));
+        shown
+    }
+
+    /// The golden's last snapshot as it is shown.
+    fn golden_shown(snapshot: &Value) -> Vec<Shown> {
+        let text = |v: &Value| v.as_str().map(str::to_owned);
+        let pick = |v: &Value, of: &[&'static str]| of.iter().copied().find(|s| v == *s);
+        let mut shown: Vec<Shown> = snapshot
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| {
+                (
+                    text(&e["id"]).unwrap(),
+                    pick(&e["state"], &["idle", "thinking", "working", "attention", "done"]),
+                    text(&e["detail"]),
+                    pick(&e["prop"], &["laptop", "lens"]),
+                    text(&e["title"]),
+                    text(&e["chat_title"]),
+                    text(&e["cwd"]),
+                    text(&e["where"]),
+                    text(&e["host_id"]),
+                    !e["ended"].is_null(),
+                )
+            })
+            .collect();
+        shown.sort_by(|a, b| a.0.cmp(&b.0));
+        shown
+    }
+
+    /// The Board's cards for the chats at `now`: each one's id, state and line.
+    fn cards(chats: Vec<Entry>, now: f64) -> Vec<(String, &'static str, String)> {
+        let mut board = Board::new();
+        board.refresh(
+            &Sources {
+                chats,
+                ..Sources::default()
+            },
+            now,
+        );
+        let mut cards: Vec<_> = board
+            .cards()
+            .iter()
+            .map(|c| (c.id.clone(), c.eff, c.detail.clone()))
+            .collect();
+        cards.sort();
+        cards
+    }
+
+    #[test]
+    fn claude_cases_reach_the_csharps_final_states_under_arrival_jitter() {
+        let golden = golden("claude.json");
+        let os = golden.value["os"].as_str().unwrap();
+        let (mut failures, mut replayed, mut checked) = (Vec::new(), 0, 0);
+        // how often the jitter turned events round, and how often the chats took one for late
+        let (mut reordered, mut stale) = (0, 0);
+        for (i, (case, lines)) in array(&golden.value, "cases")
+            .iter()
+            .zip(&golden.lines.cases)
+            .enumerate()
+        {
+            let name = case["name"].as_str().unwrap();
+            let chats = name.starts_with("random/") || name.starts_with("ordering/");
+            if case["os_specific"] == json!(true) && os != this_os() || !chats || KEPT_IN_ORDER.contains(&name) {
+                continue;
+            }
+            replayed += 1;
+            let folder = |what: &str| {
+                let dir = std::env::temp_dir().join(format!("aipet-sessions-jitter-{}-{i}-{what}", std::process::id()));
+                let _ = fs::remove_dir_all(&dir);
+                fs::create_dir_all(&dir).unwrap();
+                dir
+            };
+            let skipped: HashSet<String> = clock_set_back(array(case, "steps"))
+                .iter()
+                .map(|sid| format!("claude:{sid}"))
+                .collect();
+            let dir = folder("in-order");
+            let (in_order, mut now, ..) = replay(case, lines, &dir, None);
+            let _ = fs::remove_dir_all(&dir);
+            // where the golden's steps already come in the order Claude dispatched them, the in-order replay is the
+            // golden's own end; else at least each chat's state is (the C# drops the title of a prompt that came late)
+            if let Some(last) = array(case, "steps").iter().rev().find_map(|s| s.get("snapshot")) {
+                let (golden, in_order) = (golden_shown(last), shown(&in_order));
+                let status = |shown: &[Shown]| -> Vec<_> {
+                    shown
+                        .iter()
+                        .filter(|c| !skipped.contains(&c.0))
+                        .map(|c| (c.0.clone(), c.1, c.2.clone(), c.3, c.9))
+                        .collect()
+                };
+                if status(&golden) != status(&in_order) {
+                    failures.push(format!(
+                        "{name}: the in-order replay doesn't end as the golden: {:?} {:?}",
+                        status(&in_order),
+                        status(&golden)
+                    ));
+                    continue;
+                }
+                if in_dispatch_order(case) {
+                    checked += 1;
+                    if golden != in_order {
+                        failures.push(format!("{name}: the in-order replay doesn't end as the golden"));
+                        continue;
+                    }
+                }
+            }
+            for seed in 0..SEEDS {
+                let dir = folder(&seed.to_string());
+                let (jittered, arrived, turned, late) =
+                    replay(case, lines, &dir, Some(&mut Random(seed * 7919 + i as u64)));
+                let _ = fs::remove_dir_all(&dir);
+                now = now.max(arrived);
+                reordered += usize::from(turned);
+                stale += late;
+                let failure = if shown(&jittered) != shown(&in_order) {
+                    Some(format!(
+                        "the chats show {:?}, in order {:?}",
+                        shown(&jittered),
+                        shown(&in_order)
+                    ))
+                } else if cards(jittered.clone(), now) != cards(in_order.clone(), now) {
+                    Some(format!(
+                        "the Board shows {:?}, in order {:?}",
+                        cards(jittered, now),
+                        cards(in_order.clone(), now)
+                    ))
+                } else {
+                    None
+                };
+                if let Some(failure) = failure {
+                    failures.push(format!("{name}, seed {seed}: {failure}"));
+                    break;
+                }
+            }
+        }
+        // the golden's own ends are checked for many cases, not only the in-order replay; and the jitter did turn
+        // events round, which the chats then took for late
+        assert!(replayed >= 40, "only {replayed} cases replayed");
+        assert!(checked >= 4, "only {checked} cases' steps come in dispatch order");
+        assert!(
+            reordered >= replayed * SEEDS as usize / 2,
+            "only {reordered} replays turned events round"
+        );
+        assert!(stale >= 100, "only {stale} events were taken for late");
+        assert!(
+            failures.is_empty(),
+            "{} of {replayed} cases end otherwise under jitter:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
+    }
+
+    /// The chats whose hooks' clock was set back: an `at` past the step's `now`.
+    fn clock_set_back(steps: &[Value]) -> HashSet<String> {
+        steps
+            .iter()
+            .filter(|s| {
+                s["envelope"]["at"]
+                    .as_f64()
+                    .is_some_and(|at| at > s["now"].as_f64().unwrap() + 5.0)
+            })
+            .map(|s| chat(s).to_owned())
+            .collect()
+    }
+
+    fn chat(step: &Value) -> &str {
+        step["envelope"]["payload"]["session_id"].as_str().unwrap_or("default")
+    }
+
+    /// Whether each event comes after all those Claude dispatched before it, and the case has no chat whose clock was
+    /// set back.
+    fn in_dispatch_order(case: &Value) -> bool {
+        let steps = array(case, "steps");
+        let ats: Vec<f64> = steps.iter().filter_map(|s| s["envelope"]["at"].as_f64()).collect();
+        clock_set_back(steps).is_empty() && ats.windows(2).all(|w| w[0] <= w[1])
+    }
+
+    /// The case's events, in the order Claude dispatched them as the hook's envelopes (`jitter` None), or arriving
+    /// over HTTP with jitter; the chats they leave, the last `now`, whether the jitter turned any events round, and
+    /// how many events were stale.
+    fn replay(
+        case: &Value,
+        lines: &CaseLines,
+        dir: &Path,
+        mut jitter: Option<&mut Random>,
+    ) -> (Vec<Entry>, f64, bool, usize) {
+        let sessions = AgentSessions::with_codex_home(dir);
+        let steps = array(case, "steps");
+        let skipped = clock_set_back(steps);
+        let (mut last_now, mut turned, mut stale) = (0.0f64, false, 0);
+        // the events since the last file step: placed and applied at the next file step, or the end
+        let mut events: Vec<usize> = Vec::new();
+        let mut flush = |events: &mut Vec<usize>, jitter: Option<&mut Random>| {
+            let applied = arrivals(steps, events, jitter);
+            let dispatched = arrivals(steps, events, None);
+            turned |= applied.iter().map(|a| a.1).ne(dispatched.iter().map(|d| d.1));
+            for (arrival, n) in applied {
+                let line = lines.steps[n].envelope.unwrap().get();
+                let mut envelope = Envelope::parse(line).unwrap();
+                let now = match arrival {
+                    Some(arrival) => {
+                        envelope.fields.insert(AT.into(), json!(arrival));
+                        envelope.fields.insert(VIA.into(), json!("http"));
+                        arrival
+                    }
+                    None => steps[n]["now"].as_f64().unwrap(),
+                };
+                if let Some(path) = envelope
+                    .fields
+                    .get_mut("payload")
+                    .and_then(|p| p.get_mut("transcript_path"))
+                    && let Some(rest) = path.as_str().and_then(|p| p.strip_prefix(FILES))
+                {
+                    *path = Value::String(format!("{}{rest}", dir.display()));
+                }
+                stale += usize::from(sessions.apply(&envelope, now).outcome == "stale");
+                last_now = last_now.max(now);
+            }
+            events.clear();
+        };
+        for (n, step) in steps.iter().enumerate() {
+            if let Some(file) = step["write"].as_str() {
+                flush(&mut events, jitter.as_deref_mut());
+                let bytes = file_bytes(array(step, "parts"));
+                retry(|| fs::write(dir.join(file), &bytes));
+            } else if let Some(file) = step["delete"].as_str() {
+                flush(&mut events, jitter.as_deref_mut());
+                retry(|| fs::remove_file(dir.join(file)));
+            } else if !skipped.contains(chat(step)) {
+                events.push(n);
+            }
+        }
+        flush(&mut events, jitter);
+        (sessions.snapshot(), last_now, turned, stale)
+    }
+
+    /// The events in the order they are applied, each with its arrival when it comes over HTTP: up to [`JITTER`]
+    /// after Claude dispatched it (its golden `at`), and so in any order but one. Claude waits for a turn's
+    /// UserPromptSubmit hook (and SessionStart's) before the turn goes on, and the user starts a turn only after the
+    /// last one ended: such an opener arrives after all that its chat dispatched before it, and before all after it.
+    fn arrivals(steps: &[Value], events: &[usize], jitter: Option<&mut Random>) -> Vec<(Option<f64>, usize)> {
+        let mut dispatched: Vec<(f64, usize)> = events
+            .iter()
+            .map(|&n| {
+                let at = steps[n]["envelope"]["at"].as_f64();
+                (at.unwrap_or_else(|| steps[n]["now"].as_f64().unwrap()), n)
+            })
+            .collect();
+        // stable: events of the same tick in the golden's order
+        dispatched.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let Some(random) = jitter else {
+            return dispatched.into_iter().map(|(_, n)| (None, n)).collect();
+        };
+        // each chat's latest opener's arrival, and the latest arrival of all it sent
+        let mut chats: HashMap<&str, (f64, f64)> = HashMap::new();
+        let mut arrivals = Vec::new();
+        for (at, n) in dispatched {
+            let chat = chats.entry(chat(&steps[n])).or_insert((f64::MIN, f64::MIN));
+            let mut arrival = at + random.next() * JITTER;
+            if matches!(
+                steps[n]["envelope"]["payload"]["hook_event_name"].as_str(),
+                Some("SessionStart" | "UserPromptSubmit")
+            ) {
+                arrival = arrival.max(chat.1 + 0.001);
+                chat.0 = arrival;
+            } else {
+                arrival = arrival.max(chat.0 + 0.001);
+            }
+            chat.1 = chat.1.max(arrival);
+            arrivals.push((arrival, n));
+        }
+        arrivals.sort_by(|a, b| a.0.total_cmp(&b.0));
+        arrivals.into_iter().map(|(arrival, n)| (Some(arrival), n)).collect()
     }
 }

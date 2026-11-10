@@ -53,7 +53,7 @@ pub(super) fn apply(chats: &mut Chats, e: &Event, now: f64) -> Result<&'static s
     let text = |k: &str| str_of(Some(p), k);
     chats.prune(now);
     if ev == "SessionEnd" {
-        return Ok(chats.end(e.key, ev, at, now));
+        return Ok(chats.end(e.key, ev, at, now, false));
     }
     if !EVENTS.contains(&ev) {
         return Ok("ignored");
@@ -72,7 +72,7 @@ pub(super) fn apply(chats: &mut Chats, e: &Event, now: f64) -> Result<&'static s
             Ids::Stale => return Ok("stale"),
             Ids::LatePrompt => late = true,
             Ids::Taken => {}
-            Ids::Silent if claude::stale(old, ev, at, now) => return Ok("stale"),
+            Ids::Silent if claude::stale(old, ev, at, now, false) => return Ok("stale"),
             Ids::Silent => {}
         }
     }

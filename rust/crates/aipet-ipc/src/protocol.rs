@@ -19,6 +19,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// `v`: the only version there is.
 pub const VERSION: i32 = 1;
 
+/// The pet's HTTP listener (`aipet-mcp`) on 127.0.0.1: MCP at `/mcp`, Claude's HTTP hooks at `/hook/claude`. One
+/// port for every user of the machine, which the hook and MCP registrations, the doctor, the plugin check and the
+/// docs all name; `AIPET_PORT` moves the pet's listener for tests only. Its bodies share [`MAX_REQUEST`].
+pub const MCP_PORT: u16 = 47615;
+
 /// A request's size limit, in bytes of its line without the `\n`.
 pub const MAX_REQUEST: usize = 4 << 20;
 /// How long either end waits for the other: the hook for its write and the reply together, the pet for a request.
@@ -49,6 +54,11 @@ pub const TOOL_INPUT_KEYS: [&str; 4] = ["file_path", "notebook_path", "skill", "
 /// Claude's environment variables that say where a chat runs; the hook passes them in `env`.
 pub const CLAUDE_ENV: [&str; 2] = ["CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_HOST_SESSION_ID"];
 
+/// Where Claude's HTTP hooks post their events on the pet's listener (fnt-71), at [`MCP_PORT`].
+pub const CLAUDE_HOOK_PATH: &str = "/hook/claude";
+/// The headers Claude's HTTP hooks carry [`CLAUDE_ENV`] in, in its order (through the hooks' `allowedEnvVars`).
+pub const CLAUDE_ENV_HEADERS: [&str; 2] = ["X-AiPet-Entrypoint", "X-AiPet-Host-Session"];
+
 // The envelope's and the replies' field names.
 pub const V: &str = "v";
 pub const KIND: &str = "type";
@@ -63,6 +73,9 @@ pub const OUTCOME: &str = "outcome";
 pub const ERROR: &str = "error";
 pub const APP: &str = "app";
 pub const RECENT: &str = "recent";
+/// `via`: never sent by a hook. The pet's HTTP listener marks the envelopes it makes `"via":"http"`: their `at` is
+/// when the pet got the event (Claude's HTTP hooks carry no time of their own), which the chats order by otherwise.
+pub const VIA: &str = "via";
 
 /// `Ipc.UnixTime`: Unix seconds with ms precision. The milliseconds are rounded down (also before 1970, as
 /// `DateTimeOffset.ToUnixTimeMilliseconds` does) and then divided by 1000.0, so the double is the C#'s to the bit.

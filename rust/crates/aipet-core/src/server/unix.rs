@@ -27,7 +27,7 @@ pub(super) struct State {
 }
 
 pub(super) fn start(shared: &Arc<Shared>) -> io::Result<()> {
-    let path = Path::new(&shared.options.endpoint);
+    let path = Path::new(&shared.endpoint);
     refuse_live_server(path)?;
     let socket = Arc::new(listening(bound(path)?, path)?);
     *lock(&shared.sys.listener) = Some(Arc::clone(&socket));
@@ -49,7 +49,7 @@ pub(super) fn stop(shared: &Shared) {
     let Some(socket) = lock(&shared.sys.listener).take() else {
         return;
     };
-    let path = Path::new(&shared.options.endpoint);
+    let path = Path::new(&shared.endpoint);
     for _ in 0..LISTENERS {
         // not blocking: a full queue fails the connect at once rather than hold Stop up
         let woke = Socket::new(Domain::UNIX, Type::STREAM, None).and_then(|wake| {
