@@ -53,7 +53,7 @@ fi
 targets=$(sed -n 's/^targets *= *\[\(.*\)\]/\1/p' rust/about.toml | tr ',' '\n' | tr -d '" ')
 [ -n "$targets" ] || { echo "no targets in rust/about.toml" >&2; exit 1; }
 for target in $targets; do
-  (cd rust && cargo tree --frozen -p aipet -p aipet-hook -e normal --target "$target" --prefix none -f '{p}')
+  (cd rust && cargo tree --frozen --color never -p aipet -p aipet-hook -e normal --target "$target" --prefix none -f '{p}')
 done | grep -v -e ' (/' -e '^$' | sed 's/ (\*)$//; s/ (proc-macro)$//; s/ v\([^ ]*\)$/ \1/' | sort -u > "$tmp/built"
 grep '^Used by: ' "$tmp/notices.md" | sed 's/^Used by: //' | sed 's/, /\n/g' | sort -u > "$tmp/listed"
 missing=$(comm -23 "$tmp/built" "$tmp/listed")
