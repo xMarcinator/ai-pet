@@ -1,4 +1,4 @@
-//! System.Text.Json as the registration meets it (`src/AiPet.Hook/Install.cs`, `PluginHooks.cs`), so that what the
+//! System.Text.Json as the registration meets it (`AiPet.Hook/Install.cs`, `PluginHooks.cs`), so that what the
 //! Rust writes and says is what the C# writes and says:
 //! - [`indented`]: `ToJsonString` with `WriteIndented` and `UnsafeRelaxedJsonEscaping`, as the settings files and the
 //!   plugin's hook files are written;
@@ -8,7 +8,7 @@
 //! - [`read`] and [`member`]: what reading a node throws, since `JsonObject` reads its members into a dictionary.
 //!
 //! All of it is held against the golden generator's output (`tests/golden/registration/json.json`, written by
-//! `rust/golden/Registration.cs`): which characters each encoder escapes and how, and every message.
+//! the golden generator's Registration.cs): which characters each encoder escapes and how, and every message.
 
 use std::cmp::Ordering;
 use std::fmt::Write as _;
@@ -817,12 +817,8 @@ mod tests {
 
     fn golden() -> Value {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/registration/json.json");
-        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| {
-            panic!(
-                "{}: {e} (write it with: dotnet run --project rust/golden -c Release -- registration)",
-                path.display()
-            )
-        });
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{}: {e} (a frozen corpus: see tests/golden/README.md)", path.display()));
         serde_json::from_str(&text).unwrap()
     }
 

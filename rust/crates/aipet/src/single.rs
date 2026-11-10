@@ -1,5 +1,5 @@
 //! One pet per user, the .NET pet or the Rust one: the spec's single-instance contract (R7), taken before anything
-//! else (`src/AiPet.UI/Program.cs:15-37`).
+//! else (`AiPet.UI/Program.cs:15-37`).
 //!
 //! - Windows: the named mutex `Local\AiPetApp`, made as .NET's `new Mutex(true, name, out created)` makes it. Another
 //!   pet holds it when it was there already, or when this pet may not open it (a pet started elevated made it).
@@ -155,6 +155,7 @@ mod unix {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::path::{Path, PathBuf};
     use std::process::{Command, Output, Stdio};
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -168,10 +169,6 @@ mod tests {
         static COUNT: AtomicUsize = AtomicUsize::new(0);
         let n = COUNT.fetch_add(1, Ordering::SeqCst);
         format!("aipet-single-{what}-{}-{n}", std::process::id())
-    }
-
-    fn repo() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("..")
     }
 
     /// Runs this test binary's test `name` as a pet of its own, with `env` added and `AIPET_PIPE` and
@@ -255,15 +252,12 @@ mod tests {
         }
     }
 
+    /// The mutex is the one the .NET pet of earlier releases takes, frozen as the last C# had it (commit bf3696ea4a,
+    /// AiPet.UI's Program.cs:21: `new Mutex(true, @"Local\AiPetApp", out created)`), so that one pet runs whichever
+    /// runtime each is.
+    #[cfg(windows)]
     #[test]
     fn the_mutex_is_the_csharps() {
-        let program = std::fs::read_to_string(repo().join("src").join("AiPet.UI").join("Program.cs"))
-            .unwrap_or_else(|e| panic!("Program.cs: {e}. Once the C# is gone, MUTEX is the contract as it stands"));
-        assert!(
-            program.contains(r#"new Mutex(true, @"Local\AiPetApp", out created)"#),
-            "{program}"
-        );
-        #[cfg(windows)]
         assert_eq!(MUTEX, r"Local\AiPetApp");
     }
 

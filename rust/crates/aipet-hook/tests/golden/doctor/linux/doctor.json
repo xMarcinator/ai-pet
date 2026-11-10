@@ -1,0 +1,764 @@
+{
+  "about": "aipet-hook --doctor as the C# hook answers each scenario; written by rust/golden's doctor mode (rust/golden/Doctor.cs), replayed by tests/doctor.rs. Don't edit by hand.",
+  "os": "linux",
+  "newline": "\n",
+  "cases": [
+    {
+      "name": "claude-no-settings",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {},
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [FAIL] settings.json doesn't exist: run aipet-hook --install claude\n\n1 problem(s), 0 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-no-config-folder",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [],
+        "files": {},
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [FAIL] settings.json can't be read: Could not find a part of the path '{root}/claude/settings.json'.\n\n1 problem(s), 0 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-unparsable",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/settings.json": "{ \"hooks\": "
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [FAIL] settings.json can't be read: Expected depth to be zero at the end of the JSON payload. There is an open JSON object or array that should be closed. LineNumber: 0 | BytePositionInLine: 11.\n\n1 problem(s), 0 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-not-an-object",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/settings.json": "[]"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n\nAll good.\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-not-registered",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/settings.json": "{ \"model\": \"opus\" }"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [FAIL] AiPet's hooks aren't registered: run aipet-hook --install claude\n\n1 problem(s), 0 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-registered",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/settings.json": "{\n  \"hooks\": {\n    \"SessionStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"UserPromptSubmit\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PostToolUseFailure\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PermissionRequest\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PermissionDenied\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Notification\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Elicitation\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"ElicitationResult\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PostCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5\n          }\n        ]\n      }\n    ],\n    \"StopFailure\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SessionEnd\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ]\n  }\n}"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [ok]   registered for all 17 events\n  [ok]   hook: {root}/bin/aipet-hook\n\nPolicies set by your organisation\n  [ok]   no managed settings on this machine\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning the hook the way Claude does\n  [ok]   aipet-hook: ran, printed nothing, exit 0, {ms} ms (the pet isn't running, so the hook did nothing)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 1 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-registered-pet",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/settings.json": "{\n  \"hooks\": {\n    \"SessionStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"UserPromptSubmit\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PostToolUseFailure\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PermissionRequest\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PermissionDenied\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Notification\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Elicitation\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"ElicitationResult\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PostCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5\n          }\n        ]\n      }\n    ],\n    \"StopFailure\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SessionEnd\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ]\n  }\n}"
+        },
+        "executable": [],
+        "hook_copies": [],
+        "pet": {
+          "recent": [
+            "{time} claude pid=4242 SessionStart golden-claude where=? -> idle",
+            "{time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle"
+          ]
+        }
+      },
+      "exit": 0,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [ok]   registered for all 17 events\n  [ok]   hook: {root}/bin/aipet-hook\n\nPolicies set by your organisation\n  [ok]   no managed settings on this machine\n\nAiPet\n  [ok]   the pet is running (pid {pid}), listening on {endpoint}\n\nRunning the hook the way Claude does\n  [ok]   aipet-hook: ran, printed nothing, exit 0, {ms} ms, and the pet got the event\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         {time} claude pid=4242 SessionStart golden-claude where=? -> idle\n\nAll good.\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-some-events-and-hooks-off",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/settings.json": "{\n  \"disableAllHooks\": true,\n  \"hooks\": {\n    \"SessionStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5\n          }\n        ]\n      }\n    ]\n  }\n}"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [FAIL] \"disableAllHooks\": true switches every hook off\n  [warn] missing events: UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, PermissionDenied, Notification, Elicitation, ElicitationResult, PreCompact, PostCompact, SubagentStart, SubagentStop, StopFailure, SessionEnd (run aipet-hook --install claude)\n  [ok]   hook: {root}/bin/aipet-hook\n\nPolicies set by your organisation\n  [ok]   no managed settings on this machine\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning the hook the way Claude does\n  [ok]   aipet-hook: ran, printed nothing, exit 0, {ms} ms (the pet isn't running, so the hook did nothing)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\n1 problem(s), 2 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-hook-missing",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/settings.json": "{\n  \"hooks\": {\n    \"SessionStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"UserPromptSubmit\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PostToolUseFailure\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PermissionRequest\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PermissionDenied\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Notification\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Elicitation\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"ElicitationResult\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PostCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5\n          }\n        ]\n      }\n    ],\n    \"StopFailure\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SessionEnd\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/nowhere/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ]\n  }\n}"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [ok]   registered for all 17 events\n  [FAIL] the registered hook doesn't exist: {root}/nowhere/aipet-hook\n\nPolicies set by your organisation\n  [ok]   no managed settings on this machine\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning the hook the way Claude does\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\n1 problem(s), 1 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-legacy-hook-py",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/settings.json": "{ \"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"args\": [ \"{root-fwd}/home/.claude/pet/hook.py\" ] } ] } ] } }"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [warn] missing events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, PostToolUseFailure, PermissionRequest, PermissionDenied, Notification, Elicitation, ElicitationResult, PreCompact, PostCompact, SubagentStart, SubagentStop, StopFailure, SessionEnd (run aipet-hook --install claude)\n  [FAIL] the registered hook doesn't exist: \n\nPolicies set by your organisation\n  [ok]   no managed settings on this machine\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning the hook the way Claude does\n         skipped: the plugin runs its own copy of the hook from Claude's plugin folder (the events the pet got show below)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\n1 problem(s), 2 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-plugin",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/plugins/installed_plugins.json": "{\"version\":2,\"plugins\":{\"aipet@aipet\":[{\"scope\":\"user\",\"version\":\"0.2.0\"}]}}",
+          "claude/settings.json": "{ \"enabledPlugins\": { \"aipet@aipet\": true } }"
+        },
+        "executable": [],
+        "hook_copies": [],
+        "pet": {
+          "recent": [
+            "{time} claude pid=4242 SessionStart golden-claude where=? -> idle",
+            "{time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle"
+          ]
+        }
+      },
+      "exit": 0,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [ok]   hooks come from the AiPet plugin (enabledPlugins), not from settings.json\n\nPolicies set by your organisation\n  [ok]   no managed settings on this machine\n\nAiPet\n  [ok]   the pet is running (pid {pid}), listening on {endpoint}\n\nRunning the hook the way Claude does\n         skipped: the plugin runs its own copy of the hook from Claude's plugin folder (the events the pet got show below)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         {time} claude pid=4242 SessionStart golden-claude where=? -> idle\n\nAll good.\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-plugin-not-installed",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/settings.json": "{ \"enabledPlugins\": { \"aipet@aipet\": true } }"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [FAIL] AiPet's hooks aren't registered: run aipet-hook --install claude\n\n1 problem(s), 0 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "claude-plugin-and-direct",
+      "agent": "claude",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "claude"
+        ],
+        "files": {
+          "claude/plugins/installed_plugins.json": "{\"version\":2,\"plugins\":{\"aipet@aipet\":[{\"scope\":\"user\",\"version\":\"0.2.0\"}]}}",
+          "claude/settings.json": "{\n  \"enabledPlugins\": { \"aipet@aipet\": true },\n  \"hooks\": {\n    \"SessionStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"UserPromptSubmit\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PostToolUse\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PostToolUseFailure\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PermissionRequest\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ],\n        \"matcher\": \"*\"\n      }\n    ],\n    \"PermissionDenied\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Notification\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Elicitation\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"ElicitationResult\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PreCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"PostCompact\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStart\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SubagentStop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5\n          }\n        ]\n      }\n    ],\n    \"StopFailure\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ],\n    \"SessionEnd\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{root-fwd}/bin/aipet-hook\",\n            \"args\": [\n              \"--agent\",\n              \"claude\"\n            ],\n            \"timeout\": 5,\n            \"async\": true\n          }\n        ]\n      }\n    ]\n  }\n}"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nClaude Code settings ({root}/claude/settings.json)\n  [ok]   registered for all 17 events\n  [ok]   hook: {root}/bin/aipet-hook\n  [warn] the AiPet plugin is also enabled, so every event is reported twice\n\nPolicies set by your organisation\n  [ok]   no managed settings on this machine\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning the hook the way Claude does\n  [ok]   aipet-hook: ran, printed nothing, exit 0, {ms} ms (the pet isn't running, so the hook did nothing)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 2 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-missing-legacy-hooks",
+      "agent": "codex",
+      "probe": false,
+      "no_codex": true,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "codex/config.toml": "[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = 'C:\\Users\\JOHNSM~1\\AppData\\Local\\AiPet\\hooks\\AIPET-~1.EXE --agent codex'\ntimeout = 30\n"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [warn] the codex CLI isn't on PATH (needed to trust hooks, and for this check)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [warn] couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown\n  [ok]   Stop               C:\\Users\\JOHNSM~1\\AppData\\Local\\AiPet\\hooks\\AIPET-~1.EXE --agent codex  (config.toml)\n  [warn] AiPet isn't registered for every event (run aipet-hook --install codex)\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 4 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-missing-nothing-registered",
+      "agent": "codex",
+      "probe": false,
+      "no_codex": true,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "codex/config.toml": "model = \"o3\"\n"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nCodex\n  [warn] the codex CLI isn't on PATH (needed to trust hooks, and for this check)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [warn] couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown\n  [FAIL] AiPet's hooks aren't registered: add the aipet plugin (codex plugin marketplace add xMarcinator/ai-pet, then codex plugin add aipet@aipet), or run aipet-hook --install codex\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\n1 problem(s), 3 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-missing-plugin",
+      "agent": "codex",
+      "probe": false,
+      "no_codex": true,
+      "setup": {
+        "dirs": [
+          "codex",
+          "codex/plugins/cache/aipet/aipet/0.2.0"
+        ],
+        "files": {
+          "codex/config.toml": "[plugins.\"aipet@aipet\"]\nenabled = true\n"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [warn] the codex CLI isn't on PATH (needed to trust hooks, and for this check)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [warn] couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown\n  [ok]   the aipet@aipet plugin is enabled, so the hooks come from it\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: without hooks/list it isn't known which command and folder Codex runs the plugin's hook with\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 3 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-missing-plugin-and-direct",
+      "agent": "codex",
+      "probe": false,
+      "no_codex": true,
+      "setup": {
+        "dirs": [
+          "codex",
+          "codex/plugins/cache/aipet/aipet/0.2.0"
+        ],
+        "files": {
+          "codex/config.toml": "[plugins.\"aipet@aipet\"]\nenabled = true\n\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [warn] the codex CLI isn't on PATH (needed to trust hooks, and for this check)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [warn] couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown\n  [ok]   Stop               ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   the aipet@aipet plugin is enabled, so the hooks come from it\n  [warn] the aipet@aipet plugin is also enabled, so every event is reported twice: run aipet-hook --uninstall codex (the plugin replaces those hooks)\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 4 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-app-server-fails",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\nexit 1\n",
+          "codex/config.toml": "[features]\ncodex_hooks = true\n\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.UserPromptSubmit]]\n[[hooks.UserPromptSubmit.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.PreToolUse]]\n[[hooks.PreToolUse.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.PermissionRequest]]\n[[hooks.PermissionRequest.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.PostToolUse]]\n[[hooks.PostToolUse.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.PreCompact]]\n[[hooks.PreCompact.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.PostCompact]]\n[[hooks.PostCompact.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.SubagentStart]]\n[[hooks.SubagentStart.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.SubagentStop]]\n[[hooks.SubagentStop.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.Interrupt]]\n[[hooks.Interrupt.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.SessionEnd]]\n[[hooks.SessionEnd.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"other-tool\"\ntimeout = 30\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n  [warn] [features] codex_hooks is deprecated; Codex wants hooks instead\n\nHooks Codex knows about\n  [warn] couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown\n  [ok]   SessionStart       ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   UserPromptSubmit   ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   PreToolUse         ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   PermissionRequest  ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   PostToolUse        ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   Stop               ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   PreCompact         ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   PostCompact        ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   SubagentStart      ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   SubagentStop       ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   Interrupt          ./bin/aipet-hook --agent codex  (config.toml)\n  [ok]   SessionEnd         ./bin/aipet-hook --agent codex  (config.toml)\n         Stop               other-tool  (config.toml)\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 3 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-hooks-in-both-files",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_tool_use:0:0\",\"eventName\":\"postToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:interrupt:0:0\",\"eventName\":\"interrupt\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_end:0:0\",\"eventName\":\"sessionEnd\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n",
+          "codex/config.toml": "[features]\nhooks = false\n\n[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n",
+          "codex/hooks.json": "{ \"hooks\": { \"Stop\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"other-tool\" } ] } ] } }\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n  [FAIL] hooks are switched off in [features]\n  [warn] hooks are in both config.toml and hooks.json; Codex warns about that at every start\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   ./bin/aipet-hook --agent codex\n  [ok]   userPromptSubmit   trusted   ./bin/aipet-hook --agent codex\n  [ok]   preToolUse         trusted   ./bin/aipet-hook --agent codex\n  [ok]   permissionRequest  trusted   ./bin/aipet-hook --agent codex\n  [ok]   postToolUse        trusted   ./bin/aipet-hook --agent codex\n  [ok]   stop               trusted   ./bin/aipet-hook --agent codex\n  [ok]   preCompact         trusted   ./bin/aipet-hook --agent codex\n  [ok]   postCompact        trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStart      trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStop       trusted   ./bin/aipet-hook --agent codex\n  [ok]   interrupt          trusted   ./bin/aipet-hook --agent codex\n  [ok]   sessionEnd         trusted   ./bin/aipet-hook --agent codex\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\n1 problem(s), 2 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-silent",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) sleep 30; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat > /dev/null\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nCodex\n  [warn] codex --version didn't work: no answer within 10 s ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [warn] couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown\n  [FAIL] AiPet's hooks aren't registered: add the aipet plugin (codex plugin marketplace add xMarcinator/ai-pet, then codex plugin add aipet@aipet), or run aipet-hook --install codex\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\n1 problem(s), 3 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-version-fails",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_tool_use:0:0\",\"eventName\":\"postToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:interrupt:0:0\",\"eventName\":\"interrupt\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_end:0:0\",\"eventName\":\"sessionEnd\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) exit 3 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [warn] codex --version didn't work: exit code 3 ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   ./bin/aipet-hook --agent codex\n  [ok]   userPromptSubmit   trusted   ./bin/aipet-hook --agent codex\n  [ok]   preToolUse         trusted   ./bin/aipet-hook --agent codex\n  [ok]   permissionRequest  trusted   ./bin/aipet-hook --agent codex\n  [ok]   postToolUse        trusted   ./bin/aipet-hook --agent codex\n  [ok]   stop               trusted   ./bin/aipet-hook --agent codex\n  [ok]   preCompact         trusted   ./bin/aipet-hook --agent codex\n  [ok]   postCompact        trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStart      trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStop       trusted   ./bin/aipet-hook --agent codex\n  [ok]   interrupt          trusted   ./bin/aipet-hook --agent codex\n  [ok]   sessionEnd         trusted   ./bin/aipet-hook --agent codex\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 2 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-not-executable",
+      "agent": "codex",
+      "probe": false,
+      "only": "unix",
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n",
+          "codex/config.toml": "[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n"
+        },
+        "executable": [],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [warn] codex --version didn't work: An error occurred trying to start process '{root}/bin/codex' with working directory '{root}'. Permission denied ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [warn] couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown\n  [ok]   Stop               ./bin/aipet-hook --agent codex  (config.toml)\n  [warn] AiPet isn't registered for every event (run aipet-hook --install codex)\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 4 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-trusted",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_tool_use:0:0\",\"eventName\":\"postToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:interrupt:0:0\",\"eventName\":\"interrupt\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_end:0:0\",\"eventName\":\"sessionEnd\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"other-tool --hook\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"lint\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"untrusted\"},{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"prompt\",\"command\":null,\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   ./bin/aipet-hook --agent codex\n  [ok]   userPromptSubmit   trusted   ./bin/aipet-hook --agent codex\n  [ok]   preToolUse         trusted   ./bin/aipet-hook --agent codex\n  [ok]   permissionRequest  trusted   ./bin/aipet-hook --agent codex\n  [ok]   postToolUse        trusted   ./bin/aipet-hook --agent codex\n  [ok]   stop               trusted   ./bin/aipet-hook --agent codex\n  [ok]   preCompact         trusted   ./bin/aipet-hook --agent codex\n  [ok]   postCompact        trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStart      trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStop       trusted   ./bin/aipet-hook --agent codex\n  [ok]   interrupt          trusted   ./bin/aipet-hook --agent codex\n  [ok]   sessionEnd         trusted   ./bin/aipet-hook --agent codex\n         stop               trusted   other-tool --hook\n         preToolUse         untrusted lint\n         sessionStart       trusted   (prompt)\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 1 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-trusted-pet",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_tool_use:0:0\",\"eventName\":\"postToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:interrupt:0:0\",\"eventName\":\"interrupt\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_end:0:0\",\"eventName\":\"sessionEnd\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": [],
+        "pet": {
+          "recent": [
+            "{time} claude pid=4242 SessionStart golden-claude where=? -> idle",
+            "{time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle"
+          ]
+        }
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   ./bin/aipet-hook --agent codex\n  [ok]   userPromptSubmit   trusted   ./bin/aipet-hook --agent codex\n  [ok]   preToolUse         trusted   ./bin/aipet-hook --agent codex\n  [ok]   permissionRequest  trusted   ./bin/aipet-hook --agent codex\n  [ok]   postToolUse        trusted   ./bin/aipet-hook --agent codex\n  [ok]   stop               trusted   ./bin/aipet-hook --agent codex\n  [ok]   preCompact         trusted   ./bin/aipet-hook --agent codex\n  [ok]   postCompact        trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStart      trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStop       trusted   ./bin/aipet-hook --agent codex\n  [ok]   interrupt          trusted   ./bin/aipet-hook --agent codex\n  [ok]   sessionEnd         trusted   ./bin/aipet-hook --agent codex\n\nAiPet\n  [ok]   the pet is running (pid {pid}), listening on {endpoint}\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         {time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle\n\nAll good.\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-untrusted",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"config.toml:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"modified\"},{\"key\":\"config.toml:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_tool_use:0:0\",\"eventName\":\"postToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"untrusted\"},{\"key\":\"config.toml:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":false,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:interrupt:0:0\",\"eventName\":\"interrupt\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_end:0:0\",\"eventName\":\"sessionEnd\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"\\u0027/x y/aipet-hook\\u0027 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   userPromptSubmit   trusted   ./bin/aipet-hook --agent codex\n  [FAIL] preToolUse         modified  ./bin/aipet-hook --agent codex  <- not trusted yet: run codex and choose Review hooks (or /hooks)\n  [ok]   permissionRequest  trusted   ./bin/aipet-hook --agent codex\n  [ok]   postToolUse        trusted   ./bin/aipet-hook --agent codex\n  [FAIL] stop               untrusted ./bin/aipet-hook --agent codex  <- not trusted yet: run codex and choose Review hooks (or /hooks)\n  [ok]   preCompact         trusted   ./bin/aipet-hook --agent codex\n  [ok]   postCompact        trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStart      trusted   ./bin/aipet-hook --agent codex\n  [FAIL] subagentStop       trusted   ./bin/aipet-hook --agent codex  <- disabled in /hooks\n  [ok]   interrupt          trusted   ./bin/aipet-hook --agent codex\n  [ok]   sessionEnd         trusted   ./bin/aipet-hook --agent codex\n  [ok]   sessionStart       trusted   '/x y/aipet-hook' --agent codex\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\n3 problem(s), 1 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-not-registered",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"other-tool --hook\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"lint\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"untrusted\"},{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"prompt\",\"command\":null,\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n         stop               trusted   other-tool --hook\n         preToolUse         untrusted lint\n         sessionStart       trusted   (prompt)\n  [FAIL] AiPet's hooks aren't registered: add the aipet plugin (codex plugin marketplace add xMarcinator/ai-pet, then codex plugin add aipet@aipet), or run aipet-hook --install codex\n\n1 problem(s), 0 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-plugin",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex",
+          "codex/plugins/cache/aipet/aipet/0.2.0/hooks"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"aipet@aipet:hooks/codex.json:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/aipet-hook.sh": "#!/bin/sh\n# Runs the aipet-hook for this OS and CPU (native/<rid>/, next to this script) with the same arguments and stdin.\n# Anything it can't run (an unknown platform, a missing binary, one that can't load) is a quiet no-op that exits 0:\n# the hook must never fail a chat. It forks as little as it can: one uname at most (none on Windows), and the one that\n# runs the hook (not exec, see below). The time it takes delays the hook's start, which orders Claude's events, and\n# each fork is slow on Git Bash.\ncase $0 in */*) dir=${0%/*} ;; *) dir=. ;; esac\nif [ \"${OS:-}\" = Windows_NT ]; then\n  bin=$dir/win-x64/aipet-hook.exe\nelse\n  # only the glibc builds are shipped: without their loader (musl, a 32-bit userland on a 64-bit kernel) they can't run\n  case $(uname -sm 2>/dev/null) in\n    MINGW*|MSYS*|CYGWIN*) bin=$dir/win-x64/aipet-hook.exe ;;\n    \"Linux x86_64\"|\"Linux amd64\") [ -e /lib64/ld-linux-x86-64.so.2 ] || exit 0; bin=$dir/linux-x64/aipet-hook ;;\n    \"Linux aarch64\"|\"Linux arm64\") [ -e /lib/ld-linux-aarch64.so.1 ] || exit 0; bin=$dir/linux-arm64/aipet-hook ;;\n    *) exit 0 ;;\n  esac\nfi\n[ -f \"$bin\" ] || exit 0\n[ -x \"$bin\" ] || chmod +x \"$bin\" 2>/dev/null\n[ -x \"$bin\" ] || exit 0\n# not exec: a binary that still can't load (a glibc older than the one it was built against, or an .exe antivirus\n# blocks) ends in a quiet 0 too\n\"$bin\" \"$@\" 2>/dev/null\nexit 0\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": [
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-x64/aipet-hook",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-arm64/aipet-hook"
+        ]
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   userPromptSubmit   trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preToolUse         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   permissionRequest  trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   stop               trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preCompact         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   postCompact        trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStart      trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStop       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   hooks come from the aipet@aipet plugin, for all 9 of its events\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 1 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-plugin-without-a-hook",
+      "agent": "codex",
+      "probe": true,
+      "setup": {
+        "dirs": [
+          "codex",
+          "codex/plugins/cache/aipet/aipet/0.2.0/hooks"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"aipet@aipet:hooks/codex.json:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/aipet-hook.sh": "#!/bin/sh\n# Runs the aipet-hook for this OS and CPU (native/<rid>/, next to this script) with the same arguments and stdin.\n# Anything it can't run (an unknown platform, a missing binary, one that can't load) is a quiet no-op that exits 0:\n# the hook must never fail a chat. It forks as little as it can: one uname at most (none on Windows), and the one that\n# runs the hook (not exec, see below). The time it takes delays the hook's start, which orders Claude's events, and\n# each fork is slow on Git Bash.\ncase $0 in */*) dir=${0%/*} ;; *) dir=. ;; esac\nif [ \"${OS:-}\" = Windows_NT ]; then\n  bin=$dir/win-x64/aipet-hook.exe\nelse\n  # only the glibc builds are shipped: without their loader (musl, a 32-bit userland on a 64-bit kernel) they can't run\n  case $(uname -sm 2>/dev/null) in\n    MINGW*|MSYS*|CYGWIN*) bin=$dir/win-x64/aipet-hook.exe ;;\n    \"Linux x86_64\"|\"Linux amd64\") [ -e /lib64/ld-linux-x86-64.so.2 ] || exit 0; bin=$dir/linux-x64/aipet-hook ;;\n    \"Linux aarch64\"|\"Linux arm64\") [ -e /lib/ld-linux-aarch64.so.1 ] || exit 0; bin=$dir/linux-arm64/aipet-hook ;;\n    *) exit 0 ;;\n  esac\nfi\n[ -f \"$bin\" ] || exit 0\n[ -x \"$bin\" ] || chmod +x \"$bin\" 2>/dev/null\n[ -x \"$bin\" ] || exit 0\n# not exec: a binary that still can't load (a glibc older than the one it was built against, or an .exe antivirus\n# blocks) ends in a quiet 0 too\n\"$bin\" \"$@\" 2>/dev/null\nexit 0\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": []
+      },
+      "exit": 1,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   userPromptSubmit   trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preToolUse         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   permissionRequest  trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   stop               trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preCompact         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   postCompact        trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStart      trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStop       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   hooks come from the aipet@aipet plugin, for all 9 of its events\n  [FAIL] the plugin has no hook for this system ({root}/codex/plugins/cache/aipet/aipet/0.2.0/native/linux-x64/aipet-hook), so its hooks do nothing\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: the plugin has no hook for this system\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\n1 problem(s), 1 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-plugin-and-direct",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex",
+          "codex/plugins/cache/aipet/aipet/0.2.0/hooks"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"aipet@aipet:hooks/codex.json:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_tool_use:0:0\",\"eventName\":\"postToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:interrupt:0:0\",\"eventName\":\"interrupt\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_end:0:0\",\"eventName\":\"sessionEnd\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/aipet-hook.sh": "#!/bin/sh\n# Runs the aipet-hook for this OS and CPU (native/<rid>/, next to this script) with the same arguments and stdin.\n# Anything it can't run (an unknown platform, a missing binary, one that can't load) is a quiet no-op that exits 0:\n# the hook must never fail a chat. It forks as little as it can: one uname at most (none on Windows), and the one that\n# runs the hook (not exec, see below). The time it takes delays the hook's start, which orders Claude's events, and\n# each fork is slow on Git Bash.\ncase $0 in */*) dir=${0%/*} ;; *) dir=. ;; esac\nif [ \"${OS:-}\" = Windows_NT ]; then\n  bin=$dir/win-x64/aipet-hook.exe\nelse\n  # only the glibc builds are shipped: without their loader (musl, a 32-bit userland on a 64-bit kernel) they can't run\n  case $(uname -sm 2>/dev/null) in\n    MINGW*|MSYS*|CYGWIN*) bin=$dir/win-x64/aipet-hook.exe ;;\n    \"Linux x86_64\"|\"Linux amd64\") [ -e /lib64/ld-linux-x86-64.so.2 ] || exit 0; bin=$dir/linux-x64/aipet-hook ;;\n    \"Linux aarch64\"|\"Linux arm64\") [ -e /lib/ld-linux-aarch64.so.1 ] || exit 0; bin=$dir/linux-arm64/aipet-hook ;;\n    *) exit 0 ;;\n  esac\nfi\n[ -f \"$bin\" ] || exit 0\n[ -x \"$bin\" ] || chmod +x \"$bin\" 2>/dev/null\n[ -x \"$bin\" ] || exit 0\n# not exec: a binary that still can't load (a glibc older than the one it was built against, or an .exe antivirus\n# blocks) ends in a quiet 0 too\n\"$bin\" \"$@\" 2>/dev/null\nexit 0\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": [
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-x64/aipet-hook",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-arm64/aipet-hook"
+        ]
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   userPromptSubmit   trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preToolUse         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   permissionRequest  trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   stop               trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preCompact         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   postCompact        trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStart      trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStop       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   sessionStart       trusted   ./bin/aipet-hook --agent codex\n  [ok]   userPromptSubmit   trusted   ./bin/aipet-hook --agent codex\n  [ok]   preToolUse         trusted   ./bin/aipet-hook --agent codex\n  [ok]   permissionRequest  trusted   ./bin/aipet-hook --agent codex\n  [ok]   postToolUse        trusted   ./bin/aipet-hook --agent codex\n  [ok]   stop               trusted   ./bin/aipet-hook --agent codex\n  [ok]   preCompact         trusted   ./bin/aipet-hook --agent codex\n  [ok]   postCompact        trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStart      trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStop       trusted   ./bin/aipet-hook --agent codex\n  [ok]   interrupt          trusted   ./bin/aipet-hook --agent codex\n  [ok]   sessionEnd         trusted   ./bin/aipet-hook --agent codex\n  [ok]   hooks come from the aipet@aipet plugin, for all 9 of its events\n  [warn] the aipet@aipet plugin is also enabled, so every event is reported twice: run aipet-hook --uninstall codex (the plugin replaces those hooks)\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 2 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-plugin-no-source",
+      "agent": "codex",
+      "probe": true,
+      "setup": {
+        "dirs": [
+          "codex",
+          "codex/plugins/cache/aipet/aipet/0.2.0/hooks"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"aipet@aipet:hooks/codex.json:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":null,\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":null,\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":null,\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":null,\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":null,\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":null,\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":null,\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":null,\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":null,\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/aipet-hook.sh": "#!/bin/sh\n# Runs the aipet-hook for this OS and CPU (native/<rid>/, next to this script) with the same arguments and stdin.\n# Anything it can't run (an unknown platform, a missing binary, one that can't load) is a quiet no-op that exits 0:\n# the hook must never fail a chat. It forks as little as it can: one uname at most (none on Windows), and the one that\n# runs the hook (not exec, see below). The time it takes delays the hook's start, which orders Claude's events, and\n# each fork is slow on Git Bash.\ncase $0 in */*) dir=${0%/*} ;; *) dir=. ;; esac\nif [ \"${OS:-}\" = Windows_NT ]; then\n  bin=$dir/win-x64/aipet-hook.exe\nelse\n  # only the glibc builds are shipped: without their loader (musl, a 32-bit userland on a 64-bit kernel) they can't run\n  case $(uname -sm 2>/dev/null) in\n    MINGW*|MSYS*|CYGWIN*) bin=$dir/win-x64/aipet-hook.exe ;;\n    \"Linux x86_64\"|\"Linux amd64\") [ -e /lib64/ld-linux-x86-64.so.2 ] || exit 0; bin=$dir/linux-x64/aipet-hook ;;\n    \"Linux aarch64\"|\"Linux arm64\") [ -e /lib/ld-linux-aarch64.so.1 ] || exit 0; bin=$dir/linux-arm64/aipet-hook ;;\n    *) exit 0 ;;\n  esac\nfi\n[ -f \"$bin\" ] || exit 0\n[ -x \"$bin\" ] || chmod +x \"$bin\" 2>/dev/null\n[ -x \"$bin\" ] || exit 0\n# not exec: a binary that still can't load (a glibc older than the one it was built against, or an .exe antivirus\n# blocks) ends in a quiet 0 too\n\"$bin\" \"$@\" 2>/dev/null\nexit 0\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": [
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-x64/aipet-hook",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-arm64/aipet-hook"
+        ]
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   userPromptSubmit   trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preToolUse         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   permissionRequest  trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   stop               trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preCompact         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   postCompact        trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStart      trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStop       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   hooks come from the aipet@aipet plugin, for all 9 of its events\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: Codex didn't say where the plugin is, and its command needs that ($PLUGIN_ROOT)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 1 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-plugin-some-events",
+      "agent": "codex",
+      "probe": false,
+      "setup": {
+        "dirs": [
+          "codex",
+          "codex/plugins/cache/aipet/aipet/0.2.0/hooks"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"aipet@aipet:hooks/codex.json:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/aipet-hook.sh": "#!/bin/sh\n# Runs the aipet-hook for this OS and CPU (native/<rid>/, next to this script) with the same arguments and stdin.\n# Anything it can't run (an unknown platform, a missing binary, one that can't load) is a quiet no-op that exits 0:\n# the hook must never fail a chat. It forks as little as it can: one uname at most (none on Windows), and the one that\n# runs the hook (not exec, see below). The time it takes delays the hook's start, which orders Claude's events, and\n# each fork is slow on Git Bash.\ncase $0 in */*) dir=${0%/*} ;; *) dir=. ;; esac\nif [ \"${OS:-}\" = Windows_NT ]; then\n  bin=$dir/win-x64/aipet-hook.exe\nelse\n  # only the glibc builds are shipped: without their loader (musl, a 32-bit userland on a 64-bit kernel) they can't run\n  case $(uname -sm 2>/dev/null) in\n    MINGW*|MSYS*|CYGWIN*) bin=$dir/win-x64/aipet-hook.exe ;;\n    \"Linux x86_64\"|\"Linux amd64\") [ -e /lib64/ld-linux-x86-64.so.2 ] || exit 0; bin=$dir/linux-x64/aipet-hook ;;\n    \"Linux aarch64\"|\"Linux arm64\") [ -e /lib/ld-linux-aarch64.so.1 ] || exit 0; bin=$dir/linux-arm64/aipet-hook ;;\n    *) exit 0 ;;\n  esac\nfi\n[ -f \"$bin\" ] || exit 0\n[ -x \"$bin\" ] || chmod +x \"$bin\" 2>/dev/null\n[ -x \"$bin\" ] || exit 0\n# not exec: a binary that still can't load (a glibc older than the one it was built against, or an .exe antivirus\n# blocks) ends in a quiet 0 too\n\"$bin\" \"$@\" 2>/dev/null\nexit 0\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": [
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-x64/aipet-hook",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-arm64/aipet-hook"
+        ]
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   stop               trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preToolUse         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [warn] the aipet@aipet plugin isn't registered for: SessionStart, UserPromptSubmit, PermissionRequest, PreCompact, PostCompact, SubagentStart, SubagentStop (update it: codex plugin marketplace upgrade aipet, then codex plugin add aipet@aipet)\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n         skipped: add --probe to run it through the shell Codex uses (PowerShell on Windows)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 2 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-probe",
+      "agent": "codex",
+      "probe": true,
+      "ci": true,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_tool_use:0:0\",\"eventName\":\"postToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:interrupt:0:0\",\"eventName\":\"interrupt\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_end:0:0\",\"eventName\":\"sessionEnd\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": []
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   ./bin/aipet-hook --agent codex\n  [ok]   userPromptSubmit   trusted   ./bin/aipet-hook --agent codex\n  [ok]   preToolUse         trusted   ./bin/aipet-hook --agent codex\n  [ok]   permissionRequest  trusted   ./bin/aipet-hook --agent codex\n  [ok]   postToolUse        trusted   ./bin/aipet-hook --agent codex\n  [ok]   stop               trusted   ./bin/aipet-hook --agent codex\n  [ok]   preCompact         trusted   ./bin/aipet-hook --agent codex\n  [ok]   postCompact        trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStart      trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStop       trusted   ./bin/aipet-hook --agent codex\n  [ok]   interrupt          trusted   ./bin/aipet-hook --agent codex\n  [ok]   sessionEnd         trusted   ./bin/aipet-hook --agent codex\n\nAiPet\n  [warn] The pet isn't running; hooks do nothing until it is.\n\nRunning AiPet's hook the way Codex does\n  [ok]   sh: ran, printed nothing, exit 0, {ms} ms (the pet isn't running, so the hook did nothing)\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         none: the pet isn't running\n\nNo problems; 1 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-probe-pet",
+      "agent": "codex",
+      "probe": true,
+      "ci": true,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"config.toml:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_tool_use:0:0\",\"eventName\":\"postToolUse\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:interrupt:0:0\",\"eventName\":\"interrupt\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"config.toml:session_end:0:0\",\"eventName\":\"sessionEnd\",\"handlerType\":\"command\",\"command\":\"./bin/aipet-hook --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/config.toml\",\"source\":\"user\",\"pluginId\":null,\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": [],
+        "pet": {
+          "recent": [
+            "{time} claude pid=4242 SessionStart golden-claude where=? -> idle",
+            "{time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle"
+          ]
+        }
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   ./bin/aipet-hook --agent codex\n  [ok]   userPromptSubmit   trusted   ./bin/aipet-hook --agent codex\n  [ok]   preToolUse         trusted   ./bin/aipet-hook --agent codex\n  [ok]   permissionRequest  trusted   ./bin/aipet-hook --agent codex\n  [ok]   postToolUse        trusted   ./bin/aipet-hook --agent codex\n  [ok]   stop               trusted   ./bin/aipet-hook --agent codex\n  [ok]   preCompact         trusted   ./bin/aipet-hook --agent codex\n  [ok]   postCompact        trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStart      trusted   ./bin/aipet-hook --agent codex\n  [ok]   subagentStop       trusted   ./bin/aipet-hook --agent codex\n  [ok]   interrupt          trusted   ./bin/aipet-hook --agent codex\n  [ok]   sessionEnd         trusted   ./bin/aipet-hook --agent codex\n\nAiPet\n  [ok]   the pet is running (pid {pid}), listening on {endpoint}\n\nRunning AiPet's hook the way Codex does\n  [ok]   sh: ran, printed nothing, exit 0, {ms} ms, and the pet got the event\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         {time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle\n\nAll good.\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-probe-files",
+      "agent": "codex",
+      "probe": true,
+      "ci": true,
+      "setup": {
+        "dirs": [
+          "codex"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\nexit 1\n",
+          "codex/config.toml": "[[hooks.Stop]]\n[[hooks.Stop.hooks]]\ntype = \"command\"\ncommand = \"./bin/aipet-hook --agent codex\"\ntimeout = 30\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": [],
+        "pet": {
+          "recent": [
+            "{time} claude pid=4242 SessionStart golden-claude where=? -> idle",
+            "{time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle"
+          ]
+        }
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [warn] couldn't ask Codex (codex app-server hooks/list), so whether the hooks are trusted is unknown\n  [ok]   Stop               ./bin/aipet-hook --agent codex  (config.toml)\n  [warn] AiPet isn't registered for every event (run aipet-hook --install codex)\n\nAiPet\n  [ok]   the pet is running (pid {pid}), listening on {endpoint}\n\nRunning AiPet's hook the way Codex does\n  [ok]   sh: ran, printed nothing, exit 0, {ms} ms, and the pet got the event\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         {time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle\n\nNo problems; 2 warning(s).\n",
+      "stderr": ""
+    },
+    {
+      "name": "codex-probe-plugin",
+      "agent": "codex",
+      "probe": true,
+      "only": "unix",
+      "setup": {
+        "dirs": [
+          "codex",
+          "codex/plugins/cache/aipet/aipet/0.2.0/hooks"
+        ],
+        "files": {
+          "bin/app-server.jsonl": "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{\"data\":[{\"cwd\":\"{root-json}/home\",\"hooks\":[{\"key\":\"aipet@aipet:hooks/codex.json:session_start:0:0\",\"eventName\":\"sessionStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:user_prompt_submit:0:0\",\"eventName\":\"userPromptSubmit\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_tool_use:0:0\",\"eventName\":\"preToolUse\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:permission_request:0:0\",\"eventName\":\"permissionRequest\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:stop:0:0\",\"eventName\":\"stop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:pre_compact:0:0\",\"eventName\":\"preCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:post_compact:0:0\",\"eventName\":\"postCompact\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_start:0:0\",\"eventName\":\"subagentStart\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"},{\"key\":\"aipet@aipet:hooks/codex.json:subagent_stop:0:0\",\"eventName\":\"subagentStop\",\"handlerType\":\"command\",\"command\":\"sh \\u0022$PLUGIN_ROOT/native/aipet-hook.sh\\u0022 --agent codex\",\"async\":true,\"timeoutSec\":30,\"sourcePath\":\"{root-json}/codex/plugins/cache/aipet/aipet/0.2.0/hooks/codex.json\",\"source\":\"plugin\",\"pluginId\":\"aipet@aipet\",\"enabled\":true,\"isManaged\":false,\"trustStatus\":\"trusted\"}]}]}}\n",
+          "bin/codex": "#!/bin/sh\ncase \"$1\" in\n  --version) echo \"codex-cli 0.0.0-test\"; exit 0 ;;\n  app-server) ;;\n  *) exit 2 ;;\nesac\ncat \"${0%/*}/app-server.jsonl\"\ncat > /dev/null\n",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/aipet-hook.sh": "#!/bin/sh\n# Runs the aipet-hook for this OS and CPU (native/<rid>/, next to this script) with the same arguments and stdin.\n# Anything it can't run (an unknown platform, a missing binary, one that can't load) is a quiet no-op that exits 0:\n# the hook must never fail a chat. It forks as little as it can: one uname at most (none on Windows), and the one that\n# runs the hook (not exec, see below). The time it takes delays the hook's start, which orders Claude's events, and\n# each fork is slow on Git Bash.\ncase $0 in */*) dir=${0%/*} ;; *) dir=. ;; esac\nif [ \"${OS:-}\" = Windows_NT ]; then\n  bin=$dir/win-x64/aipet-hook.exe\nelse\n  # only the glibc builds are shipped: without their loader (musl, a 32-bit userland on a 64-bit kernel) they can't run\n  case $(uname -sm 2>/dev/null) in\n    MINGW*|MSYS*|CYGWIN*) bin=$dir/win-x64/aipet-hook.exe ;;\n    \"Linux x86_64\"|\"Linux amd64\") [ -e /lib64/ld-linux-x86-64.so.2 ] || exit 0; bin=$dir/linux-x64/aipet-hook ;;\n    \"Linux aarch64\"|\"Linux arm64\") [ -e /lib/ld-linux-aarch64.so.1 ] || exit 0; bin=$dir/linux-arm64/aipet-hook ;;\n    *) exit 0 ;;\n  esac\nfi\n[ -f \"$bin\" ] || exit 0\n[ -x \"$bin\" ] || chmod +x \"$bin\" 2>/dev/null\n[ -x \"$bin\" ] || exit 0\n# not exec: a binary that still can't load (a glibc older than the one it was built against, or an .exe antivirus\n# blocks) ends in a quiet 0 too\n\"$bin\" \"$@\" 2>/dev/null\nexit 0\n"
+        },
+        "executable": [
+          "bin/codex"
+        ],
+        "hook_copies": [
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-x64/aipet-hook",
+          "codex/plugins/cache/aipet/aipet/0.2.0/native/linux-arm64/aipet-hook"
+        ],
+        "pet": {
+          "recent": [
+            "{time} claude pid=4242 SessionStart golden-claude where=? -> idle",
+            "{time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle"
+          ]
+        }
+      },
+      "exit": 0,
+      "stdout": "\nCodex\n  [ok]   codex-cli 0.0.0-test ({root}/bin/codex)\n\nCodex config ({root}/codex/config.toml)\n\nHooks Codex knows about\n  [ok]   sessionStart       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   userPromptSubmit   trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preToolUse         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   permissionRequest  trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   stop               trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   preCompact         trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   postCompact        trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStart      trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   subagentStop       trusted   sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex\n  [ok]   hooks come from the aipet@aipet plugin, for all 9 of its events\n\nAiPet\n  [ok]   the pet is running (pid {pid}), listening on {endpoint}\n\nRunning AiPet's hook the way Codex does\n  [ok]   sh: ran, printed nothing, exit 0, {ms} ms, and the pet got the event\n\nRecent events the pet got (all of them are in {root}/data/hook-events.log)\n         {time} codex pid=4242 SessionStart golden-codex- lag=10ms where=? -> idle\n\nAll good.\n",
+      "stderr": ""
+    }
+  ]
+}

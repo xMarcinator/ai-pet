@@ -1,7 +1,7 @@
-//! Registering AiPet's hooks with Claude Code and Codex, ported from tests/AiPet.Tests/RegistrationTests.cs: the
+//! Registering AiPet's hooks with Claude Code and Codex, ported from AiPet.Tests/RegistrationTests.cs: the
 //! cases the C# ran in-process (ClaudeConfig and CodexConfig compiled into the tests) run the built hook here, as the
 //! installers do (`aipet-hook --install|--uninstall|--doctor`), in a sandbox whose CLAUDE_CONFIG_DIR and CODEX_HOME are
-//! its own. The cases rust/golden recorded from the C# are aipet-hook's own tests (tests/registration.rs,
+//! its own. The cases the golden generator recorded from the C# are aipet-hook's own tests (tests/registration.rs,
 //! tests/codex.rs, tests/doctor.rs); these are the ones that held the files' modes, the plugins and the doctor's
 //! reading of them.
 

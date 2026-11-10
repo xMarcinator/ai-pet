@@ -1,4 +1,4 @@
-//! The installers, rehosted from tests/AiPet.Tests/InstallerTests.cs: packaging/linux/install.sh (the installer in
+//! The installers, rehosted from AiPet.Tests/InstallerTests.cs: packaging/linux/install.sh (the installer in
 //! the Linux tarball) run from a package folder the test makes, whose AiPet only writes down the environment it got
 //! and whose aipet-hook is the real hook (`aipet_testkit::hook`); and the one-line installer (install.sh at the root)
 //! against a release the test makes, with curl a stand-in. pkill, pgrep and the menu caches are stand-ins too, so

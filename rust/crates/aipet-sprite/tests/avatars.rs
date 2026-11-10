@@ -1,4 +1,4 @@
-//! Custom avatar files, ported from tests/AiPet.Tests/AvatarTests.cs. They are hand-edited: one the pet can't draw is
+//! Custom avatar files, ported from AiPet.Tests/AvatarTests.cs. They are hand-edited: one the pet can't draw is
 //! skipped, never handed to the pet (Settings draws every avatar, and the pet wears the saved one at start, so a crash
 //! there would repeat on every start). Both lists skip it: the avatars (`Avatar::all`) and the pets the avatars folder
 //! gives (`load::all`), which bakes a legacy avatar file into a pack.

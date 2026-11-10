@@ -1,9 +1,9 @@
-//! The Windows exe's resources, the ones the .NET pet's AiPet.exe had (build/Win32Resources.targets): the app's icon,
-//! a version resource that names `AiPet.exe`, and the .NET pet's manifest (app.manifest). Antivirus heuristics dislike
-//! an exe without them, and the release checks them. Nothing for any other OS.
+//! The Windows exe's resources, the ones the .NET pet's AiPet.exe had (the .NET build's Win32Resources targets): the
+//! app's icon, a version resource that names `AiPet.exe`, and the .NET pet's manifest (app.manifest). Antivirus
+//! heuristics dislike an exe without them, and the release checks them. Nothing for any other OS.
 //!
 //! The version is `AIPET_VERSION`, which the release sets to the version it releases, else `0.0.0-dev` as
-//! Directory.Build.props has it; the pet shows the same one in Settings (`updates::version`). FileVersion is its
+//! the .NET build props had it; the pet shows the same one in Settings (`updates::version`). FileVersion is its
 //! numbers: 0.3.0-rc.1 makes 0.3.0.0, as the .NET SDK makes it.
 
 use std::env;

@@ -1,4 +1,4 @@
-//! The pixel pet: a port of `src/AiPet.Core/Pet.cs`.
+//! The pixel pet: a port of `AiPet.Core/Pet.cs`.
 //!
 //! Numbers follow the C# exactly: `Math.Round` is banker's rounding (`round_ties_even`), `(int)x` truncates toward
 //! zero and saturates (`as i32`), `%` keeps the dividend's sign (as Rust's does), and every expression keeps the C#

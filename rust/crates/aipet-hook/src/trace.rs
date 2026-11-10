@@ -1,5 +1,5 @@
 //! The hook's trace log in the temp folder, written only once the pet was reached
-//! (`src/AiPet.Hook/Program.cs:193-220`).
+//! (`AiPet.Hook/Program.cs:193-220`).
 //!
 //! Problems only, one line each: `HH:mm:ss user=<user> pipe=<endpoint> <line>`. The temp folder is writable even when
 //! an agent runs hooks as a restricted sandbox user. The log is begun again once it is past 64 KB.
@@ -414,7 +414,7 @@ mod tests {
     }
 
     /// Run as root, a file another user owns at 0600 can be opened, so the owner check is what refuses it. CI runs
-    /// this with sudo (cross-runtime.yml); as anyone else such a file can't be opened for writing at all.
+    /// this with sudo (ci.yml); as anyone else such a file can't be opened for writing at all.
     #[test]
     fn a_file_another_user_owns_is_left_alone() {
         // SAFETY: geteuid has no preconditions

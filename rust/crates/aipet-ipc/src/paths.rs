@@ -1,4 +1,4 @@
-//! The app's data folder and the other places the hook and the pet both know (`src/AiPet.Core/Paths.cs`).
+//! The app's data folder and the other places the hook and the pet both know (`AiPet.Core/Paths.cs`).
 //!
 //! - Windows: `%LOCALAPPDATA%\AiPet` (the known folder, not the variable).
 //! - Linux: `$XDG_DATA_HOME/AiPet`, by default `~/.local/share/AiPet`.

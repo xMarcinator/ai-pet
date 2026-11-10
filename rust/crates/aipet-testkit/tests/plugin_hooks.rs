@@ -1,4 +1,4 @@
-//! scripts/check-plugin.sh --hook against the hook, rehosted from tests/AiPet.Tests/PluginHooksTests.cs: CI compares
+//! scripts/check-plugin.sh --hook against the hook, rehosted from AiPet.Tests/PluginHooksTests.cs: CI compares
 //! the plugin's hook files with what `aipet-hook --print-plugin-hooks` prints (the printing itself is aipet-hook's
 //! tests/registration.rs).
 

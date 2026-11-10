@@ -1,4 +1,4 @@
-//! The hook's contract against sockets that aren't a pet, ported from tests/AiPet.Tests/HookContractTests.cs
+//! The hook's contract against sockets that aren't a pet, ported from AiPet.Tests/HookContractTests.cs
 //! (HookContractTests' trace-log cases, HookSocketTests and HookRequestSizeTests): a plain Unix socket the test
 //! controls stands in for the pet. Whatever comes on stdin the hook exits 0 and prints nothing; it traces only once the
 //! pet was reached, into a log that is the user's own. The cases with the real pet's server are aipet-core's

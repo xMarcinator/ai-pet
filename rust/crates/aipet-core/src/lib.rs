@@ -1,4 +1,4 @@
-//! The pet's core, without a UI: what the C#'s `src/AiPet.Core` (and the data parts of `src/AiPet.UI`) does.
+//! The pet's core, without a UI: what the C#'s `AiPet.Core` (and the data parts of `AiPet.UI`) does.
 //!
 //! - [`server`]: the hook server, on the endpoint `aipet-ipc` names, with the C#'s trust boundary;
 //! - [`sessions`]: the chats' state from the hooks' events, and their ordering (AgentSessions);

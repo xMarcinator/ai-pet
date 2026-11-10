@@ -3,6 +3,27 @@
 All notable changes to AiPet are listed here. Versions follow [Semantic Versioning](https://semver.org/). The
 app, `aipet-hook` and the plugin share one version number.
 
+## [Unreleased] - milestone 3
+
+The end of AiPet's move to Rust: the .NET code is gone from the repository. The pet, the hook and the plugin work as
+in the milestone 2 release, and an installed copy of any earlier release updates to this one as before.
+
+### Removed
+- The C# projects (`src/AiPet.Core`, `src/AiPet.UI`, `src/AiPet.Hook`), their tests (`tests/AiPet.Tests`), the
+  solution (`AiPet.slnx`), `Directory.Build.props` and `build/Win32Resources.targets`. Every C# test has Rust tests
+  that hold its cases (`rust/PARITY.md`); `cargo test --workspace` in `rust/` runs them all.
+- The golden generators (`rust/golden`). The corpora they wrote from the C# stay under `rust/crates/*/tests/golden/`
+  as frozen fixtures; corpora the C# wrote on Linux at the cutover replace the replays CI made of it there.
+- `tools/IconGen`, which drew the icons with the C# pet's renderer. The icons it made stay committed.
+- CI's .NET build and tests, the hook start-up comparison with the NativeAOT hook, the cross-runtime workflow
+  (`cross-runtime.yml`: each runtime's hook against the other's pet), the Velopack proof's .NET-to-Rust jobs and their
+  harness, and the test variables `AIPET_TEST_HOOK` and `AIPET_GOLDEN`. Only the release's Windows job installs .NET,
+  for Velopack's `vpk`.
+
+### Changed
+- CI checks that nothing outside this changelog names what was removed (`scripts/check-removed-paths.sh`), and runs
+  the hook's trace log tests and the pet's peer check as root on Linux, which the cross-runtime workflow did.
+
 ## [0.2.0] - 2026-11-10
 
 AiPet's move to Rust: the hook is written in Rust, and the packages ship the Rust pet in place of the .NET one

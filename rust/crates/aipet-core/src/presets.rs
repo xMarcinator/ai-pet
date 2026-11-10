@@ -1,5 +1,5 @@
 //! Import defaults: a team's preset file for the Jira and GitHub settings, which the user picks in Settings
-//! (`src/AiPet.Core/Presets.cs`):
+//! (`AiPet.Core/Presets.cs`):
 //!
 //! ```text
 //! {"version":1,"jira":{"site":…,"jql":…,"enabled":…},"github":{"host":…,"orgs":[…],"jiraProjects":[…],"enabled":…}}

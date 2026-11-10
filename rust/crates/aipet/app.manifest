@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- AiPet.exe's manifest (build.rs), the .NET pet's (src/AiPet.UI/app.manifest): DPI aware per monitor, as winit
+<!-- AiPet.exe's manifest (build.rs), the .NET pet's (AiPet.UI/app.manifest): DPI aware per monitor, as winit
      makes the process at start anyway. -->
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="1.0.0.0" name="AiPet.app"/>

@@ -1,4 +1,4 @@
-//! The plugin's launcher, plugins/aipet/native/aipet-hook.sh, rehosted from tests/AiPet.Tests/LauncherTests.cs: run
+//! The plugin's launcher, plugins/aipet/native/aipet-hook.sh, rehosted from AiPet.Tests/LauncherTests.cs: run
 //! with sh as the plugin runs it, with a fake uname first on PATH and fake hooks next to it. Whatever it finds, it
 //! prints nothing and exits 0; it runs a hook only where one can load. Unix only (Git Bash on Windows isn't something
 //! CI has).

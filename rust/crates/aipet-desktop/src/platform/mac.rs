@@ -1,4 +1,4 @@
-//! The macOS platform (`src/AiPet.UI/Platform/MacPlatform.cs`): a stub, as in the C#. Links and folders open with
+//! The macOS platform (`AiPet.UI/Platform/MacPlatform.cs`): a stub, as in the C#. Links and folders open with
 //! `open`, no app is brought forward, and there is no player. macOS isn't a release target; this keeps it compiling.
 
 use std::path::Path;

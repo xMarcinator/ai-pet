@@ -1,5 +1,5 @@
 //! The core, on a thread of its own: what MainWindow's constructor starts and its Refresh does
-//! (`src/AiPet.UI/MainWindow.axaml.cs:83-141, 303-314`).
+//! (`AiPet.UI/MainWindow.axaml.cs:83-141, 303-314`).
 //!
 //! - the hook server, over the chats' store (AgentSessions);
 //! - Codex's log watcher, and the Jira and GitHub watchers: GitHub reads the keys of Jira's issues, and looks again

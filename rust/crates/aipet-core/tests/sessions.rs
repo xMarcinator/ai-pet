@@ -1,11 +1,11 @@
 //! AgentSessions against the C#:
-//! - the golden data (tests/golden/sessions/claude.json and codex.json), which rust/golden wrote with the C#'s
+//! - the golden data (tests/golden/sessions/claude.json and codex.json), which the golden generator wrote with the C#'s
 //!   AgentSessions, is replayed through the port: every outcome, hook-events.log line and snapshot must match, the
 //!   times bit for bit;
-//! - tests/AiPet.Tests/OrderingTests.cs's cases, ported (`ordering` for Claude's, `codex_ordering` for Codex's).
+//! - AiPet.Tests/OrderingTests.cs's cases, ported (`ordering` for Claude's, `codex_ordering` for Codex's).
 //!
-//! When the C# changes: `dotnet run --project rust/golden -c Release -- sessions` from the repository root, then fix
-//! the port until this passes. Never edit the golden files by hand.
+//! The corpus is frozen: the C# and its generator are gone (tests/golden/README.md), so it is the contract as it
+//! stands. Never edit the golden files by hand.
 
 use std::fs;
 use std::io;
@@ -43,12 +43,8 @@ fn golden(name: &'static str) -> &'static Golden {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/golden/sessions")
             .join(name);
-        let text = fs::read_to_string(&path).unwrap_or_else(|e| {
-            panic!(
-                "{}: {e} (write it with: dotnet run --project rust/golden -c Release -- sessions)",
-                path.display()
-            )
-        });
+        let text = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{}: {e} (a frozen corpus: see tests/golden/README.md)", path.display()));
         // the lines borrow the text for as long as the tests run
         let text: &'static str = Box::leak(text.into_boxed_str());
         Golden {
@@ -243,7 +239,7 @@ fn replay_in(case: &Value, lines: &CaseLines, name: &str, dir: &Path) -> Result<
             if is_dos_device_name(file) {
                 return Err(format!(
                     "{at}: the fixture {file:?} is named as a DOS device, which Windows before 11 (CI's windows-2022) \
-                     opens instead of a file: rename its case in rust/golden/Sessions.cs"
+                     opens instead of a file: give its case another name"
                 ));
             }
             Ok(())
@@ -497,7 +493,7 @@ fn shows(state: &'static str, detail: &str) -> (Option<&'static str>, Option<Str
     (Some(state), Some(detail.into()))
 }
 
-/// tests/AiPet.Tests/OrderingTests.cs's ClaudeOrderingTests: Claude's events, placed by `at` (when the hook started)
+/// AiPet.Tests/OrderingTests.cs's ClaudeOrderingTests: Claude's events, placed by `at` (when the hook started)
 /// and Rank for the same tick, and a call's PreToolUse and PermissionRequest by each other.
 mod ordering {
     use super::*;
@@ -777,7 +773,7 @@ mod ordering {
     }
 }
 
-/// tests/AiPet.Tests/OrderingTests.cs's CodexOrderingTests: Codex's events, placed by its own ids first: turn_id
+/// AiPet.Tests/OrderingTests.cs's CodexOrderingTests: Codex's events, placed by its own ids first: turn_id
 /// (UUIDv7), tool_use_id.
 mod codex_ordering {
     use super::*;

@@ -2,8 +2,8 @@
 //! the pack model it is moving to: the renderer-neutral [`Pose`] ([`pose`]), packs ([`pack`]) and the compositor
 //! ([`compose`]).
 //!
-//! A port of `src/AiPet.Core/Pet.cs` and `src/AiPet.Core/Avatar.cs`. The pixels match the C# exactly; the golden
-//! tests (`tests/golden.rs`) replay frames that the C# rendered (`rust/golden`) and compare every pixel.
+//! A port of `AiPet.Core/Pet.cs` and `AiPet.Core/Avatar.cs`. The pixels match the C# exactly; the golden
+//! tests (`tests/golden.rs`) replay frames that the C# rendered (frozen at the cutover) and compare every pixel.
 //!
 //! Each frame the UI passes a [`PetInput`] and the time to [`Pet::update`], and gets a [`PetFrame`] back: three
 //! 26×24 layers of premultiplied `0xAARRGGBB` pixels (body, glow, fx), plus the motion to apply to them (offset,

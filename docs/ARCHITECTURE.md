@@ -38,9 +38,9 @@ graph LR
 ```
 
 **Key design choices.**
-- The agent-facing part is a separate tiny process. `aipet-hook` is a native Rust program ([rust/crates/aipet-hook/](../rust/crates/aipet-hook/)), so a process spawned on every event starts quickly. Releases build it with cargo for Windows and Linux (§7.9). It is a port of the .NET hook in [src/AiPet.Hook/](../src/AiPet.Hook/), which no longer ships but which the tests still run. For the hook's behaviour this document cites the C#; the Rust hook does the same.
-- The hook only observes. On the hook path it never writes to stdout, never fails, and always exits 0 ([Program.cs](../src/AiPet.Hook/Program.cs):13-17, 23-80), so it cannot inject text into a chat or disturb the agent.
-- The hook is a thin forwarder. Each run connects to the running pet over a local socket that only the current user can open, sends the event as one JSON line and waits for one line back ([Ipc.cs](../src/AiPet.Core/Ipc.cs)). All state logic lives in the pet ([AgentSessions.cs](../src/AiPet.Core/AgentSessions.cs)), so the chats exist only while it runs. When it isn't running, a hook does nothing at all: it writes nothing anywhere and starts nothing. Only the user, an installer, or the Windows updater after an update starts the pet. Both ends share the endpoint, limits and field names through a source-linked `Ipc.cs`, next to [Paths.cs](../src/AiPet.Core/Paths.cs).
+- The agent-facing part is a separate tiny process. `aipet-hook` is a native Rust program ([rust/crates/aipet-hook/](../rust/crates/aipet-hook/)), so a process spawned on every event starts quickly. Releases build it with cargo for Windows and Linux (§7.9). It is a port of the .NET hook (AiPet.Hook), which the cutover to Rust removed with the rest of the C# (it is at commit `bf3696ea4a`). For the hook's behaviour this document cites the C#; the Rust hook does the same.
+- The hook only observes. On the hook path it never writes to stdout, never fails, and always exits 0 (Program.cs:13-17, 23-80), so it cannot inject text into a chat or disturb the agent.
+- The hook is a thin forwarder. Each run connects to the running pet over a local socket that only the current user can open, sends the event as one JSON line and waits for one line back (Ipc.cs). All state logic lives in the pet (AgentSessions.cs), so the chats exist only while it runs. When it isn't running, a hook does nothing at all: it writes nothing anywhere and starts nothing. Only the user, an installer, or the Windows updater after an update starts the pet. Both ends share the endpoint, limits and field names through a source-linked `Ipc.cs`, next to Paths.cs.
 - Claude reaches the hook in one of two ways: hooks registered directly in its settings (exec form, no shell), or the `aipet` plugin, whose hooks run `sh` on a launcher script with `"shell": "bash"`. Codex likewise has direct hooks (through PowerShell on Windows, `sh -c` elsewhere) or the same plugin. §6 and §7 cover both.
 - Everything fails soft:
   - A hook that finds nothing listening exits 0 at once. One that gets no event on stdin within 2 s sends nothing. One whose reply doesn't come within 2 s gives up and exits 0.
@@ -54,14 +54,10 @@ graph LR
 
 | Path | What it is |
 |---|---|
-| [src/AiPet.Core/](../src/AiPet.Core/) | Platform-neutral logic: `Pet` (animation and renderer), `Avatar`, `Board` (data model), `AgentSessions` (the hooks' chats), `HookServer` (the pet's end of the socket), `Ipc` (the protocol, shared with the hook), `CodexWatcher`, `JiraWatcher`, `GitHubWatcher`, `Paths`, the `IPlatform` interfaces and `Log` (`Platform.cs`), `Preset` (Settings' "Import defaults…"), `UpdateStatus` and `HookCleanup` (for the Windows uninstaller). |
-| [src/AiPet.UI/](../src/AiPet.UI/) | The Avalonia 12 app (`AiPet.exe`, `AiPet` on Linux): `Program`, `App`, `MainWindow`, `SettingsWindow`, `Updates` (Velopack), `app.manifest`, and `Platform/` (Windows, Linux, macOS stub, `PlatformFactory`). |
-| [src/AiPet.Hook/](../src/AiPet.Hook/) | The .NET `aipet-hook` that the Rust one replaced: `Program` (entry point, request line), `ClaudeHook`, `CodexHook` (each builds its envelope), `Install` and `ClaudeConfig` (`Install.cs`), `CodexConfig`, `Doctor`, `PluginHooks` (`--print-plugin-hooks`). Links `Paths.cs` and `Ipc.cs` from Core. Nothing ships it; the tests still run it. |
-| [rust/](../rust/) | The Rust workspace. [crates/aipet-hook/](../rust/crates/aipet-hook/) is the `aipet-hook` that ships, a port of `src/AiPet.Hook`; it uses [crates/aipet-ipc/](../rust/crates/aipet-ipc/), the port of `Ipc.cs` and `Paths.cs`. The hook's `build.rs` gives the Windows exe its icon, manifest and version resource. The rest of `rust/` is the pet's move to Rust, under way. |
-| [tests/AiPet.Tests/](../tests/AiPet.Tests/) | xUnit tests. They run the hook as the agents do (`dotnet hook/aipet-hook.dll`) against a real `HookServer` on a temp endpoint, with temp data folders ([TestEnv.cs](../tests/AiPet.Tests/TestEnv.cs)), and cover ordering, the Board, the server (starved thread pool included), registration, the launcher, the installers, the plugin hook files, presets, Velopack, the release workflow and the exe resources. |
-| [AiPet.slnx](../AiPet.slnx), [Directory.Build.props](../Directory.Build.props) | The solution (three projects and the tests), and the version and metadata every project shares. Releases set the version from the tag (`-p:Version`). |
-| [build/](../build/) | `Win32Resources.targets`, which both exe projects import: it writes each exe's `.res` (icon, manifest, and a version resource that names the `.exe`, not the `.dll`) without `rc.exe`, on any OS. `default.win32manifest` is the manifest it uses when a project has none, and the one the Rust hook's `build.rs` embeds. |
-| [assets/icon/](../assets/icon/), [tools/IconGen/](../tools/IconGen/) | The app icon (`aipet.ico` and PNGs). IconGen draws it with the pet's own renderer and also writes the plugin's icons and the Linux hicolor icons. Its output is committed; builds only use the committed files. |
+| [rust/](../rust/) | The Rust workspace: the pet ([crates/aipet/](../rust/crates/aipet/)) and its core, front end and shells, and [crates/aipet-hook/](../rust/crates/aipet-hook/), the `aipet-hook` that ships, which uses [crates/aipet-ipc/](../rust/crates/aipet-ipc/), the port of `Ipc.cs` and `Paths.cs`. The exes' `build.rs` give them their Windows icon, manifest and version resource. |
+| The C# (removed) | The .NET app: AiPet.Core (platform-neutral logic: `Pet`, `Avatar`, `Board`, `AgentSessions`, `HookServer`, `Ipc`, the watchers, `Paths`, `Platform.cs`, `Presets`, `UpdateStatus`, `HookCleanup`), AiPet.UI (the Avalonia app), AiPet.Hook (the .NET `aipet-hook`), the xUnit tests (AiPet.Tests), the solution and its build props and targets, and IconGen. The cutover to Rust removed them; they are at commit `bf3696ea4a`, and the file names this document cites are theirs. [rust/PARITY.md](../rust/PARITY.md) maps every C# test to the Rust tests that hold it. |
+| [build/](../build/) | `default.win32manifest`, the manifest the Rust hook's `build.rs` embeds (the one the .NET hook had). |
+| [assets/icon/](../assets/icon/) | The app icon (`aipet.ico` and PNGs), and the plugin's and the Linux hicolor icons. They were drawn with the C# pet's renderer by IconGen, which went with the C#; builds only use the committed files. |
 | [plugins/aipet/](../plugins/aipet/) | One plugin folder for both agents: `.claude-plugin/plugin.json` and `hooks/hooks.json` (Claude Code), `.codex-plugin/plugin.json` and `hooks/codex.json` (Codex), the launcher `native/aipet-hook.sh`, assets, README and LICENSE. The hook binaries (`native/<rid>/`) are gitignored: the release workflow adds them in the plugin repository. |
 | [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json), [.agents/plugins/marketplace.json](../.agents/plugins/marketplace.json) | The marketplaces `aipet` for Claude Code and for Codex. Both point at `plugins/aipet` in the separate repository `xMarcinator/ai-pet-plugin`, pinned to a tag and a commit. |
 | [packaging/linux/](../packaging/linux/) | The Linux package's `install.sh` (install, update, `--uninstall`), the menu entry template `aipet.desktop.in`, the hicolor icons, and `hyprland/` with the Hyprland window rules (`aipet.lua`, `aipet.conf`). |
@@ -79,7 +75,7 @@ graph LR
 
 Files: [pet.rs](../rust/crates/aipet-sprite/src/pet.rs) (behaviour), [pose.rs](../rust/crates/aipet-sprite/src/pose.rs) (the Pose), [pack.rs](../rust/crates/aipet-sprite/src/pack.rs) (the pack model and its checks), [manifest.rs](../rust/crates/aipet-sprite/src/manifest.rs) (reading `pack.json`), [load.rs](../rust/crates/aipet-sprite/src/load.rs) (finding and loading pets, the limits, Aseprite, theme files, `--check-pack`), [compose.rs](../rust/crates/aipet-sprite/src/compose.rs) (the compositor), [vector.rs](../rust/crates/aipet-sprite/src/vector.rs) (path data and the tiny-skia rasteriser), [builtin.rs](../rust/crates/aipet-sprite/src/builtin.rs) (the embedded pets), and in the UI crate [sprite.rs](../rust/crates/aipet-ui/src/sprite.rs), [vector_view.rs](../rust/crates/aipet-ui/src/vector_view.rs) and [settings/avatars.rs](../rust/crates/aipet-ui/src/settings/avatars.rs).
 
-This section describes the Rust pet. The behaviour in `pet.rs` is a port of `src/AiPet.Core/Pet.cs` that keeps its numbers bit for bit, with the C#'s states. The moods added since (`sad`, `tired`, `news`, the aura and the heart, fnt-72) are the Rust pet's own: they are on in the app and off in the golden replays (`PetInput.moods`, `Board.moods`), so the replays still match the C# frame for frame. What the pet looks like comes from a **pack**. The authoring side (the manifest, every key, the limits and the checker) is in [MAKING-A-PET.md](MAKING-A-PET.md).
+This section describes the Rust pet. The behaviour in `pet.rs` is a port of `AiPet.Core/Pet.cs` that keeps its numbers bit for bit, with the C#'s states. The moods added since (`sad`, `tired`, `news`, the aura and the heart, fnt-72) are the Rust pet's own: they are on in the app and off in the golden replays (`PetInput.moods`, `Board.moods`), so the replays still match the C# frame for frame. What the pet looks like comes from a **pack**. The authoring side (the manifest, every key, the limits and the checker) is in [MAKING-A-PET.md](MAKING-A-PET.md).
 
 ### 3.1 Pipeline: Pose → compositor → renderers
 
@@ -228,7 +224,7 @@ The repository's [avatars/](../avatars/) folder is not read by the app: it holds
 
 ## 4. The window and bubbles
 
-Files: [Program.cs](../src/AiPet.UI/Program.cs), [App.axaml](../src/AiPet.UI/App.axaml), [MainWindow.axaml](../src/AiPet.UI/MainWindow.axaml), [MainWindow.axaml.cs](../src/AiPet.UI/MainWindow.axaml.cs), [SettingsWindow.axaml.cs](../src/AiPet.UI/SettingsWindow.axaml.cs), and the platforms' window calls in [LinuxPlatform.cs](../src/AiPet.UI/Platform/LinuxPlatform.cs) and [WindowsPlatform.cs](../src/AiPet.UI/Platform/WindowsPlatform.cs).
+Files: Program.cs, App.axaml, MainWindow.axaml, MainWindow.axaml.cs, SettingsWindow.axaml.cs, and the platforms' window calls in LinuxPlatform.cs and WindowsPlatform.cs.
 
 ### 4.1 Process and window model
 
@@ -272,7 +268,7 @@ On `Opened` it calls `PlaceWindow`, marks the window placed (fitting starts only
 
 ### 4.2 Fitting the window (Linux)
 
-On Linux the pet's window is kept only as big as what it shows (`FitWindow`, [MainWindow.axaml.cs](../src/AiPet.UI/MainWindow.axaml.cs)). `IPlatform.FitsPetWindow` turns this on; `LinuxPlatform` returns true unless `AIPET_NOFIT=1`, and Windows and macOS keep the default, false (Platform.cs:29).
+On Linux the pet's window is kept only as big as what it shows (`FitWindow`, MainWindow.axaml.cs). `IPlatform.FitsPetWindow` turns this on; `LinuxPlatform` returns true unless `AIPET_NOFIT=1`, and Windows and macOS keep the default, false (Platform.cs:29).
 
 **Why.** Click-through on X11 relies on the window's input shape (§4.3). Hyprland ignores the X11 input shape, so every pixel of an XWayland window's rectangle takes the mouse: with a fixed 380x600 window, nothing under its transparent parts could be clicked. So on Linux the window itself shrinks to the pet and its bubbles. Outside that box clicks reach the windows below on any compositor. Inside it, on Hyprland, the transparent parts still take the mouse (§10).
 
@@ -412,14 +408,14 @@ Board caps each stack (`MaxCards`: 4 chats, 4 reviews, 1 music, Board.cs:26) and
 
 **Import defaults…** (`ImportAsync`, SettingsWindow.axaml.cs:154-204) sets the Jira and GitHub settings from a preset file a team shares, saved as the pages' Save does.
 - The file is picked with the desktop's file picker. An error from the picker shows as a message rather than taking the pet down.
-- The format ([Presets.cs](../src/AiPet.Core/Presets.cs):5-8) is `{"version":1,"jira":{site,jql,enabled},"github":{host,orgs[],jiraProjects[],enabled}}`. Every section and field is optional, and a file of another version is refused with a message. A preset never carries credentials: tokens and the Jira email are never read from it, even when the file has them.
+- The format (Presets.cs:5-8) is `{"version":1,"jira":{site,jql,enabled},"github":{host,orgs[],jiraProjects[],enabled}}`. Every section and field is optional, and a file of another version is refused with a message. A preset never carries credentials: tokens and the Jira email are never read from it, even when the file has them.
 - When a preset points Jira at another site, or GitHub at another host, while a token is saved, that token is removed before Save restarts the watcher (`Preset.MovesJira`, `MovesGitHub`, Presets.cs:108-118). A shared file therefore can't send your token to an address you never typed. The result line asks you to paste the token again if you trust the new address.
 
 ---
 
 ## 5. From sources to bubbles: the Board
 
-Files: [Board.cs](../src/AiPet.Core/Board.cs), [AgentSessions.cs](../src/AiPet.Core/AgentSessions.cs), [CodexWatcher.cs](../src/AiPet.Core/CodexWatcher.cs).
+Files: Board.cs, AgentSessions.cs, CodexWatcher.cs.
 
 `Board` is a UI-thread-only model. It is rebuilt from scratch on every 250 ms tick and whenever a watcher, the media player or the hook server raises `Changed` (MainWindow.axaml.cs:123-137, 292-303). Each rebuild takes a `Snapshot` of the `AgentSessions` store: copies of its entries, taken under the store's lock, so the UI never waits on a file or a hook (AgentSessions.cs:58).
 
@@ -575,7 +571,7 @@ This mapping is best effort against the Codex 0.155/0.156 file formats (:15).
 
 ## 6. The hooks at runtime
 
-Files: [Program.cs](../src/AiPet.Hook/Program.cs), [ClaudeHook.cs](../src/AiPet.Hook/ClaudeHook.cs), [CodexHook.cs](../src/AiPet.Hook/CodexHook.cs), [Ipc.cs](../src/AiPet.Core/Ipc.cs) (linked into the hook), the plugin's launcher [aipet-hook.sh](../plugins/aipet/native/aipet-hook.sh), and in the pet [HookServer.cs](../src/AiPet.Core/HookServer.cs) and [AgentSessions.cs](../src/AiPet.Core/AgentSessions.cs). Registration: [Install.cs](../src/AiPet.Hook/Install.cs), [CodexConfig.cs](../src/AiPet.Hook/CodexConfig.cs), [plugins/aipet/hooks/](../plugins/aipet/hooks/).
+Files: Program.cs, ClaudeHook.cs, CodexHook.cs, Ipc.cs (linked into the hook), the plugin's launcher [aipet-hook.sh](../plugins/aipet/native/aipet-hook.sh), and in the pet HookServer.cs and AgentSessions.cs. Registration: Install.cs, CodexConfig.cs, [plugins/aipet/hooks/](../plugins/aipet/hooks/).
 
 ### 6.1 How each agent runs it
 
@@ -737,7 +733,7 @@ Left wrong:
 
 ### 6.5 The socket
 
-Both ends share [Ipc.cs](../src/AiPet.Core/Ipc.cs): the endpoint, the limits, the envelope's field names, and the client calls `Connect`, `Ask` and `ReadLineAsync`. The hook connects with `NamedPipeClientStream`, which is NativeAOT-safe and a Unix domain socket off Windows. The pet's end is [HookServer.cs](../src/AiPet.Core/HookServer.cs).
+Both ends share Ipc.cs: the endpoint, the limits, the envelope's field names, and the client calls `Connect`, `Ask` and `ReadLineAsync`. The hook connects with `NamedPipeClientStream`, which is NativeAOT-safe and a Unix domain socket off Windows. The pet's end is HookServer.cs.
 
 - **Endpoint** (`Ipc.Endpoint`, Ipc.cs:52-55):
   - Windows: the named pipe `\\.\pipe\AiPet-<user SID>-<session id>` (`AiPet-<user name>` if either can't be read). The session id comes from `ProcessIdToSessionId`, not from `Process.SessionId`, which lists every process on the machine. Pipe names are machine-wide, so the user and the session keep pets apart (Ipc.cs:157-170).
@@ -746,7 +742,7 @@ Both ends share [Ipc.cs](../src/AiPet.Core/Ipc.cs): the endpoint, the limits, th
 - **Who can connect:**
   - Windows: the pipe's ACL allows only the user and denies network clients, and the pet sets the user as the owner (`OnlyMe`, HookServer.cs:338-351). This isn't `PipeOptions.CurrentUserOnly`, which grants the token's owner: that is Administrators in an elevated process (dotnet/runtime#123903), so an elevated pet and a normal hook, or the other way round, couldn't talk. The hook checks the owner itself (`OwnedByMe`, Ipc.cs:175-181). The first instance is created with `FirstPipeInstance`, so a squatter on the name makes the pet log that it can't listen.
   - Linux: the socket file is set to 0600 before the pet listens. The pet checks each peer's uid against its own `geteuid()`, with `SO_PEERCRED` (getpeereid on other Unixes), and refuses a peer it can't tell; the mode keeps other users out, but not root (`SameUser`, HookServer.cs:383-400). The hook's `CurrentUserOnly` checks the pet's uid in turn (Ipc.cs:69-70).
-- **Server** (`Start`, HookServer.cs:54-85). Listening and answering run on threads of their own and only ever block, so nothing waits for the thread pool. While the pool is busy (the pet's watchers, a burst of hooks reading transcripts), a hook would otherwise get no answer in time, or on Windows find every instance taken and drop its event as if the pet were closed. [StarvedPoolTests.cs](../tests/AiPet.Tests/StarvedPoolTests.cs) checks this.
+- **Server** (`Start`, HookServer.cs:54-85). Listening and answering run on threads of their own and only ever block, so nothing waits for the thread pool. While the pool is busy (the pet's watchers, a burst of hooks reading transcripts), a hook would otherwise get no answer in time, or on Windows find every instance taken and drop its event as if the pet were closed. StarvedPoolTests.cs checks this.
   - Windows: 8 synchronous pipe instances, whose waits, reads and writes happen in the kernel, each with a thread (`Listen`, :120-150). Each listener makes the next instance before handing its connection off, so a hook never finds no instance at all and takes the pet for not running. Buffers are 64 KiB.
   - Linux: a plain `Socket`, never used asynchronously, so .NET keeps it blocking and `Accept` is `accept(2)` on the calling thread (`Bind`, :360-381). (`NamedPipeServerStream` waits for an `AcceptAsync` that the pool completes.) `RefuseLiveServer` connects first: a live pet refuses the start; a socket file a crash left behind refuses the connect and is replaced (:353-358). 8 threads wait in `Accept` on the one socket, and the kernel queues connects meanwhile (`Accept`, :169-205). An accept error (out of file descriptors, say) is logged, and the thread tries again 100 ms later. If only some threads start, the pet still listens and logs how many.
   - `Serve` (:209-225) hands each connection to a thread of its own. Past 64 at once (`MaxConnections`), or when no thread can be started, the connection is dropped at once, so a flood can't take a thread each for 2 s until none can be started. Such drops are logged at most once every 10 s (`Warn`).
@@ -838,7 +834,7 @@ With the pet closed, each of these hooks reads its stdin, connects to nothing an
 
 ## 7. Installing, trust and checking
 
-Files: [Install.cs](../src/AiPet.Hook/Install.cs), [CodexConfig.cs](../src/AiPet.Hook/CodexConfig.cs), [Doctor.cs](../src/AiPet.Hook/Doctor.cs), [PluginHooks.cs](../src/AiPet.Hook/PluginHooks.cs), [HookCleanup.cs](../src/AiPet.Core/HookCleanup.cs), [plugins/aipet/](../plugins/aipet/), [install.ps1](../install.ps1), [install.sh](../install.sh), [packaging/linux/install.sh](../packaging/linux/install.sh), [scripts/](../scripts/), [build.ps1](../build.ps1), [build.sh](../build.sh), [release.yml](../.github/workflows/release.yml), [ci.yml](../.github/workflows/ci.yml).
+Files: Install.cs, CodexConfig.cs, Doctor.cs, PluginHooks.cs, HookCleanup.cs, [plugins/aipet/](../plugins/aipet/), [install.ps1](../install.ps1), [install.sh](../install.sh), [packaging/linux/install.sh](../packaging/linux/install.sh), [scripts/](../scripts/), [build.ps1](../build.ps1), [build.sh](../build.sh), [release.yml](../.github/workflows/release.yml), [ci.yml](../.github/workflows/ci.yml).
 
 An agent gets AiPet's hook in one of two ways:
 - **The aipet plugin**, for Claude Code and for Codex (§7.6). The one-line installers set it up.
@@ -1048,7 +1044,7 @@ The uninstall removes every line that names `AiPet/hyprland/aipet.lua` or `.conf
 - **win** (windows-2022; release.yml:130-249):
   - publishes the app self-contained;
   - builds the hook in `rust/` with `cargo build -p aipet-hook --release --locked --target x86_64-pc-windows-msvc`, with `AIPET_VERSION` set to the version and the C runtime linked in (`RUSTFLAGS=-C target-feature=+crt-static`). The hook then needs only Windows' own DLLs, not the Visual C++ runtime's, which a Windows install may lack; the step fails if the exe names one (`vcruntime*.dll`, `msvcp*.dll`, `api-ms-win-crt-*`);
-  - checks both exes' version resources as Windows reads them: `OriginalFilename` and `InternalName` are the exe's own name, `ProductName` is `AiPet`, `ProductVersion` is the version. For the app, [build/Win32Resources.targets](../build/Win32Resources.targets) makes the project's `.res` (icon, manifest, and a version resource that names the `.exe`, not the `.dll`) on every OS without rc.exe, the SDK copies it into the apphost, and the version comes from `-p:Version` through [Directory.Build.props](../Directory.Build.props). For the hook, its build script ([build.rs](../rust/crates/aipet-hook/build.rs)) embeds the icon, manifest and version resource the .NET hook had, byte for byte, at the version in `AIPET_VERSION` (`0.0.0-dev` without it); it needs the Windows SDK's rc.exe;
+  - checks both exes' version resources as Windows reads them: `OriginalFilename` and `InternalName` are the exe's own name, `ProductName` is `AiPet`, `ProductVersion` is the version. For the app, its build script ([build.rs](../rust/crates/aipet/build.rs)) embeds the .NET pet's icon, manifest and a version resource that names `AiPet.exe`. For the hook, its build script ([build.rs](../rust/crates/aipet-hook/build.rs)) embeds the icon, manifest and version resource the .NET hook had, byte for byte, at the version in `AIPET_VERSION` (`0.0.0-dev` without it); it needs the Windows SDK's rc.exe;
   - puts the hook next to `AiPet.exe` and deletes the `.pdb` files;
   - runs Velopack's `vpk` (`VPK_VERSION`): `download github` for the previous full package, so `pack` can make a delta, then `pack --packId AiPetApp --channel win --shortcuts StartMenuRoot --noPortable`. The packId is `AiPetApp`, never `AiPet`, which is the data folder;
   - collects `AiPet-Setup-<version>-win-x64.exe`, the full and delta `.nupkg`, `releases.win.json` cut to this version's packages, and a portable zip of the app folder made with 7z.
@@ -1075,18 +1071,17 @@ The uninstall removes every line that names `AiPet/hyprland/aipet.lua` or `.conf
 - **Pins and permissions:** every action is pinned to a commit, the containers by digest, and Rust, zig and cargo-zigbuild by version. The workflow has no permissions by default, and each job gets only what it needs. `VPK_VERSION` must equal the app's Velopack package version (a test checks it). A version's plugin tag can be pushed only once, so a failed later job is re-run with "Re-run failed jobs".
 
 **CI** ([ci.yml](../.github/workflows/ci.yml)) runs on pushes to main and on pull requests:
-- on windows-2022 and ubuntu-22.04: build the solution and the Rust hook (`cargo build -p aipet-hook --release --locked`), `dotnet test`, and `check-plugin.sh --marketplaces . plugins/aipet --hook rust/target/release/aipet-hook`, so the hook files are checked against the hook that ships. On Windows it also runs `ResourceTests.RustHook_CarriesTheDotnetHooksResources` against that hook (`AIPET_TEST_HOOK`), which must pass, not be skipped (the Rust hook's icon, manifest and version resource are the .NET hook's, byte for byte), and parses the PowerShell scripts in PowerShell 7 and in Windows PowerShell 5.1 (ci.yml:26-104);
-- the Rust workspace: format, clippy with `-D warnings`, and `cargo test --workspace`, the hook's own tests among them, on windows-2022 and ubuntu-22.04, and `cargo check` on macos-14 (ci.yml:106-185);
-- the hook's start-up, on windows-2022 and ubuntu-22.04: the Rust hook (with `+crt-static` on Windows, as the release builds it) and the NativeAOT hook published from `src/AiPet.Hook` each run 200 times from bash on the event path with no pet, the two in turns. The job writes both medians to its summary and fails when the Rust hook's is more than 10 % over the NativeAOT hook's (ci.yml:187-276);
-- a shell job: `dash -n` for the POSIX scripts (the one-liner, the package installer, the launcher), `bash -n` for the rest, ShellCheck at warning level, and a check that `build.sh`, `install.sh`, `packaging/linux/install.sh` and `scripts/*.sh` are in git with mode 100755 (ci.yml:278-307).
+- on windows-2022 and ubuntu-22.04: build the Rust hook (`cargo build -p aipet-hook --release --locked`) and run `check-plugin.sh --marketplaces . plugins/aipet --hook rust/target/release/aipet-hook`, so the hook files are checked against the hook that ships; on Windows, parse the PowerShell scripts in PowerShell 7 and in Windows PowerShell 5.1;
+- the Rust workspace: format, clippy with `-D warnings`, and `cargo test --workspace` on windows-2022 and ubuntu-22.04 (on Windows that includes the exes' resources against the values the .NET exes had), and on Linux the trace log's tests and the peer check as root; `cargo check` on macos-14;
+- a shell job: `dash -n` for the POSIX scripts (the one-liner, the package installer, the launcher), `bash -n` for the rest, ShellCheck at warning level, the skills' Codex copies, the parity ledger (`scripts/check-parity.sh`), a check that nothing names what the cutover removed (`scripts/check-removed-paths.sh`), and a check that `build.sh`, `install.sh`, `packaging/linux/install.sh` and `scripts/*.sh` are in git with mode 100755.
 
-[cross-runtime.yml](../.github/workflows/cross-runtime.yml) runs the C#'s hook test suites (the event path, the plugin hook files, `--install` and `--doctor`) against the Rust hook on both OSes, and the Rust pet's server tests against the .NET hook.
+No .NET is installed in CI; the release installs it only for `vpk`, a .NET tool, in the Windows job. Until the cutover, CI also built and tested the C#, timed the Rust hook's start-up against the NativeAOT hook's, and a cross-runtime workflow ran each runtime's hook against the other's pet.
 
 ---
 
 ## 8. Other integrations and the platform layer
 
-Files: [Jira.cs](../src/AiPet.Core/Jira.cs), [GitHub.cs](../src/AiPet.Core/GitHub.cs), [Presets.cs](../src/AiPet.Core/Presets.cs), [Platform.cs](../src/AiPet.Core/Platform.cs), [UpdateStatus.cs](../src/AiPet.Core/UpdateStatus.cs), [Updates.cs](../src/AiPet.UI/Updates.cs), [WindowsPlatform.cs](../src/AiPet.UI/Platform/WindowsPlatform.cs), [LinuxPlatform.cs](../src/AiPet.UI/Platform/LinuxPlatform.cs), [MacPlatform.cs](../src/AiPet.UI/Platform/MacPlatform.cs).
+Files: Jira.cs, GitHub.cs, Presets.cs, Platform.cs, UpdateStatus.cs, Updates.cs, WindowsPlatform.cs, LinuxPlatform.cs, MacPlatform.cs.
 
 ### 8.1 Jira
 

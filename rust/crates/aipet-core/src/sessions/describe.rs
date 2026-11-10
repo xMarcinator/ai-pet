@@ -255,7 +255,7 @@ mod tests {
     use super::*;
 
     /// Path.GetFileName's rules differ by OS; the golden data holds the ones of the OS it was written on, so both are
-    /// held here (the Windows ones as .NET 10 gives them, in rust/golden's claude/describe-paths case).
+    /// held here (the Windows ones as .NET 10 gives them, in the golden corpus's claude/describe-paths case).
     #[test]
     fn file_names_follow_the_os_rules() {
         #[cfg(windows)]

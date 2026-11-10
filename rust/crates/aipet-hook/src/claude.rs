@@ -1,4 +1,4 @@
-//! Claude Code's registration (`ClaudeConfig`, `src/AiPet.Hook/Install.cs:73-246`): AiPet's hooks in settings.json,
+//! Claude Code's registration (`ClaudeConfig`, `AiPet.Hook/Install.cs:73-246`): AiPet's hooks in settings.json,
 //! in `$CLAUDE_CONFIG_DIR` or else `~/.claude`. Claude runs the exe directly with its arguments (no shell), so the
 //! path needs no quoting on any OS.
 //!

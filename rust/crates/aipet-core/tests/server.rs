@@ -1,12 +1,10 @@
 //! The hook server (`aipet_core::server`) against the C#'s own tests of HookServer, case for case:
-//! tests/AiPet.Tests/HookServerTests.cs (EndToEndTests and HookServerTests), HookServerUnixTests.cs and
+//! AiPet.Tests/HookServerTests.cs (EndToEndTests and HookServerTests), HookServerUnixTests.cs and
 //! StarvedPoolTests.cs, and the cases of HookContractTests.cs that ran the hook against the pet (the others are
 //! aipet-testkit's tests/hook_contract.rs). NoPetTests, the hook with no pet at all, are aipet-hook's (tests/event.rs).
 //!
-//! The hooks are real: the Rust hook built with these tests (`cargo test --workspace` builds it first), or the one
-//! `AIPET_TEST_HOOK` names, run through `dotnet` when it's a .dll: the C# hook, as cross-runtime.yml runs it against
-//! this server. Every server has an endpoint and folders of its own: nothing here reaches the user's pet, data or
-//! `~/.codex`.
+//! The hooks are real: the Rust hook built with these tests (`cargo test --workspace` builds it first). Every server
+//! has an endpoint and folders of its own: nothing here reaches the user's pet, data or `~/.codex`.
 
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -279,21 +277,6 @@ struct Hook {
 fn hook() -> &'static Hook {
     static HOOK: OnceLock<Hook> = OnceLock::new();
     HOOK.get_or_init(|| {
-        if let Some(asked) = std::env::var_os("AIPET_TEST_HOOK").filter(|h| !h.is_empty()) {
-            let path = std::path::absolute(&asked).unwrap();
-            assert!(path.is_file(), "AIPET_TEST_HOOK: there's no hook at {}", path.display());
-            return if path.extension() == Some(OsStr::new("dll")) {
-                Hook {
-                    program: "dotnet".into(),
-                    args: vec![path.into()],
-                }
-            } else {
-                Hook {
-                    program: path.into(),
-                    args: vec![],
-                }
-            };
-        }
         // <target>/<profile>/deps/server-<hash>: the hook is two folders up
         let exe = std::env::current_exe().unwrap();
         let path = exe

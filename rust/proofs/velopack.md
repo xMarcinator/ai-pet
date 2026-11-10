@@ -4,11 +4,13 @@ Scope: whether a Windows install of the .NET AiPet (Velopack packId `AiPetApp`) 
 `AiPet.exe` is a Rust program, by a full package and by a delta, and whether the Rust app's uninstall hook runs. This
 resolves the spec's parked unknown about the update path (R14, task fn-1-migrate-aipet-from-net-to-rust.14).
 
-The harness lives in `.github/workflows/velopack-proof.yml` and `rust/notes/prototypes/velopack-proof/`:
+The harness lived in `.github/workflows/velopack-proof.yml` and a prototype folder beside the others in
+`rust/notes/prototypes/`. The cutover to Rust (task 25) removed the prototype and the workflow's .NET jobs with the
+C# they ran; the workflow keeps only its Rust-to-Rust job. Both are whole at commit `bf3696ea4a`:
 - `src/main.rs`: the Rust stand-in, a GUI exe named `AiPet.exe`. It calls `VelopackApp::build().run()` first and
   appends one line per event to `%LOCALAPPDATA%\AiPet\velopack-proof\<event>.txt`.
 - `driver/Program.cs`: the update driver. It updates the install with the .NET pet's own Velopack library and calls
-  (`src/AiPet.UI/Updates.cs`), with a local feed in place of the GitHub releases.
+  (`AiPet.UI/Updates.cs`), with a local feed in place of the GitHub releases.
 - `proof.ps1`: the Windows steps and checks. It runs by hand in Windows Sandbox too.
 
 ## Verdict
