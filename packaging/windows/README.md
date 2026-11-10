@@ -18,21 +18,23 @@ with Velopack, and how to check a package by hand.
 
 ## How the job builds them
 
-1. It builds the pet, the Rust `AiPet.exe` (`rust/crates/aipet`), so users need no .NET.
-2. It builds the hook, the Rust `aipet-hook` (`rust/crates/aipet-hook`), with cargo in `rust/`:
-   `cargo build -p aipet-hook --release --locked --target x86_64-pc-windows-msvc`, with `AIPET_VERSION=<version>`
-   and `RUSTFLAGS=-C target-feature=+crt-static`.
+1. It builds the pet, `AiPet.exe` (`rust/crates/aipet`), and the hook, `aipet-hook.exe` (`rust/crates/aipet-hook`),
+   with cargo in `rust/`:
+   `cargo build -p aipet -p aipet-hook --release --locked --target x86_64-pc-windows-msvc`, with
+   `AIPET_VERSION=<version>` and `RUSTFLAGS=-C target-feature=+crt-static`. Users need no runtime of any kind.
    - The hook runs on every agent event, so it has to start in milliseconds.
-   - `+crt-static` links the C runtime in, so the hook needs only Windows' own DLLs, not the Visual C++ runtime's,
-     which a Windows install may lack. The step fails if the exe names a C runtime DLL (`vcruntime*.dll`,
+   - `+crt-static` links the C runtime in, so both exes need only Windows' own DLLs, not the Visual C++ runtime's,
+     which a Windows install may lack. The step fails if either exe names a C runtime DLL (`vcruntime*.dll`,
      `msvcp*.dll`, `api-ms-win-crt-*`).
-   - Its build script embeds the icon, the manifest and a version resource with the release's version
+   - Their build scripts embed the icon, the manifest and a version resource with the release's version
      ([below](#version-resources)).
    - It needs the Visual Studio C++ tools and the Windows SDK's `rc.exe`. The `windows-2022` runner has them.
-3. It checks both exes' version resources (release.yml:169, and [below](#version-resources)).
-4. It copies `aipet-hook.exe` next to `AiPet.exe`, adds `LICENSE` and `THIRD-PARTY-NOTICES.md`, and deletes every
-   `*.pdb`. The native libraries' symbols alone come to about 100 MiB.
-5. It runs Velopack's CLI, `vpk`, at the version set by `VPK_VERSION` in the workflow (release.yml:57):
+2. It checks both exes' version resources (the step "Check the exes' version resources", and
+   [below](#version-resources)).
+3. It copies `aipet-hook.exe` next to `AiPet.exe`, and adds `LICENSE` and `THIRD-PARTY-NOTICES.md`. Only the exes
+   are copied out of cargo's target folder, so no `.pdb` goes in.
+4. It installs .NET, for `vpk` alone (a .NET tool), and runs Velopack's CLI at the version set by `VPK_VERSION` in
+   the workflow:
 
    ```
    dotnet tool install vpk --version <VPK_VERSION> --tool-path out/tools
@@ -43,13 +45,13 @@ with Velopack, and how to check a package by hand.
    ```
 
    `download github` fetches the latest release's full package, so `pack` can make a delta from it. Before the first
-   release there's nothing to fetch, and the job carries on without a delta. `pack` checks that the app's `Main`
-   calls `VelopackApp.Build().Run()`, and the job never skips that check.
-6. It renames Velopack's `*-Setup.exe` to `AiPet-Setup-<version>-win-x64.exe`. Setup embeds its package, so the
+   release there's nothing to fetch, and the job carries on without a delta. `pack` checks that a .NET app's `Main`
+   calls Velopack's startup, but not a native app's: the pet's own tests hold that its `main` runs it first.
+5. It renames Velopack's `*-Setup.exe` to `AiPet-Setup-<version>-win-x64.exe`. Setup embeds its package, so the
    file name doesn't matter.
-7. It cuts `releases.win.json` down to this version's packages, as `vpk upload github` does. Earlier packages stay
+6. It cuts `releases.win.json` down to this version's packages, as `vpk upload github` does. Earlier packages stay
    in their own releases.
-8. It zips `out/app` into the portable zip.
+7. It zips `out/app` into the portable zip.
 
 The `plugin` job writes `SHA256SUMS` over these files and the Linux tarballs before it pushes the plugin. The
 `publish` job checks the files against it, then uploads them and `SHA256SUMS` to the GitHub release with
@@ -62,10 +64,11 @@ passed. Velopack's `RELEASES` and `assets.win.json` aren't uploaded:
 
 - **packId `AiPetApp`, and never change it.**
   - Velopack installs to `%LOCALAPPDATA%\<packId>`, and `%LOCALAPPDATA%\AiPet` is already the app's data folder
-    (settings and logs, `Paths.cs`).
+    (settings and logs, `rust/crates/aipet-ipc/src/paths.rs`).
   - The packId is also the app's identity for updates, so a new one would make a second installation.
 - **Install layout.**
-  - The app is in `%LOCALAPPDATA%\AiPetApp\current\` (`AiPet.exe`, `aipet-hook.exe` and the runtime).
+  - The app is in `%LOCALAPPDATA%\AiPetApp\current\` (`AiPet.exe`, `aipet-hook.exe`, `LICENSE` and
+    `THIRD-PARTY-NOTICES.md`).
   - Velopack also installs `Update.exe`, and a stub `AiPet.exe` in `%LOCALAPPDATA%\AiPetApp\` that starts
     `current\AiPet.exe`.
   - The `current` path stays the same across updates. That matters for `aipet-hook --install`, whose registration
@@ -76,46 +79,46 @@ passed. Velopack's `RELEASES` and `assets.win.json` aren't uploaded:
   without `Update.exe` above it, so the app treats it as not installed and never updates it.
 - **Unsigned.** SmartScreen warns about the installer and the exes. Signing can be added later with `vpk pack`'s
   signing options.
-- **Velopack's package and CLI move together.** The app references the `Velopack` package
-  (AiPet.UI.csproj:26) at the same version as `VPK_VERSION`.
-  `VelopackTests.VpkVersion_IsThePackageVersion` fails when they differ.
+- **Velopack's crate and CLI move together.** The pet depends on the `velopack` crate
+  (`rust/crates/aipet/Cargo.toml`) at exactly the version of `VPK_VERSION`.
+  `rust/crates/aipet-testkit/tests/velopack.rs::vpk_version_is_the_package_version` fails when they differ.
 
 ## Velopack in the app
 
-Updates.cs holds all of it.
+[rust/crates/aipet/src/updates.rs](../../rust/crates/aipet/src/updates.rs) holds all of it, through Velopack's Rust
+SDK.
 
-- **Startup.** `Program.Main` calls `Updates.App().Run()` before anything else
-  (Program.cs:13). The installer, updater and uninstaller start `AiPet.exe` with
-  `--veloapp-*` arguments; `Run` handles those and exits. Any other start goes on at once.
+- **Startup.** The pet's `main` calls `updates::startup()` before anything else. The installer, updater and
+  uninstaller start `AiPet.exe` with arguments of their own; Velopack handles those and exits. Any other start goes on
+  at once.
 - **Only the installed copy uses Velopack's locator.** A copy counts as installed when `Update.exe` is in the folder
-  above the app's (`UpdateStatus.Installed`, UpdateStatus.cs:22). The
-  portable zip, `dotnet AiPet.dll` and Linux get a locator that finds nothing
-  (Updates.cs:49-50), so they never check for updates.
-- **The uninstall hook.** Before Velopack removes the app, its uninstall callback runs
-  `HookCleanup.Run(<app folder>\aipet-hook.exe)` (Updates.cs:48,
-  HookCleanup.cs:66). `install.ps1` registers the hook directly
-  (`aipet-hook --install claude`) when Claude Code's plugin can't run for lack of Git Bash, and that registration
-  names the installed exe. For each agent whose config names this install's hook, the callback runs
-  `aipet-hook --uninstall claude|codex`, with no window and at most 10 seconds each, and logs the result to
-  `aipet.log`. It matches the path with `/` or `\`, JSON and TOML escaping, and the 8.3 short form Codex's command
-  uses for a path with spaces. Registrations of another copy (the portable zip, a build from source) and the
-  plugins are left alone.
-- **Updates.** The installed app checks
-  `GithubSource("https://github.com/xMarcinator/ai-pet")` on the `win` channel (stable releases only, no token):
-  3 minutes after it starts, then every 6 hours (UpdateStatus.cs:11-17). A
-  new version downloads in the background. Settings > General shows the version and the state, with
-  **Check for updates**.
+  above the app's. The portable zip, a build from source and Linux get a locator that finds nothing, so they never
+  check for updates.
+- **The uninstall hook.** Before Velopack removes the app, its uninstall callback runs the hook cleanup
+  ([rust/crates/aipet-core/src/cleanup.rs](../../rust/crates/aipet-core/src/cleanup.rs)) for `<app folder>\aipet-hook.exe`.
+  `install.ps1` registers the hook directly (`aipet-hook --install claude`) when Claude Code's plugin can't run for
+  lack of Git Bash, and that registration names the installed exe. For each agent whose config names this install's
+  hook, the callback runs `aipet-hook --uninstall claude|codex`, with no window and at most 10 seconds each, and logs
+  the result to `aipet.log`. It matches the path with `/` or `\`, JSON and TOML escaping, and the 8.3 short form
+  Codex's command uses for a path with spaces. Registrations of another copy (the portable zip, a build from source)
+  and the plugins are left alone.
+- **Updates.** The installed app checks the GitHub releases of `https://github.com/xMarcinator/ai-pet` on the `win`
+  channel (stable releases only, no token): 3 minutes after it starts, then every 6 hours
+  (`rust/crates/aipet-core/src/update_status.rs`). A new version downloads in the background. Settings > General shows
+  the version and the state, with **Check for updates**.
   - **Quit** in the pet's menu installs a downloaded update once the pet has exited, without a window, and the pet
-    stays closed (MainWindow.axaml.cs:256).
-  - **Restart to update** in Settings installs it and starts the pet again
-    (SettingsWindow.axaml.cs:133).
-  - Velopack's own install-on-start is off (`SetAutoApplyOnStartup(false)`), because `Run` comes before the
-    single-instance check: in a second copy, `Update.exe` would stop the running pet. Instead, once `Main` knows it
-    is the only pet, `Updates.Start` installs an update that was downloaded but never installed, and `Main` exits so
-    that `Update.exe` can start the pet again (Program.cs:25,
-    Updates.cs:83-88). The start that follows an update never does this, so a
-    failed update can't loop; Settings then shows the update as ready.
-  - A failed check or download is only a state Settings shows, and a line in `aipet.log`.
+    stays closed (`updates::install_on_quit`).
+  - **Restart to update** in Settings installs it and starts the pet again (`updates::restart`).
+  - Velopack's own install-on-start is off (`set_auto_apply_on_startup(false)`), because its startup comes before the
+    single-instance check: in a second copy, `Update.exe` would stop the running pet. Instead, once the pet knows it
+    is the only one, `updates::start` installs an update that was downloaded but never installed, and the pet exits
+    so that `Update.exe` can start it again. The start that follows an update never does this, so a failed update
+    can't loop; Settings then shows the update as ready.
+  - A check that gets no answer for 5 minutes, or a download that stalls for 10, is given up on. A failed check or
+    download is only a state Settings shows, and a line in `aipet.log`.
+- **The proof.** [velopack-proof.yml](../../.github/workflows/velopack-proof.yml), run by hand, installs a Rust pet
+  built as the release builds it, has it update itself from a local feed, and uninstalls it
+  ([rust/proofs/velopack.md](../../rust/proofs/velopack.md) also records the update from the .NET releases).
 
 ## Version resources
 

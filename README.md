@@ -10,8 +10,8 @@ thinks, types and searches while a chat works, waves when a chat needs you, and 
 - If you want them: a bubble for each Jira issue your search finds and each GitHub pull request waiting on your
   review, and one for the track playing in Spotify.
 
-AiPet runs on Windows 10/11 x64 and on Linux x64 or arm64 (X11, or XWayland under Wayland). macOS isn't supported
-yet.
+AiPet runs on Windows 10/11 x64 and on Linux x64 or arm64: on Wayland (natively where the compositor has
+layer-shell, such as Hyprland, Sway and KDE; through XWayland on GNOME) and on X11. macOS isn't supported yet.
 
 ## Disclaimer
 > [!WARNING]
@@ -97,17 +97,20 @@ and run the one-liner again to switch to the plugin. Claude Code and Codex also 
     asks D-Bus with `dbus-send`.
   - `secret-tool` (package `libsecret-tools`): keeps the Jira and GitHub tokens in your desktop keyring. Without
     it they go into a file only you can read (see [Privacy](#privacy)).
-  - `xdotool`: the stop button needs it to bring the agent's app forward and press Escape. `wmctrl` can bring an
-    app forward, but then the pet never presses a key.
-- The pet is an X11 window, so on Wayland it runs through XWayland. Apps that run as native Wayland windows can't
-  be found or brought forward.
+  - `xdotool` (or `wmctrl`): brings the agent's app forward when you click a chat that has no link. Apps that run
+    as native Wayland windows can't be found or brought forward; for them only the chat's link opens.
+- **Wayland.** On a compositor with layer-shell (Hyprland, Sway, KDE, COSMIC) the pet is a layer surface: only the
+  pet and its bubbles take the mouse, and it shows on every workspace. Elsewhere (GNOME, X11) it's an X11 window,
+  through XWayland on GNOME. `AIPET_BACKEND=wayland` or `AIPET_BACKEND=desktop` picks one yourself.
+- **Graphics.** The pet draws through OpenGL (Mesa, or your GPU's driver) on the low-power GPU. `WGPU_BACKEND` and
+  `WGPU_POWER_PREF` override that.
 
 ### Hyprland
 
-Hyprland frames, rounds, blurs and animates every window. On the pet's transparent window that draws a frame around
-the whole rectangle, and animated moves make dragging overshoot. AiPet ships window rules for this. The installers
-copy them to `~/.local/share/AiPet/hyprland/` and, when they run under Hyprland, print the line that includes them.
-They never edit your config.
+Hyprland animates the pet's moves, so while you drag it the pet glides behind the pointer, and it frames, rounds
+and blurs the transparent Settings window. AiPet ships rules for this. The installers copy them to
+`~/.local/share/AiPet/hyprland/` and, when they run under Hyprland, print the line that includes them. They never
+edit your config.
 
 For `~/.config/hypr/hyprland.lua` (Hyprland 0.55 and later):
 
@@ -123,18 +126,11 @@ For `~/.config/hypr/hyprland.conf` (Hyprland 0.53 and 0.54):
 source = ~/.local/share/AiPet/hyprland/aipet.conf
 ```
 
-For Hyprland 0.52 and earlier, the end of `aipet.conf` has the same rules as `windowrulev2` lines.
+For Hyprland 0.52 and earlier, the end of `aipet.conf` has the same rules as `layerrule` and `windowrulev2` lines.
 
 The rules:
-- The pet's window floats and is pinned, so it stays on its monitor whichever workspace is shown. It has no border,
-  rounding, blur, shadow or animations.
+- The pet (the layer namespace `aipet`) has no animations.
 - The Settings window has no border, rounding, blur or shadow.
-
-Don't add `no_focus` to these rules: an XWayland window with it gets no mouse input at all.
-
-Hyprland ignores the X11 input shape, so every pixel of the pet's window would take the mouse. AiPet therefore
-keeps its window only as big as what it shows. Inside that box, the transparent parts around the pet and between
-the bubbles still take the mouse. `AIPET_NOFIT=1` keeps the window at its full size.
 
 Uninstalling AiPet removes the rules and the line that includes them. The config is backed up first, to
 `<config>.aipet-<time>.bak`.
@@ -145,7 +141,7 @@ Uninstalling AiPet removes the rules and the line that includes them. The config
 
 The pet shows the mood of all your chats together: asleep when nothing is going on, thinking, working, waving when
 a chat needs you, or done. Drag it and it runs; it remembers where you put it. Hover over it and it waves; click
-it and it reacts. The Rust pet also has moods of its own: it holds up an envelope when a review comes in, looks sad
+it and it reacts. It also has moods of its own: it holds up an envelope when a review comes in, looks sad
 when a chat's turn fails, glows gold as a chat finishes, and gets tired late at night or after a long chat.
 
 ### Bubbles
@@ -167,11 +163,8 @@ shortly after the mouse leaves the pet.
 
 Hover over the front bubble (or any bubble of a spread stack) for its buttons:
 - ✕ dismisses the bubble.
-- ■ stops a chat in a desktop app. The pet brings the app forward and presses Escape, which stops the chat the app
-  has open. It only presses Escape when that must be this chat: the only chat of that agent the pet knows about,
-  with the app really in front, and not in the pet's first 15 minutes (it only knows the chats it has heard from
-  since it started). Otherwise it only brings the app forward, so you can stop the chat yourself. Only a chat in a
-  desktop app has this button, while it works.
+- **Open** on a chat that works in a desktop app opens the chat, so you can stop it there. The pet never presses
+  keys in another app.
 - Jira and GitHub bubbles have buttons that open the Jira issue and the pull request, when the pet knows them.
 - The music bubble has previous, play/pause and next.
 
@@ -180,7 +173,7 @@ The pet never sends anything to a chat.
 ### Menu
 
 Right-click the pet for its menu:
-- **Show chats**: hides or shows the bubbles.
+- **Show bubbles**: hides or shows the bubbles.
 - **Always on top**
 - **Avatars…**: opens Settings on the Avatars page.
 - **Settings…**
@@ -264,7 +257,9 @@ The logs:
 The data folder is `%LOCALAPPDATA%\AiPet` on Windows and `~/.local/share/AiPet` on Linux. Settings > General > Data
 folder opens it.
 
-On Linux, `AIPET_SOFTWARE=1` draws without OpenGL, for virtual GPUs (such as WSLg) where OpenGL output doesn't show.
+`AIPET_DEBUG=1` makes the pet say on stderr which window it uses (the Wayland or the desktop one) and why, and log
+the pointer and the clickable area. The pet needs a working GPU driver (OpenGL on Linux, Vulkan on Windows): it has
+no software fallback.
 
 ## Privacy
 
@@ -313,9 +308,17 @@ Your settings and logs stay in the data folder: delete it to remove them too. Th
 
 ## Building from source
 
-Needs Rust, installed with [rustup](https://rustup.rs) (1.98 or newer). On Windows that needs Visual Studio's C++
-build tools with a Windows SDK; on Linux, a C linker (gcc or clang), and pkg-config with libxkbcommon's development
-files.
+Needs Rust, installed with [rustup](https://rustup.rs) (1.98 or newer; `rust/Cargo.toml` says which), and:
+
+| System | What else |
+|---|---|
+| Windows | Visual Studio's C++ build tools with a Windows SDK (its `rc.exe` embeds the exes' icon and version) |
+| Arch | `base-devel pkgconf libxkbcommon` |
+| Debian, Ubuntu | `build-essential pkg-config libxkbcommon-dev` |
+| Fedora | `gcc pkgconf-pkg-config libxkbcommon-devel` |
+
+To run the pet on Linux you also need Mesa's EGL and OpenGL (or your GPU's driver), and a Wayland or X11 session.
+The first build downloads a few hundred crates.
 
 ```bash
 cd rust
@@ -331,9 +334,10 @@ The scripts:
 
 | Script | What |
 |---|---|
-| [build.sh](build.sh), [build.ps1](build.ps1) | Publish the app, and build the hook with cargo, into `artifacts/<rid>/`; copy the hook into `plugins/aipet/native/<rid>/`, and make a local marketplace in `artifacts/marketplace/` for trying the plugin before a release. `build.sh` builds this machine's platform, or the ones named; `build.ps1` builds win-x64 and linux-x64, or `-Only <rid>`. A hook for another system needs [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) (Linux) or Windows (win-x64), and is left out without them. |
+| [build.sh](build.sh), [build.ps1](build.ps1) | Build the pet and the hook with cargo, as the release does, into `artifacts/<rid>/`; copy the hook into `plugins/aipet/native/<rid>/`, and make a local marketplace in `artifacts/marketplace/` for trying the plugin before a release. `build.sh` builds this machine's platform, or the ones named; `build.ps1` builds win-x64 and linux-x64, or `-Only <rid>`. A build for another Linux platform needs [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) and zig, and win-x64 needs Windows; each is left out, with a warning, without them. |
 | [scripts/install-from-source.sh](scripts/install-from-source.sh), [scripts/install-from-source.ps1](scripts/install-from-source.ps1) | Install that build: the app with a menu or Start menu entry, and the hook, registered directly with Claude Code and Codex (`--no-hooks` / `-NoHooks` skips that). They rebuild first when the build is missing or older than the source. |
 | [scripts/check-plugin.sh](scripts/check-plugin.sh) | Checks the plugin's manifests and the marketplaces, and with `--hook <command>` that the plugin's hook files are exactly what `aipet-hook --print-plugin-hooks` prints. |
+| [scripts/check-notices.sh](scripts/check-notices.sh) | Checks that [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is what [cargo-about](https://github.com/EmbarkStudios/cargo-about) 0.9.3 makes of `rust/about.toml` and `rust/about.hbs`, with a licence for every crate the release builds compile in; `--write` regenerates it. Run it after changing `rust/Cargo.lock`. |
 
 [.github/workflows/release.yml](.github/workflows/release.yml) builds the releases. CI
 ([.github/workflows/ci.yml](.github/workflows/ci.yml)) builds and tests on Windows and Linux.
