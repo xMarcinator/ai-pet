@@ -323,9 +323,12 @@ HEART, HEART_HI = "#FF6F91", "#FFD3DE"
 
 
 def float_up(rise, steps, step_ms, drift=0.0):
-    """Rising and fading out, then back."""
-    return keys([(step_ms, {"dx": drift * i / steps, "dy": -rise * i / steps,
-                            "opacity": 1 - i / steps}) for i in range(steps)])
+    """Rising and fading out, then back: `steps` steps of `step_ms`, each split into short keys so it glides
+    (vector_pack.fine)."""
+    from vector_pack import fine
+    sub, n = fine(steps, step_ms)
+    return keys([(step_ms // sub, {"dx": drift * i / n, "dy": -rise * i / n,
+                                   "opacity": 1 - i / n}) for i in range(n)])
 
 
 def effect(value, parts, shapes, animation):
