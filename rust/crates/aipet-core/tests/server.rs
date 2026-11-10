@@ -927,6 +927,42 @@ fn json_it_cant_serve_is_refused() {
     assert_eq!(pet.serve(), "thinking");
 }
 
+/// fnt-81: version 2's event is version 1's; its task message is the tracker watcher's only, never the pipe's or
+/// socket's, and it has no ping.
+#[test]
+fn version_2_takes_events_and_refuses_task_lines() {
+    let _side = side_by_side();
+    let env = Env::new("version-2");
+    let pet = Pet::start(&env, &env.sessions());
+    let sid = uuid();
+    let mut event: Value = serde_json::from_str(&envelope(
+        "claude",
+        now(),
+        payload(&sid, "UserPromptSubmit", json!({"prompt": "hi"})),
+    ))
+    .unwrap();
+    event["v"] = json!(2);
+    let reply = ask_json(&pet.endpoint, &event.to_string()).unwrap();
+    assert_eq!((&reply["ok"], &reply["outcome"]), (&json!(true), &json!("thinking")));
+    assert!(pet.chat(&format!("claude:{sid}")).is_some());
+
+    let task =
+        r#"{"v":2,"type":"task","op":"upsert","source":"tracker","task":{"id":"t","short_id":"T-1","tone":"red"}}"#;
+    for (line, error) in [
+        (task, "task messages come from the tracker watcher only"),
+        (r#"{"v":2,"type":"ping"}"#, "unsupported version"),
+        (r#"{"v":1,"type":"task","op":"remove","id":"t"}"#, "unknown request"),
+        (r#"{"v":3,"type":"event"}"#, "unsupported version"),
+    ] {
+        let reply = ask_json(&pet.endpoint, line).unwrap();
+        assert_eq!(
+            (&reply["ok"], &reply["error"]),
+            (&json!(false), &json!(error)),
+            "{line}"
+        );
+    }
+}
+
 #[test]
 fn an_oversized_request_is_dropped_without_a_reply() {
     let _side = side_by_side();

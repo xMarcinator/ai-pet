@@ -1,4 +1,5 @@
-//! The wire protocol, version 1: its limits, field names and time format (`AiPet.Core/Ipc.cs:27-57`).
+//! The wire protocol: its limits, field names and time format (`AiPet.Core/Ipc.cs:27-57`), and version 2's task
+//! messages (fnt-81).
 //!
 //! One request per connection. The client writes one UTF-8 JSON line ending in `\n`, the pet answers with one line,
 //! and both close. The answer is what tells the hook the pet has its event.
@@ -12,12 +13,31 @@
 //! `at` is when the hook started (before stdin was read), `sent` when it sent the event: Unix seconds with ms
 //! precision ([`unix_time`], written as [`format_seconds`] does). `env` is Claude's only ([`CLAUDE_ENV`]).
 //!
-//! The contract is frozen: the Rust and the .NET hooks and pets talk to each other through it.
+//! Version 1 is what the hooks send, and the Rust and the .NET hooks and pets talk to each other through it. Version 2
+//! (fnt-81, the tracker's FNT-64) adds task messages beside the events, which only the pet's tracker watcher makes:
+//!
+//! ```text
+//! {"v":2,"type":"event",..}  as version 1's event
+//! {"v":2,"type":"task","op":"upsert","source":"tracker","task":{..}}
+//! {"v":2,"type":"task","op":"remove","source":"tracker","id":".."}
+//!     -> {"ok":false,"error":"task messages come from the tracker watcher only"} on the pipe or socket
+//! ```
+//!
+//! A ping is version 1's only: `{"v":2,"type":"ping"}` is refused as an unsupported version, as the C# refuses it.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// `v`: the only version there is.
+/// `v`: the version the hooks send.
 pub const VERSION: i32 = 1;
+/// `v`: version 2, whose events are version 1's and whose task messages come from the tracker watcher only.
+pub const VERSION_2: i32 = 2;
+
+/// `type` of a version 2 task message, its `op`s, and the refusal a task line gets on the pipe or socket: anything
+/// local may write there, so nothing there may make a task bubble.
+pub const TASK: &str = "task";
+pub const UPSERT: &str = "upsert";
+pub const REMOVE: &str = "remove";
+pub const TASK_ONLY_FROM_WATCHER: &str = "task messages come from the tracker watcher only";
 
 /// The pet's HTTP listener (`aipet-mcp`) on 127.0.0.1: MCP at `/mcp`, Claude's HTTP hooks at `/hook/claude`. One
 /// port for every user of the machine, which the hook and MCP registrations, the doctor, the plugin check and the
@@ -76,6 +96,10 @@ pub const RECENT: &str = "recent";
 /// `via`: never sent by a hook. The pet's HTTP listener marks the envelopes it makes `"via":"http"`: their `at` is
 /// when the pet got the event (Claude's HTTP hooks carry no time of their own), which the chats order by otherwise.
 pub const VIA: &str = "via";
+// A version 2 task message's own members.
+pub const OP: &str = "op";
+pub const SOURCE: &str = "source";
+pub const ID: &str = "id";
 
 /// `Ipc.UnixTime`: Unix seconds with ms precision. The milliseconds are rounded down (also before 1970, as
 /// `DateTimeOffset.ToUnixTimeMilliseconds` does) and then divided by 1000.0, so the double is the C#'s to the bit.
