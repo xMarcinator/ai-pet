@@ -1,5 +1,5 @@
 //! Where the tests that run programs run: the repository's shell scripts, release.yml's steps and the built binaries.
-//! The port of the C# tests' `TestEnv` and `Scripts.Sandbox` (tests/AiPet.Tests/TestEnv.cs and Scripts.cs).
+//! The port of the C# tests' `TestEnv` and `Scripts.Sandbox` (AiPet.Tests/TestEnv.cs and Scripts.cs).
 //!
 //! A [`Sandbox`] is a folder of the test's own, removed with it. A program run in it gets fresh folders for HOME, the
 //! XDG folders, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `AIPET_DATA_DIR` and `TMPDIR`, an `AIPET_PIPE` no pet listens on,
@@ -118,14 +118,8 @@ pub fn built(name: &str) -> PathBuf {
     path
 }
 
-/// The hook the black-box suites run: the one `AIPET_TEST_HOOK` names (`TestEnv.TestHook`), else the Rust hook built
-/// with the tests, which must not be older than its sources.
+/// The hook the black-box suites run: the Rust hook built with the tests, which must not be older than its sources.
 pub fn hook() -> PathBuf {
-    if let Some(asked) = std::env::var_os("AIPET_TEST_HOOK").filter(|h| !h.is_empty()) {
-        let path = std::path::absolute(&asked).unwrap();
-        assert!(path.is_file(), "AIPET_TEST_HOOK: there's no hook at {}", path.display());
-        return path;
-    }
     let hook = built("aipet-hook");
     assert_fresh(&hook, &["aipet-hook/src", "aipet-ipc/src"]);
     hook

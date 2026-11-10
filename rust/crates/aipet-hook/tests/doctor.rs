@@ -1,7 +1,7 @@
-//! `aipet-hook --doctor claude|codex [--probe]`, as a user runs it, held against the C#: rust/golden's `doctor` mode
-//! (rust/golden/Doctor.cs) ran each scenario of tests/golden/doctor/doctor.json through the built C# hook in a sandbox
-//! of its own. Here the built Rust hook runs it in the same sandbox, and must print the same lines and exit with the
-//! same code; and, as a check, change nothing there.
+//! `aipet-hook --doctor claude|codex [--probe]`, as a user runs it, held against the C#: the golden generator's
+//! `doctor` mode ran each scenario of tests/golden/doctor/doctor.json through the built C# hook in a sandbox of its
+//! own. Here the built Rust hook runs it in the same sandbox, and must print the same lines and exit with the same
+//! code; and, as a check, change nothing there.
 //!
 //! The sandbox ({root}) is every folder the hook could read or write: home/, claude/ (CLAUDE_CONFIG_DIR), codex/
 //! (CODEX_HOME), data/, tmp/ and bin/, the first folder on PATH, where the scenario's fake codex is. bin/aipet-hook
@@ -10,16 +10,15 @@
 //! with the lines the C#'s pet had (and those of what it gets itself), and takes events as the pet does. What varies
 //! between runs is a token on both sides: the sandbox, the endpoint, the pet's pid and clock, and durations.
 //!
-//! A corpus is written on one OS ("os") and replayed only there: the committed one on Windows. When `AIPET_GOLDEN`
-//! names the golden generator's dll (CI sets it), the C# writes a corpus on this OS, which is replayed too; on Linux
-//! that is the only replay. Some scenarios run only where they may: `ci` ones start PowerShell (Windows' --probe for
+//! A corpus is written on one OS ("os") and replayed only there: doctor.json on Windows, linux/doctor.json (written at
+//! the cutover) on Linux. Some scenarios run only where they may: `ci` ones start PowerShell (Windows' --probe for
 //! Codex), which only a CI runner may; `managed` ones write the organisation's Claude settings, which only a CI runner
-//! that sets `AIPET_TEST_MANAGED_SETTINGS=1` may (cross-runtime.yml); `no_codex` ones would find the Codex installed
-//! where the doctor looks for it on Windows, so they run only where there's none.
+//! that sets `AIPET_TEST_MANAGED_SETTINGS=1` may (neither frozen corpus has any: the C# wrote them only live, on CI);
+//! `no_codex` ones would find the Codex installed where the doctor looks for it on Windows, so they run only where
+//! there's none.
 //!
-//! When the C# changes: `dotnet build rust/golden -c Release -p:UseAppHost=false`, then
-//! `dotnet rust/golden/bin/Release/net10.0/aipet-golden.dll doctor` from the repository root, then fix the port until
-//! this passes. Never edit the golden file by hand.
+//! The corpora are frozen: the C# and its generator are gone (tests/golden/README.md), so they are the contract as
+//! they stand. Never edit the golden files by hand.
 
 mod common;
 
@@ -45,12 +44,18 @@ const MANAGED_VAR: &str = "AIPET_TEST_MANAGED_SETTINGS";
 /// The time every line of this test's pet says, which the replay takes for a token as it does the C#'s.
 const PET_TIME: &str = "2000-01-01 00:00:00.000";
 
+/// The corpus written on this OS: the committed one, or Linux's in linux/.
 fn golden() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/doctor/doctor.json")
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/doctor");
+    if THIS_OS == "linux" {
+        dir.join("linux").join("doctor.json")
+    } else {
+        dir.join("doctor.json")
+    }
 }
 
 fn load(path: &Path) -> Value {
-    common::load(path, "doctor")
+    common::load(path)
 }
 
 /// Every scenario of a corpus written on this OS that this machine may run, through the built hook. A run must come
@@ -127,7 +132,7 @@ fn installed_codex() -> Option<PathBuf> {
     })
 }
 
-/// The organisation's settings file the scenarios write (as rust/golden/Doctor.cs does).
+/// The organisation's settings file the scenarios write (as the golden generator's Doctor.cs did).
 fn managed_path() -> PathBuf {
     PathBuf::from(if cfg!(windows) {
         r"C:\ProgramData\ClaudeCode\managed-settings.json"
@@ -246,8 +251,8 @@ fn endpoint(what: &str, n: usize) -> OsString {
 }
 
 // ------------------------------------------------------------------ the sandbox
-/// The scenario's sandbox as its setup says, the fixtures' tokens filled in as rust/golden/Doctor.cs fills them; and
-/// the hook under test where the scenarios run it.
+/// The scenario's sandbox as its setup says, the fixtures' tokens filled in as the golden generator's Doctor.cs
+/// filled them; and the hook under test where the scenarios run it.
 fn set_up(case: &Value, root: &Path) -> io::Result<()> {
     let setup = &case["setup"];
     let list = |key: &str| -> Vec<String> {
@@ -395,8 +400,8 @@ fn doctor(case: &Value, root: &Path, endpoint: &OsStr) -> Output {
     }
 }
 
-/// What varies between runs, as tokens (`Tokens` in rust/golden/Doctor.cs): the sandbox, the pet's endpoint, pid and
-/// clock, and durations.
+/// What varies between runs, as tokens (`Tokens` in the golden generator's Doctor.cs): the sandbox, the pet's
+/// endpoint, pid and clock, and durations.
 fn tokens(text: &str, root: &Path, endpoint: &str) -> String {
     let root = root.to_string_lossy();
     let text = text
@@ -732,51 +737,15 @@ mod sys {
 }
 
 // ------------------------------------------------------------------ the tests
-/// Every scenario of the committed corpus gives what the C#'s gave, where it was written.
+/// Every scenario of the corpus written on this OS gives what the C#'s gave.
 #[test]
 fn the_doctor_is_the_csharps() {
     let corpus = load(&golden());
     if text(&corpus["os"]) != THIS_OS {
-        eprintln!(
-            "skipped: doctor.json was written on {} (the live replay covers this OS)",
-            corpus["os"]
-        );
+        eprintln!("skipped: no corpus was written on {THIS_OS}");
         return;
     }
     replay(&corpus, &Scratch::new("doctor", "golden"));
-}
-
-/// With `AIPET_GOLDEN`, the C# writes the corpus on this OS (building the C# hook first), and that is replayed too.
-#[test]
-fn the_csharp_on_this_os_is_replayed() {
-    let Some(dll) = std::env::var_os("AIPET_GOLDEN") else {
-        eprintln!("skipped: AIPET_GOLDEN doesn't name the golden generator's dll (see this file's doc)");
-        return;
-    };
-    let scratch = Scratch::new("doctor", "live");
-    let written = scratch.0.join("golden");
-    let out = {
-        // the C# writes the organisation's settings meanwhile, where it may
-        let _machine = managed_allowed().then(machine);
-        Command::new("dotnet")
-            .arg(dll)
-            .arg("doctor")
-            .arg(&written)
-            .stdin(Stdio::null())
-            .output()
-            .unwrap()
-    };
-    assert!(
-        out.status.success(),
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    eprint!("{}", String::from_utf8_lossy(&out.stderr));
-    replay(
-        &load(&written.join("doctor.json")),
-        &Scratch::new("doctor", "live-replay"),
-    );
 }
 
 /// The pet this test gives the scenarios answers as the C#'s: a ping lists what it got, an event is taken.

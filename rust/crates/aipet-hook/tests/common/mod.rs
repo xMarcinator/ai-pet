@@ -28,14 +28,10 @@ pub fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("..")
 }
 
-/// A corpus rust/golden wrote, which its `mode` writes again.
-pub fn load(path: &Path, mode: &str) -> Value {
-    let text = fs::read_to_string(path).unwrap_or_else(|e| {
-        panic!(
-            "{}: {e} (write it with: dotnet run --project rust/golden -c Release -- {mode})",
-            path.display()
-        )
-    });
+/// A corpus the golden generator wrote, frozen at the cutover.
+pub fn load(path: &Path) -> Value {
+    let text = fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("{}: {e} (a frozen corpus: see tests/golden/README.md)", path.display()));
     serde_json::from_str(&text).unwrap()
 }
 

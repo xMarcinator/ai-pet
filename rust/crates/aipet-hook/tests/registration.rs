@@ -1,20 +1,16 @@
 //! `aipet-hook --install|--uninstall claude` and `--print-plugin-hooks`, run as the installers run them, held against
 //! the C#:
-//! - tests/golden/registration/claude.json: rust/golden's `registration` mode (rust/golden/Registration.cs) ran each
-//!   Claude fixture through the hook's own Install.cs; each step here runs the built hook in the same setup and must
-//!   give the same exit code, the same lines and the same files, byte for byte;
+//! - tests/golden/registration/claude.json: the golden generator's `registration` mode ran each Claude fixture
+//!   through the C# hook's own Install.cs; each step here runs the built hook in the same setup and must give the same
+//!   exit code, the same lines and the same files, byte for byte;
 //! - the same file's `run` cases: Install.Run's usage errors and its refusal to register a program that isn't
 //!   aipet-hook;
 //! - the plugin's committed hook files, which --print-plugin-hooks must print as they are.
 //!
 //! The corpus was written on one OS ("os"). On another, the newline is its (`Environment.NewLine`, in the files the
 //! C# writes and in what it prints), fixtures that give another answer there (os_specific) aren't compared, and modes
-//! only on Unix. When `AIPET_GOLDEN` names the golden generator's dll (CI sets it; see aipet-ipc's src/csharp.rs to
-//! run it locally), the C# writes the corpus again on this OS and that is replayed too: on Linux it holds the
-//! symlink and mode fixtures that Windows can't make.
-//!
-//! When the C# changes: `dotnet run --project rust/golden -c Release -- registration` from the repository root, then
-//! fix the port until this passes. Never edit the golden files by hand.
+//! only on Unix. The corpus is frozen: the C# and its generator are gone (tests/golden/README.md), so it is the
+//! contract as it stands. Never edit the golden files by hand.
 
 mod common;
 
@@ -36,7 +32,7 @@ fn golden_dir() -> PathBuf {
 }
 
 fn load(path: &Path) -> Value {
-    common::load(path, "registration")
+    common::load(path)
 }
 
 fn new_scratch(test: &str) -> Scratch {
@@ -344,6 +340,19 @@ fn claude_registration_is_the_csharps() {
     replay(&load(&golden_dir().join("claude.json")), &scratch);
 }
 
+/// The corpus the C# wrote on Linux, for the last time at the cutover: its os_specific fixtures, the symlinks and the
+/// files' modes that the Windows corpus can't hold.
+#[test]
+fn the_linux_corpus_is_the_csharps() {
+    if THIS_OS != "linux" {
+        eprintln!("skipped: the Linux corpus is replayed on Linux");
+        return;
+    }
+    let corpus = load(&golden_dir().join("linux").join("claude.json"));
+    assert_eq!(text(&corpus["os"]), "linux");
+    replay(&corpus, &new_scratch("claude-linux"));
+}
+
 /// What sets a run aside is known from what the hook says: here settings.json is held as a virus scanner can hold
 /// it, open and shared with nobody, and the hook's refusal is a sharing violation. (Unix has none.)
 #[cfg(windows)]
@@ -364,34 +373,6 @@ fn a_held_file_is_known_from_what_the_hook_says() {
     // the read-only fixture's refusal is an answer of the port's
     let denied = "Couldn't update claude settings: Access to the path is denied.";
     assert!(!hook_held(denied));
-}
-
-/// With `AIPET_GOLDEN`, the C# writes the corpus on this OS, and that is replayed too. The System.Text.Json data
-/// (json.json) doesn't depend on the OS: it must come out as committed.
-#[test]
-fn the_csharp_on_this_os_is_replayed() {
-    let Some(dll) = std::env::var_os("AIPET_GOLDEN") else {
-        eprintln!("skipped: AIPET_GOLDEN doesn't name the golden generator's dll (see this file's doc)");
-        return;
-    };
-    let scratch = new_scratch("live");
-    let written = scratch.0.join("golden");
-    let out = Command::new("dotnet")
-        .arg(dll)
-        .arg("registration")
-        .arg(&written)
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    assert!(
-        load(&written.join("json.json")) == load(&golden_dir().join("json.json")),
-        "System.Text.Json writes, compares or refuses otherwise than when json.json was written"
-    );
-    let corpus = load(&written.join("claude.json"));
-    assert_eq!(text(&corpus["os"]), THIS_OS);
-    let replays = new_scratch("live-replay");
-    replay(&corpus, &replays);
 }
 
 // ------------------------------------------------------------------ Install.Run, and the modes' usage
@@ -446,34 +427,24 @@ fn install_answers_as_install_run() {
 }
 
 /// Program.Main: a mode without an agent is a usage error, never a hook run waiting on stdin (left open here). The
-/// usage lines are the C#'s own.
+/// usage lines are the C#'s own, frozen as the last C# had them (commit bf3696ea4a: AiPet.Hook's Program.cs:31-33,
+/// Install.cs:19 and PluginHooks.cs:15).
 ///
 /// A hook run would wait for stdin and then exit 0 without a word, so the exit code and the usage tell the two apart
 /// without a clock: a fresh exe the antivirus scans can take seconds to start on a loaded machine. The bound only
 /// keeps a hook that waited for ever from hanging the test.
 #[test]
 fn a_mode_without_an_agent_is_a_usage_error() {
-    let source = |file: &str| fs::read_to_string(repo().join("src").join("AiPet.Hook").join(file)).unwrap();
-    let (program, plugin_hooks, install) = (source("Program.cs"), source("PluginHooks.cs"), source("Install.cs"));
     let install_usage = "usage: aipet-hook --install|--uninstall claude|codex";
-    for (mode, usage, from) in [
-        ("--install", install_usage, &install),
-        ("--uninstall", install_usage, &install),
-        (
-            "--doctor",
-            "usage: aipet-hook --doctor claude|codex [--probe]",
-            &program,
-        ),
+    for (mode, usage) in [
+        ("--install", install_usage),
+        ("--uninstall", install_usage),
+        ("--doctor", "usage: aipet-hook --doctor claude|codex [--probe]"),
         (
             "--print-plugin-hooks",
             "usage: aipet-hook --print-plugin-hooks claude|codex",
-            &plugin_hooks,
         ),
     ] {
-        assert!(
-            from.contains(&format!("\"{usage}\"")),
-            "the C# no longer says {usage:?}"
-        );
         let mut child = Command::new(HOOK)
             .arg(mode)
             .stdin(Stdio::piped())

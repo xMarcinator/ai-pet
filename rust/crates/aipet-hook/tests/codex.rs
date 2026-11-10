@@ -1,20 +1,19 @@
 //! `aipet-hook --install|--uninstall codex`, run as the installers run them, held against the C#:
-//! tests/golden/codex/codex.json (rust/golden's `registration` mode, rust/golden/Registration.cs) ran each Codex
-//! fixture through the hook's own CodexConfig.cs; each step here runs the built hook in the same setup and must give
-//! the same exit code, the same lines and the same files, byte for byte.
+//! tests/golden/codex/codex.json (the golden generator's `registration` mode) ran each Codex fixture through the C#
+//! hook's own CodexConfig.cs; each step here runs the built hook in the same setup and must give the same exit code,
+//! the same lines and the same files, byte for byte.
 //!
-//! Codex's events depend on the OS, so a corpus is compared only on the OS it was written on ("os"): the committed one
-//! on Windows. When `AIPET_GOLDEN` names the golden generator's dll (CI sets it; see aipet-ipc's src/csharp.rs to run
-//! it locally), the C# writes the corpus again on this OS and that is replayed too: on Linux that is the only replay,
-//! with the symlink and mode fixtures Windows can't make.
+//! Codex's events depend on the OS, so the corpus is compared only on the OS it was written on ("os"): Windows. On
+//! Linux, the C# was replayed live until the cutover; the fixtures' rules are held there by src/codex.rs's own tests
+//! and the testkit's registration suite.
 //!
 //! In the fixtures the command AiPet registers is `{command}` (and `{command-escaped}` as TOML and JSON strings write
 //! it), config.toml and hooks.json are `{config}` and `{hooks}`, and the case's folder is `{root}`: each side puts its
 //! own values in their place, and back. A new backup is named by the clock, so after each step it is renamed
 //! `<file>.aipet-20000101-<n>.bak`, as the C# harness did.
 //!
-//! When the C# changes: `dotnet run --project rust/golden -c Release -- registration` from the repository root, then
-//! fix the port until this passes. Never edit the golden files by hand.
+//! The corpus is frozen: the C# and its generator are gone (tests/golden/README.md), so it is the contract as it
+//! stands. Never edit the golden files by hand.
 
 mod common;
 
@@ -28,12 +27,12 @@ use serde_json::{Map, Value, json};
 
 use common::{FAMILY, Failure, HOOK, Scratch, THIS_OS, from_hex, harness, hook_held, set_env, text, to_hex};
 
-fn golden() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/codex/codex.json")
+fn golden_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/codex")
 }
 
 fn load(path: &Path) -> Value {
-    common::load(path, "registration")
+    common::load(path)
 }
 
 fn new_scratch(test: &str) -> Scratch {
@@ -308,37 +307,21 @@ fn replay_case(case: &Value, root: &Path, command: &str) -> Result<usize, Failur
     Ok(steps.len())
 }
 
-/// Every Codex fixture's --install and --uninstall gives what the C#'s gave, where the corpus was written.
+/// Every Codex fixture's --install and --uninstall gives what the C#'s gave, where the corpus was written: the
+/// committed corpus on Windows, and on Linux the one the C# wrote there at the cutover (with the symlink and mode
+/// fixtures Windows can't make).
 #[test]
 fn codex_registration_is_the_csharps() {
-    let corpus = load(&golden());
+    let dir = golden_dir();
+    let path = if THIS_OS == "linux" {
+        dir.join("linux").join("codex.json")
+    } else {
+        dir.join("codex.json")
+    };
+    let corpus = load(&path);
     if text(&corpus["os"]) != THIS_OS {
-        eprintln!(
-            "skipped: codex.json was written on {} (the live replay covers this OS)",
-            corpus["os"]
-        );
+        eprintln!("skipped: no corpus was written on {THIS_OS}");
         return;
     }
     replay(&corpus, &new_scratch("golden"));
-}
-
-/// With `AIPET_GOLDEN`, the C# writes the corpus on this OS, and that is replayed too.
-#[test]
-fn the_csharp_on_this_os_is_replayed() {
-    let Some(dll) = std::env::var_os("AIPET_GOLDEN") else {
-        eprintln!("skipped: AIPET_GOLDEN doesn't name the golden generator's dll (see this file's doc)");
-        return;
-    };
-    let scratch = new_scratch("live");
-    let written = scratch.0.join("golden");
-    let out = Command::new("dotnet")
-        .arg(dll)
-        .arg("registration")
-        .arg(&written)
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    let replays = new_scratch("live-replay");
-    replay(&load(&written.join("codex.json")), &replays);
 }

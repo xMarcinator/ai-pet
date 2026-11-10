@@ -1,4 +1,4 @@
-//! release.yml's scripts, rehosted from tests/AiPet.Tests/ReleaseWorkflowTests.cs: run as the runner runs them (bash
+//! release.yml's scripts, rehosted from AiPet.Tests/ReleaseWorkflowTests.cs: run as the runner runs them (bash
 //! -eo pipefail), against folders and git repositories the tests make. gh and ssh are stand-ins; nothing reaches
 //! GitHub.
 
@@ -338,6 +338,21 @@ fn release_builds_the_rust_pet() {
     let pack = step("Build the installer and update feed (Velopack)");
     assert!(pack.contains("--packId AiPetApp"), "{pack}");
     assert!(pack.contains("--mainExe AiPet.exe"), "{pack}");
+    // .NET only for vpk, a .NET tool: one setup-dotnet, in the Windows job, whose only dotnet command installs vpk
+    let text = text.replace("\r\n", "\n");
+    let job = |name: &str| text.find(&format!("\n  {name}:\n")).unwrap();
+    let win = &text[job("win")..job("linux")];
+    assert_eq!(text.matches("actions/setup-dotnet@").count(), 1);
+    assert!(win.contains("actions/setup-dotnet@"));
+    let dotnet: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("dotnet "))
+        .collect();
+    assert_eq!(
+        dotnet,
+        ["dotnet tool install vpk --version \"$VPK_VERSION\" --tool-path out/tools"]
+    );
 }
 
 /// A repository whose codex.json is A at v0.2.0, B at v0.3.0-rc.1, and B at HEAD (one commit later).
