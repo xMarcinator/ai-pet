@@ -21,8 +21,6 @@ hood-green|Hood|Green
 hood-vector|Hood (vector)|
 pip|Pip|
 pip-painted|Pip (painted)|
-hamster|Hamster|
-hamster-pixel|Hamster (pixel)|
 sprout-vector|Sprout (vector)|
 EOF
 "$here/pet-calm.sh" csharp-sprout-again Sprout -- "$csharp"

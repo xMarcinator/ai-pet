@@ -3,8 +3,8 @@
 //! files are the bake's: the manifests as text, the sheets pixel for pixel); the vector Pip
 //! (`avatars/reference/pip_gen.py` writes it, in Peach with a Lilac theme) with its painting, whose Lilac theme is
 //! sheets (`tests/bake.rs` again); and the vector Hood (in
-//! Green, with a Blue theme), Hamster and Sprout, and the pixel Hamster, which their reference generators write
-//! (`tests/vector_packs.rs` checks they still do).
+//! Green, with a Blue theme) and Sprout, which their reference generators write (`tests/vector_packs.rs` checks they
+//! still do).
 
 use std::collections::BTreeMap;
 
@@ -39,30 +39,17 @@ const PIP_PAINTED: Files = pack!("pip-painted": "pack.json", "feet.png", "sprout
     "sparkles.png", "dust.png", "feet-lilac.png", "body-lilac.png", "arms-lilac.png", "aura-glow.png", "tears.png",
     "heart.png", "aura.png");
 const HOOD_VECTOR: Files = pack!("hood-vector": "pack.json");
-const HAMSTER_VECTOR: Files = pack!("hamster-vector": "pack.json");
 const SPROUT_VECTOR: Files = pack!("sprout-vector": "pack.json");
-const HAMSTER_PIXEL: Files = pack!("hamster-pixel": "pack.json", "body.png", "feet.png", "prop.png", "screen.png",
-    "arms.png", "headphones.png", "eyes.png", "fx.png", "sparkles.png", "dust.png", "aura-glow.png", "tears.png",
-    "blush.png", "heart.png", "aura.png");
 
 /// The built-in pets, in order.
 pub fn all() -> Vec<LoadedPack> {
-    [
-        SPROUT,
-        HOOD,
-        PIP,
-        PIP_PAINTED,
-        HOOD_VECTOR,
-        HAMSTER_VECTOR,
-        SPROUT_VECTOR,
-        HAMSTER_PIXEL,
-    ]
-    .into_iter()
-    .map(|files| {
-        let (pack, sheets) = load(files).expect("the embedded packs load (tests/bake.rs)");
-        LoadedPack { pack, sheets }
-    })
-    .collect()
+    [SPROUT, HOOD, PIP, PIP_PAINTED, HOOD_VECTOR, SPROUT_VECTOR]
+        .into_iter()
+        .map(|files| {
+            let (pack, sheets) = load(files).expect("the embedded packs load (tests/bake.rs)");
+            LoadedPack { pack, sheets }
+        })
+        .collect()
 }
 
 /// The embedded pack for `avatar`, if it is one of the built-in pixel pets exactly (a file that renames or recolours

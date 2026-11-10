@@ -718,7 +718,8 @@ mod tests {
 
     #[test]
     fn art_drawn_facing_left_mirrors_when_the_pet_faces_right_and_effects_dont_follow_it() {
-        // the Hamster is drawn turned to the left: dragged right it must turn right, dragged left stay as drawn
+        // a pet drawn turned to the left (a perspective view): dragged right it must turn right, dragged left stay as
+        // drawn
         let mut p = eyes_pack(Kind::Vector);
         p.faces = Facing::Left;
         p.layers.push(Layer::new("dust", Channel::Fx, "dust"));

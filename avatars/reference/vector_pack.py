@@ -1,5 +1,5 @@
 """Turns a reference generator's drawing into a vector pack (rust/crates/aipet-sprite/packs/<folder>/pack.json), shared
-by hood_gen.py, hamster_gen.py and sprout_gen.py (run one with --pack).
+by hood_gen.py and sprout_gen.py (run one with --pack).
 
 The generators already draw every state as SVG groups named after their parts (body, eye-left, hand-right, prop,
 caret, ...). This module reads those groups back from the generator's own output, so the pack is the approved

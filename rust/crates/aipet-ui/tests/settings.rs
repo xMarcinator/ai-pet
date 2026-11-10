@@ -405,14 +405,14 @@ fn reload_shows_new_avatars_and_open_folder_makes_the_folder_first() {
     assert!(folder.is_dir());
     assert_eq!(pet.platform.calls(), [Call::OpenFolder(folder.clone())]);
 
-    // an avatar put in the folder shows after Reload (after the eight built-ins), and picking it puts it on
+    // an avatar put in the folder shows after Reload (after the six built-ins), and picking it puts it on
     let green = include_str!("../../../../avatars/hood-green.json").replace("Hood (green)", "Mint");
     let custom = folder.join("mint.json");
     std::fs::write(&custom, &green).unwrap();
-    ui.update(Message::SelectAvatar(8));
+    ui.update(Message::SelectAvatar(6));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Sprout"), "not there before Reload");
     ui.update(avatars(settings::avatars::Message::Reload));
-    ui.update(Message::SelectAvatar(8));
+    ui.update(Message::SelectAvatar(6));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Mint"));
 
     // the avatar worn, edited under the same name, is worn as it is now once read again
@@ -450,7 +450,7 @@ fn reload_shows_new_avatars_and_open_folder_makes_the_folder_first() {
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood"));
     assert!(settings::avatars::tiles(&ui)[1].1, "its tile is the one worn now");
     ui.update(avatars(settings::avatars::Message::Reload));
-    ui.update(Message::SelectAvatar(8));
+    ui.update(Message::SelectAvatar(6));
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Hood"), "its tile went with it");
 }
 
@@ -475,8 +475,8 @@ fn reload_lists_what_didnt_load_and_why() {
     assert_eq!(skipped[0].0, "half-made");
     assert!(skipped[0].1.contains("manifest isn't valid"), "{skipped:?}");
     assert_eq!(skipped[1].0, "note.json");
-    // the pets themselves are all there: the four built-in pets (FNT-74)
-    assert_eq!(settings::avatars::tiles(&ui).len(), 4);
+    // the pets themselves are all there: the three built-in pets (FNT-74)
+    assert_eq!(settings::avatars::tiles(&ui).len(), 3);
 }
 
 #[test]
