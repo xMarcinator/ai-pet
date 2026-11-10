@@ -7,7 +7,7 @@
   "plan_review_status": "unknown",
   "plan_reviewed_at": null,
   "spec_path": ".flow/specs/fnt-70-rust-build-hygiene-hakari-sccache-and.md",
-  "status": "open",
+  "status": "done",
   "title": "Rust build hygiene: hakari, sccache and target sweeps",
   "tracker": {
     "baseHashFlow": null,
@@ -20,5 +20,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-08T10:29:49.792076Z"
+  "updated_at": "2026-11-10T17:42:32.751095Z"
 }

@@ -16,7 +16,7 @@ Measure the baseline, then give every build one feature set with cargo-hakari (R
 - Check the release binary's size and that the pet starts.
 
 ## Acceptance
-- [ ] The baseline is recorded (target size, duplicate copies, clean build times)
+- [x] The baseline is recorded (target size, duplicate copies, clean build times)
 - [ ] `workspace-hack` is generated and committed; every crate depends on it; fmt, clippy and every test pass
 - [ ] CI and the local checks fail on a stale hack crate (shown by a deliberate stale change, then reverted)
 - [ ] The release binary's size is noted, and the pet starts

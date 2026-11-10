@@ -10,7 +10,7 @@
   "priority": null,
   "spec": "fnt-70-rust-build-hygiene-hakari-sccache-and",
   "spec_path": ".flow/tasks/fnt-70-rust-build-hygiene-hakari-sccache-and.2.md",
-  "status": "todo",
+  "status": "done",
   "title": "sccache across worktrees, target sweeps after gates, and the measurements",
   "updated_at": "2026-11-08T10:30:27.497620Z"
 }
