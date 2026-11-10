@@ -1,6 +1,5 @@
 //! The `aipet-hook` binary on its event path, as the agents run it: whatever comes on stdin it exits 0 and prints
-//! nothing, and it writes nothing unless the pet was reached. The C#'s own hook suites run against it too, with the
-//! .NET pet (cross-runtime.yml); these need neither.
+//! nothing, and it writes nothing unless the pet was reached. These need no pet.
 
 use std::ffi::OsString;
 use std::io::Write;

@@ -313,23 +313,19 @@ Your settings and logs stay in the data folder: delete it to remove them too. Th
 
 ## Building from source
 
-Needs:
-- the [.NET 10 SDK](https://dotnet.microsoft.com/download), for the app;
-- Rust, installed with [rustup](https://rustup.rs) (1.98 or newer), for the hook. On Windows that needs Visual Studio's
-  C++ build tools with a Windows SDK; on Linux, a C linker (gcc or clang).
+Needs Rust, installed with [rustup](https://rustup.rs) (1.98 or newer). On Windows that needs Visual Studio's C++
+build tools with a Windows SDK; on Linux, a C linker (gcc or clang), and pkg-config with libxkbcommon's development
+files.
 
 ```bash
-dotnet build AiPet.slnx
-dotnet test AiPet.slnx
-dotnet src/AiPet.UI/bin/Debug/net10.0/AiPet.dll     # runs the pet
-cd rust && cargo build -p aipet-hook                # the hook the releases ship: rust/target/debug/aipet-hook
-cargo test --workspace                              # the Rust tests
+cd rust
+cargo build -p aipet -p aipet-hook    # the pet and the hook: rust/target/debug/AiPet and aipet-hook
+cargo run -p aipet                    # runs the pet
+cargo test --workspace                # the tests
 ```
 
-**Windows developers:** antivirus reacts to PowerShell and to freshly built `.exe` files. Build and test with
-`-p:UseAppHost=false` (`dotnet build AiPet.slnx -p:UseAppHost=false`), so that no `.exe` is made, and run programs
-as `dotnet <dll>`. Cargo can't do without `.exe` files: a freshly built hook may be held for a scan for a while. Leave
-publishing to GitHub Actions: `build.ps1` and `scripts/install-from-source.ps1` publish `.exe` files.
+**Windows developers:** antivirus reacts to PowerShell and to freshly built `.exe` files: a freshly built pet or hook
+may be held for a scan for a while. Leave publishing to GitHub Actions.
 
 The scripts:
 
@@ -342,9 +338,9 @@ The scripts:
 [.github/workflows/release.yml](.github/workflows/release.yml) builds the releases. CI
 ([.github/workflows/ci.yml](.github/workflows/ci.yml)) builds and tests on Windows and Linux.
 
-The tests in [tests/AiPet.Tests](tests/AiPet.Tests) run the hook as the agents do (as `dotnet aipet-hook.dll`)
-against the pet's listener on a temporary pipe or socket. They never touch your pet, settings or data. The tests of
-the shell scripts run only on Linux.
+The tests run the hook as the agents do, against the pet's listener on a temporary pipe or socket, and run the
+scripts in a sandbox of fresh folders (`rust/crates/aipet-testkit`). They never touch your pet, settings or data. The
+tests of the shell scripts run only on Linux.
 
 ### Hooks without the plugins
 
@@ -354,8 +350,8 @@ the shell scripts run only on Linux.
 
 - Use either the plugins or these registrations, not both: with both, every event reaches the pet twice. When the
   plugin is enabled and can run, `--install` changes nothing and says so.
-- Run the `aipet-hook` executable itself. Under `dotnet aipet-hook.dll`, `--install` refuses, since it would
-  register `dotnet`.
+- Run the `aipet-hook` executable itself: `--install` registers the program that runs it, and refuses one with
+  another name.
 - Codex asks you to trust these hooks too. Changing them means trusting them again.
 - Each config is backed up before a change, as `<file>.aipet-<time>.bak` (the newest three are kept). Codex's is
   edited as text: your other hooks and their trust entries stay as they are.
@@ -370,10 +366,12 @@ the shell scripts run only on Linux.
 
 | Path | What |
 |---|---|
-| `src/AiPet.UI/` | The app (Avalonia, .NET 10). Platform code is in `Platform/` (Windows, Linux, a macOS stub). |
-| `src/AiPet.Core/` | The pet's animation, avatars, the chats and the hooks' listener, and the Jira, GitHub and Codex watchers. |
-| `rust/crates/aipet-hook/` | `aipet-hook`, which the agents run on each event, with `--install`, `--uninstall`, `--doctor` and `--print-plugin-hooks`. The rest of `rust/` is the pet's move to Rust, under way. |
-| `src/AiPet.Hook/` | The .NET `aipet-hook` that the Rust one replaced. The tests still run it until the move to Rust is done. |
+| `rust/crates/aipet/` | The app: one pet per user, the core on a thread of its own, and the Wayland or the desktop shell. |
+| `rust/crates/aipet-core/` | The chats and the hooks' listener, the Jira, GitHub and Codex watchers, the bubbles, and the data, secrets and logs. |
+| `rust/crates/aipet-sprite/` | The pets: avatars, packs, the animation and the renderer. |
+| `rust/crates/aipet-ui/`, `aipet-desktop/`, `aipet-wayland/` | The front end (bubbles, menu, Settings), and the window it lives in: an ordinary one (Windows, X11, macOS) or a layer-shell surface (Wayland). |
+| `rust/crates/aipet-hook/` | `aipet-hook`, which the agents run on each event, with `--install`, `--uninstall`, `--doctor` and `--print-plugin-hooks`. |
+| `rust/crates/aipet-ipc/` | What the hook and the pet share: the protocol, the endpoint and the data paths. |
+| `rust/crates/aipet-testkit/` | The sandbox the tests that run programs and scripts use. |
 | `plugins/aipet/` | The plugin for Claude Code and Codex. |
 | `packaging/` | The Linux package's installer, menu entry, icons and Hyprland rules; notes on the Windows packages. |
-| `tests/AiPet.Tests/` | The tests. |

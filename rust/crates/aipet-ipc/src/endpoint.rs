@@ -1,4 +1,4 @@
-//! Where the hooks reach the pet: `Ipc.Endpoint` (`src/AiPet.Core/Ipc.cs:52-55, 156-211`).
+//! Where the hooks reach the pet: `Ipc.Endpoint` (`AiPet.Core/Ipc.cs:52-55, 156-211`).
 //!
 //! - Windows: the named pipe `\\.\pipe\AiPet-<user SID>-<session id>`, or `AiPet-<user name>` when either can't be
 //!   read. Pipe names are machine-wide: the user and the session keep two users' (or one user's two sessions') pets

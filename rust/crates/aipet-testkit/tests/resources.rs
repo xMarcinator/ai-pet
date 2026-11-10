@@ -1,7 +1,7 @@
-//! The Windows exes' resources, ported from tests/AiPet.Tests/ResourceTests.cs: AiPet.exe and aipet-hook.exe carry
+//! The Windows exes' resources, ported from AiPet.Tests/ResourceTests.cs: AiPet.exe and aipet-hook.exe carry
 //! the app's icon, a manifest, and a version resource that names the exe, from their build scripts
-//! (rust/crates/aipet/build.rs, rust/crates/aipet-hook/build.rs) as the .NET app's and hook's did from
-//! build/Win32Resources.targets. Read here from the PE file, and on Windows also by Windows itself. Only a Windows
+//! (rust/crates/aipet/build.rs, rust/crates/aipet-hook/build.rs) as the .NET app's and hook's did from the .NET
+//! build's Win32Resources targets. Read here from the PE file, and on Windows also by Windows itself. Only a Windows
 //! build has them, so these run there and are skipped elsewhere.
 
 #![cfg_attr(not(windows), allow(dead_code))]

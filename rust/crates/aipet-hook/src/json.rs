@@ -1,5 +1,5 @@
 //! A JSON tree that keeps an event as it came: read as System.Text.Json's `JsonNode.Parse` reads text, and written
-//! as the hook's request line (`src/AiPet.Hook/Program.cs:176-187`).
+//! as the hook's request line (`AiPet.Hook/Program.cs:176-187`).
 //!
 //! The hook changes little of an event (it cuts long strings and drops `tool_response`) and passes the rest on as it
 //! came: members in their order, and numbers as their text (`1.0`, `-0` and `1e400` stay as they are written). The

@@ -1,4 +1,4 @@
-//! The Windows app's Velopack side against release.yml and the installers, ported from tests/AiPet.Tests/
+//! The Windows app's Velopack side against release.yml and the installers, ported from AiPet.Tests/
 //! VelopackTests.cs: the channel, the versions and the repository they must agree on, and the order the pet's `main`
 //! does things in. (HookCleanup's cases and the status texts are aipet-core's tests/data.rs; Velopack's startup and
 //! the update checks, aipet's src/updates.rs.)

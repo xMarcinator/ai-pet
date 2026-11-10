@@ -1,5 +1,5 @@
 //! Where the pet's window goes (MainWindow's PlaceWindow, SaveConfig and ResetPosition,
-//! `src/AiPet.UI/MainWindow.axaml.cs:160-201`): the place `config.json` keeps, read at start, kept after a drop and
+//! `AiPet.UI/MainWindow.axaml.cs:160-201`): the place `config.json` keeps, read at start, kept after a drop and
 //! after Reset position, and written as `config.json`'s rules say. The shells place the window from it, each through
 //! its own screens or outputs ([`Place`] is the whole window's top-left corner in desktop pixels).
 //!

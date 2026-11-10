@@ -1,5 +1,5 @@
 //! AgentSessions: each chat's state from the hooks' events, in the order the agents meant them
-//! (`src/AiPet.Core/AgentSessions.cs`).
+//! (`AiPet.Core/AgentSessions.cs`).
 //!
 //! The chats as their hooks report them, kept by the running pet alone: every hook run forwards its event (see
 //! [`crate::server`]) and [`AgentSessions::apply`] places it. Events run in the background and can finish out of

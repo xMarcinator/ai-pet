@@ -10,7 +10,7 @@
 //! and [`INLINE_MENU`] say where the sprite and the menu are.
 //!
 //! The bubbles and the mood are the core's [`Board`]'s, as `MainWindow`'s Refresh and SyncCards make them
-//! (`src/AiPet.UI/MainWindow.axaml.cs:303-314, 486-564`). A bubble the pointer is on shows its round [`Button`]s and
+//! (`AiPet.UI/MainWindow.axaml.cs:303-314, 486-564`). A bubble the pointer is on shows its round [`Button`]s and
 //! its dismiss button, and a click on it opens its item, as MakeCard, UpdateChrome and OpenItem have it (`:352-485`).
 //! What the pet asks of the app (saving its preferences, dismissing a bubble, Settings' actions, its place, quitting)
 //! goes to the app's [`Host`]; what it asks of the operating system (opening links, bringing an agent's app forward,

@@ -1,5 +1,5 @@
 //! `config.json`, `jira.json` and `github.json` as the .NET app reads and writes them
-//! (`src/AiPet.UI/MainWindow.axaml.cs`, `Jira.cs`, `GitHub.cs`).
+//! (`AiPet.UI/MainWindow.axaml.cs`, `Jira.cs`, `GitHub.cs`).
 //!
 //! The app reads and writes them with System.Text.Json's defaults, so these follow the same rules, and a Rust pet and
 //! a .NET pet read each other's files (a rollback loses nothing):

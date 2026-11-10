@@ -1,6 +1,6 @@
 //! What the hook and the pet share: how a hook reaches the running pet, and where the app's files are.
 //!
-//! A port of `src/AiPet.Core/Ipc.cs` and `src/AiPet.Core/Paths.cs`, which the .NET hook links as source. During the
+//! A port of `AiPet.Core/Ipc.cs` and `AiPet.Core/Paths.cs`, which the .NET hook links as source. During the
 //! migration either side can be the other runtime (a Rust hook with a .NET pet, or the other way round), so this is
 //! the seam, and it matches the C# exactly:
 //! - [`protocol`]: the wire protocol's version, limits, field names and time format;

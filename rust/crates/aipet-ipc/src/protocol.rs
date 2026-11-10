@@ -1,4 +1,4 @@
-//! The wire protocol, version 1: its limits, field names and time format (`src/AiPet.Core/Ipc.cs:27-57`).
+//! The wire protocol, version 1: its limits, field names and time format (`AiPet.Core/Ipc.cs:27-57`).
 //!
 //! One request per connection. The client writes one UTF-8 JSON line ending in `\n`, the pet answers with one line,
 //! and both close. The answer is what tells the hook the pet has its event.

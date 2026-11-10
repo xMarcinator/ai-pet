@@ -1,5 +1,5 @@
 //! The uninstaller's hook cleanup: `aipet-hook --uninstall` for each agent this install registered
-//! (`src/AiPet.Core/HookCleanup.cs`).
+//! (`AiPet.Core/HookCleanup.cs`).
 //!
 //! install.ps1 registers the hook directly (`aipet-hook --install claude`) when Claude's plugin can't run for lack of
 //! Git Bash, and that registration names the installed exe. Once the uninstaller has deleted it, Claude would fail to
@@ -373,7 +373,7 @@ mod tests {
         (Dir(dir), configs)
     }
 
-    /// What the C# makes of every character (rust/golden's data mode; tests/data.rs has how to write it again).
+    /// What the C# makes of every character (the golden generator's data mode; frozen).
     fn chars() -> serde_json::Value {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/data/hook_cleanup.json");
         let golden: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();

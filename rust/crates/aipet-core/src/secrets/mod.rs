@@ -1,5 +1,5 @@
 //! The Jira and GitHub tokens, under the keys `AiPet:Jira` and `AiPet:GitHub`, where the .NET app keeps them
-//! (`ISecretStore`, `src/AiPet.Core/Platform.cs`), so a token either app saved is the other's too:
+//! (`ISecretStore`, `AiPet.Core/Platform.cs`), so a token either app saved is the other's too:
 //! - Windows: Credential Manager, a generic credential whose target name is the key ([`CredentialManager`]);
 //! - Linux: the Secret Service through `secret-tool`, with the attributes `service=aipet` and `key=<key>`, and
 //!   `secrets.json` (0600) in the data folder when that fails ([`SecretTool`], [`FileSecrets`]);

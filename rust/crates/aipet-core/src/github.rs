@@ -1,5 +1,5 @@
 //! The GitHub watcher: pull requests waiting on the user's review, through GitHub's GraphQL API
-//! (`src/AiPet.Core/GitHub.cs`).
+//! (`AiPet.Core/GitHub.cs`).
 //!
 //! The settings are `github.json` in the data folder ([`GitHubSettings`]); the token is `AiPet:GitHub` in the secret
 //! store, one the user saved in Settings (no other credentials on the computer are used). Without one, GitHub reviews

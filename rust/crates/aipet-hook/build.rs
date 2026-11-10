@@ -1,9 +1,9 @@
-//! The Windows exe's resources, the ones the .NET hook had (build/Win32Resources.targets): the app's icon, a version
-//! resource that names `aipet-hook.exe`, and the compiler's default manifest (asInvoker). Antivirus heuristics dislike
-//! an exe without them, and the release checks them. Nothing for any other OS.
+//! The Windows exe's resources, the ones the .NET hook had (the .NET build's Win32Resources targets): the app's icon,
+//! a version resource that names `aipet-hook.exe`, and the compiler's default manifest (asInvoker). Antivirus
+//! heuristics dislike an exe without them, and the release checks them. Nothing for any other OS.
 //!
 //! The version is `AIPET_VERSION`, which the release sets to the version it releases, else `0.0.0-dev` as
-//! Directory.Build.props has it. FileVersion is its numbers: 0.3.0-rc.1 makes 0.3.0.0, as the .NET SDK makes it.
+//! the .NET build props had it. FileVersion is its numbers: 0.3.0-rc.1 makes 0.3.0.0, as the .NET SDK makes it.
 
 use std::env;
 use std::path::{Path, PathBuf};

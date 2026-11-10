@@ -47,8 +47,8 @@ The desktop shell needs `WAYLAND_DISPLAY` set to an empty value and no `WAYLAND_
 both stay on X11. `main` does that itself before choosing the desktop shell, so nothing changes for you.
 
 Checks: `cargo test --workspace` (93 tests), `cargo clippy --workspace --all-targets` and `cargo fmt --check`, all
-clean. The golden data is regenerated from the C# with `dotnet run --project rust/golden -c Release`, from the repo
-root (needs .NET 10).
+clean. The golden data was regenerated from the C# with the golden generator (needs .NET 10), which the cutover
+removed: the fixtures are frozen.
 
 ## Layout
 

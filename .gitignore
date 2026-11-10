@@ -1,13 +1,8 @@
-# Build output
-bin/
-obj/
+# Build output (build.sh, build.ps1)
 artifacts/
-publish/
 # the release workflow's build folder (release.yml), when its steps are run locally
 out/
 Releases/
-*.user
-.vs/
 .idea/
 
 # The plugin's hook binaries (native/<rid>/): the release workflow adds them to the release commit in the plugin
@@ -19,14 +14,13 @@ legacy/
 
 # Scratch and test output
 scratch/
-TestResults/
 *.log
 *.tmp
 .claude/settings.local.json
 # agent worktrees (Claude Code's); the skills in .claude/skills/ are tracked
 .claude/worktrees/
 
-# The Rust spike's build output (rust/)
+# The Rust workspace's build output
 rust/target/
 # the research prototypes in rust/notes build on their own; their sources in src/bin are kept
 rust/notes/prototypes/*/target/

@@ -1,4 +1,4 @@
-//! The app's own updates, through Velopack's Rust SDK (`src/AiPet.UI/Updates.cs`).
+//! The app's own updates, through Velopack's Rust SDK (`AiPet.UI/Updates.cs`).
 //!
 //! Velopack installs and updates the Windows app (release.yml packs it with packId `AiPetApp` into
 //! `%LOCALAPPDATA%\AiPetApp`, channel `win`). Only that installed copy checks for updates, from the GitHub releases: a

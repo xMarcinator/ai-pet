@@ -1,4 +1,4 @@
-//! The hook server: the pet's end of the endpoint, on threads of its own (`src/AiPet.Core/HookServer.cs`).
+//! The hook server: the pet's end of the endpoint, on threads of its own (`AiPet.Core/HookServer.cs`).
 //!
 //! Each hook run connects, sends its event and waits for the outcome: the event goes to [`AgentSessions`], and one
 //! line to hook-events.log and to the recent list the doctor pings for. Garbage, oversized or silent connections are

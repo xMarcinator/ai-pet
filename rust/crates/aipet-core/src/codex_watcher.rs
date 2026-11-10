@@ -1,4 +1,4 @@
-//! The Codex log watcher: Codex chats as Codex's own session files show them (`src/AiPet.Core/CodexWatcher.cs`), for
+//! The Codex log watcher: Codex chats as Codex's own session files show them (`AiPet.Core/CodexWatcher.cs`), for
 //! when its hooks don't report them: hooks that aren't trusted yet (Codex skips them silently), a desktop app that
 //! doesn't run them, an interrupted turn (on Windows AiPet registers no Interrupt hook), or a turn that ends in an
 //! error (Codex runs no Stop hook then). The Board orders the hook's live state against this by Codex's turn ids,

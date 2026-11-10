@@ -1,4 +1,4 @@
-//! The Linux platform (`src/AiPet.UI/Platform/LinuxPlatform.cs`), for X11 and Wayland sessions alike, through the
+//! The Linux platform (`AiPet.UI/Platform/LinuxPlatform.cs`), for X11 and Wayland sessions alike, through the
 //! desktop's own tools when they are installed: xdotool, else wmctrl, to bring an agent's window forward; xdg-open
 //! for links and folders; and MPRIS for the player, through playerctl, else dbus-send. Native Wayland windows can't
 //! be found or brought forward this way: for them nothing comes forward, and at most the chat's link opens.

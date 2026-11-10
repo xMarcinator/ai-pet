@@ -1,6 +1,6 @@
 [package]
 name = "aipet-hook"
-description = "The hook Claude Code and Codex run on every event: it hands the event to the running pet and never disturbs the agent. Also --install/--uninstall, --doctor and --print-plugin-hooks. A port of src/AiPet.Hook."
+description = "The hook Claude Code and Codex run on every event: it hands the event to the running pet and never disturbs the agent. Also --install/--uninstall, --doctor and --print-plugin-hooks. A port of AiPet.Hook."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,4 +1,4 @@
-//! Avatars: a port of `src/AiPet.Core/Avatar.cs`.
+//! Avatars: a port of `AiPet.Core/Avatar.cs`.
 
 use std::collections::HashMap;
 use std::fmt;

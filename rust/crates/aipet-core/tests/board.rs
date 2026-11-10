@@ -1,12 +1,12 @@
 //! The Board and the Codex log watcher against the C#:
-//! - the golden data (tests/golden/board/board.json and watcher.json), which rust/golden wrote with the C#'s Board and
-//!   CodexWatcher, is replayed through the port: every refresh's bubbles, order, sections, links, caps and mood, every
-//!   poll's sessions, the times bit for bit;
-//! - tests/AiPet.Tests/BoardTests.cs's cases, ported (`merge` and `reviews`), with the port's AgentSessions and
+//! - the golden data (tests/golden/board/board.json and watcher.json), which the golden generator wrote with the
+//!   C#'s Board and CodexWatcher, is replayed through the port: every refresh's bubbles, order, sections, links, caps
+//!   and mood, every poll's sessions, the times bit for bit;
+//! - AiPet.Tests/BoardTests.cs's cases, ported (`merge` and `reviews`), with the port's AgentSessions and
 //!   CodexWatcher on a fixture Codex home.
 //!
-//! When the C# changes: `dotnet run --project rust/golden -c Release -- board` from the repository root, then fix the
-//! port until this passes. Never edit the golden files by hand.
+//! The corpus is frozen: the C# and its generator are gone (tests/golden/README.md), so it is the contract as it
+//! stands. Never edit the golden files by hand.
 
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -38,12 +38,8 @@ fn golden(name: &'static str) -> &'static Value {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/golden/board")
             .join(name);
-        let text = fs::read_to_string(&path).unwrap_or_else(|e| {
-            panic!(
-                "{}: {e} (write it with: dotnet run --project rust/golden -c Release -- board)",
-                path.display()
-            )
-        });
+        let text = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{}: {e} (a frozen corpus: see tests/golden/README.md)", path.display()));
         serde_json::from_str(&text).unwrap_or_else(|e| panic!("{name} parses: {e}"))
     })
 }
@@ -568,7 +564,7 @@ fn the_golden_data_covers_the_watcher() {
     }
 }
 
-// ------------------------------------------------------------------ tests/AiPet.Tests/BoardTests.cs
+// ------------------------------------------------------------------ AiPet.Tests/BoardTests.cs
 fn now() -> f64 {
     unix_time(SystemTime::now())
 }

@@ -1,8 +1,9 @@
 # The parity ledger
 
-Every test of the C# suite (tests/AiPet.Tests: 162 test attributes, 263 cases) and the Rust tests that hold the same
-cases, so that nothing the C# tested is lost when the .NET code goes (spec fn-1-migrate-aipet-from-net-to-rust, R16).
-`scripts/check-parity.sh` checks it, and CI runs it (ci.yml's Shell scripts job).
+Every test of the C# suite (AiPet.Tests: 162 test attributes, 263 cases) and the Rust tests that hold the same
+cases, so that nothing the C# tested was lost when the .NET code went (spec fn-1-migrate-aipet-from-net-to-rust, R16).
+`scripts/check-parity.sh` checks it, and CI runs it (ci.yml's Shell scripts job). The C# was removed at the cutover
+(task 25); its tests are at commit `bf3696ea4a`, and the rows stay as the record.
 
 ## Reading a row
 
@@ -17,10 +18,10 @@ cases, so that nothing the C# tested is lost when the .NET code goes (spec fn-1-
 A Rust test's cases are the rows it loops over (the C#'s `[InlineData]` became a `for` over the same list), or the
 cases of the golden corpus it replays. One Rust test can hold several C# tests; per file, each counts once.
 
-`scripts/check-parity.sh` fails when an attribute in tests/AiPet.Tests has no row (or a row names one that's gone),
-when a row's case count isn't the C#'s, when a Rust test it names isn't a `fn` in that file, or when the Rust has fewer
-cases than the C#, in a row or in a file. It prints each file's counts. Once tests/AiPet.Tests is gone, it checks the
-ledger against the Rust tests alone.
+`scripts/check-parity.sh` fails when a row isn't under a file's heading, names a test twice or has no cases, when a
+Rust test it names isn't a `fn` in that file, or when the Rust has fewer cases than the C#, in a row or in a file. It
+prints each file's counts. Until the cutover it also held the rows to the C# tests' attributes and case counts; now it
+checks the ledger against the Rust tests alone.
 
 ## Where the Rust tests run
 
@@ -31,12 +32,13 @@ ledger against the Rust tests alone.
   `aipet_testkit::Sandbox`. A program run in it gets fresh folders for HOME, the XDG folders, the agents' config
   folders, the data and temp folders, an endpoint no pet listens on, and a PATH of the test's stand-ins before an
   allow-list of the system's tools; nothing else of the user's environment. The testkit's own tests
-  (`tests/sandbox.rs`) assert that. The suites run the hook built with the tests (`cargo test --workspace` builds it),
-  or the one `AIPET_TEST_HOOK` names.
+  (`tests/sandbox.rs`) assert that. The suites run the hook built with the tests (`cargo test --workspace` builds
+  it).
 - **Skipped by platform**: `#[cfg_attr(<not this platform>, ignore = "why")]`, so cargo reports them as ignored, as
   xUnit reported the C#'s `Skip`.
-- **Golden replays**: rust/golden ran the C#'s own code and wrote corpora under `crates/*/tests/golden/`, which the
-  Rust replays. With `AIPET_GOLDEN` set (CI), the C# writes them again on the runner's OS and that is replayed too.
+- **Golden replays**: the golden generator ran the C#'s own code and wrote corpora under `crates/*/tests/golden/`,
+  which the Rust replays. They are frozen since the cutover (each folder's README.md); until then CI also had the C#
+  write them again on the runner's OS and replayed that, which the Linux corpora written at the cutover now hold.
 
 ## Deviations
 
@@ -44,7 +46,7 @@ Where the Rust holds a case differently from the C#, or the C# and the Rust answ
 
 - **The watchers' requests and errors (task 11).** The expected requests and error texts in
   `aipet-core/tests/watchers.rs` were recorded once from .NET 10 (the C#'s request code against a local stub, in a
-  scratch app), not by rust/golden, so CI doesn't replay them against the C#: they are the record as they stand. The
+  scratch app), not by the golden generator, so CI didn't replay them against the C#: they are the record as they stand. The
   deliberate differences are listed in the module docs of `aipet-core/src/jira.rs`, `github.rs` and `http.rs`.
 - **Events the C# applies but the port refuses (task 9).** A .NET 10 probe of the C#'s HookServer found events the C#
   applies and the port's `Envelope::parse` refuses, so the Rust server gives them no answer: a number past a double's
@@ -59,7 +61,7 @@ Where the Rust holds a case differently from the C#, or the C# and the Rust answ
   built hook (`--install`, `--uninstall`, `--doctor`) in the sandbox. `PluginEvents_AreThePluginsHooks` is held by
   the doctor taking exactly codex.json's events as the plugin's, and by `--print-plugin-hooks codex` printing the file.
   `Install_UnderDotnet_Refuses`: a copy of the hook under another name stands in for `dotnet` (as the C# did with
-  `AIPET_TEST_HOOK`).
+  the test hook it named).
 - **VelopackTests**: `VpkVersion_IsThePackageVersion` holds VPK_VERSION to the velopack crate the pet pins, not the
   csproj's PackageReference; `Main_RunsVelopackFirst` and `PendingUpdate_IsInstalledByTheOnlyPet` read the order in
   `main.rs` and `updates.rs`, not Program.Main's IL.
@@ -81,16 +83,19 @@ connect, `aipet-hook`'s claude.rs and `aipet`'s single.rs.
 
 ## At the cutover (task 25)
 
-These read the C# or run it, and need changing when `src/` and `tests/` go:
+These read the C# or ran it, and were changed when the C# went (it is at commit `bf3696ea4a`):
 
-- `crates/aipet-hook/tests/registration.rs::a_mode_without_an_agent_is_a_usage_error` reads src/AiPet.Hook/*.cs for
-  the usage lines (it panics without them);
-- `crates/aipet-ipc/src/csharp.rs::every_constant_equals_ipc_cs` reads src/AiPet.Core/Ipc.cs, and
-  `crates/aipet/src/single.rs::the_mutex_is_the_csharps` (Windows) src/AiPet.UI/Program.cs: both say the Rust's
-  constants are then the contract as they stand;
-- the golden replays' `AIPET_GOLDEN` modes (aipet-hook's registration.rs, codex.rs and doctor.rs, aipet-core's data.rs,
-  aipet-ipc's csharp.rs) and ci.yml's `dotnet build golden`: rust/golden builds against src/;
-- `scripts/check-parity.sh` then checks the ledger against the Rust tests alone; the rows stay as the record.
+- `crates/aipet-hook/tests/registration.rs::a_mode_without_an_agent_is_a_usage_error` read AiPet.Hook's Program.cs,
+  Install.cs and PluginHooks.cs for the usage lines; it now holds them as the last C# had them.
+- `crates/aipet-ipc/src/csharp.rs::every_constant_equals_ipc_cs` read AiPet.Core/Ipc.cs, and
+  `crates/aipet/src/single.rs::the_mutex_is_the_csharps` (now Windows only) AiPet.UI/Program.cs: each holds the
+  values as the last C# had them.
+- The golden replays' live modes, which ran the generator on CI's runners: aipet-hook's registration.rs, codex.rs and
+  doctor.rs replay corpora the C# wrote on Linux at the cutover (`tests/golden/*/linux/`) in their place. aipet-core's
+  data.rs had the C# read what the Rust writes, and aipet-ipc's csharp.rs compared the endpoint and data paths with
+  the C#'s in the same environments; those went with the C# (endpoint.rs's and paths.rs's tests hold the paths'
+  rules). Neither frozen doctor corpus has the managed-settings scenarios, which the C# ran only live on CI.
+- `scripts/check-parity.sh` checks the ledger against the Rust tests alone; the rows stay as the record.
 
 ## AvatarTests.cs
 
@@ -103,7 +108,7 @@ Custom avatar files the pet can't draw are skipped. Both lists the Rust has are 
 
 ## BoardTests.cs
 
-A Codex chat as the hook and the watcher report it (`merge`), and the review bubbles (`reviews`). Beyond these, `every_board_case_matches_the_csharp` and `every_watcher_case_matches_the_csharp` replay rust/golden's corpus.
+A Codex chat as the hook and the watcher report it (`merge`), and the review bubbles (`reviews`). Beyond these, `every_board_case_matches_the_csharp` and `every_watcher_case_matches_the_csharp` replay the golden corpus.
 
 | C# test | Attribute | C# cases | Rust | Rust cases |
 |---|---|---|---|---|
@@ -191,7 +196,7 @@ plugins/aipet/native/aipet-hook.sh, rehosted in the sandbox with a fake uname an
 
 ## OrderingTests.cs
 
-ClaudeOrderingTests (`ordering`) and CodexOrderingTests (`codex_ordering`), case for case. Beyond these, `every_claude_case_matches_the_csharp` and `every_codex_case_matches_the_csharp` replay rust/golden's corpus of the C#'s AgentSessions.
+ClaudeOrderingTests (`ordering`) and CodexOrderingTests (`codex_ordering`), case for case. Beyond these, `every_claude_case_matches_the_csharp` and `every_codex_case_matches_the_csharp` replay the golden corpus of the C#'s AgentSessions.
 
 | C# test | Attribute | C# cases | Rust | Rust cases |
 |---|---|---|---|---|
@@ -266,7 +271,7 @@ Settings' preset files (`aipet_core::presets`).
 
 ## RegistrationTests.cs
 
-The cases the C# ran in-process run the built hook in the sandbox (`--install`, `--uninstall`, `--doctor`), as the installers run it. rust/golden's recorded cases are aipet-hook's tests/registration.rs, codex.rs and doctor.rs.
+The cases the C# ran in-process run the built hook in the sandbox (`--install`, `--uninstall`, `--doctor`), as the installers run it. The golden generator's recorded cases are aipet-hook's tests/registration.rs, codex.rs and doctor.rs.
 
 | C# test | Attribute | C# cases | Rust | Rust cases |
 |---|---|---|---|---|

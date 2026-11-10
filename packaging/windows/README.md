@@ -18,8 +18,7 @@ with Velopack, and how to check a package by hand.
 
 ## How the job builds them
 
-1. It publishes the app self-contained, so users need no .NET:
-   `dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r win-x64 --self-contained -p:Version=<version>`.
+1. It builds the pet, the Rust `AiPet.exe` (`rust/crates/aipet`), so users need no .NET.
 2. It builds the hook, the Rust `aipet-hook` (`rust/crates/aipet-hook`), with cargo in `rust/`:
    `cargo build -p aipet-hook --release --locked --target x86_64-pc-windows-msvc`, with `AIPET_VERSION=<version>`
    and `RUSTFLAGS=-C target-feature=+crt-static`.
@@ -78,23 +77,23 @@ passed. Velopack's `RELEASES` and `assets.win.json` aren't uploaded:
 - **Unsigned.** SmartScreen warns about the installer and the exes. Signing can be added later with `vpk pack`'s
   signing options.
 - **Velopack's package and CLI move together.** The app references the `Velopack` package
-  ([AiPet.UI.csproj](../../src/AiPet.UI/AiPet.UI.csproj):26) at the same version as `VPK_VERSION`.
+  (AiPet.UI.csproj:26) at the same version as `VPK_VERSION`.
   `VelopackTests.VpkVersion_IsThePackageVersion` fails when they differ.
 
 ## Velopack in the app
 
-[Updates.cs](../../src/AiPet.UI/Updates.cs) holds all of it.
+Updates.cs holds all of it.
 
 - **Startup.** `Program.Main` calls `Updates.App().Run()` before anything else
-  ([Program.cs](../../src/AiPet.UI/Program.cs):13). The installer, updater and uninstaller start `AiPet.exe` with
+  (Program.cs:13). The installer, updater and uninstaller start `AiPet.exe` with
   `--veloapp-*` arguments; `Run` handles those and exits. Any other start goes on at once.
 - **Only the installed copy uses Velopack's locator.** A copy counts as installed when `Update.exe` is in the folder
-  above the app's (`UpdateStatus.Installed`, [UpdateStatus.cs](../../src/AiPet.Core/UpdateStatus.cs):22). The
+  above the app's (`UpdateStatus.Installed`, UpdateStatus.cs:22). The
   portable zip, `dotnet AiPet.dll` and Linux get a locator that finds nothing
-  ([Updates.cs](../../src/AiPet.UI/Updates.cs):49-50), so they never check for updates.
+  (Updates.cs:49-50), so they never check for updates.
 - **The uninstall hook.** Before Velopack removes the app, its uninstall callback runs
-  `HookCleanup.Run(<app folder>\aipet-hook.exe)` ([Updates.cs](../../src/AiPet.UI/Updates.cs):48,
-  [HookCleanup.cs](../../src/AiPet.Core/HookCleanup.cs):66). `install.ps1` registers the hook directly
+  `HookCleanup.Run(<app folder>\aipet-hook.exe)` (Updates.cs:48,
+  HookCleanup.cs:66). `install.ps1` registers the hook directly
   (`aipet-hook --install claude`) when Claude Code's plugin can't run for lack of Git Bash, and that registration
   names the installed exe. For each agent whose config names this install's hook, the callback runs
   `aipet-hook --uninstall claude|codex`, with no window and at most 10 seconds each, and logs the result to
@@ -103,49 +102,39 @@ passed. Velopack's `RELEASES` and `assets.win.json` aren't uploaded:
   plugins are left alone.
 - **Updates.** The installed app checks
   `GithubSource("https://github.com/xMarcinator/ai-pet")` on the `win` channel (stable releases only, no token):
-  3 minutes after it starts, then every 6 hours ([UpdateStatus.cs](../../src/AiPet.Core/UpdateStatus.cs):11-17). A
+  3 minutes after it starts, then every 6 hours (UpdateStatus.cs:11-17). A
   new version downloads in the background. Settings > General shows the version and the state, with
   **Check for updates**.
   - **Quit** in the pet's menu installs a downloaded update once the pet has exited, without a window, and the pet
-    stays closed ([MainWindow.axaml.cs](../../src/AiPet.UI/MainWindow.axaml.cs):256).
+    stays closed (MainWindow.axaml.cs:256).
   - **Restart to update** in Settings installs it and starts the pet again
-    ([SettingsWindow.axaml.cs](../../src/AiPet.UI/SettingsWindow.axaml.cs):133).
+    (SettingsWindow.axaml.cs:133).
   - Velopack's own install-on-start is off (`SetAutoApplyOnStartup(false)`), because `Run` comes before the
     single-instance check: in a second copy, `Update.exe` would stop the running pet. Instead, once `Main` knows it
     is the only pet, `Updates.Start` installs an update that was downloaded but never installed, and `Main` exits so
-    that `Update.exe` can start the pet again ([Program.cs](../../src/AiPet.UI/Program.cs):25,
-    [Updates.cs](../../src/AiPet.UI/Updates.cs):83-88). The start that follows an update never does this, so a
+    that `Update.exe` can start the pet again (Program.cs:25,
+    Updates.cs:83-88). The start that follows an update never does this, so a
     failed update can't loop; Settings then shows the update as ready.
   - A failed check or download is only a state Settings shows, and a line in `aipet.log`.
 
 ## Version resources
 
-Both exes carry the icon and a version resource that names the exe. The C# compiler's own version resource would
-name the `.dll`, a Rust exe has none, and antivirus heuristics dislike an `.exe` that says it's a `.dll` or has no
-version.
+Both exes carry the icon and a version resource that names the exe: a Rust exe has none of its own, and antivirus
+heuristics dislike an `.exe` without one.
 
-- [build/Win32Resources.targets](../../build/Win32Resources.targets) writes the `.res` file itself, on every OS and
-  without `rc.exe`, before the compiler runs, and gives the compiler only that. It holds the icons from
-  `ApplicationIcon`, the manifest (the project's, or `build/default.win32manifest` for the .NET hook), and a version
-  resource. The version resource has `CompanyName`, `FileDescription` (the project's `AssemblyTitle`),
+- Their build scripts ([rust/crates/aipet/build.rs](../../rust/crates/aipet/build.rs) and
+  [rust/crates/aipet-hook/build.rs](../../rust/crates/aipet-hook/build.rs)) give `AiPet.exe` and `aipet-hook.exe`
+  the resources the .NET exes had: the icon, the manifest (the pet's `app.manifest`, and
+  `build/default.win32manifest` for the hook) and a version resource with `CompanyName`, `FileDescription`,
   `FileVersion`, `InternalName` and `OriginalFilename` (`AiPet.exe`, `aipet-hook.exe`), `LegalCopyright`,
-  `ProductName` (`AiPet`) and `ProductVersion` (the version as released).
-- Both projects set `AssemblyTitle` and `ApplicationIcon` and import the targets
-  ([AiPet.UI.csproj](../../src/AiPet.UI/AiPet.UI.csproj):11-14, 33;
-  [AiPet.Hook.csproj](../../src/AiPet.Hook/AiPet.Hook.csproj):11-13, 26).
-- The hook that ships is the Rust one. Its build script
-  ([rust/crates/aipet-hook/build.rs](../../rust/crates/aipet-hook/build.rs)) gives `aipet-hook.exe` the resources
-  the targets give the .NET hook, byte for byte: the icon, `build/default.win32manifest` and the same version
-  resource. It compiles them with the Windows SDK's `rc.exe`, through the `winresource` crate.
-- The app's version comes from `-p:Version` through [Directory.Build.props](../../Directory.Build.props), and the
-  hook's from `AIPET_VERSION`, which the release sets to the same version (`0.0.0-dev` without it). With
+  `ProductName` (`AiPet`) and `ProductVersion` (the version as released). They compile them with the Windows SDK's
+  `rc.exe`, through the `winresource` crate, and cargo links them into the exes.
+- The version is `AIPET_VERSION`, which the release sets to the version it releases (`0.0.0-dev` without it). With
   `1.2.3-rc.4`, `FileVersion` is `1.2.3.0` and `ProductVersion` is `1.2.3-rc.4`.
-- The SDK copies the dll's resources into the apphost (`AiPet.exe`), and cargo links the hook's into
-  `aipet-hook.exe`. The release's check step reads them as Windows does and fails unless each exe's
-  `OriginalFilename` and `InternalName` are its own name, `ProductName` is `AiPet` and `ProductVersion` is the
-  release's version.
-- `ResourceTests` checks the same fields in the built dlls on every OS. On Windows, CI also checks that the Rust
-  hook's resources are the .NET hook's, byte for byte (`RustHook_CarriesTheDotnetHooksResources`).
+- The release's check step reads them as Windows does and fails unless each exe's `OriginalFilename` and
+  `InternalName` are its own name, `ProductName` is `AiPet` and `ProductVersion` is the release's version.
+- `rust/crates/aipet-testkit/tests/resources.rs` checks them on Windows against the values the .NET exes had, byte for
+  byte.
 
 ## Checking a package by hand
 

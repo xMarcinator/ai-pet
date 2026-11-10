@@ -1,5 +1,5 @@
 //! The Board: the hooks' chats, Codex's logs, Jira, GitHub and media merged into the pet's bubbles
-//! (`src/AiPet.Core/Board.cs`).
+//! (`AiPet.Core/Board.cs`).
 //!
 //! [`Board::refresh`] rebuilds it a few times a second from [`Sources`], each source as it was at one moment
 //! ([`Sources::read`] reads the live ones):
