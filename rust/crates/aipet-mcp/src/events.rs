@@ -1,4 +1,4 @@
-//! The status events the listener takes in (Claude's HTTP hooks, and next Codex's `report_event`), on their way to
+//! The status events the listener takes in (Claude's HTTP hooks, and Codex's `report_event`), on their way to
 //! the core's [`Ingress`]: one bounded queue, and one thread of its own that applies them in the order they arrived.
 //!
 //! A route only queues its event and answers at once: it never waits on the chats, the transcripts they read, the

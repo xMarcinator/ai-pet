@@ -339,6 +339,12 @@ impl Chats {
     }
 }
 
+/// Whether a Codex chat takes the event: one it places, or SessionEnd, which leaves its tombstone. What the listener's
+/// `report_event` lets in.
+pub fn codex_takes(ev: &str) -> bool {
+    ev == "SessionEnd" || codex::EVENTS.contains(&ev)
+}
+
 // ------------------------------------------------------------------ JSON and log helpers
 /// A string field of a JSON object; none when it's missing or not a string.
 fn str_of<'a>(o: Option<&'a Map<String, Value>>, key: &str) -> Option<&'a str> {

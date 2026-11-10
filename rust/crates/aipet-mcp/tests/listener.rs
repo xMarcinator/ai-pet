@@ -384,7 +384,6 @@ enum Kind {
     Idempotent,
     #[allow(dead_code, reason = "task 6 adds such a tool")]
     Destructive,
-    #[allow(dead_code, reason = "task 6 adds such a tool")]
     NotIdempotent,
 }
 
@@ -398,12 +397,21 @@ struct Row {
 }
 
 fn table() -> Vec<Row> {
-    vec![Row {
-        name: "status",
-        kind: Kind::ReadOnly,
-        ok: json!({}),
-        failing: None,
-    }]
+    vec![
+        Row {
+            name: "status",
+            kind: Kind::ReadOnly,
+            ok: json!({}),
+            failing: None,
+        },
+        Row {
+            name: "report_event",
+            kind: Kind::NotIdempotent,
+            ok: json!({"agent": "codex", "event": {"session_id": "c0dex", "hook_event_name": "SessionStart",
+                "cwd": "/w", "model": "gpt-5", "transcript_path": null, "source": "startup"}}),
+            failing: Some(json!({"agent": "codex", "event": {"session_id": "c0dex", "hook_event_name": "Teleport"}})),
+        },
+    ]
 }
 
 #[test]
@@ -464,13 +472,15 @@ fn every_tool_conforms() {
         }
     }
 
-    // status shows what came in
+    // status shows what came in: the event applied, and report_event's once the queue has applied it
+    until(|| pet.ingress.recent().len() >= 2);
     let (_, reply) = pet.stateless("tools/call", Some("status"), json!({"name": "status", "arguments": {}}));
     let status = &reply["result"]["structuredContent"];
-    assert_eq!(status["registrations_seen"], json!({"claude": true, "codex": false}));
+    assert_eq!(status["registrations_seen"], json!({"claude": true, "codex": true}));
     let events = status["hook_events"].as_array().unwrap();
-    assert_eq!(events.len(), 1, "{status}");
+    assert_eq!(events.len(), 2, "{status}");
     assert!(events[0].as_str().unwrap().contains("c0nf0rm"), "{status}");
+    assert!(events[1].as_str().unwrap().contains("SessionStart c0dex"), "{status}");
 }
 
 /// The structured content has every property the schema requires, and none it doesn't name; each of a type the schema
@@ -479,7 +489,9 @@ fn conforms(value: &Value, schema: &Value, name: &str) {
     let object = value
         .as_object()
         .unwrap_or_else(|| panic!("{name}: {value} isn't an object"));
-    let properties = schema["properties"].as_object().unwrap();
+    // an empty result (`{}`) has a schema without properties
+    let none = serde_json::Map::new();
+    let properties = schema["properties"].as_object().unwrap_or(&none);
     for required in schema["required"].as_array().into_iter().flatten() {
         assert!(object.contains_key(required.as_str().unwrap()), "{name}: no {required}");
     }
@@ -740,4 +752,151 @@ fn parallel_posts_all_land_in_their_chats() {
         );
     }
     assert_eq!(pet.logged("mcp: dropped"), 0);
+}
+
+// ------------------------------------------------------------------------------------------ R6: Codex's report_event
+
+impl Pet {
+    /// A Codex hook's `report_event` call: the tool's result.
+    fn report(&self, arguments: Value) -> Value {
+        let (status, reply) = self.stateless(
+            "tools/call",
+            Some("report_event"),
+            json!({"name": "report_event", "arguments": arguments}),
+        );
+        assert_eq!(status, 200, "{reply}");
+        reply["result"].clone()
+    }
+
+    fn codex_chat(&self, sid: &str) -> Option<Entry> {
+        let id = format!("codex:{sid}");
+        self.ingress.sessions().snapshot().into_iter().find(|e| e.id == id)
+    }
+}
+
+/// Every event Codex's hooks report, called as an `mcp_tool` hook calls it (the fields each event's input table
+/// has), leaves the chat as the pipe leaves it for the envelope the exe makes of the same input.
+#[test]
+fn every_codex_event_over_report_event_gives_the_pipes_state() {
+    let pet = Pet::start("codex");
+    let pipe = AgentSessions::with_codex_home(pet.root.join("codex"));
+    let (t1, t2) = (
+        "019a6b2c-1d00-7000-8000-000000000001",
+        "019a6b2c-2e00-7000-8000-000000000002",
+    );
+    let bash = json!({"command": "cargo build"});
+    let events = [
+        json!({"hook_event_name": "SessionStart", "source": "startup"}),
+        json!({"hook_event_name": "UserPromptSubmit", "turn_id": t1, "prompt": "Fix the build\nplease"}),
+        json!({"hook_event_name": "PreToolUse", "turn_id": t1, "tool_name": "Bash", "tool_use_id": "call_1", "tool_input": bash}),
+        json!({"hook_event_name": "PermissionRequest", "turn_id": t1, "tool_name": "Bash", "tool_input": bash}),
+        json!({"hook_event_name": "PostToolUse", "turn_id": t1, "tool_name": "Bash", "tool_use_id": "call_1", "tool_input": bash,
+            "tool_response": {"output": "x".repeat(300_000)}}),
+        json!({"hook_event_name": "PreToolUse", "turn_id": t1, "tool_name": "apply_patch", "tool_use_id": "call_2",
+            "tool_input": {"input": "*** Begin Patch\n*** Update File: src/lib.rs\n*** End Patch"}}),
+        json!({"hook_event_name": "PostToolUse", "turn_id": t1, "tool_name": "apply_patch", "tool_use_id": "call_2",
+            "tool_input": {"input": "*** Begin Patch\n*** Update File: src/lib.rs\n*** End Patch"}}),
+        json!({"hook_event_name": "PreCompact"}),
+        json!({"hook_event_name": "PostCompact"}),
+        json!({"hook_event_name": "SubagentStart"}),
+        json!({"hook_event_name": "SubagentStop"}),
+        json!({"hook_event_name": "Stop", "turn_id": t1}),
+        json!({"hook_event_name": "UserPromptSubmit", "turn_id": t2, "prompt": "Again"}),
+        json!({"hook_event_name": "Interrupt"}),
+        json!({"hook_event_name": "SessionEnd"}),
+    ];
+    let start = SystemTime::now();
+    for (n, mut event) in events.into_iter().enumerate() {
+        thread::sleep(Duration::from_millis(2));
+        // the base fields every event's input table has; an ephemeral thread's transcript_path is null
+        event["session_id"] = json!("x1");
+        event["cwd"] = json!("/w");
+        event["model"] = json!("gpt-5.3-codex");
+        event["transcript_path"] = Value::Null;
+        let name = event["hook_event_name"].as_str().unwrap().to_owned();
+        let result = pet.report(json!({"agent": "codex", "event": event}));
+        assert_eq!(result["isError"], false, "{name}: {result}");
+        assert_eq!(result["structuredContent"], json!({}), "{name}");
+        let recent = pet.applied(n + 1);
+
+        // the pipe: the exe's envelope of the same input
+        let Ok(Node::Object(payload)) = aipet_json::parse(&event.to_string(), event::READ_DEPTH) else {
+            panic!()
+        };
+        let at = start + Duration::from_secs(n as u64);
+        let line = event::envelope("codex", at, Some(4242), None, event::trimmed(payload).unwrap()).to_json();
+        let applied = pipe.apply(&Envelope::parse(&line).unwrap(), unix_time(at));
+
+        let outcome = recent[n].rsplit("-> ").next().unwrap();
+        assert_eq!(outcome, applied.outcome, "{name}: {}", recent[n]);
+        let by_pipe = pipe.snapshot().into_iter().find(|e| e.id == "codex:x1").unwrap();
+        let by_http = pet.codex_chat("x1").unwrap();
+        assert_eq!(shows(&by_http), shows(&by_pipe), "{name}");
+        if name == "PermissionRequest" {
+            assert_eq!(by_http.state, Some("attention"), "{name}");
+        }
+    }
+    assert!(
+        pet.codex_chat("x1").unwrap().ended.is_some(),
+        "SessionEnd left its tombstone"
+    );
+    assert!(pet.ingress.seen("codex"));
+    assert!(!pet.ingress.seen("claude"));
+}
+
+/// Another agent, an event Codex's chats don't take, or one without a session, is `isError` with the reason, and
+/// changes nothing: no chat, no line in the record, no agent seen. So is an event that isn't an object, or none.
+#[test]
+fn an_invalid_agent_or_event_is_an_error_and_changes_nothing() {
+    let pet = Pet::start("codex-invalid");
+    for (what, arguments) in [
+        (
+            "Claude",
+            json!({"agent": "claude", "event": {"session_id": "x", "hook_event_name": "Stop"}}),
+        ),
+        (
+            "no agent",
+            json!({"agent": "", "event": {"session_id": "x", "hook_event_name": "Stop"}}),
+        ),
+        (
+            "an unknown event",
+            json!({"agent": "codex", "event": {"session_id": "x", "hook_event_name": "Teleport"}}),
+        ),
+        (
+            "Claude's event",
+            json!({"agent": "codex", "event": {"session_id": "x", "hook_event_name": "Notification"}}),
+        ),
+        ("no event name", json!({"agent": "codex", "event": {"session_id": "x"}})),
+        (
+            "no session",
+            json!({"agent": "codex", "event": {"hook_event_name": "UserPromptSubmit", "turn_id": "t"}}),
+        ),
+        // arguments rmcp can't read as the input schema's: rmcp answers an isError too
+        (
+            "an event that isn't an object",
+            json!({"agent": "codex", "event": "Stop"}),
+        ),
+        ("no event", json!({"agent": "codex"})),
+    ] {
+        let result = pet.report(arguments);
+        assert_eq!(result["isError"], true, "{what}: {result}");
+        let reason = result["content"][0]["text"].as_str().unwrap_or("");
+        assert!(!reason.is_empty(), "{what}: no reason: {result}");
+    }
+    // a valid event after them is the first the queue applied
+    let ok =
+        json!({"agent": "codex", "event": {"session_id": "y", "hook_event_name": "SessionStart", "source": "startup"}});
+    assert_eq!(pet.report(ok)["isError"], false);
+    let recent = pet.applied(1);
+    assert_eq!(recent.len(), 1, "{recent:?}");
+    assert!(recent[0].contains("SessionStart y"), "{}", recent[0]);
+    let chats = pet.ingress.sessions().snapshot();
+    assert_eq!(chats.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["codex:y"]);
+    assert!(!pet.ingress.seen("claude"));
+    assert_eq!(
+        pet.logged("mcp: dropped an event: report_event refused it: agent is \"claude\""),
+        1,
+        "{:?}",
+        pet.log.lock().unwrap()
+    );
 }

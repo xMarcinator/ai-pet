@@ -93,7 +93,7 @@ fn envelope(
 
 /// Whether a path lies in Claude's folder (`$CLAUDE_CONFIG_DIR` or `~/.claude`) or Codex's home: absolute, and
 /// without `..`.
-fn agent_file(path: &Path) -> bool {
+pub(crate) fn agent_file(path: &Path) -> bool {
     let homes = [paths::claude_home(), paths::home().join(".claude"), paths::codex_home()];
     under(path, &homes)
 }

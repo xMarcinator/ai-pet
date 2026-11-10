@@ -1,5 +1,5 @@
-//! The pet's HTTP listener (fnt-71): MCP at `/mcp` for agents that drive the pet, and Claude's HTTP hooks at
-//! `/hook/claude`, on 127.0.0.1 at [`MCP_PORT`].
+//! The pet's HTTP listener (fnt-71): MCP at `/mcp` for agents that drive the pet (and for Codex's hooks, which call
+//! its `report_event`), and Claude's HTTP hooks at `/hook/claude`, on 127.0.0.1 at [`MCP_PORT`].
 //!
 //! It runs on a thread of its own with a current-thread tokio runtime, never on the shells' executor (aipet-ui's
 //! one-worker `Executor`), and it reaches the rest of the pet only through the core's [`Ingress`], which the pipe
@@ -19,6 +19,7 @@
 mod events;
 mod guard;
 mod hook;
+mod report;
 mod token;
 mod tools;
 
