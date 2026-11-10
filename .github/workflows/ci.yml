@@ -1,8 +1,9 @@
 # CI: builds the solution and runs its tests on Windows and Linux, checks that the plugin's hook files are what the
 # hook that ships (the Rust one) makes of its event tables, that the install and build scripts at least parse and
-# stay executable, and that the agent skills' Codex copies match. The Rust workspace (rust/) gets its format, lints
-# and tests on Windows and Linux, and a compile check on macOS. The Rust hook's start-up is timed against the
-# NativeAOT hook's it replaces. Nothing is published here: see release.yml.
+# stay executable, that the agent skills' Codex copies match, and that every C# test is in the parity ledger
+# (rust/PARITY.md). The Rust workspace (rust/) gets its format, lints and tests on Windows and Linux, and a compile
+# check on macOS. The Rust hook's start-up is timed against the NativeAOT hook's it replaces. Nothing is published
+# here: see release.yml.
 name: CI
 
 on:
@@ -293,6 +294,10 @@ jobs:
       # The agent skills Codex reads (.agents/skills/) must be the ones Claude Code reads (.claude/skills/), file for file.
       - name: The skills' Codex copies
         run: bash scripts/check-skill-copies.sh
+      # rust/PARITY.md maps every C# test (tests/AiPet.Tests) to the Rust tests that hold its cases (spec fn-1, R16): an
+      # attribute without a row, a Rust test that isn't there, or fewer Rust cases than the C#'s fails.
+      - name: The parity ledger
+        run: bash scripts/check-parity.sh
       - name: Executable bits
         run: |
           # The docs run these as ./build.sh and so on, so git must record them as executable (100755). A script added

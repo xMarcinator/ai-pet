@@ -337,6 +337,7 @@ fn shell_scripts_are_executable() {
         "packaging/linux/install.sh",
         "scripts/check-plugin.sh",
         "scripts/install-from-source.sh",
+        "scripts/check-parity.sh",
     ] {
         use std::os::unix::fs::PermissionsExt;
         let mode = fs::metadata(repo().join(script)).unwrap().permissions().mode();

@@ -214,6 +214,22 @@ fn manifest_is_embedded() {
     }
 }
 
+/// The hook carries the resources the .NET hook had, and no others: the icon group and its images, the manifest and
+/// the version resource (the C# compared them byte for byte with the .NET hook's; their values are held above).
+#[cfg_attr(not(windows), ignore = "Windows only: only a Windows build has the resources")]
+#[test]
+fn the_hook_has_the_dotnet_hooks_resources_and_no_others() {
+    let ico = fs::read(repo().join("assets/icon/aipet.ico")).unwrap();
+    let res = resources(&built("aipet-hook"));
+    let group = &res[&(RT_GROUP_ICON, 32512)];
+    let mut expected: Vec<(u32, u32)> = (0..u16_at(&ico, 4) as usize)
+        .map(|i| (RT_ICON, u16_at(group, 6 + 14 * i + 12) as u32))
+        .collect();
+    expected.extend([(RT_GROUP_ICON, 32512), (RT_VERSION, 1), (RT_MANIFEST, 1)]);
+    expected.sort();
+    assert_eq!(res.keys().copied().collect::<Vec<_>>(), expected);
+}
+
 /// Windows reads the version resource as the tests do (`FileVersionInfo`: GetFileVersionInfoW and VerQueryValueW).
 #[cfg_attr(not(windows), ignore = "Windows only")]
 #[test]

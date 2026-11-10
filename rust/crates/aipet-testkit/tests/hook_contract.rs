@@ -2,7 +2,8 @@
 //! (HookContractTests' trace-log cases, HookSocketTests and HookRequestSizeTests): a plain Unix socket the test
 //! controls stands in for the pet. Whatever comes on stdin the hook exits 0 and prints nothing; it traces only once the
 //! pet was reached, into a log that is the user's own. The cases with the real pet's server are aipet-core's
-//! tests/server.rs.
+//! tests/server.rs. Also NoPetTests' stale socket (its other case is aipet-hook's tests/event.rs). The tests are in
+//! `unix`, with their docs; each is skipped elsewhere.
 
 #[cfg_attr(windows, ignore = "a Unix socket stands in for the pet")]
 #[test]
@@ -37,6 +38,13 @@ fn lone_surrogates_are_mended_and_the_rest_kept() {
 fn a_line_just_under_the_limit_stays_within_it_once_sent_is_added() {
     #[cfg(unix)]
     unix::a_line_just_under_the_limit_stays_within_it_once_sent_is_added();
+}
+
+#[cfg_attr(not(target_os = "linux"), ignore = "Linux only")]
+#[test]
+fn hook_with_a_stale_socket_file_leaves_no_trace() {
+    #[cfg(target_os = "linux")]
+    unix::hook_with_a_stale_socket_file_leaves_no_trace();
 }
 
 #[cfg(unix)]
@@ -292,5 +300,30 @@ mod unix {
         let keys: Vec<&String> = sent["payload"]["tool_input"].as_object().unwrap().keys().collect();
         assert_eq!(keys, ["file_path"]);
         assert!(!sent["sent"].is_null());
+    }
+
+    /// What a crashed pet leaves: a socket file nothing listens on any more. The hook gives up at once, and with no
+    /// pet reached it writes nothing, neither a trace nor anything in the data folder.
+    #[cfg(target_os = "linux")]
+    pub fn hook_with_a_stale_socket_file_leaves_no_trace() {
+        let socket = Socket::new();
+        drop(UnixListener::bind(socket.path()).unwrap());
+        assert!(socket.path().exists());
+        let box_ = Sandbox::new();
+        for agent in ["claude", "codex"] {
+            let tmp = box_.dir(&format!("trace-{agent}"));
+            let mut command = box_.command(hook(), None);
+            command
+                .args(["--agent", agent])
+                .env("AIPET_PIPE", socket.path())
+                .env("TMPDIR", &tmp)
+                .stdin(Stdio::piped());
+            let mut child = command.spawn().unwrap();
+            let stdin = json!({"hook_event_name": "Stop", "session_id": "s"}).to_string();
+            child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
+            silent(&finish(child, Duration::from_secs(20), "the hook"));
+            assert_eq!(contents(&tmp), Vec::<PathBuf>::new(), "{agent}");
+            assert_eq!(contents(&box_.aipet()), Vec::<PathBuf>::new(), "{agent}");
+        }
     }
 }

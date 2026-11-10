@@ -378,6 +378,12 @@ impl Sandbox {
             for (name, dir) in [("USERPROFILE", self.home()), ("TMP", self.tmp()), ("TEMP", self.tmp())] {
                 env.insert(name.into(), text(dir));
             }
+            // the system's own folders, which a program can't start without (nothing of the user's)
+            for name in ["SystemRoot", "SystemDrive", "windir", "ComSpec", "PATHEXT"] {
+                if let Ok(value) = std::env::var(name) {
+                    env.insert(name.into(), value);
+                }
+            }
         }
         env.extend(self.env.clone());
         env
