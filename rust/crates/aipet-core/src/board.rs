@@ -33,6 +33,8 @@ pub const MAX_CARDS: [(&str, usize); 3] = [("chats", 4), ("reviews", 4), ("music
 
 /// A GitHub review's dot colour (0xAARRGGBB).
 pub const GITHUB_PURPLE: u32 = 0xFFA371F7;
+/// A tracker task bubble's border (0xAARRGGBB), as a chat's is its app's (fnt-81).
+pub const TRACKER_TEAL: u32 = 0xFF3FB8AF;
 
 /// How much a bubble's state counts in the order: more first; a state not listed counts 1.
 pub fn priority(eff: &str) -> i32 {

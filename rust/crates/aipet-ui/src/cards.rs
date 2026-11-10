@@ -118,7 +118,8 @@ impl Buttons {
 pub struct Bubble {
     pub id: Arc<str>,
     pub section: Section,
-    /// What it is, as the Board says: `chat`, `jira`, `jira-error`, `github`, `github-error` or `music`.
+    /// What it is, as the Board says: `chat`, `task`, `jira`, `jira-error`, `github`, `github-error`, `tracker-error`
+    /// or `music`.
     pub kind: &'static str,
     /// Its state, for the dot's colour and the style: thinking, working, attention, done, idle, review…
     pub state: &'static str,
@@ -131,6 +132,17 @@ pub struct Bubble {
     pub app: Option<(&'static str, u32)>,
     /// The round buttons it shows while the pointer is on it.
     pub buttons: Buttons,
+    /// A tracker task's counts (fnt-81).
+    pub progress: Option<Progress>,
+}
+
+/// A tracker task's counts on its bubble (fnt-81): its subtasks done of total as a thin strip along the bottom, and
+/// how many agents work on it as a badge on the dot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Progress {
+    pub done: u32,
+    pub total: u32,
+    pub agents: u32,
 }
 
 /// A bubble's title and detail cut to fit, and the bubble's width.
@@ -156,6 +168,7 @@ pub struct Card {
     pub state: &'static str,
     pub app: Option<(&'static str, u32)>,
     pub buttons: Buttons,
+    pub progress: Option<Progress>,
     /// What its text is fitted from: the title, and the detail with its thinking dots and how many more there are.
     text: (String, String),
     /// Its text fitted at rest, and beside the buttons it was fitted for (made once the pointer is on it).
@@ -281,8 +294,8 @@ impl Stacks {
             let detail = detail(bubble, t);
             match self.cards.iter_mut().find(|c| c.id == bubble.id) {
                 Some(card) => {
-                    (card.kind, card.state, card.app, card.buttons) =
-                        (bubble.kind, bubble.state, bubble.app, bubble.buttons);
+                    (card.kind, card.state, card.app, card.buttons, card.progress) =
+                        (bubble.kind, bubble.state, bubble.app, bubble.buttons, bubble.progress);
                     if card.text.0 != *bubble.title || card.text.1 != detail {
                         card.rest = fit(&bubble.title, &detail, None);
                         card.chrome = None;
@@ -298,6 +311,7 @@ impl Stacks {
                         state: bubble.state,
                         app: bubble.app,
                         buttons: bubble.buttons,
+                        progress: bubble.progress,
                         text: (bubble.title.to_string(), detail),
                         rest,
                         chrome: None,
@@ -520,6 +534,7 @@ mod tests {
             more: 0,
             app: None,
             buttons: Buttons::default(),
+            progress: None,
         }
     }
 
@@ -722,6 +737,7 @@ mod tests {
             Bubble {
                 title: "A long title of an issue".into(),
                 buttons: two,
+                progress: None,
                 ..bubble("r1", Section::Reviews, "review")
             },
             bubble("r2", Section::Reviews, "review"),

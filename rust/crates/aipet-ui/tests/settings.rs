@@ -13,9 +13,10 @@ use aipet_core::config::{Config, GitHubSettings, JiraSettings};
 use aipet_core::github::{self, GitHubWatcher};
 use aipet_core::jira::{self, Http, JiraWatcher};
 use aipet_core::secrets::{self, MemorySecrets, SecretStore};
+use aipet_core::tracker::{self, SessionsWithoutTask, TrackerWatcher};
 use aipet_core::update_status::{Kind, UpdateStatus};
 use aipet_ui::platform::{Call, Recorder};
-use aipet_ui::settings::{self, Services, Tone, general};
+use aipet_ui::settings::{self, Page, Services, Tone, general};
 use aipet_ui::{Host, Message, PetUi, Place, Prefs, Setup};
 
 const JIRA_SITE: &str = "team.atlassian.net";
@@ -56,9 +57,10 @@ struct Pet {
     secrets: Arc<MemorySecrets>,
     jira: Arc<JiraWatcher>,
     github: Arc<GitHubWatcher>,
+    tracker: Arc<TrackerWatcher>,
     platform: Arc<Recorder>,
     scratch: Scratch,
-    _events: (Receiver<jira::Event>, Receiver<github::Event>),
+    _events: (Receiver<jira::Event>, Receiver<github::Event>, Receiver<tracker::Event>),
 }
 
 impl Pet {
@@ -85,6 +87,8 @@ impl Pet {
         let (github_events, github_heard) = channel::<github::Event>();
         let jira = Arc::new(JiraWatcher::new(&scratch.0, secrets.clone(), http(), jira_events));
         let github = Arc::new(GitHubWatcher::new(&scratch.0, secrets.clone(), http(), github_events));
+        let (tracker_events, tracker_heard) = channel::<tracker::Event>();
+        let tracker = Arc::new(TrackerWatcher::new(&scratch.0, secrets.clone(), tracker_events));
         let platform = Arc::new(Recorder::new());
         let ui = PetUi::new(Setup {
             platform: platform.clone(),
@@ -93,6 +97,7 @@ impl Pet {
                 data_dir: scratch.0.clone(),
                 jira: Some(jira.clone()),
                 github: Some(github.clone()),
+                tracker: Some(tracker.clone()),
                 secrets: secrets.clone(),
                 http: http(),
                 version: "0.3.0".into(),
@@ -105,9 +110,10 @@ impl Pet {
             secrets,
             jira,
             github,
+            tracker,
             platform,
             scratch,
-            _events: (jira_heard, github_heard),
+            _events: (jira_heard, github_heard, tracker_heard),
         }
     }
 
@@ -876,4 +882,56 @@ fn reload_puts_on_the_default_style_when_the_worn_one_goes_and_the_first_pet_whe
     std::fs::remove_dir_all(folder.join("Fox")).unwrap();
     reload(&mut ui);
     assert_eq!(ui.prefs().avatar.as_deref(), Some("Sprout"));
+}
+
+/// fnt-81: the Tracker page fills its address with the default, enrolls on a thread and shows why it couldn't, keeps
+/// the code out of sight once used, and saves the hidden-chats choice at once.
+#[test]
+fn the_tracker_page_enrolls_says_why_not_and_saves_the_hidden_chats_choice() {
+    let mut pet = Pet::new("tracker");
+    let send = |pet: &mut Pet, message| {
+        pet.ui.update(Message::Settings(settings::Message::Tracker(message)));
+    };
+    pet.ui.update(Message::Settings(settings::Message::Show(Page::Tracker)));
+    let start = std::time::Instant::now();
+    pet.ui.tick(start);
+    let page = &pet.ui.settings().tracker;
+    assert_eq!(page.address, settings::tracker::DEFAULT_ADDRESS);
+    assert_eq!(page.status(Some(&pet.tracker)).1, Tone::Muted);
+
+    send(
+        &mut pet,
+        settings::tracker::Message::Address("http://192.168.1.4:3210".into()),
+    );
+    send(&mut pet, settings::tracker::Message::Code("abc-123".into()));
+    send(&mut pet, settings::tracker::Message::Enroll);
+    assert!(pet.ui.settings().tracker.code.is_empty(), "a code is used once");
+    let deadline = start + Duration::from_secs(10);
+    let mut now = start;
+    while pet
+        .ui
+        .settings()
+        .tracker
+        .status
+        .as_ref()
+        .is_some_and(|(line, _)| line == "Enrolling…")
+    {
+        assert!(now < deadline, "Enroll never finished");
+        std::thread::sleep(Duration::from_millis(10));
+        now += Duration::from_millis(16);
+        pet.ui.tick(now);
+    }
+    assert_eq!(
+        pet.ui.settings().tracker.status,
+        Some((
+            "Only a tracker on this computer can be followed for now (http://127.0.0.1:<port>)".into(),
+            Tone::Bad
+        ))
+    );
+    assert!(!pet.tracker.is_enrolled());
+
+    send(&mut pet, settings::tracker::Message::HideOtherChats(true));
+    assert_eq!(pet.tracker.settings().sessions_without_task, SessionsWithoutTask::Hide);
+    let saved = std::fs::read_to_string(pet.scratch.0.join("tracker.json")).unwrap();
+    assert!(saved.contains("\"hide\""), "{saved}");
 }

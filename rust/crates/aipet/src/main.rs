@@ -232,6 +232,7 @@ fn pet(wayland: bool, instance: single::Instance) -> Result<(), String> {
         data_dir: data_dir.clone(),
         jira: Some(core.jira()),
         github: Some(core.github()),
+        tracker: Some(core.tracker()),
         secrets,
         http,
         version: updates::version(),

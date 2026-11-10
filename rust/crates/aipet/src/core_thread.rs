@@ -73,6 +73,7 @@ pub struct Core {
     thread: Option<JoinHandle<()>>,
     jira: Arc<JiraWatcher>,
     github: Arc<GitHubWatcher>,
+    tracker: Arc<TrackerWatcher>,
     ingress: Arc<Ingress>,
 }
 
@@ -216,7 +217,7 @@ pub fn start(options: Options, news: Sender<News>) -> Core {
         codex,
         jira: Arc::clone(&jira),
         github: Arc::clone(&github),
-        tracker,
+        tracker: Arc::clone(&tracker),
         media: None,
         music,
         listening,
@@ -231,6 +232,7 @@ pub fn start(options: Options, news: Sender<News>) -> Core {
         thread: Some(thread),
         jira,
         github,
+        tracker,
         ingress,
     }
 }
@@ -250,6 +252,10 @@ impl Core {
 
     pub fn github(&self) -> Arc<GitHubWatcher> {
         Arc::clone(&self.github)
+    }
+
+    pub fn tracker(&self) -> Arc<TrackerWatcher> {
+        Arc::clone(&self.tracker)
     }
 
     /// Where hook events go in, for the HTTP listener: the pipe server's own.

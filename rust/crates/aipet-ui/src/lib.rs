@@ -46,7 +46,7 @@ use iced::widget::image::Handle;
 use iced::{Point, Rectangle, Size, Vector};
 
 pub use cards::Button;
-use cards::{Bubble, Buttons, Card, Fitted, Section, Stacks};
+use cards::{Bubble, Buttons, Card, Fitted, Progress, Section, Stacks};
 pub use executor::Executor;
 use geometry::{CARD_RADIUS, CLOSE_SIZE, CardFrame, HALO, HEADER_H, HEADER_RADIUS, MENU_RADIUS, Motion};
 pub use geometry::{INLINE_MENU, MENU, Rect, SPRITE, SURFACE};
@@ -722,6 +722,7 @@ impl PetUi {
                     more: 0,
                     app: None,
                     buttons: Buttons::default(),
+                    progress: None,
                 });
             }
         }
@@ -747,7 +748,8 @@ impl PetUi {
     }
 
     /// The Board's bubbles, in its order: each chat with its app, whose name comes before the detail unless every chat
-    /// is in the Claude app (or Claude Code); the last of a stack says how many more there are; and each with the
+    /// is in the Claude app (or Claude Code); a tracker task with the tracker's border, its acceptance count after the
+    /// detail and its subtasks and agents to draw; the last of a stack says how many more there are; and each with the
     /// buttons it shows while the pointer is on it.
     fn fill(&mut self, board: &Board) {
         let cards = board.cards();
@@ -758,12 +760,23 @@ impl PetUi {
             .collect();
         let several_apps = apps.len() > 1;
         for (i, s) in cards.iter().enumerate() {
-            let app = (s.kind == "chat").then(|| board::app_of(s));
+            let app = match s.kind {
+                "chat" => Some(board::app_of(s)),
+                "task" => Some(("Tracker", board::TRACKER_TEAL)),
+                _ => None,
+            };
             let detail = match app {
-                Some((label, _)) if several_apps || !matches!(label, "Claude app" | "Claude") => {
+                Some((label, _)) if s.kind == "chat" && (several_apps || !matches!(label, "Claude app" | "Claude")) => {
                     format!("{label} · {}", s.detail)
                 }
                 _ => s.detail.clone(),
+            };
+            let task = s.task.as_deref();
+            let detail = match task.map(|t| t.acceptance) {
+                Some(criteria) if criteria.total > 0 => {
+                    format!("{detail} · {}/{} criteria", criteria.done, criteria.total)
+                }
+                _ => detail,
             };
             let last = !cards[i + 1..].iter().any(|x| x.section() == s.section());
             self.show.push(Bubble {
@@ -776,6 +789,11 @@ impl PetUi {
                 more: if last { board.extra(s.section()) } else { 0 },
                 app,
                 buttons: buttons(s),
+                progress: task.map(|t| Progress {
+                    done: t.subtasks.done,
+                    total: t.subtasks.total,
+                    agents: t.agents.total,
+                }),
             });
         }
         self.waiting = cards.iter().filter(|s| matches!(s.kind, "jira" | "github")).count() + board.extra("reviews");
@@ -1020,6 +1038,7 @@ impl PetUi {
         match s.map(|s| (s.kind, s.url.as_deref())) {
             Some(("jira-error", _)) => return Some(self.open_settings(Page::Jira)),
             Some(("github-error", _)) => return Some(self.open_settings(Page::GitHub)),
+            Some(("tracker-error", _)) => return Some(self.open_settings(Page::Tracker)),
             Some(("music", _)) => {
                 if let Some(player) = self.platform.media() {
                     player.focus();
@@ -1654,6 +1673,66 @@ pub(crate) mod tests {
             .iter()
             .find(|b| *b.id == *id)
             .unwrap_or_else(|| panic!("no {id}: {:?}", ui.show))
+    }
+
+    /// fnt-81: a tracker task's bubble has the tracker's border, its acceptance count after the detail and its
+    /// counts to draw; its chat collapsed into it, and a click on its error bubble opens the Tracker page.
+    #[test]
+    fn a_tracker_task_is_a_bubble_with_its_counts() {
+        use aipet_core::board::TrackerSources;
+        use aipet_core::tracker::TrackerTask;
+        use aipet_core::tracker::wire::{Agents, Count, Links};
+
+        let task = TrackerTask {
+            id: "fnt-81".into(),
+            short_id: "FNT-81".into(),
+            title: "Task bubbles".into(),
+            phase: Some("testing".into()),
+            subtasks: Count { done: 3, total: 7 },
+            acceptance: Count { done: 2, total: 5 },
+            agents: Agents {
+                total: 2,
+                ..Agents::default()
+            },
+            sessions: vec!["run".into()],
+            links: Links {
+                task: Some("fnt://task/FNT-81".into()),
+                run: None,
+            },
+            ..TrackerTask::default()
+        };
+        let (ui, _) = shown(board(&Sources {
+            chats: vec![chat("claude:run", "working", "Run", "Editing", "terminal", NOW)],
+            tracker: TrackerSources {
+                tasks: vec![task],
+                connected: true,
+                ..TrackerSources::default()
+            },
+            ..Sources::default()
+        }));
+        assert!(!shows(&ui, "claude:run"));
+        let b = bubble(&ui, "task:fnt-81");
+        assert_eq!(b.app, Some(("Tracker", board::TRACKER_TEAL)));
+        assert_eq!(&*b.title, "FNT-81 · Task bubbles");
+        assert_eq!(&*b.detail, "Testing · 2/5 criteria");
+        assert_eq!(
+            b.progress,
+            Some(Progress {
+                done: 3,
+                total: 7,
+                agents: 2
+            })
+        );
+
+        let (mut ui, _) = shown(board(&Sources {
+            tracker: TrackerSources {
+                error: Some("this pet was revoked; enroll it again".into()),
+                ..TrackerSources::default()
+            },
+            ..Sources::default()
+        }));
+        ui.update(Message::CardPressed("tracker:_error".into()));
+        assert_eq!(ui.settings.page, Page::Tracker);
     }
 
     #[test]
