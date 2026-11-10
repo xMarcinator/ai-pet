@@ -9,11 +9,16 @@ use aipet_core::update_status;
 use aipet_testkit::repo;
 
 fn release_yml() -> String {
-    fs::read_to_string(repo().join(".github/workflows/release.yml")).unwrap()
+    fs::read_to_string(repo().join(".github/workflows/release.yml"))
+        .unwrap()
+        .replace("\r\n", "\n")
 }
 
+/// A source file, with LF line ends as `body` looks for them (a Windows checkout may have CRLF).
 fn source(file: &str) -> String {
-    fs::read_to_string(repo().join("rust/crates").join(file)).unwrap()
+    fs::read_to_string(repo().join("rust/crates").join(file))
+        .unwrap()
+        .replace("\r\n", "\n")
 }
 
 /// The app looks for releases.<channel>.json in the releases, which vpk pack names after its --channel.
