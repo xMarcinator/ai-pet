@@ -31,8 +31,30 @@ their fixtures stay frozen. Cut milestone 3.
 - [ ] `git grep` finds no reference to removed paths outside the CHANGELOG.
 - [ ] The milestone 3 dry run passes.
 ## Done summary
-TBD
+The .NET code is gone on branch `fn-1-cutover`, which merges into main only after 0.2.0 (milestone 2) is released from `fn-2-layered-sprite-and-vector-pets`. **Merge it, don't squash it:** the frozen C# values and fixtures name bf3696ea4a, the last commit with the C#.
 
+**Deleted:**
+- the C# projects, the solution and the build props;
+- `rust/golden`, whose fixtures stay as frozen outputs and whose Linux registration and doctor corpora were recorded from the last C# build;
+- `build/Win32Resources.targets` and `tools/IconGen`;
+- `cross-runtime.yml`, whose two Rust-only steps moved to ci.yml;
+- velopack-proof's .NET-to-Rust jobs, which `rust/proofs/velopack.md` keeps as the record.
+
+**Tests and CI:**
+- The tests that read C# sources now hold its values frozen.
+- CI installs no .NET; the release installs it only for vpk on Windows.
+- `scripts/check-removed-paths.sh` keeps removed paths from coming back.
+- `check-parity.sh` checks the ledger against the Rust tests alone.
+
+**Checks:**
+- The milestone 3 dry run, 0.3.0-dry.1 (run 42803357583), passed every job.
+- CI on the branch (run 42807766973) is green on Linux and Windows, after two fixes: an unused import on Windows, and fn-1.24's Windows-only testkit suites, fixed on the release branch and merged in.
+
+**Still the owner's:**
+- drop the removed jobs ("Hook start-up", the cross-runtime jobs) from branch protection if they're required;
+- cut milestone 3 after 0.2.0 and the merge.
+
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:
