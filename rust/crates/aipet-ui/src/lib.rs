@@ -370,7 +370,7 @@ pub struct PetUi {
     /// Device px per logical px on the pet's output, as the shell says: a pixel pack's pixels are snapped to them.
     scale: f32,
     /// Each avatar standing still, for the picker: in the theme it was last worn in, else its default.
-    stills: Vec<Handle>,
+    stills: Vec<Still>,
     avatar: usize,
     /// The worn avatar's theme: one it has.
     theme: String,
@@ -510,6 +510,23 @@ fn pets(avatars: &[shelf::Shelved]) -> Vec<aipet_sprite::load::Group> {
     aipet_sprite::load::groups_of(avatars.iter().map(|a| &a.pack))
 }
 
+/// An avatar's tile picture: the pet standing still in a theme, and that theme's accent, which the tile's dot takes.
+#[derive(Clone, Debug)]
+struct Still {
+    image: Handle,
+    /// 0xAARRGGBB.
+    accent: u32,
+}
+
+impl Still {
+    fn of(pet: &aipet_sprite::load::LoadedPack) -> Still {
+        Still {
+            image: sprite::still(pet),
+            accent: pet.pack.accent,
+        }
+    }
+}
+
 /// `pet` in its theme `theme`, which it has.
 fn themed(pet: &aipet_sprite::load::LoadedPack, theme: &str) -> aipet_sprite::load::LoadedPack {
     pet.in_theme(theme).unwrap_or_else(|| pet.clone())
@@ -526,11 +543,11 @@ impl PetUi {
     pub fn new(setup: Setup) -> Self {
         let found = aipet_sprite::load::all(&setup.avatars);
         let skipped = found.skipped;
-        let mut stills: Vec<Handle> = found.pets.iter().map(sprite::still).collect();
+        let mut stills: Vec<Still> = found.pets.iter().map(Still::of).collect();
         let avatars = shelf::shelve(found.pets);
         let (avatar, theme) = choose(&avatars, &setup.prefs);
         let worn = themed(&avatars[avatar].unpacked(), &theme);
-        stills[avatar] = sprite::still(&worn);
+        stills[avatar] = Still::of(&worn);
         let chosen = HashMap::from([(
             worn.pack.pet().to_owned(),
             (worn.pack.style().to_owned(), theme.clone()),
@@ -594,6 +611,8 @@ impl PetUi {
             settings: Settings::new(setup.services),
         };
         ui.sized();
+        // Settings' theme editor shows the theme worn
+        settings::avatars::follow(&mut ui);
         ui
     }
 
@@ -930,8 +949,6 @@ impl PetUi {
                         Some((_, theme)) => theme.clone(),
                         None => avatar.pack.palette.theme.clone(),
                     };
-                    // the theme editor was for the pet taken off
-                    self.settings.avatars.theme = None;
                     self.wear(i, &theme);
                     self.save_prefs();
                 }
@@ -1127,9 +1144,9 @@ impl PetUi {
             && let Some(old) = self.avatars.get(self.avatar)
         {
             // its tile keeps the theme it was worn in
-            self.stills[self.avatar] = sprite::still(&themed(&old.unpacked(), &self.theme));
+            self.stills[self.avatar] = Still::of(&themed(&old.unpacked(), &self.theme));
         }
-        self.stills[i] = sprite::still(&worn);
+        self.stills[i] = Still::of(&worn);
         self.chosen.insert(
             base.pack.pet().to_owned(),
             (base.pack.style().to_owned(), theme.clone()),
@@ -1144,6 +1161,8 @@ impl PetUi {
             self.input.facing = drawn_facing(&worn.pack);
         }
         self.sized();
+        // Settings' theme editor follows, whoever put it on
+        settings::avatars::follow(self);
     }
 
     fn save_prefs(&mut self) {
@@ -2096,13 +2115,44 @@ pub(crate) mod tests {
             other => panic!("{other:?}"),
         };
         let blue = sprite::still(&themed(&ui.avatars[hood].unpacked(), "Blue"));
-        assert_eq!(rgba(&ui.stills[hood]), rgba(&blue));
+        assert_eq!(rgba(&ui.stills[hood].image), rgba(&blue));
         ui.update(Message::SelectAvatar(hood));
         assert_eq!(worn(&ui), ("Hood".into(), "Vector".into(), "Blue".into()));
         // a pet not worn yet goes on in its default style and theme
         ui.update(Message::SelectAvatar(tile(&ui, "Pip")));
         let pip = &ui.avatars[ui.avatar];
         assert_eq!(ui.theme(), pip.pack.palette.theme);
+    }
+
+    #[test]
+    fn a_tiles_dot_is_the_accent_of_the_drawing_and_theme_its_still_shows() {
+        let mut ui = PetUi::new(Setup {
+            prefs: Prefs {
+                avatar: Some("Hood".into()),
+                avatar_theme: Some("Green".into()),
+                ..Prefs::default()
+            },
+            ..Setup::detached()
+        });
+        let accent = |ui: &PetUi, pet: &str| {
+            settings::avatars::tile_accents(ui)
+                .into_iter()
+                .find(|&(n, _)| n == pet)
+                .unwrap()
+                .1
+        };
+        let tile = |ui: &PetUi, name: &str| ui.avatars.iter().position(|a| a.name() == name).unwrap();
+        let hood = ui.avatars[tile(&ui, "Hood")].unpacked();
+        let green = hood.in_theme("Green").unwrap().pack.accent;
+        assert_ne!(green, hood.pack.accent, "Green has an accent of its own");
+        assert_eq!(accent(&ui, "Hood"), green);
+        // taken off, the Hood's tile still shows it in Green, and its dot is Green's: not its default Blue's
+        ui.update(Message::SelectAvatar(tile(&ui, "Sprout")));
+        assert_eq!(accent(&ui, "Hood"), green);
+        assert_eq!(accent(&ui, "Sprout"), ui.pet.pack().accent);
+        // a pet not worn yet: its default's
+        let pip = &ui.avatars[tile(&ui, "Pip")];
+        assert_eq!(accent(&ui, "Pip"), pip.pack.accent);
     }
 
     #[test]

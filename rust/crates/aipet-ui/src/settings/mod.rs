@@ -428,19 +428,25 @@ pub(crate) fn field<'a>(
         .into()
 }
 
-/// A text box's look: dark, with an edge that brightens while it has the focus.
+/// A text box's look: dark, with an edge that brightens while it has the focus; a locked one (disabled) fainter,
+/// its text muted.
 pub(crate) fn input_style(_: &iced::Theme, status: text_input::Status) -> text_input::Style {
     let focused = matches!(status, text_input::Status::Focused { .. });
+    let locked = status == text_input::Status::Disabled;
     text_input::Style {
-        background: argb(0xFF141416).into(),
+        background: argb(if locked { 0xFF1A1A1D } else { 0xFF141416 }).into(),
         border: Border {
-            color: argb(if focused { 0x66FFFFFF } else { 0x26FFFFFF }),
+            color: argb(match (focused, locked) {
+                (_, true) => 0x12FFFFFF,
+                (true, _) => 0x66FFFFFF,
+                _ => 0x26FFFFFF,
+            }),
             width: 1.0,
             radius: 8.0.into(),
         },
         icon: style::MUTED,
         placeholder: argb(0xFF6A6A72),
-        value: Color::WHITE,
+        value: if locked { style::MUTED } else { Color::WHITE },
         selection: argb(0x664C9AFF),
     }
 }

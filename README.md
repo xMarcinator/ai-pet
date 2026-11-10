@@ -190,12 +190,13 @@ Right-click the pet for its menu:
   - Team defaults: **Import defaults…** reads a preset file (below).
   - About: the version, and whether this copy updates itself. The installed Windows app shows the state of its
     updates here, with **Check for updates**.
-- **Avatars**: the pets, one tile each. Click one to wear it. Three are built in, each in two styles: Sprout and
-  Hood (pixel or vector) and Pip (vector or painted). The worn pet's **Style** picks one, saved as `AvatarStyle` in
-  `config.json`.
-  - Themes: under the tiles, the worn pet's themes (the Hood in Blue or Green, say). **New theme** makes one of your
-    own from any pet with named colours: pick its colours and save it. **Edit** and **Delete** change or remove your
-    own themes.
+- **Avatars**: the pets, one tile each, marked "Built in" or "Your own". Click one to wear it. Three are built in,
+  each in two styles: Sprout and Hood (pixel or vector) and Pip (vector or painted). The worn pet's **Style** picks
+  one, saved as `AvatarStyle` in `config.json`.
+  - Themes: under the tiles, the worn pet's themes (the Hood in Blue or Green, say), the built-in ones and your own
+    apart. Under them the theme editor shows the theme worn, with every named colour. A built-in theme is locked:
+    **Copy as new theme** makes one of your own from it, to name, colour and **Save**. Your own themes can be changed
+    and saved, copied, or deleted.
   - Your own pets: put a pack folder in the avatars folder (**Open folder**) and click **Reload**. A pack is a
     `pack.json` with its art: pixel-art or painted PNG sheets, vector shapes, or straight from Aseprite. An older
     avatar `.json` file still works too. Anything that doesn't load is listed with the reason, and

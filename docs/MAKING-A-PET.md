@@ -387,9 +387,10 @@ the same size as the sheet it replaces, so the frames still line up:
 A theme changes colours or sheets, never both. Pip (painted)'s Lilac theme is a sheet theme.
 
 **Your own themes.** You can add a theme to any pet with named colours, the built-in ones included, without
-touching its pack. On the Avatars page, **New theme** opens an editor on the worn pet in the theme it has on: give
-it a name, change any colour, and **Save**. **Edit** and **Delete** work on your own themes only; a pet's own themes
-come with it. Each is a file in the avatars folder's `themes/` folder:
+touching its pack. On the Avatars page the theme editor shows the worn pet in the theme it has on. A theme that
+comes with the pet is locked: **Copy as new theme** makes one of your own from it, to name, colour and **Save**. Your
+own themes (under "Your own") can be changed and saved, copied or deleted. Each is a file in the avatars folder's
+`themes/` folder:
 
 ```json
 {

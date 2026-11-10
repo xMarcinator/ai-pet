@@ -34,6 +34,8 @@ pub const MAX_DECODED: u64 = 64 * 1024 * 1024;
 pub struct LoadedPack {
     pub pack: Pack,
     pub sheets: Vec<Sheet>,
+    /// Whether it is one of the built-in pets ([`crate::builtin::all`]), not one from the avatars folder.
+    pub builtin: bool,
 }
 
 impl LoadedPack {
@@ -118,7 +120,11 @@ impl LoadedPack {
             let b = bake(avatar);
             (b.pack, b.sheets)
         });
-        LoadedPack { pack, sheets }
+        LoadedPack {
+            pack,
+            sheets,
+            builtin: false,
+        }
     }
 }
 
@@ -570,7 +576,11 @@ pub fn load_folder(folder: &Path) -> Result<LoadedPack, String> {
         None => return Err("no pack.json, Aseprite export or .aseprite file".to_owned()),
     };
     fits(&pack)?;
-    Ok(LoadedPack { pack, sheets })
+    Ok(LoadedPack {
+        pack,
+        sheets,
+        builtin: false,
+    })
 }
 
 /// Every raster frame within the art box and its halo, at the pack's pixel size.

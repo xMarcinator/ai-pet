@@ -215,6 +215,8 @@ pub struct Pet<R: PetRng = XorShift64> {
     pack: Pack,
     /// The pack's sheets, straight colours (premultiplied as they're drawn).
     sheets: Vec<Sheet>,
+    /// Whether the pack is a built-in pet's ([`LoadedPack::builtin`]).
+    builtin: bool,
     /// Reduced motion ([`Pet::set_reduced_motion`]).
     reduced: bool,
     /// When the layers were last drawn and with which pose, and whether [`Pet::layers`] has composited them since.
@@ -316,6 +318,7 @@ impl<R: PetRng> Pet<R> {
                 palette: Default::default(),
             },
             sheets: Vec::new(),
+            builtin: false,
             reduced: false,
             drawn_at: 0.0,
             drawn_pose: Pose::scripted(Values::IDLE, 0.0),
@@ -341,6 +344,7 @@ impl<R: PetRng> Pet<R> {
         LoadedPack {
             pack: self.pack.clone(),
             sheets: self.sheets.clone(),
+            builtin: self.builtin,
         }
     }
 
@@ -375,6 +379,7 @@ impl<R: PetRng> Pet<R> {
     pub fn set_pack(&mut self, p: LoadedPack) {
         self.pack = p.pack;
         self.sheets = p.sheets;
+        self.builtin = p.builtin;
         self.avatar = None;
         self.last_draw_frame = -1;
         self.tracker.reset();

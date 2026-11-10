@@ -40,6 +40,7 @@ impl Shelved {
         LoadedPack {
             pack: self.pet.pack.clone(),
             sheets: self.sheets.iter().map(unpack).collect(),
+            builtin: self.pet.builtin,
         }
     }
 }

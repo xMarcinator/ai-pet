@@ -525,7 +525,13 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     };
     let themes = aipet_sprite::Avatar::custom_dir(&scratch.0).join("themes");
     let avatars = |message| Message::Settings(settings::Message::Avatars(message));
-    use settings::avatars::Message as A;
+    use settings::avatars::{Editing, Message as A};
+    // what the editor has: the pet, the theme's name, and which
+    let editor = |ui: &PetUi| {
+        let t = settings::avatars::theming(ui).expect("the editor is always there");
+        (t.pet.clone(), t.name.clone(), t.editing.clone())
+    };
+    let it = |pet: &str, name: &str, editing: Editing| (pet.to_owned(), name.to_owned(), editing);
     let mut ui = start(Prefs {
         avatar: Some("Hood (vector)".into()),
         ..Prefs::default()
@@ -534,21 +540,35 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
         settings::avatars::themes(&ui),
         [("Green", true, false), ("Blue", false, false)]
     );
+    // the editor shows the theme worn, built in: locked
+    assert_eq!(editor(&ui), it("Hood (vector)", "Green", Editing::BuiltIn));
+    let body = settings::avatars::theming(&ui)
+        .unwrap()
+        .colours
+        .iter()
+        .position(|(n, _)| n == "body")
+        .unwrap();
+    ui.update(avatars(A::ThemeName("Mine".into())));
+    ui.update(avatars(A::ThemeColour(body, "#441010".into())));
+    ui.update(avatars(A::SaveTheme));
+    assert_eq!(editor(&ui), it("Hood (vector)", "Green", Editing::BuiltIn));
+    assert_ne!(settings::avatars::theming(&ui).unwrap().colours[body].1, "#441010");
+    assert!(!themes.exists(), "a built-in theme is never saved");
 
-    // a built-in theme, picked: worn, and kept in config.json
+    // a built-in theme, picked: worn, and kept in config.json; the editor follows
     ui.update(Message::SelectTheme("Blue".into()));
     assert_eq!(settings::avatars::worn(&ui).pack.palette.colours["body"], 0xFF16285E);
     assert_eq!(Config::load_from(&config).0.avatar_theme.as_deref(), Some("Blue"));
+    assert_eq!(editor(&ui), it("Hood (vector)", "Blue", Editing::BuiltIn));
 
-    // New theme opens the editor on the pet in the theme it has on
-    ui.update(avatars(A::NewTheme));
-    let t = settings::avatars::theming(&ui).expect("the editor opens");
-    assert_eq!(
-        (t.pet.as_str(), t.name.as_str(), t.editing.as_deref()),
-        ("Hood (vector)", "My theme", None)
-    );
-    let body = t.colours.iter().position(|(n, _)| n == "body").unwrap();
-    assert_eq!(t.colours[body].1, "#16285E");
+    // Copy as new theme: a new theme, editable, from the theme shown
+    ui.update(avatars(A::CopyTheme));
+    assert_eq!(editor(&ui), it("Hood (vector)", "My theme", Editing::New));
+    assert_eq!(settings::avatars::theming(&ui).unwrap().colours[body].1, "#16285E");
+    // Cancel: the theme worn again
+    ui.update(avatars(A::CancelTheme));
+    assert_eq!(editor(&ui), it("Hood (vector)", "Blue", Editing::BuiltIn));
+    ui.update(avatars(A::CopyTheme));
     // a colour that isn't one, and a name that's taken, are said and nothing is saved
     ui.update(avatars(A::ThemeColour(body, "red".into())));
     ui.update(avatars(A::SaveTheme));
@@ -561,10 +581,11 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     assert!(error.contains("already has a theme named Green"), "{error}");
     assert!(!themes.exists());
 
-    // saved: a theme file with what differs from the default, read back onto the pet, and worn
+    // saved: a theme file with what differs from the default, read back onto the pet, and worn; the editor has it,
+    // as one of the user's
     ui.update(avatars(A::ThemeName("Red".into())));
     ui.update(avatars(A::SaveTheme));
-    assert!(settings::avatars::theming(&ui).is_none(), "the editor closes");
+    assert_eq!(editor(&ui), it("Hood (vector)", "Red", Editing::Own("Red".into())));
     let read = |file: &str| -> serde_json::Value {
         serde_json::from_str(&std::fs::read_to_string(themes.join(file)).unwrap()).unwrap()
     };
@@ -585,17 +606,16 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     let again = start(Prefs::from(&Config::load_from(&config).0));
     assert_eq!(again.theme(), "Red");
     assert_eq!(settings::avatars::worn(&again), settings::avatars::worn(&ui));
+    assert_eq!(editor(&again), it("Hood (vector)", "Red", Editing::Own("Red".into())));
 
-    // edited: renamed in the same file, worn as it is now
-    ui.update(avatars(A::EditTheme("Red".into())));
+    // edited where it is: renamed in the same file, worn as it is now
     let t = settings::avatars::theming(&ui).unwrap();
-    assert_eq!(t.editing.as_deref(), Some("Red"));
     assert_eq!(t.colours[body].1, "#441010");
     let hi = t.colours.iter().position(|(n, _)| n == "hi").unwrap();
     ui.update(avatars(A::ThemeColour(hi, "#FF4A3A".into())));
     ui.update(avatars(A::ThemeName("Ember".into())));
     ui.update(avatars(A::SaveTheme));
-    assert!(settings::avatars::theming(&ui).is_none());
+    assert_eq!(editor(&ui), it("Hood (vector)", "Ember", Editing::Own("Ember".into())));
     let saved = read("hood-vector-red.json");
     assert_eq!(saved["theme"], "Ember");
     assert_eq!(saved["palette"]["hi"], "#FF4A3A");
@@ -603,7 +623,27 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     assert_eq!(ui.theme(), "Ember");
     assert_eq!(settings::avatars::worn(&ui).pack.palette.colours["hi"], 0xFFFF4A3A);
 
-    // a pixel pet's theme, made the same way
+    // a new theme not saved goes when another theme is picked, and so do changes not saved
+    ui.update(avatars(A::CopyTheme));
+    assert_eq!(
+        settings::avatars::theming(&ui).unwrap().colours[hi].1,
+        "#FF4A3A",
+        "from Ember"
+    );
+    ui.update(Message::SelectTheme("Green".into()));
+    assert_eq!(editor(&ui), it("Hood (vector)", "Green", Editing::BuiltIn));
+    ui.update(Message::SelectTheme("Ember".into()));
+    ui.update(avatars(A::ThemeColour(hi, "#000000".into())));
+    ui.update(Message::SelectTheme("Blue".into()));
+    ui.update(Message::SelectTheme("Ember".into()));
+    assert_eq!(settings::avatars::theming(&ui).unwrap().colours[hi].1, "#FF4A3A");
+    // nor does a Reload that changes nothing take a new theme away
+    ui.update(avatars(A::CopyTheme));
+    ui.update(avatars(A::Reload));
+    assert_eq!(editor(&ui).2, Editing::New);
+    ui.update(avatars(A::CancelTheme));
+
+    // a pixel pet's theme, made the same way: the editor follows the pet put on
     let hood = settings::avatars::tiles(&ui)
         .iter()
         .position(|&(n, _)| n == "Hood")
@@ -613,7 +653,8 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
         settings::avatars::themes(&ui),
         [("Blue", true, false), ("Green", false, false)]
     );
-    ui.update(avatars(A::NewTheme));
+    assert_eq!(editor(&ui), it("Hood", "Blue", Editing::BuiltIn));
+    ui.update(avatars(A::CopyTheme));
     let t = settings::avatars::theming(&ui).unwrap();
     let body = t.colours.iter().position(|(n, _)| n == "body").unwrap();
     ui.update(avatars(A::ThemeColour(body, "#5A1A60".into())));
@@ -624,7 +665,7 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     assert!(worn.sheets[at].pixels.contains(&0xFF5A1A60));
     assert!(!worn.sheets[at].pixels.contains(&0xFF16285E));
 
-    // deleted: its file goes, and the pet is back in its default
+    // deleted: its file goes, and the pet is back in its default, which the editor shows
     ui.update(avatars(A::DeleteTheme("My theme".into())));
     assert!(!themes.join("hood-my-theme.json").exists());
     assert_eq!(ui.theme(), "Blue");
@@ -633,6 +674,7 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
         [("Blue", true, false), ("Green", false, false)]
     );
     assert_eq!(Config::load_from(&config).0.avatar_theme, None);
+    assert_eq!(editor(&ui), it("Hood", "Blue", Editing::BuiltIn));
 
     // a bad theme file is a line saying why
     std::fs::write(
@@ -649,6 +691,79 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     assert_eq!(skipped.len(), 1, "{skipped:?}");
     assert_eq!(skipped[0].0, "themes/odd.json");
     assert!(skipped[0].1.contains("no colour named \"fur\""), "{skipped:?}");
+}
+
+#[test]
+fn tiles_and_themes_say_whether_they_are_built_in_or_your_own() {
+    let pet = Pet::new("avatars-own");
+    let mut ui = pet.ui;
+    let folder = aipet_sprite::Avatar::custom_dir(&pet.scratch.0);
+    // a pet of the user's, a copy of the built-in Hood under another name, and a theme of the user's for the Hood
+    let hood = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../aipet-sprite/packs/hood");
+    let fox = folder.join("Fox");
+    std::fs::create_dir_all(&fox).unwrap();
+    for entry in std::fs::read_dir(&hood).unwrap().flatten() {
+        std::fs::copy(entry.path(), fox.join(entry.file_name())).unwrap();
+    }
+    let manifest = std::fs::read_to_string(fox.join("pack.json")).unwrap();
+    std::fs::write(
+        fox.join("pack.json"),
+        manifest.replacen("\"name\": \"Hood\"", "\"name\": \"Fox\"", 1),
+    )
+    .unwrap();
+    std::fs::create_dir_all(folder.join("themes")).unwrap();
+    std::fs::write(
+        folder.join("themes").join("hood-mine.json"),
+        r##"{"pet": "Hood", "theme": "Mine", "palette": {"body": "#5A1A60"}}"##,
+    )
+    .unwrap();
+    let avatars = |message| Message::Settings(settings::Message::Avatars(message));
+    use settings::avatars::{Editing, Message as A};
+    ui.update(avatars(A::Reload));
+    assert!(ui.skipped().is_empty(), "{:?}", ui.skipped());
+    assert_eq!(
+        settings::avatars::own_tiles(&ui),
+        [("Sprout", false), ("Hood", false), ("Pip", false), ("Fox", true)]
+    );
+
+    // the Hood's themes: two built in, and the user's own, which the editor lets the user change
+    let index = |name: &str| {
+        aipet_sprite::load::all(&folder)
+            .pets
+            .iter()
+            .position(|a| a.name() == name)
+            .unwrap()
+    };
+    ui.update(Message::SelectAvatar(index("Hood")));
+    assert_eq!(
+        settings::avatars::themes(&ui),
+        [("Blue", true, false), ("Green", false, false), ("Mine", false, true)]
+    );
+    assert_eq!(settings::avatars::theming(&ui).unwrap().editing, Editing::BuiltIn);
+    ui.update(Message::SelectTheme("Mine".into()));
+    assert_eq!(
+        settings::avatars::theming(&ui).unwrap().editing,
+        Editing::Own("Mine".into())
+    );
+    // the Fox's themes come in its pack: none of them the user's to change
+    ui.update(Message::SelectTheme("Green".into()));
+    ui.update(Message::SelectAvatar(index("Fox")));
+    assert!(settings::avatars::themes(&ui).iter().all(|&(_, _, own)| !own));
+    assert_eq!(settings::avatars::theming(&ui).unwrap().editing, Editing::BuiltIn);
+
+    // read again, the Hood's tile still shows it in Green, with Green's dot
+    ui.update(avatars(A::Reload));
+    let green = aipet_sprite::load::all(&folder).pets[index("Hood")]
+        .in_theme("Green")
+        .unwrap()
+        .pack
+        .accent;
+    let dot = settings::avatars::tile_accents(&ui)
+        .into_iter()
+        .find(|&(n, _)| n == "Hood")
+        .unwrap()
+        .1;
+    assert_eq!(dot, green);
 }
 
 #[test]
@@ -677,10 +792,9 @@ fn a_pets_sheet_themes_are_picked_like_any_and_offer_no_editor() {
         [("Peach", true, false), ("Lilac", false, false)]
     );
     assert!(!settings::avatars::makes_themes(&ui));
-    ui.update(avatars(A::NewTheme));
-    assert!(settings::avatars::theming(&ui).is_none(), "no editor opens");
-    ui.update(avatars(A::EditTheme("Lilac".into())));
-    assert!(settings::avatars::theming(&ui).is_none(), "nor for a sheet theme");
+    assert!(settings::avatars::theming(&ui).is_none(), "no editor");
+    ui.update(avatars(A::CopyTheme));
+    assert!(settings::avatars::theming(&ui).is_none(), "nor a copy");
     let peach = settings::avatars::worn(&ui);
     ui.update(Message::SelectTheme("Lilac".into()));
     assert_eq!(ui.theme(), "Lilac");
@@ -696,13 +810,14 @@ fn a_pets_sheet_themes_are_picked_like_any_and_offer_no_editor() {
     let again = start(Prefs::from(&Config::load_from(&config).0));
     assert_eq!(again.theme(), "Lilac");
     assert_eq!(settings::avatars::worn(&again), lilac);
-    // a pet with named colours still offers New theme
+    // a pet with named colours still has the theme editor
     let hood = settings::avatars::tiles(&ui)
         .iter()
         .position(|&(n, _)| n == "Hood")
         .unwrap();
     ui.update(Message::SelectAvatar(hood));
     assert!(settings::avatars::makes_themes(&ui));
+    assert!(settings::avatars::theming(&ui).is_some(), "and the editor");
 }
 
 #[test]

@@ -47,7 +47,11 @@ pub fn all() -> Vec<LoadedPack> {
         .into_iter()
         .map(|files| {
             let (pack, sheets) = load(files).expect("the embedded packs load (tests/bake.rs)");
-            LoadedPack { pack, sheets }
+            LoadedPack {
+                pack,
+                sheets,
+                builtin: true,
+            }
         })
         .collect()
 }
@@ -96,7 +100,11 @@ mod tests {
     #[test]
     fn the_pixel_hood_in_green_is_the_green_hood_pixel_for_pixel() {
         let (pack, sheets) = pack_for(&Avatar::hood()).unwrap();
-        let hood = LoadedPack { pack, sheets };
+        let hood = LoadedPack {
+            pack,
+            sheets,
+            builtin: true,
+        };
         assert_eq!(hood.pack.palette.names().collect::<Vec<_>>(), ["Blue", "Green"]);
         let green = hood.in_theme("Green").expect("the Hood has a Green theme");
         let old = bake(&hood_green());

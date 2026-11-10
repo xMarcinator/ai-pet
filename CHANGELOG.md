@@ -24,6 +24,10 @@ in the milestone 2 release, and an installed copy of any earlier release updates
   that isn't there, and a pack of your own named Hamster loads and is worn like any other.
 
 ### Changed
+- Settings → Avatars says whether each pet is built in or your own, and lists the worn pet's built-in themes and
+  your own apart. The theme editor is always there, on the theme worn: a built-in theme is locked, and Copy as new
+  theme makes your own from it; your own can be edited, saved and deleted where they are. Each tile's dot is the
+  accent of the theme its picture shows.
 - CI checks that nothing outside this changelog names what was removed (`scripts/check-removed-paths.sh`), and runs
   the hook's trace log tests and the pet's peer check as root on Linux, which the cross-runtime workflow did.
 - THIRD-PARTY-NOTICES.md is generated whole by cargo-about from the crates the Windows and Linux release builds
