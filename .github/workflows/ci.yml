@@ -233,6 +233,11 @@ jobs:
         run: |
           TEST_SH=dash sh scripts/test-cargo-env.sh
           TEST_SH=bash sh scripts/test-cargo-env.sh
+      # The target sweep (scripts/sweep.sh), with a fake cargo-sweep and a fake build for the refusal
+      - name: The sweep script
+        run: |
+          TEST_SH=dash sh scripts/test-sweep.sh
+          TEST_SH=bash sh scripts/test-sweep.sh
       - name: Executable bits
         run: |
           # The docs run these as ./build.sh and so on, so git must record them as executable (100755). A script added

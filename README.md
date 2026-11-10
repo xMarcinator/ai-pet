@@ -346,6 +346,16 @@ dependencies, and nothing headless builds iced. After adding a crate or changing
 `Cargo.toml` is resolved by running `cargo hakari generate` again. cargo-hakari: `mise install`, or
 `cargo install cargo-hakari --version 0.9.39 --locked`.
 
+**Sweeping old build output.** Cargo never deletes what it built before: every change of features, profile, flags or
+toolchain adds new hashed copies, and `rust/target` had reached 42 GB by 2026-11-08. After a gate (the checks before a
+commit, the end of a task or a wave), run `scripts/sweep.sh` in the checkout or worktree that ran it, or
+`scripts/sweep.sh <checkout>` for another. It runs [cargo-sweep](https://github.com/holmgr/cargo-sweep) twice in
+`rust/`, removing output not used for `DAYS` days (default 7) and output of toolchains no longer installed, and prints
+the size before and after. It refuses (exit 1) while cargo works in that checkout, and never touches another
+checkout's target. cargo-sweep: `mise install`, or `cargo install cargo-sweep --version 0.8.0 --locked`. The
+numbers behind all three (the hack crate, sccache, the sweep) are in
+[rust/proofs/build-hygiene.md](rust/proofs/build-hygiene.md).
+
 **Windows developers:** antivirus reacts to PowerShell and to freshly built `.exe` files: a freshly built pet or hook
 may be held for a scan for a while. Leave publishing to GitHub Actions.
 
@@ -358,6 +368,7 @@ The scripts:
 | [scripts/check-plugin.sh](scripts/check-plugin.sh) | Checks the plugin's manifests and the marketplaces, and with `--hook <command>` that the plugin's hook files are exactly what `aipet-hook --print-plugin-hooks` prints. |
 | [scripts/check-notices.sh](scripts/check-notices.sh) | Checks that [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is what [cargo-about](https://github.com/EmbarkStudios/cargo-about) 0.9.3 makes of `rust/about.toml` and `rust/about.hbs`, with a licence for every crate the release builds compile in; `--write` regenerates it. Run it after changing `rust/Cargo.lock`. |
 | [scripts/cargo-env.sh](scripts/cargo-env.sh), [scripts/cargo-env.ps1](scripts/cargo-env.ps1) | Print the environment that makes cargo use sccache (above); `scripts/test-cargo-env.sh` tests the sh one. |
+| [scripts/sweep.sh](scripts/sweep.sh) | Sweeps stale output from a checkout's `rust/target` after a gate, unless cargo is running there (above); `scripts/test-sweep.sh` tests it. |
 
 [.github/workflows/release.yml](.github/workflows/release.yml) builds the releases. CI
 ([.github/workflows/ci.yml](.github/workflows/ci.yml)) builds and tests on Windows and Linux.
