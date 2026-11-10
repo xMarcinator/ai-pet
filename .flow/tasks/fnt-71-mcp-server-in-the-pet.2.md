@@ -45,9 +45,22 @@ Add the pet's HTTP listener: a new crate with its own thread and current-thread 
 - [ ] Calm CPU and RSS with the listener on and one MCP client connected are recorded against the build without it, and meet R18
 
 ## Done summary
-TBD
+The pet's HTTP listener, on branch `fnt-71-mcp-server` (kept off the fn-1 release branch: the spec lands after fn-1 ships).
 
+- New crate `aipet-mcp`: its own thread and current-thread tokio runtime; rmcp 3.9.0 Streamable HTTP at `/mcp` (both eras, legacy sessions on, 404 for an unknown session), a `/hook/claude` stub answering 200 `{}` for task 3.
+- Checks before any route: Host must be loopback (our port if named), an Origin must be the listener's own, Content-Length over 4 MiB gets 413 (chunked bodies are cut where read); one concurrency limit of 16; a handler panic answers 500 and is logged.
+- Token `paths::mcp_token()`: 32 random bytes hex, atomic create, never through a link; Unix 0600 and owner checked; Windows a protected DACL for the user alone (type-checked only, not yet run on Windows). Corrupt or open files are replaced with one log line; 401s are logged at most once a minute; constant-time compare; 401 has no `WWW-Authenticate` (it might start Claude's OAuth discovery).
+- `MCP_PORT = 47615` in `aipet-ipc/protocol.rs`, `AIPET_PORT` overrides for tests; a taken port logs once and the pet runs on.
+- `aipet_core::server::Ingress` now owns the sessions' apply, the record and `changed()`; the pipe server and the listener share it.
+- `status` tool; `registrations_seen` is `{claude, codex}` booleans: true once an event from that agent arrived since start (pipe or HTTP).
+- Table-driven conformance test (`every_tool_conforms`) with fixed listing order from `TOOLS`; tasks 4-6 add rows.
+
+Measured headless (the core side without a window, three pairs at once): the listener with one idle client costs 3.0-3.2 MB of RSS; a 4 MiB hook body leaves about 130 kB more, flat for 60 s. The paired calm-CPU and RSS runs on the real pet need the window and are in task 8 (R13, R15).
+
+Follow-up: on Windows, `SO_EXCLUSIVEADDRUSE` isn't set, so another program could bind the same port; worth a socket2 change before the Windows checks.
+
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 4d1991089499ed12319d6a801584765c0bfbaee6, b50c10bed7902fd6f173ec6cfd85cd62461ddb55
+- Tests: cd rust && cargo test --offline --workspace, cargo clippy --offline --workspace --all-targets -- -D warnings
 - PRs:
