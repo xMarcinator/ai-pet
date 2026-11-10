@@ -23,6 +23,14 @@ in the milestone 2 release, and an installed copy of any earlier release updates
 ### Changed
 - CI checks that nothing outside this changelog names what was removed (`scripts/check-removed-paths.sh`), and runs
   the hook's trace log tests and the pet's peer check as root on Linux, which the cross-runtime workflow did.
+- THIRD-PARTY-NOTICES.md is generated whole by cargo-about from the crates the Windows and Linux release builds
+  compile in, each with its licence text (ring's and kamadak-exif's source files were taken for licence texts
+  before), and names the icon font iced compiles in. CI checks that the committed file is the generator's
+  (`scripts/check-notices.sh`).
+- The docs describe the Rust code: the architecture (the crates, the two shells, click-through, the threads), the
+  README's build section with each distribution's prerequisites, the handoff's decisions (the move to Rust
+  supersedes "stay on .NET"), and the plugin and Windows packaging READMEs. The spike's notes and proofs stay, as
+  records the open plans still cite; the architecture's Appendix A lists them.
 
 ## [Unreleased]
 
