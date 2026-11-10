@@ -10,9 +10,8 @@
 
 use std::collections::HashSet;
 use std::fmt::{self, Write};
-use std::time::SystemTime;
 
-use aipet_ipc::protocol::{APP, ERROR, KIND, MAX_DEPTH, OK, OUTCOME, PID, RECENT, V, VERSION, unix_time};
+use aipet_ipc::protocol::{APP, ERROR, KIND, MAX_DEPTH, OK, OUTCOME, PID, RECENT, V, VERSION};
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::value::RawValue;
 
@@ -40,9 +39,8 @@ pub(super) fn answer(server: &Shared, line: &str) -> Option<String> {
 
 /// `{"ok":true,"app":"AiPet","pid":…,"recent":[the last 30 hook-events.log lines]}`: the doctor's ping.
 fn ping(server: &Shared) -> String {
-    let record = server.record();
     let mut recent = String::new();
-    for (i, line) in record.recent().enumerate() {
+    for (i, line) in server.ingress.recent().iter().enumerate() {
         if i > 0 {
             recent.push(',');
         }
@@ -54,24 +52,18 @@ fn ping(server: &Shared) -> String {
     )
 }
 
-/// An event goes to the chats, and its line to hook-events.log. `changed` runs unless the event changed nothing or
-/// failed; a failed one is refused with its `error:` outcome.
+/// An event goes through the ingress: to the chats, and its line to hook-events.log ([`Ingress::apply`]). A failed
+/// one is refused with its `error:` outcome.
+///
+/// [`Ingress::apply`]: super::Ingress::apply
 fn event(server: &Shared, line: &str) -> Option<String> {
     let envelope = Envelope::parse(line)?;
-    let applied = server.sessions.apply(&envelope, unix_time(SystemTime::now()));
-    let failed = applied.outcome.strip_prefix("error:");
-    if let Some(error) = failed {
-        server.log(&format!("hooks: an event failed: {error}"));
-    }
-    server.record().add(&applied.log, SystemTime::now());
-    if failed.is_some() {
-        return Some(refuse(applied.outcome));
-    }
-    if !matches!(applied.outcome, "ignored" | "stale") {
-        server.changed();
+    let outcome = server.ingress.apply(&envelope);
+    if outcome.starts_with("error:") {
+        return Some(refuse(outcome));
     }
     let mut reply = format!(r#"{{"{OK}":true,"{OUTCOME}":"#);
-    quote(&mut reply, applied.outcome);
+    quote(&mut reply, outcome);
     reply.push('}');
     Some(reply)
 }
