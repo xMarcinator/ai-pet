@@ -228,6 +228,11 @@ jobs:
       # removed, outside the CHANGELOG, the plans (.flow/) and the frozen golden fixtures.
       - name: No references to the removed .NET code
         run: bash scripts/check-removed-paths.sh
+      # The sccache build environment (scripts/cargo-env.sh), run and sourced under dash and bash
+      - name: The build environment script
+        run: |
+          TEST_SH=dash sh scripts/test-cargo-env.sh
+          TEST_SH=bash sh scripts/test-cargo-env.sh
       - name: Executable bits
         run: |
           # The docs run these as ./build.sh and so on, so git must record them as executable (100755). A script added
