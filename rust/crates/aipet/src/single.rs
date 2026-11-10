@@ -177,7 +177,20 @@ mod tests {
     /// Runs this test binary's test `name` as a pet of its own, with `env` added and `AIPET_PIPE` and
     /// `XDG_RUNTIME_DIR` taken out unless `env` sets them; what it printed. It ends within 30 s.
     fn child(name: &str, env: &[(&str, &str)]) -> String {
-        let mut command = Command::new(std::env::current_exe().unwrap());
+        child_in(&[], name, env)
+    }
+
+    /// [`child`], run by `wrapper` (a program and its arguments, the test binary's command after them).
+    fn child_in(wrapper: &[&str], name: &str, env: &[(&str, &str)]) -> String {
+        let exe = std::env::current_exe().unwrap();
+        let mut command = match wrapper.split_first() {
+            Some((program, args)) => {
+                let mut command = Command::new(program);
+                command.args(args).arg(&exe);
+                command
+            }
+            None => Command::new(&exe),
+        };
         command
             .args(["--exact", name, "--nocapture", "--test-threads=1"])
             .env("AIPET_SINGLE_CHILD", "1")
@@ -233,6 +246,12 @@ mod tests {
         if std::env::var_os("AIPET_SINGLE_TAKE").is_some() {
             let taken = take(&names).unwrap();
             println!("taken: {}", taken.is_some());
+            // a pet that runs until it is killed, holding what it took
+            if std::env::var_os("AIPET_SINGLE_HOLD").is_some() {
+                use std::io::Write;
+                std::io::stdout().flush().unwrap();
+                std::thread::sleep(Duration::from_secs(60));
+            }
         }
     }
 
@@ -523,6 +542,115 @@ mod tests {
                 assert_eq!(said(&output, "lock: "), names.lock.to_str().unwrap());
                 assert_eq!(said(&output, "taken: "), "false", "XDG_RUNTIME_DIR={runtime:?}");
             }
+        }
+
+        /// A pet that crashed holding the lock doesn't keep the next one out: the kernel let its lock go.
+        #[test]
+        fn a_crashed_pets_lock_doesnt_keep_the_next_one_out() {
+            use std::io::{BufRead, BufReader};
+
+            let scratch = Scratch::new();
+            let names = scratch.names();
+            let pipe = names.endpoint.to_str().unwrap();
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command
+                .args(["--exact", "single::tests::contender", "--nocapture", "--test-threads=1"])
+                .envs([
+                    ("AIPET_SINGLE_CHILD", "1"),
+                    ("AIPET_SINGLE_TAKE", "1"),
+                    ("AIPET_SINGLE_HOLD", "1"),
+                    ("AIPET_PIPE", pipe),
+                ])
+                .env_remove("XDG_RUNTIME_DIR")
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null());
+            let mut crashes = crate::tests_spawn(|| command.spawn()).unwrap();
+            let said = BufReader::new(crashes.stdout.take().unwrap())
+                .lines()
+                .map_while(Result::ok)
+                .find(|line| line.contains("taken: "));
+            assert!(
+                said.is_some_and(|line| line.ends_with("taken: true")),
+                "the first pet didn't run"
+            );
+            assert!(take(&names).unwrap().is_none(), "the first pet's lock let another in");
+            // a crash: SIGKILL
+            crashes.kill().unwrap();
+            crashes.wait().unwrap();
+            assert!(
+                take(&names).unwrap().is_some(),
+                "the crashed pet's lock kept the next one out"
+            );
+        }
+
+        /// A lock file that can't be opened, a link at its path (a_link_where_the_lock_goes_is_an_error) or a folder,
+        /// keeps every pet out: each gets an error rather than run without the lock.
+        #[test]
+        fn a_folder_where_the_lock_goes_is_an_error() {
+            let scratch = Scratch::new();
+            let names = scratch.names();
+            std::fs::create_dir_all(&names.lock).unwrap();
+            for _ in 0..2 {
+                assert!(take(&names).is_err());
+            }
+            assert!(names.lock.is_dir());
+        }
+
+        /// Pets with AIPET_PIPE unset, so on the default lock, each with its own XDG_RUNTIME_DIR or none: they work
+        /// out the lock in /run/user/<uid>, which the socket's rule takes before XDG_RUNTIME_DIR, so one pet keeps
+        /// out the other. They run in a user and mount namespace of their own (as uid 0 there, made by util-linux's
+        /// unshare) whose /run/user is a folder of the test's, so they never meet the user's pet or its lock. Where no
+        /// such namespace can be made (no unshare, or no unprivileged user namespaces), it says so and checks nothing.
+        #[test]
+        fn pets_on_the_default_lock_in_a_namespace_of_their_own_give_one() {
+            let scratch = Scratch::new();
+            let run_user = scratch.0.join("run-user");
+            std::fs::create_dir_all(run_user.join("0")).unwrap();
+            std::fs::set_permissions(run_user.join("0"), std::fs::Permissions::from_mode(0o700)).unwrap();
+            let run_user_text = run_user.to_str().unwrap().to_owned();
+            let wrapper = [
+                "unshare",
+                "--user",
+                "--map-root-user",
+                "--mount",
+                "sh",
+                "-c",
+                "mount --bind \"$0\" /run/user && exec \"$@\"",
+                run_user_text.as_str(),
+            ];
+            let mut usable = Command::new("unshare");
+            usable
+                .args(&wrapper[1..])
+                .arg("true")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            let usable = crate::tests_spawn(|| usable.spawn()).and_then(|mut probe| probe.wait());
+            if !usable.is_ok_and(|status| status.success()) {
+                eprintln!("no user and mount namespace with /run/user bound here: not checked");
+                return;
+            }
+            let lock = run_user.join("0").join("aipet.lock");
+            let xdg = [scratch.0.join("a"), scratch.0.join("b")];
+            for dir in &xdg {
+                std::fs::create_dir_all(dir).unwrap();
+            }
+            let runtimes = [Some(&xdg[0]), Some(&xdg[1]), None];
+            let home = scratch.0.to_str().unwrap();
+            for runtime in runtimes {
+                let mut env = vec![("AIPET_SINGLE_TAKE", "1"), ("HOME", home), ("XDG_DATA_HOME", "")];
+                env.extend(runtime.map(|dir| ("XDG_RUNTIME_DIR", dir.to_str().unwrap())));
+                // another pet runs: this one is kept out
+                let held = csharp(&lock).expect("the lock is free");
+                let output = child_in(&wrapper, "single::tests::contender", &env);
+                assert_eq!(said(&output, "lock: "), "/run/user/0/aipet.lock", "{runtime:?}");
+                assert_eq!(said(&output, "taken: "), "false", "{runtime:?}");
+                drop(held);
+                // and once it is gone, this one runs
+                let output = child_in(&wrapper, "single::tests::contender", &env);
+                assert_eq!(said(&output, "taken: "), "true", "{runtime:?}");
+            }
+            // only its user may open it
+            assert_eq!(std::fs::metadata(&lock).unwrap().permissions().mode() & 0o777, 0o600);
         }
 
         #[test]
