@@ -155,6 +155,7 @@ mod unix {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use std::path::{Path, PathBuf};
     use std::process::{Command, Output, Stdio};
     use std::sync::atomic::{AtomicUsize, Ordering};
