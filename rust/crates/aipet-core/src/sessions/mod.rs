@@ -179,6 +179,7 @@ impl AgentSessions {
                     place: place.as_deref(),
                     env,
                     title: title.as_deref(),
+                    arrived: str_of(Some(fields), protocol::VIA) == Some("http"),
                 };
                 let outcome = claude::apply(&mut self.lock(), &event, now);
                 let place = clean(place.as_deref().unwrap_or("?"));
@@ -316,8 +317,11 @@ impl Chats {
     }
 
     /// SessionEnd: the chat goes, leaving its tombstone for a day.
-    fn end(&mut self, key: &str, ev: &str, at: f64, now: f64) -> &'static str {
-        if self.get(key).is_some_and(|last| claude::stale(last, ev, at, now)) {
+    fn end(&mut self, key: &str, ev: &str, at: f64, now: f64, arrived: bool) -> &'static str {
+        if self
+            .get(key)
+            .is_some_and(|last| claude::stale(last, ev, at, now, arrived))
+        {
             return "stale";
         }
         self.put(Entry {

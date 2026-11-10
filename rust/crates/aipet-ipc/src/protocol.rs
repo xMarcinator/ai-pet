@@ -68,6 +68,9 @@ pub const OUTCOME: &str = "outcome";
 pub const ERROR: &str = "error";
 pub const APP: &str = "app";
 pub const RECENT: &str = "recent";
+/// `via`: never sent by a hook. The pet's HTTP listener marks the envelopes it makes `"via":"http"`: their `at` is
+/// when the pet got the event (Claude's HTTP hooks carry no time of their own), which the chats order by otherwise.
+pub const VIA: &str = "via";
 
 /// `Ipc.UnixTime`: Unix seconds with ms precision. The milliseconds are rounded down (also before 1970, as
 /// `DateTimeOffset.ToUnixTimeMilliseconds` does) and then divided by 1000.0, so the double is the C#'s to the bit.
