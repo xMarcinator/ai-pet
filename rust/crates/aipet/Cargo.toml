@@ -21,6 +21,8 @@ demo = ["aipet-ui/demo"]
 aipet-core = { path = "../aipet-core" }
 aipet-desktop = { path = "../aipet-desktop" }
 aipet-ipc = { path = "../aipet-ipc" }
+# the HTTP listener: MCP and Claude's HTTP hooks (fnt-71)
+aipet-mcp = { path = "../aipet-mcp" }
 aipet-sprite = { path = "../aipet-sprite" }
 aipet-ui = { path = "../aipet-ui" }
 aipet-wayland = { path = "../aipet-wayland" }

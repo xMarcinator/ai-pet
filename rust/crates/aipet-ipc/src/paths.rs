@@ -47,6 +47,12 @@ pub fn hook_events_log() -> PathBuf {
     data_dir().join("hook-events.log")
 }
 
+/// The bearer token MCP clients send the pet's listener: 64 hex digits, readable only by the user. The pet makes it
+/// on its first start (`aipet-mcp`), and the registrations' header helpers read it.
+pub fn mcp_token() -> PathBuf {
+    data_dir().join("mcp-token")
+}
+
 /// `Paths.CodexHome`: `$CODEX_HOME` as it is, else `~/.codex`. Read on every call, as the C#'s property is.
 pub fn codex_home() -> PathBuf {
     codex_home_in(&process_vars, &folders().home)

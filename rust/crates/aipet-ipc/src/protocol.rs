@@ -19,6 +19,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// `v`: the only version there is.
 pub const VERSION: i32 = 1;
 
+/// The pet's HTTP listener (`aipet-mcp`) on 127.0.0.1: MCP at `/mcp`, Claude's HTTP hooks at `/hook/claude`. One
+/// port for every user of the machine, which the hook and MCP registrations, the doctor, the plugin check and the
+/// docs all name; `AIPET_PORT` moves the pet's listener for tests only. Its bodies share [`MAX_REQUEST`].
+pub const MCP_PORT: u16 = 47615;
+
 /// A request's size limit, in bytes of its line without the `\n`.
 pub const MAX_REQUEST: usize = 4 << 20;
 /// How long either end waits for the other: the hook for its write and the reply together, the pet for a request.
