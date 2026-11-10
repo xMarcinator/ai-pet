@@ -39,9 +39,11 @@ namespace); the binary is now `AiPet` in the `aipet` crate.
 - [ ] The notices list every crate in the release builds with its licence text (`cargo about` check in CI).
 - [ ] The handoff records the decision reversal. `SPIKE.md`, `notes/` and `proofs/` are retired.
 ## Done summary
-TBD
+Done on the fn-1-docs branch, merged into main as 2818b90 (commits marked fn-1.26, e.g. dc0bd91, 5bf91b8, 47e61cc, 548b950). ARCHITECTURE describes the Rust crates (layout, rendering, the two shells, runtime files, threads; §6's contract kept); README "Building from source" has the Rust prerequisites per distribution and a crate path table; the handoff records that the move to Rust supersedes "stay on .NET"; THIRD-PARTY-NOTICES.md is generated whole by cargo-about with every licence text, checked in CI (scripts/check-notices.sh); the plugin and Windows packaging READMEs use cargo. No doc cites a removed .cs path or a dotnet build command (scripts/check-removed-paths.sh in CI).
+Deviation, accepted by the owner on 2026-11-10: rust/SPIKE.md, rust/notes/ and rust/proofs/ are kept as research records rather than deleted, because open specs still cite them; ARCHITECTURE's Appendix A lists them, and the milestone 3 changelog says so.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
+- Commits: 6ee1ac5a702a467b56d7c433261d6570c10f1bad, 980bad6fda9bdae06605cce42661e82857dedabd, be2f986b7e042acf93590044e2cc00bf0b33d6c2, 256e340a7edd862f98897abed104d0c4984c91aa, 62ac5a6eab4919663deaa0979c61d404900aa49c, b01e6fa56d7eddebf87466331d856957193dd2d7, dc0bd913e6f04b19d65a51a33c0d11dc138a2de8, 5bf91b86c61d119f0828870a43cf9eab0d13781f, 47e61cc07ab2463772487825d9bd8d5fd0dfde64, 548b9501f48001246d06a7c70920dab934562362, 2818b90f8e4f5992691527230449fb8c75801b5c
 - Tests:
 - PRs:
