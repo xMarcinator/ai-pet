@@ -1,6 +1,7 @@
 //! The hook server (`aipet_core::server`) against the C#'s own tests of HookServer, case for case:
 //! tests/AiPet.Tests/HookServerTests.cs (EndToEndTests and HookServerTests), HookServerUnixTests.cs and
-//! StarvedPoolTests.cs. NoPetTests, the hook with no pet at all, are aipet-hook's (tests/event.rs).
+//! StarvedPoolTests.cs, and the cases of HookContractTests.cs that ran the hook against the pet (the others are
+//! aipet-testkit's tests/hook_contract.rs). NoPetTests, the hook with no pet at all, are aipet-hook's (tests/event.rs).
 //!
 //! The hooks are real: the Rust hook built with these tests (`cargo test --workspace` builds it first), or the one
 //! `AIPET_TEST_HOOK` names, run through `dotnet` when it's a .dll: the C# hook, as cross-runtime.yml runs it against
@@ -21,7 +22,7 @@ use std::time::{Duration, Instant, SystemTime};
 use aipet_core::server::{HookServer, Options};
 use aipet_core::sessions::{AgentSessions, Entry};
 use aipet_ipc::connect::connect_to;
-use aipet_ipc::protocol::{CONNECT, MAX_DEPTH, MAX_REQUEST, TIMEOUT, unix_time};
+use aipet_ipc::protocol::{CONNECT, HOOK_BUDGET, MAX_DEPTH, MAX_REQUEST, MAX_STRING, STDIN, TIMEOUT, unix_time};
 use serde_json::{Value, json};
 
 /// How long a hook may take to run, starting included (a fresh exe can be scanned first).
@@ -741,6 +742,87 @@ fn a_hook_with_garbage_on_stdin_exits_0_silently() {
     assert_eq!(traces.len(), 1, "{traces:?}");
     let traced = fs::read_to_string(&traces[0]).unwrap();
     assert!(traced.contains("isn't JSON"), "{traced}");
+}
+
+// ------------------------------------------------------------------ HookContractTests: the hook against the pet
+
+/// JSON.stringify (Node, so Claude) writes a lone surrogate as an escape: text cut in the middle of an emoji.
+/// System.Text.Json parsed it but couldn't read it back, which used to lose the whole event: the hook mends it.
+#[test]
+fn lone_surrogates_still_reach_the_pet() {
+    let _side = side_by_side();
+    let env = Env::new("lone-surrogates");
+    let pet = Pet::start(&env, &env.sessions());
+    let tmp = env.dir("tmp-surrogates");
+    let (claude, codex) = (uuid(), uuid());
+    let big = "x".repeat(MAX_STRING);
+    let runs = [
+        (
+            "claude",
+            &claude,
+            format!(
+                "{{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"{claude}\",\"prompt\":\"Half \\ud83d an emoji\",\
+                 \"k\\udc00ey\":\"\\udfff\",\"list\":[\"\\ud800\",{{\"big\":\"{big}\\ud800\"}}]}}"
+            ),
+            "thinking",
+        ),
+        (
+            "codex",
+            &codex,
+            format!(
+                "{{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"{codex}\",\"turn_id\":\"{}\",\
+                 \"tool_name\":\"Bash\",\"tool_use_id\":\"call_1\",\"tool_input\":{{\"command\":\"echo \\ud800\"}}}}",
+                uuid7(now())
+            ),
+            "working",
+        ),
+    ];
+    for (agent, sid, stdin, outcome) in runs {
+        finish(start_hook(&env, agent, &stdin, &tmp, &[]), HOOK_LIMIT).silent();
+        assert_eq!(pet.outcomes(sid), [outcome], "{agent}");
+    }
+    // nothing went wrong, so nothing was traced
+    assert_eq!(contents(&tmp), Vec::<PathBuf>::new());
+}
+
+/// An agent that never closes the hook's stdin: the hook gives up within STDIN and sends nothing (the pet would
+/// ignore an empty event), well within Claude's 5 s.
+#[test]
+fn stdin_that_stays_open_sends_nothing_and_writes_nothing() {
+    let _side = side_by_side();
+    let env = Env::new("stdin-open");
+    let pet = Pet::start(&env, &env.sessions());
+    let tmp = env.dir("tmp-stdin");
+    let hook = hook();
+    let since = Instant::now();
+    let mut child = Command::new(&hook.program)
+        .args(&hook.args)
+        .args(["--agent", "claude"])
+        .env("AIPET_PIPE", &env.endpoint)
+        .env("AIPET_DATA_DIR", env.data())
+        .env("TMPDIR", &tmp)
+        .env("TMP", &tmp)
+        .env("TEMP", &tmp)
+        .env("CODEX_HOME", env.codex())
+        .env_remove("CLAUDE_CODE_ENTRYPOINT")
+        .env_remove("CLAUDE_CODE_HOST_SESSION_ID")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // held open until the hook is done
+    let stdin = child.stdin.take();
+    let pid = child.id();
+    let run = finish((child, now()), HOOK_BUDGET + Duration::from_secs(3));
+    let took = since.elapsed();
+    drop(stdin);
+    run.silent();
+    assert!(took < STDIN + Duration::from_secs(2), "took {took:?}");
+    // the pet logs every event it gets, ignored ones too
+    let pid = format!(" pid={pid} ");
+    assert!(!logged(&pet.events_log).iter().any(|l| l.contains(&pid)));
+    assert_eq!(contents(&tmp), Vec::<PathBuf>::new());
 }
 
 // ------------------------------------------------------------------ HookServerTests: clients that misbehave, and Stop
