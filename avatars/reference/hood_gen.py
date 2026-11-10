@@ -301,12 +301,16 @@ def pack():
                       shapes={"on": vp.drawing(d.art({"headphones": True}, "headphones"))}, fallback={"off": None})
     bob = vp.keys(vp.drawn(vp.eased(STYLE, "bob-l", "bob", 16)))
     typing = vp.keys(vp.drawn(vp.held(STYLE, "type", "type")))
+    # both hands type: the screen-right one taps the same keys mirrored, half a loop later, while the left one rests
+    typing_right = ([{**k, "dx": -k["dx"]} if "dx" in k else k for k in typing], 0.5)
 
     def hand(pid, bob_class, motion):
         poses = {value: {pid: list(d.at(pose, pid)[0])} for value, pose in vp.ARMS.items()}
         shapes = {value: vp.drawing(d.inner(pose, pid)) for value, pose in vp.ARMS.items()}
         animations = {"rest": vp.anim([(pid, vp.phase(STYLE, bob_class))], bob)}
-        animations.update({value: vp.anim(pid, k) for value, k in motion.items()})
+        # a motion is its keys, or its keys and the phase it starts at
+        animations.update({value: vp.anim([(pid, k[1])], k[0]) if isinstance(k, tuple) else vp.anim(pid, k)
+                           for value, k in motion.items()})
         return vp.layer(pid, "arms", "rest", hit=True, mirror="flip",
                         parts=[{"id": pid, "origin": poses["rest"][pid]}],
                         shapes=shapes, poses=poses, transition_ms=120, animations=animations)
@@ -335,8 +339,9 @@ def pack():
         "glow": C["glow"],
         # the done's golden glow first, behind everything
         "layers": [vp.aura_layer(d.norm, AURA), body, laces, eyes, prop, screen, phones,
-                   # the screen-left hand types; the screen-right one holds the magnifier as it scans
-                   hand("hand-left", "bob-l", {"hold": typing}), hand("hand-right", "bob-r", {"lens": vp.scan_keys()}),
+                   # both hands type in turn; the screen-right one holds the magnifier as it scans
+                   hand("hand-left", "bob-l", {"hold": typing}),
+                   hand("hand-right", "bob-r", {"hold": typing_right, "lens": vp.scan_keys()}),
                    *effects],
     }, C, theme="Green", themes={"Blue": BLUE})
 
