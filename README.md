@@ -190,9 +190,9 @@ Right-click the pet for its menu:
   - Team defaults: **Import defaults…** reads a preset file (below).
   - About: the version, and whether this copy updates itself. The installed Windows app shows the state of its
     updates here, with **Check for updates**.
-- **Avatars**: the pets, one tile each. Click one to wear it. Four are built in, each in two styles: Sprout and Hood
-  (pixel or vector), Pip (vector or painted) and Hamster (vector or pixel). The worn pet's **Style** picks one, saved
-  as `AvatarStyle` in `config.json`. The Hamster's design, and the ideas for its newer states, come from JLandbo's [hamster-pet](https://github.com/JLandbo/hamster-pet), used with its author's permission.
+- **Avatars**: the pets, one tile each. Click one to wear it. Three are built in, each in two styles: Sprout and
+  Hood (pixel or vector) and Pip (vector or painted). The worn pet's **Style** picks one, saved as `AvatarStyle` in
+  `config.json`.
   - Themes: under the tiles, the worn pet's themes (the Hood in Blue or Green, say). **New theme** makes one of your
     own from any pet with named colours: pick its colours and save it. **Edit** and **Delete** change or remove your
     own themes.

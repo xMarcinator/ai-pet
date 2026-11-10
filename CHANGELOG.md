@@ -19,6 +19,9 @@ in the milestone 2 release, and an installed copy of any earlier release updates
   (`cross-runtime.yml`: each runtime's hook against the other's pet), the Velopack proof's .NET-to-Rust jobs and their
   harness, and the test variables `AIPET_TEST_HOOK` and `AIPET_GOLDEN`. Only the release's Windows job installs .NET,
   for Velopack's `vpk`.
+- The Hamster is no longer a built-in pet: its vector and pixel drawings, their generators and its reference art are
+  gone, so three pets ship (Sprout, Hood and Pip). A `config.json` that names it wears the first pet, as for any pet
+  that isn't there, and a pack of your own named Hamster loads and is worn like any other.
 
 ### Changed
 - CI checks that nothing outside this changelog names what was removed (`scripts/check-removed-paths.sh`), and runs

@@ -25,14 +25,13 @@ Planned after fn-1: 15 tasks, R1–R22. It replaces today's code-drawn pet with 
 Parts carry their own positions and motion as data (R18), and a pack-making agent skill is planned (R19). Spikes come first for Aseprite (task 15) and Rive (task 13). The spec has the details and decisions.
 
 **Approved reference drawings, for fn-2's vector packs:** `avatars/reference/`.
-- **Pets:** Hood (green), Hamster and Sprout, each made by a Python generator (`hood_gen.py`, `hamster_gen.py`, `sprout_gen.py`; run `python avatars/reference/<name>_gen.py` from anywhere, no packages needed).
+- **Pets:** Hood (green) and Sprout, each made by a Python generator (`hood_gen.py`, `sprout_gen.py`; run `python avatars/reference/<name>_gen.py` from anywhere, no packages needed).
 - **Shared states:** `pet_states.py` holds every state the pet supports today (from `rust/crates/aipet-sprite/src/pet.rs`): moods, idle acts, reactions and second frames, plus the shared effects, magnifier, headphones, whole-body motion, shadow and mirroring.
 - **Outputs per pet:** `<pet>.svg`, `<pet>-working.svg` (with experimental typing), `<pet>-preview.html` (the pixel original beside the vector, then every state in 130×120 boxes on three backgrounds) and `<pet>-sheet.svg`.
-- **Pixel originals:** `hood-pixel.png`, `hood-pixel-working.png`, `hamster.png`, `sprout-pixel.png`.
-- **Review:** Codex rated all three READY on 2026-11-06.
+- **Pixel originals:** `hood-pixel.png`, `hood-pixel-working.png`, `sprout-pixel.png`.
+- **Review:** Codex rated them READY on 2026-11-06.
 - **The owner's design decisions:**
   - **Hood:** round hood with no peak, slim, short robe, tall glowing eyes, round hands resting in front of the robe that float out to wave, no feet, the laptop at the lower right (one hand holds it, one types) with only a tight glow on `>_`.
-  - **Hamster:** true to its pixel reference, after JLandbo's hamster-pet (https://github.com/JLandbo/hamster-pet, used with its author's permission). Since fnt-72 its shading is a darker orange down the right and bottom right, replacing the back in the head's yellow; paws are nubs on the belly, `lens` is round glasses, and it has its own blush, speed lines and the new states' art.
   - **Sprout:** flat body with the outline as its only edge, and no blush.
   - **Pip:** the repo-root `pocket-sprout.html` is the owner's Pip design that fn-2 task 5 builds from.
 

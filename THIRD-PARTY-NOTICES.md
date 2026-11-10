@@ -19,9 +19,6 @@ of the `iced_graphics` crate and comes under that crate's license below.
 The Aseprite files in `rust/crates/aipet-sprite/tests/fixtures/asefile/` (MIT, Copyright (c) 2020 Alpine Alpaca
 Games) are test data only: nothing of them is built into AiPet. Their license is beside them.
 
-The Hamster's design, and the ideas for its newer states, come from JLandbo's [hamster-pet](https://github.com/JLandbo/hamster-pet), used with its author's permission. That repository
-carries no license, so this rests on the author's permission rather than a license.
-
 ## The Rust crates in AiPet and aipet-hook
 
 The pet and `aipet-hook` are built from these crates, for the release targets (Windows x64, Linux x64 and arm64). The

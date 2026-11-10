@@ -26,17 +26,16 @@ Sprout and Pip).
 | Hood (vector) | 6.26 | 6.13, 6.23, 6.33, 6.33, 6.26 | 154 MB | 49 MB |
 | Pip | 5.26 | 5.26, 5.23, 5.20, 5.26, 5.30 | 154 MB | 49 MB |
 | Pip (painted) | 9.30 | 9.03, 9.10, 9.40, 9.30, 9.53 | 165 MB | 60 MB |
-| Hamster | 6.83 | 7.03, 6.70, 6.83, 6.76, 6.83 | 154 MB | 49 MB |
-| Hamster (pixel) | 4.73 | 4.77, 4.73, 4.77, 4.70, 4.70 | 155 MB | 50 MB |
 | Sprout (vector) | 6.36 | 6.30, 6.36, 6.46, 6.26, 6.40 | 154 MB | 49 MB |
 | C# Sprout (last) | 12.33 | 12.20, 12.33, 12.30, 12.33, 12.43 | 280 MB | 166 MB |
 
 - **Calm CPU:** every pet passes. The strictest budget is the C# pet's lower figure plus 0.5 points, 12.83 %, and the
   busiest pet, painted Pip, is at 9.30 %. Painted Pip costs the most because its frames are large sheets drawn
-  smoothly; the vector pets are at 5.3–6.8 %.
+  smoothly; the vector pets are at 5.3–6.4 %.
 - **RSS:** every pet passes, at 154–165 MB against a budget of 420 MB (1.5 × 280 MB).
 - **Binary size:** the embedded art (the `packs/` folders, `du -sb`) is 530 KB with FNT-72's new states for the
-  Hood, Sprout and Pip (427 KB before them), far under the 3 MB budget.
+  Hood, Sprout and Pip (427 KB before them), far under the 3 MB budget. Both figures count a pet that is no longer
+  built in (2026-11-10), whose rows are gone from the table above.
 
 ## Still to do
 

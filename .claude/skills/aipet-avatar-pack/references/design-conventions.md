@@ -34,16 +34,16 @@ and list them as fixed in the Codex review.
 - Effects (Zs, dots, notes, the alert, sparkles, dust, tears, hearts and the golden aura) keep their fixed colours
   from `pet_states.py` (the notes take the accent), each with the pet's outline. The aura's glow is soft and sits
   behind the body: the first layer.
-- The `lens` is the pack's own: a magnifier, or glasses as the Hamster wears. The `envelope` is white with a heart
+- The `lens` is the pack's own: a magnifier, or glasses. The `envelope` is white with a heart
   seal in the accent, held where the laptop sits.
 
 ## The pet's own shape
 
-- Fit head-anchored things to the head, not the body. The **Hamster** is drawn in a three-quarter view: its head is
-  off-centre and narrower than its body, turned slightly left. Its headset band and cups, the eyes' look offsets, and
-  the props held in front (laptop, magnifier, envelope) and its glasses follow the head's own centre, width and turn. Don't reuse the
-  front-facing pets' coordinates (Sprout, Hood) on a turned pet; check this first on any pet that isn't drawn
-  straight on.
+- Fit head-anchored things to the head, not the body. A pet drawn in a **three-quarter view** has its head
+  off-centre and narrower than its body, turned slightly to one side. Its headset band and cups, the eyes' look
+  offsets, the props held in front (laptop, magnifier, envelope) and any glasses follow the head's own centre, width
+  and turn. Don't reuse the front-facing pets' coordinates (Sprout, Hood) on a turned pet; check this first on any
+  pet that isn't drawn straight on.
 - Keep the pet's ground on the anchor, and its feet (or robe) on the ground in `idle`. The shadow is the app's: don't
   draw one in the pack.
 - Draw facing right; mirroring makes the left. Put anything that must not mirror (text) on a layer with

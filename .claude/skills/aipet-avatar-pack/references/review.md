@@ -14,7 +14,7 @@ Every generator writes both (`avatars/reference/pet_states.write_pages`):
 - `<prefix>-sheet.svg`: every state as a labelled frame, six to a row, plus any extra frames (`sheet_extras`, such
   as typing frames).
 
-Examples: `avatars/reference/hood-green-preview.html`, `hamster-preview.html`, `sprout-preview.html` and their
+Examples: `avatars/reference/hood-green-preview.html`, `sprout-preview.html` and their
 `-sheet.svg`. A generator that writes the manifest directly draws its page from the manifest it wrote, through a
 small resolver that follows the fallbacks as the app does: `avatars/samples/skill_example_gen.py` and its
 `skill-example-preview.html`. Its page has no original to compare with and no state sheet. When the user gave a

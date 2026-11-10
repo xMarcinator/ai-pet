@@ -90,10 +90,10 @@ pet gives all 15.
 ## One example per kind
 
 **Vector**: the Blob in `docs/MAKING-A-PET.md` ("The manifest"), and `avatars/samples/skill-example/pack.json`
-(`worked-example.md`). Built-ins: `rust/crates/aipet-sprite/packs/{hood-vector,hamster-vector,sprout-vector,pip}/`.
+(`worked-example.md`). Built-ins: `rust/crates/aipet-sprite/packs/{hood-vector,sprout-vector,pip}/`.
 
 **Pixel**: `avatars/samples/basic/pack.json` (explicit frames), `avatars/samples/grid/pack.json` (grid frames).
-Built-ins: `packs/sprout/`, `packs/hood/`, `packs/hamster-pixel/`. The shape of one:
+Built-ins: `packs/sprout/`, `packs/hood/`. The shape of one:
 
 ```json
 {
