@@ -16,6 +16,8 @@ legacy/
 scratch/
 *.log
 *.tmp
+# Python's bytecode (the reference generators in avatars/reference)
+__pycache__/
 .claude/settings.local.json
 # agent worktrees (Claude Code's); the skills in .claude/skills/ are tracked
 .claude/worktrees/

@@ -15,7 +15,7 @@ is asked for.
 | `fx` | `none`, `zs`, `dots`, `notes`, `alert`, `sparkles`, `dust`, and `zs+sparkles`, `dots+sparkles`, `notes+sparkles`, `alert+sparkles`, `dust+sparkles`, `tears`, `aura`, `heart` | `none` |
 | `facing` | `left`, `right` | `right` |
 
-`lens` is whatever the pack draws for reading: a magnifier, or glasses (the Hamster). `tears`, `aura` and `heart`
+`lens` is whatever the pack draws for reading: a magnifier, or glasses. `tears`, `aura` and `heart`
 never combine with sparkles.
 
 **The newer states** (`sad`, `tired`, `news`). A pack that draws neither the state nor its sign (`tears`, the

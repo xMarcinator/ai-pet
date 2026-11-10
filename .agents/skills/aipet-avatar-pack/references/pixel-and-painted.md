@@ -8,8 +8,8 @@ box and the anchor", "Raster frames and grid sheets" and "Part motion" (raster p
 | | `pixel` | `painted` |
 |---|---|---|
 | Scaling | Nearest neighbour, snapped to whole device pixels | Smooth |
-| `pixel_size` | Logical px per art pixel: 5 for a 26 × 24 grid (Sprout, Hood), 3 for the Hamster (pixel)'s 43 × 40 | Below 1 for art drawn larger: 0.5 for art at twice the size (Pip (painted)) |
-| `anchor` | In art pixels: `[13, 22]` (Sprout, Hood), `[21, 37]` (Hamster (pixel)) | In art pixels: `[130, 220]` at 0.5 |
+| `pixel_size` | Logical px per art pixel: 5 for a 26 × 24 grid (Sprout, Hood), 3 for a 43 × 40 one | Below 1 for art drawn larger: 0.5 for art at twice the size (Pip (painted)) |
+| `anchor` | In art pixels: `[13, 22]` (Sprout, Hood), `[21, 37]` on a 43 × 40 grid | In art pixels: `[130, 220]` at 0.5 |
 | Colour themes | Palette of exact sheet colours, swapped per theme | None; sheet themes only |
 
 The art box is 130 × 120 logical px with a 10 px margin; a frame wider than 150 or taller than 140 logical px (its
@@ -42,8 +42,8 @@ pet's clock, for effects that should stay in step). At most 512 frames in the pa
 
 **Placement.** A frame's top-left sits on the art box's top-left, moved by its `pivot`: one `[x, y]` or one per
 frame, the frame pixel placed there (negative values draw it further in). With a part, the pivot pixel is placed on
-the part's origin instead. The simplest layout, which `hamster_pixel_gen.py` uses: every frame is the whole box
-(43 × 40 cells), frames side by side on the sheet, no pivots.
+the part's origin instead. The simplest layout: every frame is the whole box (43 × 40 cells, say), frames side by
+side on the sheet, no pivots.
 
 `<value>@left` frames, if a layer has them, are drawn unmirrored while the pet faces left (Sprout's and Hood's running
 arms and feet).
@@ -64,11 +64,12 @@ A raster layer moves **as one piece**:
 
 ## The pixel generator
 
-`avatars/reference/hamster_pixel_gen.py` is the model: the reference image read into a grid of palette letters
-(`HAMSTER`), split into layers (body, arms, feet, eyes), plus what the reference lacks (raised, waving, typing and
-running arms, the laptop, the magnifier, the headphones, the effects) drawn in its palette and outline; PNGs written
-with `zlib` and `struct` (no Pillow needed); the manifest with a palette for themes. Run it with
-`python3 avatars/reference/hamster_pixel_gen.py --pack <folder>`.
+No pixel generator ships in the repository: the built-in pixel pets, Sprout and Hood, are baked from their pixel
+pets by the Rust code (`rust/crates/aipet-sprite/src/bake.rs`), which a new pet should not copy. Write one beside the
+pack, shaped like the vector generators (`--pack <folder>` writes the pack): the reference image read into a grid of
+palette letters, split into layers (body, arms, feet, eyes), plus what the reference lacks (raised, waving, typing
+and running arms, the laptop, the magnifier, the headphones, the effects) drawn in its palette and outline; PNGs
+written with `zlib` and `struct` (no Pillow needed); the manifest with a palette for themes.
 
 For a painted pack, the art usually comes from a painting program or a renderer; Pip (painted) is baked from the
 vector Pip by the Rust code (`rust/crates/aipet-sprite/src/painted.rs`), which a new pet should not copy. Write the

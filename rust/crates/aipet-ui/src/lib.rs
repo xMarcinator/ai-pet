@@ -460,10 +460,7 @@ impl FrameTimes {
     }
 }
 
-/// The avatar and theme the preferences name: the avatar by its name, or by an older "<pet> (<theme>)" name for one
-/// of a pet's themes (any case), as "Hood (green)" names the Hood in Green; else the first. The theme is the one
-/// the preferences name, else the one the older name does, else the avatar's default.
-/// The way a pet faces at rest: the way its art does (the Hamster is drawn turned to the left).
+/// The way a pet faces at rest: the way its art does (a pack drawn turned to the left, `"faces": "left"`, faces left).
 fn drawn_facing(pack: &aipet_sprite::pack::Pack) -> i32 {
     match pack.faces {
         aipet_sprite::pose::Facing::Left => -1,
@@ -471,6 +468,9 @@ fn drawn_facing(pack: &aipet_sprite::pack::Pack) -> i32 {
     }
 }
 
+/// The avatar and theme the preferences name: the avatar by its name, or by an older "<pet> (<theme>)" name for one
+/// of a pet's themes (any case), as "Hood (green)" names the Hood in Green; else the first. The theme is the one
+/// the preferences name, else the one the older name does, else the avatar's default.
 fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
     let name = prefs.avatar.as_deref().unwrap_or_default();
     let groups = pets(avatars);
@@ -1959,6 +1959,64 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_config_naming_a_pet_that_isnt_there_wears_the_first_and_an_own_pet_of_that_name_is_worn() {
+        // the Hamster was built in up to 0.2.0: a config.json from then still names it, and the owner's own pack
+        // of that name (here the baked Hood renamed, and drawn turned to the left) is a pet like any other
+        let dir = std::env::temp_dir().join(format!("aipet-ui-own-pet-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let start = |config: &str, avatars: &std::path::Path| {
+            let file = dir.join("config.json");
+            std::fs::write(&file, config).unwrap();
+            let (config, _) = Config::load_from(&file);
+            PetUi::new(Setup {
+                prefs: Prefs::from(&config),
+                avatars: avatars.to_owned(),
+                ..Setup::detached()
+            })
+        };
+        let pet = |ui: &PetUi| ui.avatars[ui.avatar].pack.pet().to_owned();
+        let index = |ui: &PetUi, name: &str| ui.avatars.iter().position(|a| a.name() == name).unwrap();
+        let none = dir.join("no-avatars");
+        for config in [
+            r#"{"Avatar":"Hamster"}"#,
+            r#"{"Avatar":"Hamster (pixel)"}"#,
+            r#"{"Avatar":"Hamster","AvatarStyle":"Pixel","AvatarTheme":"Blue"}"#,
+        ] {
+            let ui = start(config, &none);
+            assert_eq!(pet(&ui), "Sprout", "{config}");
+            assert_eq!(ui.theme(), ui.avatars[ui.avatar].pack.palette.theme, "{config}");
+            assert_eq!(ui.input.facing, 1, "{config}");
+            assert_eq!(ui.prefs().avatar.as_deref(), Some("Sprout"), "{config}");
+        }
+
+        let avatars = dir.join("avatars");
+        let own = avatars.join("Hamster");
+        std::fs::create_dir_all(&own).unwrap();
+        let baked = aipet_sprite::bake::bake(&aipet_sprite::Avatar::hood());
+        for (name, bytes) in aipet_sprite::manifest::files(&baked.pack, &baked.sheets) {
+            std::fs::write(own.join(name), bytes).unwrap();
+        }
+        let manifest = std::fs::read_to_string(own.join("pack.json")).unwrap();
+        let renamed = manifest.replacen("\"name\": \"Hood\"", "\"name\": \"Hamster\",\n  \"faces\": \"left\"", 1);
+        assert_ne!(renamed, manifest);
+        std::fs::write(own.join("pack.json"), renamed).unwrap();
+        let mut ui = start(r#"{"Avatar":"Hamster"}"#, &avatars);
+        assert!(ui.skipped().is_empty(), "{:?}", ui.skipped());
+        assert_eq!(pet(&ui), "Hamster");
+        assert_eq!(ui.prefs().avatar.as_deref(), Some("Hamster"));
+        assert!(settings::avatars::tiles(&ui).contains(&("Hamster", true)));
+        // drawn turned to the left, it stands facing left; another pet faces right, and put back on it faces left
+        assert_eq!(ui.input.facing, -1);
+        ui.update(Message::SelectAvatar(index(&ui, "Sprout")));
+        assert_eq!((pet(&ui), ui.input.facing), ("Sprout".to_owned(), 1));
+        ui.update(Message::SelectAvatar(index(&ui, "Hamster")));
+        assert_eq!((pet(&ui), ui.input.facing), ("Hamster".to_owned(), -1));
+        assert_eq!(ui.prefs().avatar.as_deref(), Some("Hamster"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn the_avatar_wears_its_theme_and_an_older_name_for_a_theme_still_works() {
         let start = |avatar: &str, theme: Option<&str>| {
             PetUi::new(Setup {
@@ -2042,9 +2100,9 @@ pub(crate) mod tests {
         ui.update(Message::SelectAvatar(hood));
         assert_eq!(worn(&ui), ("Hood".into(), "Vector".into(), "Blue".into()));
         // a pet not worn yet goes on in its default style and theme
-        ui.update(Message::SelectAvatar(tile(&ui, "Hamster")));
-        let hamster = &ui.avatars[ui.avatar];
-        assert_eq!(ui.theme(), hamster.pack.palette.theme);
+        ui.update(Message::SelectAvatar(tile(&ui, "Pip")));
+        let pip = &ui.avatars[ui.avatar];
+        assert_eq!(ui.theme(), pip.pack.palette.theme);
     }
 
     #[test]
@@ -2073,7 +2131,7 @@ pub(crate) mod tests {
         let mut ui = start("Hood", None, Some("Green"));
         assert_eq!(
             settings::avatars::tiles(&ui),
-            [("Sprout", false), ("Hood", true), ("Pip", false), ("Hamster", false)]
+            [("Sprout", false), ("Hood", true), ("Pip", false)]
         );
         let styles: Vec<&str> = settings::avatars::styles(&ui).iter().map(|s| s.0).collect();
         assert_eq!(styles, ["Pixel", "Vector"]);
@@ -2095,7 +2153,6 @@ pub(crate) mod tests {
         // older names for a pet's drawings, and for a pet in a theme
         assert_eq!(worn(&start("Hood (vector)", None, None)), it("Hood", "Vector", "Green"));
         assert_eq!(worn(&start("Pip (painted)", None, None)), it("Pip", "Painted", "Peach"));
-        assert_eq!(worn(&start("Hamster (pixel)", None, None)).1, "Pixel");
         assert_eq!(worn(&start("Sprout (vector)", None, None)).1, "Vector");
         assert_eq!(worn(&start("Hood (green)", None, None)), it("Hood", "Pixel", "Green"));
         assert_eq!(
@@ -2108,7 +2165,7 @@ pub(crate) mod tests {
             it("Hood", "Pixel", "Blue")
         );
         // the default style isn't kept
-        assert_eq!(start("Hamster", Some("Vector"), None).prefs().avatar_style, None);
+        assert_eq!(start("Pip", Some("Vector"), None).prefs().avatar_style, None);
     }
 
     #[test]

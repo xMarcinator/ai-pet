@@ -1,4 +1,4 @@
-"""What every reference pet must show, shared by the generators (hood_gen.py, hamster_gen.py, sprout_gen.py).
+"""What every reference pet must show, shared by the generators (hood_gen.py, sprout_gen.py).
 
 STATES is every state the pixel pet supports today (rust/crates/aipet-sprite/src/pet.rs, compute_pose and draw): the
 moods (idle with its five idle acts, sleep, thinking, working at the laptop, working with the magnifier for web
