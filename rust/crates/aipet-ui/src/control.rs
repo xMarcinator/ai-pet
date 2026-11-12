@@ -495,3 +495,54 @@ mod tests {
         assert_eq!(host.dismissed(), ["claude:a"]);
     }
 }
+
+#[cfg(test)]
+mod timing {
+    use std::time::Instant;
+
+    use aipet_core::control::{Command, Request};
+
+    use crate::Message;
+    use crate::tests::detached;
+
+    /// How long wearing each pet's style and theme takes on the UI thread (a style switch's stall): run with
+    /// `cargo test --release -p aipet-ui switch_times -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, not a check"]
+    fn switch_times() {
+        let (mut ui, _) = detached();
+        let cases = [
+            ("Hood", "Pixel", "Blue"),
+            ("Hood", "Pixel", "Green"),
+            ("Hood", "Vector", "Green"),
+            ("Hood", "Vector", "Blue"),
+            ("Sprout", "Pixel", "Default"),
+            ("Sprout", "Vector", "Default"),
+            ("Pip", "Vector", "Peach"),
+            ("Pip", "Vector", "Lilac"),
+            ("Pip", "Painted", "Peach"),
+            ("Pip", "Painted", "Lilac"),
+        ];
+        for round in 0..2 {
+            for (name, style, theme) in cases {
+                let (request, answer) = Request::new(Command::Wear {
+                    name: name.into(),
+                    style: Some(style.into()),
+                    theme: Some(theme.into()),
+                });
+                let start = Instant::now();
+                ui.update(Message::Command(request));
+                let wear = start.elapsed();
+                let start = Instant::now();
+                let _ = ui.settings_view();
+                let view = start.elapsed();
+                assert!(answer.try_recv().unwrap().is_ok());
+                println!(
+                    "round {round}: {name} {style} {theme}: wear {:.1} ms, Settings view {:.1} ms",
+                    wear.as_secs_f64() * 1e3,
+                    view.as_secs_f64() * 1e3
+                );
+            }
+        }
+    }
+}
