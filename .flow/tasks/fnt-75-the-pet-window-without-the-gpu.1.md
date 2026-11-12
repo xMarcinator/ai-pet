@@ -38,9 +38,10 @@ Grow FNT-73's minimal prototype into the gate R1 defines and run it paired with 
 - [ ] The verdict (go or stop) is written in the proof; on stop, the spec's remaining tasks are not started
 
 ## Done summary
-TBD
+Gate run 2026-11-12 (provisional load limit 4, owner's word to start at once): the CPU stack's calm CPU is over the iced pet's in all eight cases, 7.26-14.50 % against 6.40-7.13 % (gate RSS 15-39 MB against 110-176 MB, no GL). Verdict STOP: R1 fails, the spec's remaining tasks are not started until the owner chooses (keep iced, accept the CPU cost, or damage-tracked Slint). Results, cause and options in rust/proofs/ui-framework.md.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: a6186cdd98ebacfb1b45f6706247fae6e80e4360, 07e2a79, acabe85
+- Tests: spikes/ui-framework/gate.sh 2, spikes/ui-framework/gate.sh 1.5
 - PRs:

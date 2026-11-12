@@ -32,8 +32,8 @@ Turn `PetUi` into a framework-free scene: replace iced's geometry types with the
 - [ ] A calm pet with nothing changing reports no changed rects; existing aipet-ui, drag and golden tests pass
 
 ## Done summary
-TBD
-
+Blocked:
+The gate (task 1) failed R1 on 2026-11-12: the CPU stack used more calm CPU than the iced pet in all eight cases (rust/proofs/ui-framework.md). By the spec, the move stops here until the owner chooses: keep iced, accept the CPU cost for the memory (R1 changed), or damage-tracked Slint.
 ## Evidence
 - Commits:
 - Tests:
