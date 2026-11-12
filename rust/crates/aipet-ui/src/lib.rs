@@ -563,6 +563,7 @@ impl PetUi {
         let avatars = shelf::shelve(found.pets);
         let (avatar, theme) = choose(&avatars, &setup.prefs);
         let worn = themed(&avatars[avatar].unpacked(), &theme);
+        let fx_reach = avatars[avatar].fx_reach(&theme, &worn);
         stills[avatar] = Still::of(&worn);
         let chosen = HashMap::from([(
             worn.pack.pet().to_owned(),
@@ -585,7 +586,7 @@ impl PetUi {
             t: 0.0,
             motion: Motion::REST,
             sprite: Sprite::new(&worn),
-            fx_reach: aipet_sprite::fx_reach(&worn.pack, &worn.sheets) as f32,
+            fx_reach,
             moods: mood::Moods::default(),
             hour: || aipet_core::log::local_hour(std::time::SystemTime::now()),
             sprite_rects: Vec::new(),
@@ -1265,7 +1266,7 @@ impl PetUi {
         self.pet.set_pack(worn.clone());
         self.sprite = Sprite::new(&worn);
         // another pet's effects may reach higher or lower: the bubbles follow
-        self.fx_reach = aipet_sprite::fx_reach(&worn.pack, &worn.sheets) as f32;
+        self.fx_reach = self.avatars[i].fx_reach(&self.theme, &worn);
         if !self.input.dragging {
             self.input.facing = drawn_facing(&worn.pack);
         }
