@@ -13,8 +13,8 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::{fmt, thread};
 
 use aipet_core::presets::Preset;
-use iced::Element;
 use iced::widget::{column, row, slider, text};
+use iced::{Background, Border, Color, Element};
 
 use super::{Action, Tone, button_row, card, label, pill, section, status, switch_row};
 use crate::{Effect, PetUi};
@@ -97,6 +97,7 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
             "How big the pet is drawn.",
             crate::geometry::PET_SIZES,
             pet_size,
+            accent,
             crate::Message::SetPetSize,
         ))
         .push(size_row(
@@ -104,6 +105,7 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
             "How big the chat bubbles are, apart from the pet.",
             crate::geometry::BUBBLE_SIZES,
             bubble_size,
+            accent,
             crate::Message::SetBubbleSize,
         ));
     let action = |label, action| pill(label, false, accent).on_press(send(action));
@@ -325,16 +327,40 @@ fn import_preset(pet: &PetUi, file: &Path) -> (String, Tone) {
     )
 }
 
-/// A size in percent: a title and a hint, then a slider in steps of 5 % and the size it is at.
+/// A size in percent: a title and a hint, then a slider in steps of 5 % and the size it is at. The slider is the
+/// switches' colours: the accent up to its handle, the off switch's grey after it.
 fn size_row<'a>(
     title: &'a str,
     hint: &'a str,
     range: std::ops::RangeInclusive<i32>,
     value: i32,
+    accent: Color,
     message: fn(i32) -> crate::Message,
 ) -> Element<'a, crate::Message> {
+    let style = move |_: &iced::Theme, status| {
+        let handle = match status {
+            slider::Status::Active => accent,
+            slider::Status::Hovered | slider::Status::Dragged => accent.scale_alpha(0.88),
+        };
+        slider::Style {
+            rail: slider::Rail {
+                backgrounds: (
+                    Background::Color(accent),
+                    Background::Color(crate::style::argb(0x99FFFFFF)),
+                ),
+                width: 4.0,
+                border: Border::default().rounded(2),
+            },
+            handle: slider::Handle {
+                shape: slider::HandleShape::Circle { radius: 7.0 },
+                background: Background::Color(handle),
+                border_width: 0.0,
+                border_color: Color::TRANSPARENT,
+            },
+        }
+    };
     let control = row![
-        slider(range, value, message).step(5).width(170),
+        slider(range, value, message).step(5).width(170).style(style),
         text(format!("{value} %")).size(13).font(crate::style::UI).width(48),
     ]
     .spacing(10)
