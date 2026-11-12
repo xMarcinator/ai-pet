@@ -36,9 +36,10 @@ Give the listener a command channel to the pet (the iced pet's state that owns P
 - [ ] Hands-on: an open Settings window shows a size changed by the tool
 
 ## Done summary
-TBD
+list_avatars, wear_avatar, get_settings, set_settings, get_board and dismiss_card ask the pet over a PetLink (aipet_core::control): a Request that comes as news, which the shells hand over every frame and whose effects (on top) they now apply. The pet checks each command whole, then does it through Settings' messages, so it saves config.json as Settings does; 5 s without an answer is isError. Tests: aipet-ui's control tests compare each tool with the Settings message; the listener's tests drive a real headless PetUi, with the six tools in the conformance table. Built-in pets are three now (Sprout, Hood, Pip; the Hamster stopped being built in), so the test checks three, not the plan's four. Hands-on on Hyprland, a sandboxed pet: wear_avatar and set_settings show in an open Settings within 0.5 s and in config.json. It found that Wayland's Settings didn't redraw on an agent's change (fixed: a frame that brings a command redraws every window), and the owner asked for the size sliders in the accent (done).
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 0078d50, a61641d
+- Tests: cargo test -p aipet-core -p aipet-ui -p aipet-mcp -p aipet-desktop -p aipet-wayland -p aipet
 - PRs:
