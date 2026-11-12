@@ -6,7 +6,7 @@ The pet window draws through iced and wgpu, which maps the GL driver into the pe
 
 This spec moves the pet window to that stack: tiny-skia for every pixel, presented by smithay-client-toolkit on Wayland, by an ARGB window on X11 and by a layered window on Windows. Settings stays in iced, in the pet process, drawn by iced's CPU renderer (tiny-skia), so the pet process never loads a GPU library (the owner's decision, 2026-11-09; task 9's spike showed it works). The first task is a gate: the CPU stack must beat the iced pet's calm CPU at the real window's worst case, or the spec stops there.
 
-It runs after fn-1 ships and before FNT-71 (owner, 2026-11-09), so FNT-71's UI-thread commands are built once, on the new pet loop.
+It runs last of the ai-pet specs, after fn-2, fn-3, FNT-67, FNT-71 and FNT-76 (owner, 2026-11-12, replacing "before FNT-71"): the first gate failed (task 1), so the other specs finish on the iced pet, and FNT-71's command channel to the pet moves to the new pet loop with task 2's scene.
 
 ## Architecture & Data Models
 
@@ -71,7 +71,7 @@ FNT-73 compared the minimal stack, Slint and gpui with iced. gpui keeps the GPU 
 
 ## Early proof point
 
-Task fnt-75-the-pet-window-without-the-gpu.1 validates the core approach (the CPU stack beats iced's calm CPU at the worst case). If it fails, re-evaluate the move (keep iced, or damage-tracked Slint) before continuing with fnt-75-the-pet-window-without-the-gpu.2+.
+Task fnt-75-the-pet-window-without-the-gpu.1 validates the core approach (the CPU stack beats iced's calm CPU at the worst case). It failed on 2026-11-12 (`rust/proofs/ui-framework.md`): the breathing re-samples the sprite every frame. Task fnt-75-the-pet-window-without-the-gpu.10 retries the gate once with the breathing cached in squash steps; if it fails too, re-evaluate the move (keep iced, accept the CPU cost, or damage-tracked Slint) before continuing with fnt-75-the-pet-window-without-the-gpu.2+.
 
 ## Resolved via Research
 

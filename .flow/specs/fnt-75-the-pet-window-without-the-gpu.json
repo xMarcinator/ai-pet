@@ -8,7 +8,12 @@
   "default_sync": null,
   "depends_on_epics": [
     "fn-1-migrate-aipet-from-net-to-rust",
-    "fnt-73-ui-framework-spike-gpui-or-something"
+    "fnt-73-ui-framework-spike-gpui-or-something",
+    "fn-2-layered-sprite-and-vector-pets",
+    "fn-3-linux-desktops-beyond-hyprland-hands-on",
+    "fnt-67-rive-packs",
+    "fnt-71-mcp-server-in-the-pet",
+    "fnt-76-windows-checks-with-the-owner"
   ],
   "id": "fnt-75-the-pet-window-without-the-gpu",
   "impl_review_rounds": {},
@@ -271,5 +276,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-09T21:00:47.309055Z"
+  "updated_at": "2026-11-12T21:24:55.214056Z"
 }

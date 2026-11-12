@@ -9,8 +9,7 @@
   "depends_on_epics": [
     "fn-1-migrate-aipet-from-net-to-rust",
     "fn-2-layered-sprite-and-vector-pets",
-    "fnt-74-pet-styles-one-avatar-entry-several",
-    "fnt-75-the-pet-window-without-the-gpu"
+    "fnt-74-pet-styles-one-avatar-entry-several"
   ],
   "id": "fnt-71-mcp-server-in-the-pet",
   "impl_review_rounds": {},
@@ -281,5 +280,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-09T21:07:43.049686Z"
+  "updated_at": "2026-11-12T21:24:51.266770Z"
 }
