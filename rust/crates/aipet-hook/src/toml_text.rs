@@ -1,4 +1,4 @@
-//! The line-based `config.toml` reader the Codex registration edits with (`src/AiPet.Hook/CodexConfig.cs:199-400`).
+//! The line-based `config.toml` reader the Codex registration edits with (`AiPet.Hook/CodexConfig.cs:199-400`).
 //!
 //! Codex trusts a hook by where it is in the file and by its definition, so the file is never re-serialised: it is
 //! split into tables ([`Segment`]), each kept as its lines, and an edit leaves out or adds whole lines. The reader

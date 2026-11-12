@@ -1,4 +1,4 @@
-//! The app's data folder and the other places the hook and the pet both know (`src/AiPet.Core/Paths.cs`).
+//! The app's data folder and the other places the hook and the pet both know (`AiPet.Core/Paths.cs`).
 //!
 //! - Windows: `%LOCALAPPDATA%\AiPet` (the known folder, not the variable).
 //! - Linux: `$XDG_DATA_HOME/AiPet`, by default `~/.local/share/AiPet`.
@@ -47,9 +47,23 @@ pub fn hook_events_log() -> PathBuf {
     data_dir().join("hook-events.log")
 }
 
+/// The bearer token MCP clients send the pet's listener: 64 hex digits, readable only by the user. The pet makes it
+/// on its first start (`aipet-mcp`), and the registrations' header helpers read it.
+pub fn mcp_token() -> PathBuf {
+    data_dir().join("mcp-token")
+}
+
 /// `Paths.CodexHome`: `$CODEX_HOME` as it is, else `~/.codex`. Read on every call, as the C#'s property is.
 pub fn codex_home() -> PathBuf {
     codex_home_in(&process_vars, &folders().home)
+}
+
+/// Claude Code's folder, where its transcripts are: `$CLAUDE_CONFIG_DIR` when it is set, else `~/.claude`
+/// (`ClaudeConfig.Dir`). Read on every call.
+pub fn claude_home() -> PathBuf {
+    nonempty(&process_vars, "CLAUDE_CONFIG_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| folders().home.join(".claude"))
 }
 
 /// .NET's `Environment.GetFolderPath(SpecialFolder.UserProfile)`, which the hook's registration and doctor read too

@@ -1,5 +1,5 @@
-//! The data layer held against the .NET app. rust/golden's `data` mode (rust/golden/Data.cs) wrote
-//! tests/golden/data/ with the app's own code, and this replays it:
+//! The data layer held against the .NET app. The golden generator's `data` mode wrote tests/golden/data/ with the
+//! app's own code, and this replays it:
 //! - files.json: config.json, jira.json and github.json read, then written back, byte for byte;
 //! - secrets.json: the fallback secrets.json read, written and deleted from;
 //! - hook_cleanup.json: which configs name the installed hook (VelopackTests' cases, and configs the hook's own
@@ -7,18 +7,14 @@
 //! - update_status.json: the texts Settings shows;
 //! - log.json: each culture's time separator, which the log's lines carry.
 //!
-//! When `AIPET_GOLDEN` names the golden generator's dll (CI sets it; see aipet-ipc's src/csharp.rs to run it
-//! locally), the C# also reads every file the Rust writes (the rollback path), writes a log line in the same culture
-//! as the Rust, and on Windows it writes a Credential Manager token the Rust reads, and reads one the Rust writes,
-//! under a test-only target. That Credential Manager test runs only with `AIPET_TEST_CREDENTIAL_MANAGER` set, since
-//! it writes to the real Credential Manager (CI sets it).
+//! The Credential Manager test writes to the real Credential Manager, so it runs only with
+//! `AIPET_TEST_CREDENTIAL_MANAGER` set (CI sets it).
 //!
-//! When the C# changes: `dotnet run --project rust/golden -c Release -- data` from the repository root, then fix the
-//! port until this passes. Never edit the golden files by hand.
+//! The corpus is frozen: the C# and its generator are gone (tests/golden/README.md), so it is the contract as it
+//! stands. Never edit the golden files by hand.
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use aipet_core::cleanup::{self, AgentConfigs};
 use aipet_core::config::{Config, GitHubSettings, JiraSettings, LoadStatus};
@@ -33,12 +29,8 @@ fn golden(file: &str) -> Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/golden/data")
         .join(file);
-    let text = fs::read_to_string(&path).unwrap_or_else(|e| {
-        panic!(
-            "{}: {e} (write it with: dotnet run --project rust/golden -c Release -- data)",
-            path.display()
-        )
-    });
+    let text = fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("{}: {e} (frozen: see tests/golden/README.md)", path.display()));
     serde_json::from_str(&text).expect("golden JSON")
 }
 
@@ -251,70 +243,6 @@ fn the_secrets_file_is_the_apps() {
     }
 }
 
-/// The C# reads every data file the Rust writes, to the same values: what it writes after reading one is the
-/// Rust's file byte for byte. The files are what the Rust writes for each fixture it read, and a secrets.json.
-#[test]
-fn the_app_reads_what_the_rust_writes() {
-    let Some(dll) = std::env::var_os("AIPET_GOLDEN") else {
-        eprintln!("skipped: AIPET_GOLDEN doesn't name the golden generator's dll (see this file's doc)");
-        return;
-    };
-    let scratch = Scratch::new("rollback");
-    let fixtures = golden("files.json");
-    let mut files: Vec<(&str, PathBuf)> = Vec::new();
-    for (i, case) in fixtures["cases"].as_array().unwrap().iter().enumerate() {
-        let kind = case["kind"].as_str().unwrap();
-        let input = scratch.0.join(format!("{i}-in.json"));
-        match (case["input"].as_str(), case["input_hex"].as_str()) {
-            (Some(text), _) => fs::write(&input, text).unwrap(),
-            (None, Some(bytes)) => fs::write(&input, hex(bytes)).unwrap(),
-            (None, None) => {}
-        }
-        let output = scratch.0.join(format!("{i}-{kind}.json"));
-        if Loaded::load(kind, &input).0.save_to(&output).is_ok() {
-            files.push((kind, output));
-        }
-    }
-    // the legacy toolbar, which the app itself never writes
-    for (i, toolbar) in [Some(true), Some(false)].into_iter().enumerate() {
-        let output = scratch.0.join(format!("toolbar-{i}.json"));
-        Config {
-            toolbar,
-            left: Some(-7),
-            ..Config::default()
-        }
-        .save_to(&output)
-        .unwrap();
-        files.push(("config", output));
-    }
-    let secrets = FileSecrets::new(&scratch.0.join("secrets"));
-    secrets.write("AiPet:GitHub", "github", "ghp_x").unwrap();
-    secrets.write("AiPet:Jira", "ann", "tok+en/é<&>\"'😀").unwrap();
-    files.push(("secrets", scratch.0.join("secrets").join("secrets.json")));
-
-    for kind in ["config", "jira", "github", "secrets"] {
-        let paths: Vec<&PathBuf> = files.iter().filter(|(k, _)| *k == kind).map(|(_, p)| p).collect();
-        let out = Command::new("dotnet")
-            .arg(&dll)
-            .args(["data", "read", kind])
-            .args(&paths)
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-        let lines: Vec<Value> = String::from_utf8(out.stdout)
-            .unwrap()
-            .lines()
-            .map(|l| serde_json::from_str(l).unwrap())
-            .collect();
-        assert_eq!(lines.len(), paths.len());
-        for (path, read) in paths.iter().zip(&lines) {
-            let rust = fs::read_to_string(path).unwrap();
-            assert_eq!(read["status"], "loaded", "{}: {rust}", path.display());
-            assert_eq!(read["written"].as_str().unwrap(), rust, "{}", path.display());
-        }
-    }
-}
-
 /// HookCleanup.Names for VelopackTests' cases and more.
 #[test]
 fn hook_cleanup_names_the_hook_as_the_app_does() {
@@ -443,29 +371,10 @@ fn log_time_separators_are_the_apps() {
     assert!(checked > 500, "{checked} cultures");
 }
 
-/// The C#'s log line, written in this environment's culture, has the Rust's time separator: `HH:mm:ss.fff line`
-/// with the culture's separator for `:`.
-#[test]
-fn the_log_has_the_apps_time_separator() {
-    let Some(dll) = std::env::var_os("AIPET_GOLDEN") else {
-        eprintln!("skipped: AIPET_GOLDEN doesn't name the golden generator's dll (see this file's doc)");
-        return;
-    };
-    let out = Command::new("dotnet").arg(&dll).args(["data", "log"]).output().unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    let line = String::from_utf8(out.stdout).unwrap();
-    let time = line.strip_suffix(" golden\n").unwrap_or_else(|| panic!("{line:?}"));
-    let separator: String = time[2..].chars().take_while(|c| !c.is_ascii_digit()).collect();
-    assert_eq!(separator, log::time_separator(), "{line:?}");
-    let sep = log::time_separator();
-    let shape: String = time.chars().map(|c| if c.is_ascii_digit() { '0' } else { c }).collect();
-    assert_eq!(shape, format!("00{sep}00{sep}00.000"), "{line:?}");
-}
-
 /// A token in Credential Manager is the .NET app's: written with the target name as the key and the secret as its
-/// UTF-16 blob, it reads back in either app. The target is a test one, and is deleted whatever happens. It writes to
-/// the real Credential Manager of whoever runs it, so it runs only when `AIPET_TEST_CREDENTIAL_MANAGER` is set (CI
-/// sets it).
+/// UTF-16 blob, it reads back. (Until the cutover the C# also read what the Rust wrote and the other way round.) The
+/// target is a test one, and is deleted whatever happens. It writes to the real Credential Manager of whoever runs
+/// it, so it runs only when `AIPET_TEST_CREDENTIAL_MANAGER` is set (CI sets it).
 #[cfg(windows)]
 #[test]
 fn credential_manager_tokens_are_the_apps() {
@@ -495,30 +404,4 @@ fn credential_manager_tokens_are_the_apps() {
     assert_eq!(store.read(target).as_deref(), Some("tøken-✓-😀"));
     store.delete(target);
     assert_eq!(store.read(target), None);
-
-    let Some(dll) = std::env::var_os("AIPET_GOLDEN") else {
-        eprintln!("skipped the C# half: AIPET_GOLDEN doesn't name the golden generator's dll");
-        return;
-    };
-    let csharp = |args: &[&str]| {
-        let out = Command::new("dotnet")
-            .arg(&dll)
-            .args(["data", "secret"])
-            .args(args)
-            .output()
-            .unwrap();
-        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-        String::from_utf8(out.stdout).unwrap()
-    };
-    let csharp_reads = || {
-        let read: Value = serde_json::from_str(csharp(&["read", target]).trim()).unwrap();
-        read["secret"].as_str().map(str::to_owned)
-    };
-
-    csharp(&["write", target, "ann@acme.example", "from-csharp-✓"]);
-    assert_eq!(store.read(target).as_deref(), Some("from-csharp-✓"));
-    store.write(target, "ann@acme.example", "from-rust-😀").unwrap();
-    assert_eq!(csharp_reads().as_deref(), Some("from-rust-😀"));
-    store.delete(target);
-    assert_eq!(csharp_reads(), None);
 }

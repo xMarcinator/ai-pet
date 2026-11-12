@@ -1,4 +1,4 @@
-//! Claude Code's registration (`ClaudeConfig`, `src/AiPet.Hook/Install.cs:73-246`): AiPet's hooks in settings.json,
+//! Claude Code's registration (`ClaudeConfig`, `AiPet.Hook/Install.cs:73-246`): AiPet's hooks in settings.json,
 //! in `$CLAUDE_CONFIG_DIR` or else `~/.claude`. Claude runs the exe directly with its arguments (no shell), so the
 //! path needs no quoting on any OS.
 //!
@@ -11,8 +11,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::install::{NEWLINE, backup, is_file, read_text, real_path, save, thrown, upper};
-use crate::json::{Node, Object};
 use crate::json_out::{self, deep_equals, member, read};
+use aipet_ipc::json::{Node, Object};
 
 /// One of Claude's hook events AiPet registers for.
 pub(crate) struct Event {

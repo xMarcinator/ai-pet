@@ -45,9 +45,17 @@ the sessions code is outside this task's Touches.
 - [ ] No Rust test reads or writes the real home, config or data (the sandbox is asserted in the testkit's own tests).
 - [ ] Rust test counts per area are at least the C#'s case counts for that area.
 ## Done summary
-TBD
+The C# tests are mapped and the missing ones ported. `aipet-testkit` is the C#'s TestEnv and Scripts.Sandbox: fresh HOME, XDG, agent, data and temp folders, an endpoint no pet listens on, and a PATH of allowed tools plus stand-ins, asserted by its own tests (tests/sandbox.rs: only the sandbox's variables reach a program, PATH is the allow-list and stand-ins, files land in the sandbox and go with it).
 
+- Rehosted in the sandbox against the Rust hook: InstallerTests, LauncherTests, ReleaseWorkflowTests, check-plugin.sh's half of PluginHooksTests.
+- Ported: RegistrationTests' in-process cases (black-box against the built hook), VelopackTests' release.yml/main-order checks, ResourceTests (PE reader; Windows-only), HookContractTests (fake sockets in the testkit, real pet in aipet-core's server.rs), NoPetTests' stale socket, AvatarTests, and three SingleInstanceTests cases (test code in aipet/src/single.rs).
+- rust/PARITY.md: all 162 attributes (263 cases; the task said 141) mapped, 0 n/a; 413 Rust cases. Records tasks 9 and 11's deviations, the Windows-only tests, and what the cutover must change.
+- scripts/check-parity.sh checks rows, case counts, that each Rust fn exists, and Rust ≥ C# per row and per file; ci.yml's Shell scripts job runs it. With tests/ gone it checks the ledger against the Rust alone.
+
+Verified: cargo test --workspace (648 passed, 10 ignored) three times, clippy -D warnings, fmt --check, check-parity.sh against tests/. Windows-only tests unverified here.
+
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: c763811c7ef6a5a542cc661a8285883e229af899, dd7d5fd6f3bc541e464e06c4fa1efb83afa4cb48, 88abd8b8bbedc0ed23f95d9f222cc9549f1ef7aa, d9936d23a0437fb1c3c4523ea536a78023cdd9d0, 1565d0742faa2c70790d6f12b7b59ae98c9c5c57
+- Tests: cd rust && cargo test --offline --workspace
 - PRs:

@@ -53,6 +53,8 @@ pub(super) struct Event<'a> {
     pub env: Option<&'a Map<String, Value>>,
     /// The chat's title from its transcript, when it was read ("" for none).
     pub title: Option<&'a str>,
+    /// The pet's HTTP listener made the envelope: `at` is when the event arrived, not when Claude dispatched it.
+    pub arrived: bool,
 }
 
 /// Places a Claude event; returns the chat's state, `removed`, `ignored` or `stale`.
@@ -61,7 +63,7 @@ pub(super) fn apply(chats: &mut Chats, e: &Event, now: f64) -> &'static str {
     let text = |k: &str| str_of(Some(p), k);
     chats.prune(now);
     if ev == "SessionEnd" {
-        return chats.end(e.key, ev, at, now);
+        return chats.end(e.key, ev, at, now, e.arrived);
     }
     if !EVENTS.contains(&ev) {
         return "ignored";
@@ -271,15 +273,32 @@ pub(super) fn rank(ev: &str) -> i32 {
 /// True when an event the agent started at `at` is older than what the chat's entry already has, i.e. it finished
 /// late: started earlier, or in the same tick but earlier in a turn, or before the chat ended. A recorded time well
 /// past `now` means the clock was set back since: it can't order anything.
-pub(super) fn stale(s: &Entry, ev: &str, at: f64, now: f64) -> bool {
+///
+/// An event that `arrived` over HTTP has the pet's time of arrival as its `at`, which is never earlier than the
+/// latest. Then one of a turn's own events (`straggler`) arriving within [`STRAGGLERS`] after the turn's end, or the
+/// chat's, is taken for that turn's, held up on the way: it can't open a turn, so it doesn't undo the "done".
+pub(super) fn stale(s: &Entry, ev: &str, at: f64, now: f64, arrived: bool) -> bool {
     if let Some(ended) = s.ended {
-        return ended <= now + 5.0 && at <= ended + 0.0005;
+        return ended <= now + 5.0 && (at <= ended + 0.0005 || arrived && straggler(ev) && at <= ended + STRAGGLERS);
     }
     let last = s.dispatched;
     if last > now + 5.0 {
         return false;
     }
+    if arrived && s.state == Some("done") && straggler(ev) && at <= last + STRAGGLERS {
+        return true;
+    }
     at < last - 0.0005 || (at <= last + 0.0005 && rank(ev) < s.dispatched_rank)
+}
+
+/// How long after the end of a turn, or of the chat, an event of it can still come in over HTTP, in seconds: the
+/// arrival jitter the order is proven under (fnt-71 R5).
+const STRAGGLERS: f64 = 0.5;
+
+/// An event that comes in a turn, never first or after the chat: anything but SessionStart, UserPromptSubmit and
+/// SessionEnd.
+fn straggler(ev: &str) -> bool {
+    !matches!(ev, "SessionStart" | "UserPromptSubmit" | "SessionEnd")
 }
 
 /// Records the event as the chat's latest, for `stale`. One taken although it started before the latest (a
@@ -297,7 +316,7 @@ pub(super) fn stamp(s: &mut Entry, ev: &str, at: f64, now: f64) {
 /// Claude's order: by `at` (`stale`), except for a call's PreToolUse and PermissionRequest (`pair`).
 fn is_stale(s: &mut Entry, e: &Event, now: f64) -> bool {
     let paired = if s.ended.is_none() { pair(s, e) } else { None };
-    paired.unwrap_or_else(|| stale(s, e.ev, e.at, now))
+    paired.unwrap_or_else(|| stale(s, e.ev, e.at, now, e.arrived))
 }
 
 /// How far apart the hooks of one Claude call's PreToolUse and PermissionRequest can start, in seconds.

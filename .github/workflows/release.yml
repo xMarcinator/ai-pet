@@ -5,9 +5,8 @@
 #
 #   check       the version is new and well formed, the plugin files are consistent, the deploy key reads the plugin
 #               repository and it has a branch
-#   win         AiPet.exe (self-contained) and aipet-hook.exe (Rust): Velopack installer and update feed, portable zip
-#   linux-hook  per architecture, aipet-hook (Rust, for glibc 2.27 and newer)
-#   linux       per platform, AiPet (self-contained) and that hook: AiPet-<version>-<rid>.tar.gz
+#   win         AiPet.exe and aipet-hook.exe (Rust): Velopack installer and update feed, portable zip
+#   linux       per platform, AiPet and aipet-hook (Rust, for glibc 2.27 and newer): AiPet-<version>-<rid>.tar.gz
 #   plugin      SHA256SUMS of every package, then plugins/aipet plus the hook binaries: a commit tagged v<version> in
 #               the plugin repository. The checksums come first, since that push can't be undone.
 #   publish     the GitHub release with every package (checked against SHA256SUMS) and SHA256SUMS, then the
@@ -46,14 +45,13 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DOTNET_NOLOGO: "true"
-  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
   # The repository the plugin's release commits go to (written only by this workflow), and the plugin's path in it.
   # The marketplace files on main point at the same place.
   PLUGIN_REPO: xMarcinator/ai-pet-plugin
   PLUGIN_PATH: plugins/aipet
-  # Velopack's CLI: keep it in step with the Velopack package the app references (src/AiPet.UI/AiPet.UI.csproj). vpk
-  # pack checks that the app calls VelopackApp.Build().Run() in Main, and warns when the versions differ.
+  # Velopack's CLI: keep it in step with the Velopack crate the pet uses (rust/crates/aipet/Cargo.toml). vpk pack
+  # checks that a .NET app calls VelopackApp.Build().Run() in Main, but not a native one: the pet's own tests hold
+  # that its main runs Velopack's startup first.
   VPK_VERSION: 1.2.158
 
 jobs:
@@ -142,37 +140,38 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # vpk is a .NET tool: the one place a release installs .NET
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
-      - name: Publish the app (self-contained)
-        run: |
-          dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r win-x64 --self-contained -o out/app \
-            -p:Version="$VERSION" -p:DebugType=none --nologo
       # the workspace's rust-version, as in ci.yml
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: 1.98.1
-      - name: Build the hook (Rust)
+      - name: Build the pet and the hook (Rust)
         env:
-          # The C runtime linked in, as NativeAOT linked it into the .NET hook: the hook needs only Windows' own DLLs,
-          # not the Visual C++ runtime's, which a Windows install may lack (the hook then couldn't start, unseen).
+          # The C runtime linked in, as the .NET app carried its own runtime and NativeAOT linked it into the .NET
+          # hook: both need only Windows' own DLLs, not the Visual C++ runtime's, which a Windows install may lack
+          # (the pet then wouldn't start, and the hook would fail unseen).
           RUSTFLAGS: -C target-feature=+crt-static
         run: |
-          # its build script embeds the icon and a version resource that names this release (AIPET_VERSION)
-          (cd rust && AIPET_VERSION="$VERSION" cargo build -p aipet-hook --release --locked --target x86_64-pc-windows-msvc)
-          mkdir -p out/hook
+          # their build scripts embed the icon and a version resource that names this release (AIPET_VERSION), which
+          # the pet also shows in Settings
+          (cd rust && AIPET_VERSION="$VERSION" cargo build -p aipet -p aipet-hook --release --locked --target x86_64-pc-windows-msvc)
+          mkdir -p out/app out/hook
+          cp rust/target/x86_64-pc-windows-msvc/release/AiPet.exe out/app/
           cp rust/target/x86_64-pc-windows-msvc/release/aipet-hook.exe out/hook/
-          if grep -qaiE 'vcruntime[0-9]+\.dll|msvcp[0-9]+\.dll|api-ms-win-crt-' out/hook/aipet-hook.exe; then
-            echo "::error::aipet-hook.exe needs the C runtime's DLLs, which a Windows install may lack"; exit 1
-          fi
+          for f in out/app/AiPet.exe out/hook/aipet-hook.exe; do
+            if grep -qaiE 'vcruntime[0-9]+\.dll|msvcp[0-9]+\.dll|api-ms-win-crt-' "$f"; then
+              echo "::error::$f needs the C runtime's DLLs, which a Windows install may lack"; exit 1
+            fi
+          done
       - name: Check the exes' version resources
         shell: pwsh
         run: |
-          # AiPet.dll carries the icon and a version resource that names the exe (build/Win32Resources.targets), which
-          # the SDK copies into the apphost; aipet-hook.exe gets the same from its build script
-          # (rust/crates/aipet-hook/build.rs). Read them as Windows does: an exe that says it's a .dll, or has no
-          # version, upsets antivirus heuristics.
+          # The pet and the hook get the icon and a version resource that names the exe from their build scripts
+          # (rust/crates/aipet/build.rs, rust/crates/aipet-hook/build.rs), as the .NET exes had them. Read them as
+          # Windows does: an exe without a version, or one that names another file, upsets antivirus heuristics.
           $bad = $false
           foreach ($f in @('out/app/AiPet.exe', 'out/hook/aipet-hook.exe')) {
             $v = (Get-Item -LiteralPath $f).VersionInfo
@@ -186,9 +185,9 @@ jobs:
           if ($bad) { exit 1 }
       - name: Put the hook next to AiPet.exe
         run: |
+          # An update replaces current\ completely, and the hooks install.ps1 registers run current\aipet-hook.exe
+          # (rust/proofs/velopack.md), so every package carries the hook.
           cp out/hook/aipet-hook.exe out/app/
-          # the native libraries' symbols (libSkiaSharp.pdb, libHarfBuzzSharp.pdb) alone are about 100 MiB
-          find out/app -name '*.pdb' -delete
           for f in LICENSE THIRD-PARTY-NOTICES.md; do
             if [ -f "$f" ]; then cp "$f" out/app/; fi
           done
@@ -196,6 +195,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DOTNET_ROLL_FORWARD: Major   # vpk may target an older .NET than the one installed
+          DOTNET_NOLOGO: "true"
+          DOTNET_CLI_TELEMETRY_OPTOUT: "true"
         run: |
           dotnet tool install vpk --version "$VPK_VERSION" --tool-path out/tools
           vpk=out/tools/vpk
@@ -248,27 +249,33 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  linux-hook:
-    name: Linux hook (${{ matrix.rid }})
+  linux:
+    name: Linux (${{ matrix.rid }})
     needs: check
     strategy:
       matrix:
         include:
-          - { rid: linux-x64, target: x86_64-unknown-linux-gnu }
-          - { rid: linux-arm64, target: aarch64-unknown-linux-gnu }
+          # Each on a runner of its architecture: the pet links libxkbcommon (through smithay-client-toolkit), which
+          # pkg-config finds only for the runner's own architecture.
+          - { rid: linux-x64, target: x86_64-unknown-linux-gnu, runner: ubuntu-22.04 }
+          - { rid: linux-arm64, target: aarch64-unknown-linux-gnu, runner: ubuntu-22.04-arm }
     # 22.04: pip installs zig for the runner's user there (24.04's Python refuses it)
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
     defaults:
       run:
         shell: bash
     env:
+      VERSION: ${{ needs.check.outputs.version }}
       RID: ${{ matrix.rid }}
       TARGET: ${{ matrix.target }}
-      # the oldest glibc the hook may need, as for the release before (Ubuntu 18.04's)
+      # The oldest glibc the pet and the hook may need, as for the releases before (Ubuntu 18.04's). The pet's GUI
+      # libraries (X11, Wayland, EGL, xkbcommon's keymaps) are loaded at run time or linked against the system's own,
+      # so nothing of theirs raises it: built for 2.27 (zig 0.17, 2026-11-09), the newest version either binary asks
+      # for is GLIBC_2.27, and the pet needs only glibc's own libraries.
       GLIBC_FLOOR: "2.27"
-      # zig links the hook against its own glibc 2.27 stubs, which cargo-zigbuild picks by the target's suffix.
+      # zig links the binaries against its own glibc 2.27 stubs, which cargo-zigbuild picks by the target's suffix.
       # Pinned like the actions; to update, change both and watch the glibc step.
       ZIG_VERSION: 0.13.0
       # 0.23.4 drops rustc's -Wl,--fix-cortex-a53-843419 for aarch64, which zig's linker refuses (0.19.8 passed it on)
@@ -282,89 +289,67 @@ jobs:
         with:
           toolchain: 1.98.1
           targets: ${{ matrix.target }}
-      - name: Install zig and cargo-zigbuild
+      - name: Install zig, cargo-zigbuild and the pet's build dependencies
         run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev
           python3 -m pip install --user "ziglang==$ZIG_VERSION"
           cargo install cargo-zigbuild --version "$ZIGBUILD_VERSION" --locked
-      - name: Build the hook (Rust, for glibc 2.27)
+      - name: Build the pet and the hook (Rust, for glibc 2.27)
+        env:
+          # The system's libxkbcommon asks for a newer glibc than 2.27 itself, which is that system's business: the
+          # loader checks it against the glibc it comes with. The binaries' own needs are checked in the next step.
+          RUSTFLAGS: -C link-arg=-Wl,--allow-shlib-undefined
         run: |
-          # Linked against glibc dynamically: zig can't link it statically (+crt-static) for a .2.27 target, and the
-          # next step checks the symbol versions the hook needs. A hook linked on the runner would need the runner's
-          # glibc (2.35 on 22.04), and older distributions' loaders would refuse it on every event.
-          (cd rust && cargo zigbuild -p aipet-hook --release --locked --target "$TARGET.$GLIBC_FLOOR")
-          mkdir -p out/hook
+          # Linked against glibc dynamically: zig can't link them statically (+crt-static) for a .2.27 target, and the
+          # next step checks the symbol versions they need. Binaries linked on the runner would need the runner's
+          # glibc (2.35 on 22.04), and older distributions' loaders would refuse them.
+          (cd rust && AIPET_VERSION="$VERSION" cargo zigbuild -p aipet -p aipet-hook --release --locked --target "$TARGET.$GLIBC_FLOOR")
+          mkdir -p out/app out/hook
+          cp "rust/target/$TARGET/release/AiPet" out/app/
           cp "rust/target/$TARGET/release/aipet-hook" out/hook/
-          file out/hook/aipet-hook
-          ls -la out/hook
-      - name: Check the glibc the hook needs
+          file out/app/AiPet out/hook/aipet-hook
+          ls -la out/app out/hook
+      - name: Check the glibc the binaries need
         run: |
           # The loader refuses a binary that asks for a newer GLIBC_ symbol version than the system's glibc has, so
           # the newest one it asks for is the oldest glibc it runs on.
-          hook=out/hook/aipet-hook
-          need=$(readelf -W -V "$hook" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)+' | sed 's/^GLIBC_//' | sort -uV || true)
-          if [ -z "$need" ]; then echo "::error::readelf found no GLIBC_ versions in $hook"; readelf -W -V "$hook"; exit 1; fi
-          echo "GLIBC_ versions the hook needs: $(echo $need)"
           bad=0
-          for v in $need; do
-            if [ "$(printf '%s\n' "$GLIBC_FLOOR" "$v" | sort -V | tail -n 1)" != "$GLIBC_FLOOR" ]; then
-              echo "::error::The hook needs GLIBC_$v, newer than $GLIBC_FLOOR, for:"
-              readelf -W --dyn-syms "$hook" | grep -F "@GLIBC_$v " || true
-              bad=1
-            fi
+          for bin in out/app/AiPet out/hook/aipet-hook; do
+            name=$(basename "$bin")
+            need=$(readelf -W -V "$bin" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)+' | sed 's/^GLIBC_//' | sort -uV || true)
+            if [ -z "$need" ]; then echo "::error::readelf found no GLIBC_ versions in $bin"; readelf -W -V "$bin"; exit 1; fi
+            echo "GLIBC_ versions $name needs: $(echo $need)"
+            for v in $need; do
+              if [ "$(printf '%s\n' "$GLIBC_FLOOR" "$v" | sort -V | tail -n 1)" != "$GLIBC_FLOOR" ]; then
+                echo "::error::$name needs GLIBC_$v, newer than $GLIBC_FLOOR, for:"
+                readelf -W --dyn-syms "$bin" | grep -F "@GLIBC_$v " || true
+                bad=1
+              fi
+            done
+            echo "$RID $name: needs glibc $(echo "$need" | tail -n 1) (floor $GLIBC_FLOOR)" >> "$GITHUB_STEP_SUMMARY"
           done
           if [ "$bad" = 1 ]; then exit 1; fi
-          echo "$RID hook: needs glibc $(echo "$need" | tail -n 1) (floor $GLIBC_FLOOR)" >> "$GITHUB_STEP_SUMMARY"
+      - name: The libraries the pet needs
+        run: |
+          # for the record: glibc's own, and at most libxkbcommon, which every desktop has
+          readelf -d out/app/AiPet | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tee needed.txt
+          echo "$RID AiPet links: $(tr '\n' ' ' < needed.txt)" >> "$GITHUB_STEP_SUMMARY"
+      - name: The pet runs
+        run: |
+          # --check-pack loads a pack as the pet would and opens no window: enough to know the binary starts here
+          out/app/AiPet --check-pack avatars/samples/basic
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hook-${{ matrix.rid }}
           path: out/hook/aipet-hook
           if-no-files-found: error
           retention-days: 7
-
-  linux:
-    name: Linux (${{ matrix.rid }})
-    needs: [check, linux-hook]
-    strategy:
-      matrix:
-        include:
-          # Microsoft's .NET cross-build images, which the app is published in as before (the hook comes from the
-          # linux-hook job). Pinned by digest, like the actions (docker ignores the tag then): Microsoft rebuilds these
-          # tags. To update, read the tag's new digest (docker buildx imagetools inspect <image>:<tag>).
-          - { rid: linux-x64, image: "mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-amd64@sha256:f67558f7b8fcf1a875f62d682a05aa6b0ea2e61656258112566665fbc14ce13f" }
-          - { rid: linux-arm64, image: "mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-arm64@sha256:712167cf0280effdccca936264ec0b3d8789cef04fde3c2fa6e911494673b427" }
-    runs-on: ubuntu-24.04
-    container: ${{ matrix.image }}
-    permissions:
-      contents: read
-    defaults:
-      run:
-        shell: bash
-    env:
-      VERSION: ${{ needs.check.outputs.version }}
-      RID: ${{ matrix.rid }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 10.0.x
-      - name: Publish the app (self-contained)
-        run: |
-          dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r "$RID" --self-contained -o out/app \
-            -p:Version="$VERSION" -p:DebugType=none --nologo
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: hook-${{ matrix.rid }}
-          path: out/hook
       - name: Make the tarball
         run: |
           name="AiPet-$VERSION-$RID"
           stage="out/stage/$name"
-          mkdir -p "$stage" dist
-          cp -R out/app "$stage/app"
-          cp out/hook/aipet-hook "$stage/app/aipet-hook"
-          find "$stage/app" \( -name '*.pdb' -o -name '*.dbg' \) -delete
+          mkdir -p "$stage/app" dist
+          cp out/app/AiPet out/hook/aipet-hook "$stage/app/"
           chmod 755 "$stage/app/AiPet" "$stage/app/aipet-hook"
           cp packaging/linux/install.sh packaging/linux/aipet.desktop.in "$stage/"
           chmod 755 "$stage/install.sh"
@@ -375,6 +360,7 @@ jobs:
             if [ -f "$f" ]; then cp "$f" "$stage/"; fi
           done
           tar -C out/stage --sort=name --owner=0 --group=0 --numeric-owner -czf "dist/$name.tar.gz" "$name"
+          tar -tzvf "dist/$name.tar.gz"
           ls -la dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -385,7 +371,7 @@ jobs:
 
   plugin:
     name: Push the plugin
-    needs: [check, win, linux-hook, linux]
+    needs: [check, win, linux]
     runs-on: ubuntu-24.04
     permissions:
       contents: read   # this repository; the plugin repository is written with the deploy key

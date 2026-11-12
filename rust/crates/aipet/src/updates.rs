@@ -1,4 +1,4 @@
-//! The app's own updates, through Velopack's Rust SDK (`src/AiPet.UI/Updates.cs`).
+//! The app's own updates, through Velopack's Rust SDK (`AiPet.UI/Updates.cs`).
 //!
 //! Velopack installs and updates the Windows app (release.yml packs it with packId `AiPetApp` into
 //! `%LOCALAPPDATA%\AiPetApp`, channel `win`). Only that installed copy checks for updates, from the GitHub releases: a
@@ -7,6 +7,11 @@
 //! from source and Linux never check, and use no network here. A failure is only a state Settings shows.
 //!
 //! What Velopack's update manager does goes through [`Manager`], so the decisions here are tested with a fake one.
+//!
+//! `AIPET_TEST_UPDATE_FEED=<folder>`, for the Windows CI's update test only (velopack-proof.yml): the installed copy
+//! updates from that local feed (a folder with `releases.win.json` and the packages, as `vpk pack` writes it) instead
+//! of the GitHub releases, checks a few seconds after it starts, and writes each status Settings would show to the
+//! log, so the test can hold them against the C#'s texts.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -79,28 +84,39 @@ pub fn start() -> bool {
     if !installed() {
         return true;
     }
-    let source = velopack::sources::GithubSource::new(update_status::REPO, None, false);
+    let feed = test_feed();
+    let source: Box<dyn velopack::sources::UpdateSource> = match &feed {
+        Some(feed) => {
+            aipet_core::log::write(&format!("updates: the test feed {}", feed.display()));
+            Box::new(velopack::sources::FileSource::new(feed))
+        }
+        None => Box::new(velopack::sources::GithubSource::new(update_status::REPO, None, false)),
+    };
     let options = velopack::UpdateOptions {
         ExplicitChannel: Some(update_status::CHANNEL.to_owned()),
         ..velopack::UpdateOptions::default()
     };
-    let manager = match velopack::UpdateManager::new(source, Some(options), None) {
+    let manager = match velopack::UpdateManager::new_boxed(source, Some(options), None) {
         Ok(manager) => manager,
         Err(e) => {
             aipet_core::log::write(&format!("updates: {e}"));
             return true;
         }
     };
-    let updater = Arc::new(Updater::new(
-        Box::new(Velopack(manager)),
-        Box::new(aipet_core::log::write),
-    ));
+    let mut updater = Updater::new(Box::new(Velopack(manager)), Box::new(aipet_core::log::write));
+    updater.log_status = feed.is_some();
+    let updater = Arc::new(updater);
+    let first = if feed.is_some() {
+        TEST_FIRST_CHECK
+    } else {
+        update_status::FIRST_CHECK
+    };
     if !updater.start(RESTARTED.load(Ordering::Relaxed)) {
         return false;
     }
     let _ = UPDATER.set(Arc::clone(&updater));
     let checks = thread::Builder::new().name("updates".into()).spawn(move || {
-        updater.run(update_status::FIRST_CHECK, update_status::EVERY, &mut |wait| {
+        updater.run(first, update_status::EVERY, &mut |wait| {
             thread::sleep(wait);
             true
         })
@@ -111,9 +127,19 @@ pub fn start() -> bool {
     true
 }
 
-/// The app's version, as released.
+/// The first check from the test feed: soon after the start, so the test doesn't wait minutes.
+const TEST_FIRST_CHECK: Duration = Duration::from_secs(5);
+
+/// The local feed `AIPET_TEST_UPDATE_FEED` names, if any (see the module's notes).
+fn test_feed() -> Option<PathBuf> {
+    std::env::var_os("AIPET_TEST_UPDATE_FEED")
+        .filter(|feed| !feed.is_empty())
+        .map(PathBuf::from)
+}
+
+/// The app's version, as released: the release builds it with `AIPET_VERSION` (build.rs), else `0.0.0-dev`.
 pub fn version() -> String {
-    env!("CARGO_PKG_VERSION").to_owned()
+    env!("AIPET_VERSION").to_owned()
 }
 
 /// Where the update stands now, for Settings: Off in a copy that doesn't update itself.
@@ -213,6 +239,8 @@ struct Updater {
     state: Mutex<State>,
     /// A check runs: one at a time.
     busy: AtomicBool,
+    /// Each status set goes to the log too, as its text: the test feed's (see the module's notes).
+    log_status: bool,
     /// Every status set, for tests.
     #[cfg(test)]
     history: Mutex<Vec<UpdateStatus>>,
@@ -234,6 +262,7 @@ impl Updater {
                 ready: None,
             }),
             busy: AtomicBool::new(false),
+            log_status: false,
             #[cfg(test)]
             history: Mutex::new(Vec::new()),
         }
@@ -248,6 +277,9 @@ impl Updater {
     }
 
     fn set(&self, status: UpdateStatus) {
+        if self.log_status {
+            (self.log)(&format!("updates: status: {}", status.text()));
+        }
         #[cfg(test)]
         self.history
             .lock()
@@ -503,6 +535,22 @@ mod tests {
     }
 
     const READY_120: &str = "AiPet 1.2.0 is ready. It's installed when you quit the pet, or restart now.";
+
+    /// With the test feed, each status goes to the log as Settings would show it; otherwise none does.
+    #[test]
+    fn the_test_feeds_statuses_go_to_the_log() {
+        for log_status in [true, false] {
+            let (mut updater, _, logged) = updater();
+            updater.log_status = log_status;
+            updater.check();
+            let expected: &[&str] = if log_status {
+                &["updates: status: Checking for updates…", "updates: status: Up to date."]
+            } else {
+                &[]
+            };
+            assert_eq!(*logged.lock().unwrap(), expected);
+        }
+    }
 
     /// Start installs an update downloaded earlier before anything else, with the updater's window and the pet
     /// started again, and the pet exits.

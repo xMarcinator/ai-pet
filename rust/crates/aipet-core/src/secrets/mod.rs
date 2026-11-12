@@ -1,5 +1,5 @@
-//! The Jira and GitHub tokens, under the keys `AiPet:Jira` and `AiPet:GitHub`, where the .NET app keeps them
-//! (`ISecretStore`, `src/AiPet.Core/Platform.cs`), so a token either app saved is the other's too:
+//! The Jira and GitHub tokens, under the keys `AiPet:Jira` and `AiPet:GitHub` (and the tracker's, `AiPet:Tracker`), where the .NET app keeps them
+//! (`ISecretStore`, `AiPet.Core/Platform.cs`), so a token either app saved is the other's too:
 //! - Windows: Credential Manager, a generic credential whose target name is the key ([`CredentialManager`]);
 //! - Linux: the Secret Service through `secret-tool`, with the attributes `service=aipet` and `key=<key>`, and
 //!   `secrets.json` (0600) in the data folder when that fails ([`SecretTool`], [`FileSecrets`]);
@@ -28,6 +28,8 @@ pub use windows::CredentialManager;
 pub const JIRA: &str = "AiPet:Jira";
 /// The GitHub token's key (`GitHubWatcher.TokenKey`).
 pub const GITHUB: &str = "AiPet:GitHub";
+/// The tracker companion's credential, `{base_url, device_id, token}` as JSON (fnt-81; the pet's own, no C# key).
+pub const TRACKER: &str = "AiPet:Tracker";
 
 /// Where the tokens are kept.
 pub trait SecretStore: Send + Sync {

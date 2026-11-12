@@ -1,4 +1,4 @@
-//! The Windows platform (`src/AiPet.UI/Platform/WindowsPlatform.cs`): an agent's app is the first main window of its
+//! The Windows platform (`AiPet.UI/Platform/WindowsPlatform.cs`): an agent's app is the first main window of its
 //! exe, brought to the front; links and folders open with `ShellExecuteW`; and the player is Spotify, read from its
 //! window's title and told what to play with `WM_APPCOMMAND`.
 //!

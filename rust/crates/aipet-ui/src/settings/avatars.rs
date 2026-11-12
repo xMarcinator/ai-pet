@@ -1,9 +1,10 @@
-//! Settings' Avatars page (`SettingsWindow.axaml.cs:214-261`): every avatar as a still with its accent's dot, to pick
-//! one (the pet wears it, and Settings takes its colour); under them the worn pet's themes, colours or sheets, to pick
-//! one, and New theme (for a pet with named colours), which opens an editor on the pet in its theme, saved as a theme
-//! file in the avatars folder's `themes` folder (the user's own themes can be edited and deleted too; a sheet theme
-//! can't be); then "Your own avatars": Reload, and Open folder,
-//! which makes the avatars folder first if it is missing.
+//! Settings' Avatars page (`SettingsWindow.axaml.cs:214-261`): every avatar as a still with its accent's dot and
+//! whether it is built in or the user's own, to pick one (the pet wears it, and Settings takes its colour); under them
+//! the worn pet's themes, colours or sheets, built in and the user's own apart, to pick one, and (for a pet with named
+//! colours) the theme editor, always on the theme worn: a built-in theme is locked and can be copied as a new theme, one
+//! of the user's can be changed, saved, deleted and copied, each a theme file in the avatars folder's `themes` folder
+//! (a sheet theme can't be edited); then "Your own avatars": Reload, and Open folder, which makes the avatars folder
+//! first if it is missing.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -16,7 +17,7 @@ use iced::widget::image::FilterMethod;
 use iced::widget::{Row, button, column, container, image, row, text, text_input, tooltip};
 use iced::{Alignment, Border, Color, Element, Length, Shadow};
 
-use super::{Tone, button_row, card, dot, field, pill, status};
+use super::{Tone, button_row, card, dot, pill, status};
 use crate::style::{self, argb};
 use crate::{Effect, PetUi};
 
@@ -25,18 +26,19 @@ use crate::{Effect, PetUi};
 pub struct Avatars {
     /// Why Open folder couldn't make the avatars folder, under "Your own avatars".
     pub folder_error: Option<String>,
-    /// The theme being made or edited, while the editor is open.
+    /// The theme editor: the worn theme, or a new one made from it; `None` for a pet without named colours.
     pub theme: Option<Theming>,
     /// Why a theme couldn't be deleted, under the themes.
     pub theme_error: Option<String>,
 }
 
-/// A theme being made or edited for the worn pet: its name, and each named colour as typed.
+/// The worn pet's theme in the editor: its name, and each named colour as typed.
 #[derive(Debug)]
 pub struct Theming {
     pub pet: String,
-    /// The user's theme being edited, by the name it had when the editor opened; `None` for a new theme.
-    pub editing: Option<String>,
+    /// The theme the pet wore when the editor took this up: when it wears another, the editor follows.
+    pub worn: String,
+    pub editing: Editing,
     pub name: String,
     /// The pet's colour names, in its palette's order, each with its text.
     pub colours: Vec<(String, String)>,
@@ -45,7 +47,18 @@ pub struct Theming {
     pub error: Option<String>,
 }
 
-/// The theme being made or edited, if the editor is open.
+/// Which theme the editor has, and so what it lets the user do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Editing {
+    /// A theme that comes with the pet: locked, and copied to make one of the user's.
+    BuiltIn,
+    /// The user's theme by the name it had when the editor took it up: saved to its file, deleted, or copied.
+    Own(String),
+    /// A new theme, not saved yet.
+    New,
+}
+
+/// The theme in the editor: the worn one, or a new one made from it; `None` for a pet without named colours.
 #[doc(hidden)]
 pub fn theming(pet: &PetUi) -> Option<&Theming> {
     pet.settings.avatars.theme.as_ref()
@@ -65,7 +78,7 @@ pub fn themes(pet: &PetUi) -> Vec<(&str, bool, bool)> {
         .collect()
 }
 
-/// Whether the page offers New theme: the worn pet has named colours to make a theme from (a pet whose themes are
+/// Whether the page has the theme editor: the worn pet has named colours to make a theme from (a pet whose themes are
 /// only sheets has none).
 #[doc(hidden)]
 pub fn makes_themes(pet: &PetUi) -> bool {
@@ -77,6 +90,22 @@ pub fn makes_themes(pet: &PetUi) -> bool {
 pub fn tiles(pet: &PetUi) -> Vec<(&str, bool)> {
     shown(pet)
         .map(|(i, avatar)| (avatar.pack.pet(), i == pet.avatar))
+        .collect()
+}
+
+/// Each tile's pet, and whether the drawing it shows is the user's own (from the avatars folder) rather than built in.
+#[doc(hidden)]
+pub fn own_tiles(pet: &PetUi) -> Vec<(&str, bool)> {
+    shown(pet)
+        .map(|(_, avatar)| (avatar.pack.pet(), !avatar.builtin))
+        .collect()
+}
+
+/// Each tile's pet, and its dot's colour (0xAARRGGBB): the accent of the drawing and theme its still shows.
+#[doc(hidden)]
+pub fn tile_accents(pet: &PetUi) -> Vec<(&str, u32)> {
+    shown(pet)
+        .filter_map(|(i, avatar)| Some((avatar.pack.pet(), pet.stills.get(i)?.accent)))
         .collect()
 }
 
@@ -111,10 +140,14 @@ pub(crate) fn select_style(pet: &mut PetUi, i: usize) {
     } else {
         palette.theme.clone()
     };
-    // the theme editor was for the style taken off
-    pet.settings.avatars.theme = None;
     pet.wear(i, &theme);
     pet.save_prefs();
+}
+
+/// The drawing of `g` in the style its pet was last worn in, while it still has that style.
+fn chosen_style(pet: &PetUi, g: &aipet_sprite::load::Group) -> Option<usize> {
+    let (style, _) = pet.chosen.get(&g.pet)?;
+    g.styles.iter().copied().find(|&i| pet.avatars[i].pack.style() == style)
 }
 
 /// The pet worn, as drawn: its pack and sheets, in its theme.
@@ -123,13 +156,14 @@ pub fn worn(pet: &PetUi) -> LoadedPack {
     pet.pet.loaded()
 }
 
-/// Each pet's tile, in order: the drawing it shows (the worn one for the worn pet, else its default style) and it.
-fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &LoadedPack)> {
+/// Each pet's tile, in order: the drawing it shows (the worn one for the worn pet, else the style it was last worn
+/// in, else its default style) and it.
+pub(crate) fn shown(pet: &PetUi) -> impl Iterator<Item = (usize, &LoadedPack)> {
     crate::pets(&pet.avatars).into_iter().map(move |g| {
         let i = if g.styles.contains(&pet.avatar) {
             pet.avatar
         } else {
-            g.default
+            chosen_style(pet, &g).unwrap_or(g.default)
         };
         (i, &*pet.avatars[i])
     })
@@ -143,10 +177,8 @@ pub enum Message {
     Reload,
     /// Open the avatars folder, made first if it is missing.
     OpenFolder,
-    /// Open the editor on a new theme for the worn pet, from its theme now.
-    NewTheme,
-    /// Open the editor on the worn pet's theme of the user's by this name.
-    EditTheme(String),
+    /// Copy as new theme: a new theme for the worn pet in the editor, from the colours it shows.
+    CopyTheme,
     /// Delete the worn pet's theme of the user's by this name: its file goes.
     DeleteTheme(String),
     ThemeName(String),
@@ -154,6 +186,7 @@ pub enum Message {
     ThemeColour(usize, String),
     /// Save the theme as a file in the themes folder, read the avatars folder again and wear the pet in it.
     SaveTheme,
+    /// Drop the new theme: the editor shows the theme worn again.
     CancelTheme,
 }
 
@@ -164,17 +197,8 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
         .map(|(i, avatar, still)| {
             let selected = i == pet.avatar;
             let name = row![
-                // the worn pet's dot is in the theme it wears
-                dot(
-                    argb(
-                        if selected {
-                            pet.pet.pack().accent
-                        } else {
-                            avatar.pack.accent
-                        } | 0xFF000000
-                    ),
-                    9.0,
-                ),
+                // in the theme the still shows
+                dot(argb(still.accent | 0xFF000000), 9.0),
                 text(avatar.pack.pet())
                     .size(13)
                     .font(style::UI_SEMIBOLD)
@@ -182,8 +206,14 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
             ]
             .spacing(7)
             .align_y(Alignment::Center);
+            // where the drawing shown came from
+            let origin = text(if avatar.builtin { "Built in" } else { "Your own" })
+                .size(11.5)
+                .font(style::UI)
+                .color(style::MUTED);
+            let name = column![name, origin].spacing(2).align_x(Alignment::Center);
             let tile = column![
-                image(still.clone())
+                image(still.image.clone())
                     .width(78)
                     .height(72)
                     // pixel art stays crisp; painted and vector stills are drawn larger and scaled down smoothly
@@ -236,19 +266,7 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
         if folder {
             pill.on_press(crate::Message::Settings(super::Message::Avatars(message)))
         } else {
-            // greyed out as a disabled Fluent button is (ButtonBackgroundDisabled and so on): a pill has no disabled
-            // look of its own
-            pill.style(|_, _| button::Style {
-                background: Some(argb(0x0BFFFFFF).into()),
-                text_color: argb(0x5DFFFFFF),
-                border: Border {
-                    color: argb(0x12FFFFFF),
-                    width: 1.0,
-                    radius: 16.0.into(),
-                },
-                shadow: Shadow::default(),
-                snap: true,
-            })
+            greyed(pill)
         }
     };
     let buttons = row![
@@ -297,69 +315,82 @@ pub(super) fn view(pet: &PetUi) -> Element<'_, crate::Message> {
         .into()
 }
 
-/// The worn pet's themes as pills, the one worn marked, with New theme (and Edit and Delete for one of the user's);
-/// or the editor, while it is open: a preview, the name and each named colour.
+/// The worn pet's themes as pills, the one worn marked, built in and the user's own apart; then, for a pet with named
+/// colours, the editor on the theme worn (or a new one made from it).
 fn themes_view(pet: &PetUi, accent: Color, folder: bool) -> Element<'_, crate::Message> {
-    let send = |m| crate::Message::Settings(super::Message::Avatars(m));
     let worn = &pet.avatars[pet.avatar];
-    let Some(t) = &pet.settings.avatars.theme else {
-        let list = themes(pet);
-        if list.is_empty() {
-            return super::label(
-                "Themes",
-                format!(
-                    "{} has no colours to change: only pixel and vector pets with named colours have themes.",
-                    worn.name()
-                ),
-            );
-        }
-        let enabled = |p: button::Button<'static, crate::Message>, m| if folder { p.on_press(send(m)) } else { p };
-        let mut pills: Vec<Element<'_, crate::Message>> = list
+    let list = themes(pet);
+    if list.is_empty() {
+        return super::label(
+            "Themes",
+            format!(
+                "{} has no colours to change: only pixel and vector pets with named colours have themes.",
+                worn.name()
+            ),
+        );
+    }
+    let about = if makes_themes(pet) {
+        format!(
+            "{} in other colours. Built-in themes are locked: copy one to make your own, which you can change.",
+            worn.name()
+        )
+    } else {
+        format!(
+            "{} drawn in other sheets. Its themes come with it and can't be edited.",
+            worn.name()
+        )
+    };
+    let mut out = column![super::label("Themes", about)].spacing(10);
+    // built in, then the user's own where there are any
+    for (title, own) in [("Built in", false), ("Your own", true)] {
+        let pills: Vec<Element<'_, crate::Message>> = list
             .iter()
+            .filter(|&&(_, _, o)| o == own)
             .map(|&(name, on, _)| {
                 pill(name, on, accent)
                     .on_press(crate::Message::SelectTheme(name.to_owned()))
                     .into()
             })
             .collect();
-        let makes = makes_themes(pet);
-        if makes {
-            pills.push(enabled(pill("New theme", false, accent), Message::NewTheme).into());
+        if !pills.is_empty() {
+            out = out.push(
+                column![
+                    text(title).size(11.5).font(style::UI_SEMIBOLD).color(style::MUTED),
+                    Row::with_children(pills).spacing(8).wrap().vertical_spacing(8),
+                ]
+                .spacing(6),
+            );
         }
-        if let Some(&(name, _, _)) = list.iter().find(|&&(_, on, own)| on && own) {
-            pills.push(enabled(pill("Edit", false, accent), Message::EditTheme(name.to_owned())).into());
-            pills.push(enabled(pill("Delete", false, accent), Message::DeleteTheme(name.to_owned())).into());
-        }
-        let pills = Row::with_children(pills).spacing(8).wrap().vertical_spacing(8);
-        let about = if makes {
-            format!(
-                "{} in other colours. New theme makes one of your own from the colours it has on.",
-                worn.name()
-            )
-        } else {
-            format!(
-                "{} drawn in other sheets. Its themes come with it and can't be edited.",
-                worn.name()
-            )
-        };
-        let mut out = column![super::label("Themes", about), pills].spacing(10);
-        if let Some(e) = &pet.settings.avatars.theme_error {
-            out = out.push(status(e.as_str(), Tone::Bad));
-        }
-        return out.into();
-    };
+    }
+    if let Some(e) = &pet.settings.avatars.theme_error {
+        out = out.push(status(e.as_str(), Tone::Bad));
+    }
+    if let Some(t) = &pet.settings.avatars.theme {
+        out = out.push(editor(pet, t, accent, folder));
+    }
+    out.into()
+}
+
+/// The editor: a preview, the name and each named colour. A built-in theme's are locked, and it offers only Copy as
+/// new theme; one of the user's offers Save, Delete and Copy as new theme; a new one Save and Cancel.
+fn editor<'a>(pet: &'a PetUi, t: &'a Theming, accent: Color, folder: bool) -> Element<'a, crate::Message> {
+    let send = |m| crate::Message::Settings(super::Message::Avatars(m));
+    let locked = t.editing == Editing::BuiltIn;
     let colours = Row::with_children(t.colours.iter().enumerate().map(|(i, (name, value))| {
         let shown = aipet_sprite::vector::colour(value)
             .ok()
             .flatten()
             .map_or(Color::TRANSPARENT, argb);
-        let input = text_input("#RRGGBB", value)
-            .on_input(move |s| send(Message::ThemeColour(i, s)))
+        let mut input = text_input("#RRGGBB", value)
             .size(13)
             .font(style::UI)
             .padding([6, 8])
             .width(96)
             .style(super::input_style);
+        // a box without on_input is disabled
+        if !locked {
+            input = input.on_input(move |s| send(Message::ThemeColour(i, s)));
+        }
         column![
             text(words(name)).size(12).font(style::UI_SEMIBOLD).color(style::ICON),
             row![dot(shown, 14.0), input].spacing(8).align_y(Alignment::Center),
@@ -371,11 +402,12 @@ fn themes_view(pet: &PetUi, accent: Color, folder: bool) -> Element<'_, crate::M
     .spacing(12)
     .wrap()
     .vertical_spacing(12);
+    let kind = pet.avatars[pet.avatar].pack.kind;
     let preview: Element<'_, crate::Message> = match &t.preview {
         Some(h) => image(h.clone())
             .width(156)
             .height(144)
-            .filter_method(if worn.pack.kind == Kind::Pixel {
+            .filter_method(if kind == Kind::Pixel {
                 FilterMethod::Nearest
             } else {
                 FilterMethod::Linear
@@ -383,35 +415,71 @@ fn themes_view(pet: &PetUi, accent: Color, folder: bool) -> Element<'_, crate::M
             .into(),
         None => iced::widget::Space::new().width(156).height(144).into(),
     };
-    let buttons = row![
-        pill("Save", true, accent).on_press(send(Message::SaveTheme)),
-        pill("Cancel", false, accent).on_press(send(Message::CancelTheme)),
+    let mut name = text_input("My theme", &t.name)
+        .size(13)
+        .font(style::UI)
+        .padding([7, 10])
+        .style(super::input_style);
+    if !locked {
+        name = name.on_input(move |s| send(Message::ThemeName(s)));
+    }
+    let name = column![
+        text("Theme name").size(12).font(style::UI_SEMIBOLD).color(style::ICON),
+        name
     ]
-    .spacing(8);
-    let title = match &t.editing {
-        Some(name) => format!("Edit {}'s theme {name}", t.pet),
-        None => format!("A new theme for {}", t.pet),
+    .spacing(6);
+    // what writes to the avatars folder is greyed out where there is none (the demo)
+    let writes = |p: button::Button<'a, crate::Message>, m| if folder { p.on_press(send(m)) } else { greyed(p) };
+    let copy = || writes(pill("Copy as new theme", false, accent), Message::CopyTheme);
+    let (title, buttons) = match &t.editing {
+        Editing::BuiltIn => (format!("{}'s theme {}", t.pet, t.name), row![copy()]),
+        Editing::Own(own) => (
+            format!("Edit {}'s theme {own}", t.pet),
+            row![
+                writes(pill("Save", true, accent), Message::SaveTheme),
+                writes(pill("Delete", false, accent), Message::DeleteTheme(own.clone())),
+                copy(),
+            ],
+        ),
+        Editing::New => (
+            format!("A new theme for {}", t.pet),
+            row![
+                writes(pill("Save", true, accent), Message::SaveTheme),
+                pill("Cancel", false, accent).on_press(send(Message::CancelTheme)),
+            ],
+        ),
     };
+    let mut head = column![text(title).size(14).font(style::UI_SEMIBOLD).color(Color::WHITE)].spacing(4);
+    if locked {
+        head = head.push(status("Built-in theme: copy it to make your own.", Tone::Muted));
+    }
     let mut editor = column![
-        text(title).size(14).font(style::UI_SEMIBOLD).color(Color::WHITE),
-        row![
-            preview,
-            column![
-                field("Theme name", "My theme", &t.name, false, move |s| send(
-                    Message::ThemeName(s)
-                )),
-                colours
-            ]
-            .spacing(12)
-        ]
-        .spacing(16),
-        buttons,
+        head,
+        row![preview, column![name, colours].spacing(12)].spacing(16),
+        buttons.spacing(8),
     ]
-    .spacing(12);
+    .spacing(12)
+    .padding(iced::Padding::ZERO.top(6));
     if let Some(e) = &t.error {
         editor = editor.push(status(e.as_str(), Tone::Bad));
     }
     editor.into()
+}
+
+/// A pill greyed out as a disabled Fluent button is (ButtonBackgroundDisabled and so on), taking no clicks: a pill has
+/// no disabled look of its own.
+fn greyed(pill: button::Button<'_, crate::Message>) -> button::Button<'_, crate::Message> {
+    pill.style(|_, _| button::Style {
+        background: Some(argb(0x0BFFFFFF).into()),
+        text_color: argb(0x5DFFFFFF),
+        border: Border {
+            color: argb(0x12FFFFFF),
+            width: 1.0,
+            radius: 16.0.into(),
+        },
+        shadow: Shadow::default(),
+        snap: true,
+    })
 }
 
 /// A tile's tooltip, in the menu's panel colours.
@@ -438,10 +506,8 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
             pet.skipped = found.skipped;
             reload(pet, found.pets);
         }
-        Message::NewTheme => {
-            if !makes_themes(pet) {
-                return None;
-            }
+        Message::CopyTheme => {
+            let t = pet.settings.avatars.theme.take()?;
             let base = &pet.avatars[pet.avatar];
             let taken = |n: &str| base.pack.palette.names().any(|t| t == n);
             let name = (1..)
@@ -454,19 +520,14 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
                 })
                 .find(|n| !taken(n))
                 .expect("a name is free");
-            let theme = pet.theme.clone();
-            open_editor(pet, &theme, None, name);
-        }
-        Message::EditTheme(name) => {
-            let own = pet.avatars[pet.avatar]
-                .pack
-                .palette
-                .themes
-                .iter()
-                .any(|t| t.name == name && t.file.is_some());
-            if own {
-                open_editor(pet, &name, Some(name.clone()), name.clone());
-            }
+            // the colours as they are in the editor, and its preview of them
+            pet.settings.avatars.theme_error = None;
+            pet.settings.avatars.theme = Some(Theming {
+                editing: Editing::New,
+                name,
+                error: None,
+                ..t
+            });
         }
         Message::DeleteTheme(name) => {
             let file = own_theme(pet, &name)?.file.clone()?;
@@ -482,25 +543,34 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
                 Err(e) => pet.settings.avatars.theme_error = Some(format!("Couldn't delete {}: {e}", path.display())),
             }
         }
+        // a built-in theme is locked
         Message::ThemeName(name) => {
-            if let Some(t) = &mut pet.settings.avatars.theme {
+            if let Some(t) = &mut pet.settings.avatars.theme
+                && t.editing != Editing::BuiltIn
+            {
                 t.name = name;
                 t.error = None;
             }
         }
         Message::ThemeColour(i, value) => {
             if let Some(mut t) = pet.settings.avatars.theme.take() {
-                if let Some(c) = t.colours.get_mut(i) {
-                    c.1 = value;
+                if t.editing != Editing::BuiltIn {
+                    if let Some(c) = t.colours.get_mut(i) {
+                        c.1 = value;
+                    }
+                    t.error = None;
+                    t.preview = preview(pet, &t);
                 }
-                t.error = None;
-                t.preview = preview(pet, &t);
                 pet.settings.avatars.theme = Some(t);
             }
         }
-        Message::CancelTheme => pet.settings.avatars.theme = None,
+        Message::CancelTheme => show_worn(pet),
         Message::SaveTheme => {
             let t = pet.settings.avatars.theme.take()?;
+            if t.editing == Editing::BuiltIn {
+                pet.settings.avatars.theme = Some(t);
+                return None;
+            }
             match save(pet, &t, &folder.join(THEMES)) {
                 Ok(name) => {
                     let found = load::all(&folder);
@@ -541,26 +611,50 @@ fn own_theme<'a>(pet: &'a PetUi, name: &str) -> Option<&'a Theme> {
         .find(|t| t.name == name && t.file.is_some())
 }
 
-/// Opens the editor on the worn pet in its theme `from`, as `name`.
-fn open_editor(pet: &mut PetUi, from: &str, editing: Option<String>, name: String) {
+/// Puts the editor on the theme the pet wears, unless it has it already (with the user's changes, or a new theme made
+/// from it and not saved yet). Whatever puts a pet, style or theme on calls it, Settings or not: the pet owns what it
+/// wears, and the editor follows.
+pub(crate) fn follow(pet: &mut PetUi) {
+    let worn = pet.avatars[pet.avatar].name();
+    let on = pet
+        .settings
+        .avatars
+        .theme
+        .as_ref()
+        .is_some_and(|t| t.pet == worn && t.worn == pet.theme);
+    if !on {
+        show_worn(pet);
+    }
+}
+
+/// The editor on the theme the pet wears, as it is: locked for a built-in one; none for a pet without named colours.
+fn show_worn(pet: &mut PetUi) {
+    pet.settings.avatars.theme = None;
     let base = &pet.avatars[pet.avatar];
-    let Some(colours) = base.pack.palette.in_theme(from) else {
+    if !base.pack.palette.has_colours() {
+        return;
+    }
+    let Some(colours) = base.pack.palette.in_theme(&pet.theme) else {
         return;
     };
-    let mut t = Theming {
+    let editing = match own_theme(pet, &pet.theme) {
+        Some(_) => Editing::Own(pet.theme.clone()),
+        None => Editing::BuiltIn,
+    };
+    pet.settings.avatars.theme = Some(Theming {
         pet: base.name().to_owned(),
+        worn: pet.theme.clone(),
         editing,
-        name,
+        name: pet.theme.clone(),
         colours: colours
             .into_iter()
             .map(|(n, c)| (n, aipet_sprite::vector::colour_name(Some(c))))
             .collect(),
-        preview: None,
+        // the worn pet's tile is the pet in this theme, standing idle
+        preview: pet.stills.get(pet.avatar).map(|s| s.image.clone()),
         error: None,
-    };
-    t.preview = preview(pet, &t);
+    });
     pet.settings.avatars.theme_error = None;
-    pet.settings.avatars.theme = Some(t);
 }
 
 /// The avatars as read again (`FillAvatars`), one tile each. The worn avatar's tile is the one with its name, and
@@ -588,14 +682,24 @@ fn reload(pet: &mut PetUi, avatars: Vec<LoadedPack>) {
         pet.pet.set_pack(worn.clone());
         pet.sprite = crate::sprite::Sprite::new(&worn);
     }
+    // the others in the theme their pet was last worn in, where they have it
     pet.stills = avatars
         .iter()
         .enumerate()
-        .map(|(i, a)| crate::sprite::still(if i == index { &worn } else { a }))
+        .map(|(i, a)| match pet.chosen.get(a.pack.pet()) {
+            _ if i == index => crate::Still::of(&worn),
+            Some((_, theme)) => crate::Still::of(&crate::themed(a, theme)),
+            None => crate::Still::of(a),
+        })
         .collect();
     pet.avatars = crate::shelf::shelve(avatars);
+    pet.chosen.insert(
+        pet.avatars[index].pack.pet().to_owned(),
+        (pet.avatars[index].pack.style().to_owned(), theme.clone()),
+    );
     pet.avatar = index;
     pet.theme = theme;
+    follow(pet);
 }
 
 /// A palette name as words: `eyeHi` is "Eye hi", `rim-mid` "Rim mid".
@@ -658,7 +762,11 @@ fn save(pet: &PetUi, t: &Theming, folder: &Path) -> Result<String, String> {
         .find(|a| a.name() == t.pet)
         .ok_or("The pet has gone.")?;
     let palette = &base.pack.palette;
-    if t.editing.as_deref() != Some(name) && palette.names().any(|n| n == name) {
+    let own = match &t.editing {
+        Editing::Own(own) => Some(own.as_str()),
+        _ => None,
+    };
+    if own != Some(name) && palette.names().any(|n| n == name) {
         return Err(format!("{} already has a theme named {name}.", t.pet));
     }
     let mut colours = serde_json::Map::new();
@@ -671,10 +779,7 @@ fn save(pet: &PetUi, t: &Theming, folder: &Path) -> Result<String, String> {
             colours.insert(n.clone(), aipet_sprite::vector::colour_name(Some(c)).into());
         }
     }
-    let editing = t
-        .editing
-        .as_ref()
-        .and_then(|e| palette.themes.iter().find(|th| &th.name == e)?.file.clone());
+    let editing = own.and_then(|e| palette.themes.iter().find(|th| th.name == e)?.file.clone());
     let file = match editing {
         Some(file) => file,
         None => {

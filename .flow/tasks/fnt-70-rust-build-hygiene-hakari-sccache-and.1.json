@@ -8,7 +8,7 @@
   "priority": null,
   "spec": "fnt-70-rust-build-hygiene-hakari-sccache-and",
   "spec_path": ".flow/tasks/fnt-70-rust-build-hygiene-hakari-sccache-and.1.md",
-  "status": "todo",
+  "status": "done",
   "title": "Baseline, and one feature set with cargo-hakari",
   "updated_at": "2026-11-08T10:30:26.965767Z"
 }

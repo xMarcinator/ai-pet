@@ -1,7 +1,7 @@
 //! The Jira and GitHub watchers against a stub server on this computer: the requests (URL, method, headers, body),
 //! what is read from the answers, the error texts, the minimum intervals and the new-review alerts.
 //!
-//! The expected requests and texts are what the C# (`src/AiPet.Core/Jira.cs`, `GitHub.cs`) sent and said against
+//! The expected requests and texts are what the C# (`AiPet.Core/Jira.cs`, `GitHub.cs`) sent and said against
 //! the same kind of stub, recorded with .NET 10: only the headers it sets (no User-Agent, Accept or Accept-Encoding
 //! of HttpClient's own), `Uri.EscapeDataString`'s escaping, System.Text.Json's for the GraphQL body. The C# always
 //! uses `https://`; the stub speaks plain HTTP through `Http::local`, which reaches this computer only, a redirect's

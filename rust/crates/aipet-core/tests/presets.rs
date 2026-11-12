@@ -1,5 +1,5 @@
 //! "Import defaults…" in Settings reads a team's preset file: Jira and GitHub settings, never credentials. Each case
-//! of the C#'s `tests/AiPet.Tests/PresetTests.cs`, with its files and answers; the refusals are checked whole, and
+//! of the C#'s `AiPet.Tests/PresetTests.cs`, with its files and answers; the refusals are checked whole, and
 //! the line a file that isn't JSON is refused at is the one .NET 10 names for the same file.
 
 use aipet_core::config::{DEFAULT_JQL, GitHubSettings, JiraSettings};

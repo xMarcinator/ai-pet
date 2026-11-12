@@ -59,7 +59,7 @@ fn start_with(
 ) -> io::Result<()> {
     let made = Security::only_me()?;
     let security = shared.sys.security.get_or_init(|| made);
-    let name = &shared.options.endpoint;
+    let name = &shared.endpoint;
     // ERROR_ACCESS_DENIED when the name is taken
     let mut first = Some(make(name, security, true)?);
     shared.sys.listening.store(true, Ordering::SeqCst);
@@ -85,7 +85,7 @@ pub(super) fn stop(shared: &Shared) {
     if !shared.sys.listening.swap(false, Ordering::SeqCst) {
         return;
     }
-    let path = pipe_path(&shared.options.endpoint);
+    let path = pipe_path(&shared.endpoint);
     for _ in 0..2 * LISTENERS {
         // opened at once or not at all, as Connect(0)
         // SAFETY: path is NUL-terminated; no security attributes or template
@@ -115,7 +115,7 @@ fn listen(shared: &Arc<Shared>, pipe: File) {
     let Some(security) = shared.sys.security.get() else {
         return;
     };
-    let name = &shared.options.endpoint;
+    let name = &shared.endpoint;
     let mut waiting = Some(pipe);
     // stopping is read once the instance exists, so Stop's wake-up either finds the instance or comes before this
     while let Some(pipe) = waiting.take() {

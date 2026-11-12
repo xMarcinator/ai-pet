@@ -1,9 +1,10 @@
-//! The Settings window (`SettingsWindow.axaml`): a sidebar of pages (General, Avatars, Jira, GitHub), the page's title
+//! The Settings window (`SettingsWindow.axaml`): a sidebar of pages (General, Avatars, Jira, GitHub, Tracker), the page's title
 //! and hint, and the page. This file is the window, the navigation, the rows, cards and fields the pages share, and
 //! the [`Action`]s Settings asks of the app; each page is a file of its own, which fills it without touching this one:
 //! - [`general`]: the pet's switches, Reset position, the data folder, Import defaults… and the updates section;
 //! - [`avatars`]: the avatars, Reload and the avatars folder;
 //! - [`jira`] and [`github`]: their fields, Test, Save and Forget;
+//! - [`tracker`]: the flow-next tracker's address and companion code, Enroll and Forget (fnt-81);
 //! - [`updates`]: the version and where its update stands, shown on the General page.
 //!
 //! A page is a state struct kept in [`Settings`], a `Message` enum of its own (wrapped in this file's [`Message`]),
@@ -15,6 +16,7 @@ pub mod avatars;
 pub mod general;
 pub mod github;
 pub mod jira;
+pub mod tracker;
 pub mod updates;
 
 use std::path::PathBuf;
@@ -24,6 +26,7 @@ use std::time::Duration;
 use aipet_core::github::GitHubWatcher;
 use aipet_core::jira::{Http, JiraWatcher};
 use aipet_core::secrets::{MemorySecrets, SecretStore};
+use aipet_core::tracker::TrackerWatcher;
 use aipet_core::update_status::{Kind, UpdateStatus};
 use iced::widget::text::IntoFragment;
 use iced::widget::{Space, button, column, container, row, scrollable, text, text_input, toggler};
@@ -40,10 +43,11 @@ pub enum Page {
     Avatars,
     Jira,
     GitHub,
+    Tracker,
 }
 
 impl Page {
-    pub const ALL: [Page; 4] = [Page::General, Page::Avatars, Page::Jira, Page::GitHub];
+    pub const ALL: [Page; 5] = [Page::General, Page::Avatars, Page::Jira, Page::GitHub, Page::Tracker];
 
     /// The page `AIPET_OPEN_SETTINGS` names (`avatars`, `jira`, …), for opening Settings on it at start; General
     /// otherwise.
@@ -64,6 +68,7 @@ impl Page {
             Page::Avatars => "Avatars",
             Page::Jira => "Jira",
             Page::GitHub => "GitHub",
+            Page::Tracker => "Tracker",
         }
     }
 
@@ -76,6 +81,10 @@ impl Page {
             Page::GitHub => {
                 "Pull requests waiting on your review. A PR that mentions a Jira key (in its title, branch, description \
                  or commits) joins that Jira bubble, which then gets a button to open it."
+            }
+            Page::Tracker => {
+                "A bubble for every task the flow-next tracker is working on. Chats that are the tracker's runs \
+                 join their task's bubble."
             }
         }
     }
@@ -109,6 +118,7 @@ pub enum Message {
     Avatars(avatars::Message),
     Jira(jira::Message),
     GitHub(github::Message),
+    Tracker(tracker::Message),
     Updates(updates::Message),
 }
 
@@ -122,6 +132,7 @@ pub struct Services {
     /// demo, tests).
     pub jira: Option<Arc<JiraWatcher>>,
     pub github: Option<Arc<GitHubWatcher>>,
+    pub tracker: Option<Arc<TrackerWatcher>>,
     /// Where the tokens are (the platform's store): Jira's Test reads the saved token when none is typed.
     pub secrets: Arc<dyn SecretStore>,
     /// The client Jira's Test searches with.
@@ -140,6 +151,7 @@ impl Services {
             data_dir,
             jira: None,
             github: None,
+            tracker: None,
             secrets: Arc::new(MemorySecrets::default()),
             http: Http::local(Duration::from_secs(5)),
             version: env!("CARGO_PKG_VERSION").to_owned(),
@@ -156,6 +168,7 @@ pub struct Settings {
     pub avatars: avatars::Avatars,
     pub jira: jira::Jira,
     pub github: github::GitHub,
+    pub tracker: tracker::Tracker,
     pub updates: updates::Updates,
 }
 
@@ -168,6 +181,7 @@ impl Settings {
             avatars: avatars::Avatars::default(),
             jira: jira::Jira::default(),
             github: github::GitHub::default(),
+            tracker: tracker::Tracker::default(),
             updates: updates::Updates::default(),
         }
     }
@@ -187,6 +201,7 @@ pub(crate) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
         Message::Avatars(message) => avatars::update(pet, message),
         Message::Jira(message) => jira::update(pet, message),
         Message::GitHub(message) => github::update(pet, message),
+        Message::Tracker(message) => tracker::update(pet, message),
         Message::Updates(message) => updates::update(pet, message),
     }
 }
@@ -196,6 +211,7 @@ pub(crate) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
 pub(crate) fn closed(pet: &mut PetUi) {
     jira::closed(pet);
     github::closed(pet);
+    tracker::closed(pet);
 }
 
 /// The pages' background work, every frame: picks up what their threads finished.
@@ -204,6 +220,7 @@ pub(crate) fn tick(pet: &mut PetUi) {
     avatars::tick(pet);
     jira::tick(pet);
     github::tick(pet);
+    tracker::tick(pet);
     updates::tick(pet);
 }
 
@@ -218,6 +235,7 @@ impl PetUi {
             Page::Avatars => avatars::view(self),
             Page::Jira => jira::view(self),
             Page::GitHub => github::view(self),
+            Page::Tracker => tracker::view(self),
         };
         let header = column![
             text(page.title()).size(19).font(style::UI_SEMIBOLD).color(Color::WHITE),
@@ -428,19 +446,25 @@ pub(crate) fn field<'a>(
         .into()
 }
 
-/// A text box's look: dark, with an edge that brightens while it has the focus.
+/// A text box's look: dark, with an edge that brightens while it has the focus; a locked one (disabled) fainter,
+/// its text muted.
 pub(crate) fn input_style(_: &iced::Theme, status: text_input::Status) -> text_input::Style {
     let focused = matches!(status, text_input::Status::Focused { .. });
+    let locked = status == text_input::Status::Disabled;
     text_input::Style {
-        background: argb(0xFF141416).into(),
+        background: argb(if locked { 0xFF1A1A1D } else { 0xFF141416 }).into(),
         border: Border {
-            color: argb(if focused { 0x66FFFFFF } else { 0x26FFFFFF }),
+            color: argb(match (focused, locked) {
+                (_, true) => 0x12FFFFFF,
+                (true, _) => 0x66FFFFFF,
+                _ => 0x26FFFFFF,
+            }),
             width: 1.0,
             radius: 8.0.into(),
         },
         icon: style::MUTED,
         placeholder: argb(0xFF6A6A72),
-        value: Color::WHITE,
+        value: if locked { style::MUTED } else { Color::WHITE },
         selection: argb(0x664C9AFF),
     }
 }

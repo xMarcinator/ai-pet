@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-10T16:44:09.933553Z",
+  "depends_on": [
+    "fnt-81-tracker-task-bubbles-in-the-pet-fnt-64.2"
+  ],
+  "id": "fnt-81-tracker-task-bubbles-in-the-pet-fnt-64.6",
+  "priority": null,
+  "spec": "fnt-81-tracker-task-bubbles-in-the-pet-fnt-64",
+  "spec_path": ".flow/tasks/fnt-81-tracker-task-bubbles-in-the-pet-fnt-64.6.md",
+  "status": "todo",
+  "title": "Hosted tracker: CSR enrolment and mutual TLS",
+  "updated_at": "2026-11-10T16:44:09.933553Z"
+}

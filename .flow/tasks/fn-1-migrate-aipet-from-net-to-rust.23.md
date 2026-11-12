@@ -55,8 +55,17 @@ order, at the same moment, and with different or unset `XDG_RUNTIME_DIR` values,
       workflow extended).
 - [ ] CHANGELOG entry. The milestone 2 release is cut (the user starts it).
 ## Done summary
-TBD
+The release ships the Rust pet. Release dry runs 42690261608 and 42780171062 (0.2.0-dry.3) produced every artifact with every gate green. The lock test (42692117460), the Windows local-feed update test (42692124212) and full CI on Linux and Windows are green. THIRD-PARTY-NOTICES comes from cargo-about (`rust/about.toml`, `rust/about.hbs`).
 
+Installs (`rust/proofs/install.md`):
+- **Linux:** clean install, update from 0.1.0 (config and hook registrations byte-identical), rollback (0.1.0 reads a config the Rust pet wrote, extra fields included) and uninstall all pass, each in a scratch HOME.
+- **Windows:** the owner installed the dry-run Setup and reported that it works.
+
+Closed on the owner's word (2026-11-10). Their Windows run's other findings (ghosts on jump and resize, the vector Hood's bubble gap, styles not remembered per pet) are in fn-2-layered-sprite-and-vector-pets.25.
+
+Still the owner's: cutting the milestone 2 release (`gh workflow run release.yml --ref main -f version=0.2.0` after merging to main).
+
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
 - Commits:
 - Tests:

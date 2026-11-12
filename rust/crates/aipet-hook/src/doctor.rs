@@ -1,10 +1,10 @@
-//! `--doctor claude|codex [--probe]` (`src/AiPet.Hook/Doctor.cs`): checks that the agent will really run AiPet's
+//! `--doctor claude|codex [--probe]` (`AiPet.Hook/Doctor.cs`): checks that the agent will really run AiPet's
 //! hook, without changing anything. It reads the agent's settings and the organisation's, asks Codex which hooks it
 //! trusts (`codex app-server`, or else reads Codex's files), flags hook commands that can't work, and runs AiPet's
 //! hook with a harmless test event: directly for Claude (as Claude does), and for Codex only with --probe, since that
 //! means starting PowerShell or sh the way Codex does. Exit code 1 when something is broken.
 //!
-//! What it prints is the C#'s, line for line: tests/doctor.rs replays tests/golden/doctor, which rust/golden's
+//! What it prints is the C#'s, line for line: tests/doctor.rs replays tests/golden/doctor, which the golden generator's
 //! `doctor` mode wrote through the built C# hook. Where the C# stops with an unhandled exception instead (a
 //! settings.json or hooks.json that names a member twice, a `hooks/list` entry whose fields aren't strings, a
 //! config.toml or plugin cache it may not read), the port carries on: the settings.json is reported as unreadable,
@@ -29,9 +29,9 @@ use crate::claude::{self, Vars};
 use crate::codex;
 use crate::event::decoded;
 use crate::install::{NEWLINE, file_not_found, is_file, say, thrown};
-use crate::json::{Node, Object};
 use crate::json_out::{self, member, read};
 use crate::plugin_hooks::CODEX_EVENTS;
+use aipet_ipc::json::{Node, Object};
 
 /// `Doctor.Run`'s usage, for an agent it doesn't know.
 pub(crate) const USAGE: &str = "usage: aipet-hook --doctor claude|codex";

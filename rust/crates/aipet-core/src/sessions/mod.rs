@@ -1,5 +1,5 @@
 //! AgentSessions: each chat's state from the hooks' events, in the order the agents meant them
-//! (`src/AiPet.Core/AgentSessions.cs`).
+//! (`AiPet.Core/AgentSessions.cs`).
 //!
 //! The chats as their hooks report them, kept by the running pet alone: every hook run forwards its event (see
 //! [`crate::server`]) and [`AgentSessions::apply`] places it. Events run in the background and can finish out of
@@ -179,6 +179,7 @@ impl AgentSessions {
                     place: place.as_deref(),
                     env,
                     title: title.as_deref(),
+                    arrived: str_of(Some(fields), protocol::VIA) == Some("http"),
                 };
                 let outcome = claude::apply(&mut self.lock(), &event, now);
                 let place = clean(place.as_deref().unwrap_or("?"));
@@ -316,8 +317,11 @@ impl Chats {
     }
 
     /// SessionEnd: the chat goes, leaving its tombstone for a day.
-    fn end(&mut self, key: &str, ev: &str, at: f64, now: f64) -> &'static str {
-        if self.get(key).is_some_and(|last| claude::stale(last, ev, at, now)) {
+    fn end(&mut self, key: &str, ev: &str, at: f64, now: f64, arrived: bool) -> &'static str {
+        if self
+            .get(key)
+            .is_some_and(|last| claude::stale(last, ev, at, now, arrived))
+        {
             return "stale";
         }
         self.put(Entry {
@@ -333,6 +337,12 @@ impl Chats {
     fn prune(&mut self, now: f64) {
         self.0.retain(|e| now - e.ts <= 86400.0);
     }
+}
+
+/// Whether a Codex chat takes the event: one it places, or SessionEnd, which leaves its tombstone. What the listener's
+/// `report_event` lets in.
+pub fn codex_takes(ev: &str) -> bool {
+    ev == "SessionEnd" || codex::EVENTS.contains(&ev)
 }
 
 // ------------------------------------------------------------------ JSON and log helpers

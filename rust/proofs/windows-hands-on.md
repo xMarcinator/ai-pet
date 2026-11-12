@@ -53,7 +53,7 @@ used for the pass with the same commands.
 | Demo pet | `(cd rust && cargo build -p aipet --features demo --target-dir target/demo)` | `rust/target/demo/debug/AiPet.exe` |
 | Release pet | `(cd rust && cargo build --release -p aipet)` | `rust/target/release/AiPet.exe` |
 | Release hook | `(cd rust && cargo build --release -p aipet-hook)` | `rust/target/release/aipet-hook.exe` |
-| .NET pet | `dotnet build AiPet.slnx -p:UseAppHost=false` | `src/AiPet.UI/bin/Debug/net10.0/AiPet.dll`, run as `dotnet src/AiPet.UI/bin/Debug/net10.0/AiPet.dll` |
+| .NET pet | `dotnet build` of the solution, with `-p:UseAppHost=false` (removed at the cutover; at `bf3696ea4a`) | `AiPet.UI/bin/Debug/net10.0/AiPet.dll`, run as `dotnet AiPet.UI/bin/Debug/net10.0/AiPet.dll` |
 
 The demo has its own target folder so that it doesn't replace the plain debug build's `AiPet.exe`.
 
@@ -168,8 +168,8 @@ Have a working Claude-app chat, a Jira issue with a PR, a GitHub review, Spotify
 
 | # | Check | Command or action | Look for | Result |
 |---|---|---|---|---|
-| I1 | .NET first | Start the installed .NET pet, then `rust/target/debug/AiPet.exe; echo $?`. | Prints 0 at once, and no second pet shows. | **Pass**, against the branch's .NET build (`dotnet src/AiPet.UI/bin/Debug/net10.0/AiPet.dll`): the old installed .NET pet in `%LOCALAPPDATA%\AiPetApp` is a leftover that doesn't start. |
-| I2 | Rust first | Start `rust/target/debug/AiPet.exe &`, then the installed .NET pet (and `dotnet src/AiPet.UI/bin/Debug/net10.0/AiPet.dll`). | No .NET pet shows. | **Pass**, against the branch's .NET build. |
+| I1 | .NET first | Start the installed .NET pet, then `rust/target/debug/AiPet.exe; echo $?`. | Prints 0 at once, and no second pet shows. | **Pass**, against the branch's .NET build (`dotnet AiPet.UI/bin/Debug/net10.0/AiPet.dll`): the old installed .NET pet in `%LOCALAPPDATA%\AiPetApp` is a leftover that doesn't start. |
+| I2 | Rust first | Start `rust/target/debug/AiPet.exe &`, then the installed .NET pet (and `dotnet AiPet.UI/bin/Debug/net10.0/AiPet.dll`). | No .NET pet shows. | **Pass**, against the branch's .NET build. |
 | I3 | Same moment | `"$LOCALAPPDATA/AiPetApp/current/AiPet.exe" & rust/target/debug/AiPet.exe &` (three times). | One pet each time. | **Pass**, against the branch's .NET build, in two rounds: one won by each pet. |
 
 ## J. The demo (task 15, check 4; tasks 17, 19, 20)

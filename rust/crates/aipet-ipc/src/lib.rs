@@ -1,17 +1,21 @@
 //! What the hook and the pet share: how a hook reaches the running pet, and where the app's files are.
 //!
-//! A port of `src/AiPet.Core/Ipc.cs` and `src/AiPet.Core/Paths.cs`, which the .NET hook links as source. During the
+//! A port of `AiPet.Core/Ipc.cs` and `AiPet.Core/Paths.cs`, which the .NET hook links as source. During the
 //! migration either side can be the other runtime (a Rust hook with a .NET pet, or the other way round), so this is
 //! the seam, and it matches the C# exactly:
 //! - [`protocol`]: the wire protocol's version, limits, field names and time format;
 //! - [`endpoint`]: the pipe's name on Windows, the socket's path elsewhere;
 //! - [`paths`]: the data folder and the files in it, and Codex's home;
-//! - [`connect`]: connecting to the pet and asking it one thing, within the C#'s time limits.
+//! - [`connect`]: connecting to the pet and asking it one thing, within the C#'s time limits;
+//! - [`json`] and [`event`]: an event kept as it came, and its envelope, which the hook and the pet's HTTP listener
+//!   both make.
 //!
 //! It has no async runtime and starts no process: the hook runs it on every agent event.
 
 pub mod connect;
 pub mod endpoint;
+pub mod event;
+pub mod json;
 pub mod paths;
 pub mod protocol;
 

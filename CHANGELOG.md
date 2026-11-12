@@ -3,10 +3,58 @@
 All notable changes to AiPet are listed here. Versions follow [Semantic Versioning](https://semver.org/). The
 app, `aipet-hook` and the plugin share one version number.
 
-## [Unreleased]
+## [Unreleased] - milestone 3
 
-The first step of AiPet's move to Rust: the hook is now written in Rust, and the pet is still the .NET one. The Rust
-pet, which the packages don't ship yet, draws its pets from layered packs, listed under Added.
+The end of AiPet's move to Rust: the .NET code is gone from the repository. The pet, the hook and the plugin work as
+in the milestone 2 release, and an installed copy of any earlier release updates to this one as before.
+
+### Added
+- The flow-next tracker: Settings › Tracker enrolls the pet as the tracker's companion device with a one-time code,
+  on this computer (`http://127.0.0.1:3210`) or a hosted tracker over mutual TLS (`https://`, its certificate
+  authority pinned by the code). Each task the tracker works on gets a bubble: its phase or what waits on you,
+  acceptance criteria met, a strip for its subtasks and a badge for its agents, amber when it needs you and red when
+  its run failed; the chats that are its runs join it, and a click opens the task in the tracker's client. Where you
+  allow it in the tracker, the bubble answers a permission prompt or pauses or stops the run. Chats that aren't
+  tracker tasks can hide while it's connected. Nothing the hooks report is sent to the tracker but a chat's id.
+- Protocol version 2 between the hook and the pet: a v2 event is a v1 event, and the tracker's task messages are the
+  pet's own (the pipe and socket refuse them). Hooks keep sending version 1.
+
+### Removed
+- The C# projects (`src/AiPet.Core`, `src/AiPet.UI`, `src/AiPet.Hook`), their tests (`tests/AiPet.Tests`), the
+  solution (`AiPet.slnx`), `Directory.Build.props` and `build/Win32Resources.targets`. Every C# test has Rust tests
+  that hold its cases (`rust/PARITY.md`); `cargo test --workspace` in `rust/` runs them all.
+- The golden generators (`rust/golden`). The corpora they wrote from the C# stay under `rust/crates/*/tests/golden/`
+  as frozen fixtures; corpora the C# wrote on Linux at the cutover replace the replays CI made of it there.
+- `tools/IconGen`, which drew the icons with the C# pet's renderer. The icons it made stay committed.
+- CI's .NET build and tests, the hook start-up comparison with the NativeAOT hook, the cross-runtime workflow
+  (`cross-runtime.yml`: each runtime's hook against the other's pet), the Velopack proof's .NET-to-Rust jobs and their
+  harness, and the test variables `AIPET_TEST_HOOK` and `AIPET_GOLDEN`. Only the release's Windows job installs .NET,
+  for Velopack's `vpk`.
+- The Hamster is no longer a built-in pet: its vector and pixel drawings, their generators and its reference art are
+  gone, so three pets ship (Sprout, Hood and Pip). A `config.json` that names it wears the first pet, as for any pet
+  that isn't there, and a pack of your own named Hamster loads and is worn like any other.
+
+### Changed
+- Settings → Avatars says whether each pet is built in or your own, and lists the worn pet's built-in themes and
+  your own apart. The theme editor is always there, on the theme worn: a built-in theme is locked, and Copy as new
+  theme makes your own from it; your own can be edited, saved and deleted where they are. Each tile's dot is the
+  accent of the theme its picture shows.
+- CI checks that nothing outside this changelog names what was removed (`scripts/check-removed-paths.sh`), and runs
+  the hook's trace log tests and the pet's peer check as root on Linux, which the cross-runtime workflow did.
+- THIRD-PARTY-NOTICES.md is generated whole by cargo-about from the crates the Windows and Linux release builds
+  compile in, each with its licence text (ring's and kamadak-exif's source files were taken for licence texts
+  before), and names the icon font iced compiles in. CI checks that the committed file is the generator's
+  (`scripts/check-notices.sh`).
+- The docs describe the Rust code: the architecture (the crates, the two shells, click-through, the threads), the
+  README's build section with each distribution's prerequisites, the handoff's decisions (the move to Rust
+  supersedes "stay on .NET"), and the plugin and Windows packaging READMEs. The spike's notes and proofs stay, as
+  records the open plans still cite; the architecture's Appendix A lists them.
+
+## [0.2.0] - 2026-11-10
+
+AiPet's move to Rust: the hook is written in Rust, and the packages ship the Rust pet in place of the .NET one
+(milestone 2). It draws its pets from layered packs, listed under Added. A release of the milestone 1 hook with the
+.NET pet, if one is cut first, can be updated from and rolled back to without losing settings, tokens or hooks.
 
 ### Added
 - Pets are layered packs: a folder with a `pack.json` and its art, in the data folder's `avatars/`. Each layer
@@ -43,6 +91,16 @@ pet, which the packages don't ship yet, draws its pets from layered packs, liste
   squash or idle acts, though its expressions still change.
 
 ### Changed
+- The pet is the Rust one, in the Windows installer and zip and the Linux packages. It installs to the same folders,
+  keeps its settings, logs, tokens and avatars where they were, and an installed copy updates itself as before: the
+  update from a .NET release keeps them, and so do the hooks it registered. The packages are much smaller, since
+  they carry no .NET runtime.
+- On Windows, `AiPet.exe` keeps its icon and version details, and needs no Visual C++ runtime. It draws through
+  Vulkan, which leaves no stale copies of the pet behind when it jumps or changes size; it takes a few seconds to
+  appear. `WGPU_BACKEND=gl` picks GL instead.
+- Linux: the pet runs on glibc 2.27 and newer, like the hook, and needs no runtime of its own.
+- Building from source needs only Rust: `build.sh`, `build.ps1` and `install-from-source` build the pet and the hook
+  with cargo.
 - `aipet-hook` is the Rust one, in the plugin and in the Windows and Linux packages. Its command line, what it sends
   the pet, and what it registers are the same, so hooks registered by an earlier version keep working, and Codex
   doesn't ask you to trust them again.
@@ -51,8 +109,6 @@ pet, which the packages don't ship yet, draws its pets from layered packs, liste
 - Linux: two pets started at the same moment no longer both run, also when one of them was started from a snap or
   over SSH. The pet holds a lock next to its socket (`aipet.lock`) while it runs, which the Rust pet will hold too.
   When it can't take that lock (something else is at its path, say), the pet doesn't start, and `aipet.log` says why.
-- Building from source needs Rust for the hook: `build.sh`, `build.ps1` and `install-from-source` build it with
-  cargo.
 - Settings → Avatars shows one tile per pet. The green Hood is now the Hood's Green theme, and a `config.json` that
   names "Hood (green)" wears it. The avatar `.json` files of earlier versions still load, `avatars/hood-green.json`
   among them.

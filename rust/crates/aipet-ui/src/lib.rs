@@ -10,7 +10,7 @@
 //! and [`INLINE_MENU`] say where the sprite and the menu are.
 //!
 //! The bubbles and the mood are the core's [`Board`]'s, as `MainWindow`'s Refresh and SyncCards make them
-//! (`src/AiPet.UI/MainWindow.axaml.cs:303-314, 486-564`). A bubble the pointer is on shows its round [`Button`]s and
+//! (`AiPet.UI/MainWindow.axaml.cs:303-314, 486-564`). A bubble the pointer is on shows its round [`Button`]s and
 //! its dismiss button, and a click on it opens its item, as MakeCard, UpdateChrome and OpenItem have it (`:352-485`).
 //! What the pet asks of the app (saving its preferences, dismissing a bubble, Settings' actions, its place, quitting)
 //! goes to the app's [`Host`]; what it asks of the operating system (opening links, bringing an agent's app forward,
@@ -33,7 +33,7 @@ pub mod vector_view;
 mod view;
 
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -41,12 +41,13 @@ use std::time::{Duration, Instant};
 
 use aipet_core::board::{self, Board, Session};
 use aipet_core::config::Config;
+use aipet_core::tracker;
 use aipet_sprite::{Pet, PetFrame, PetInput};
 use iced::widget::image::Handle;
 use iced::{Point, Rectangle, Size, Vector};
 
 pub use cards::Button;
-use cards::{Bubble, Buttons, Card, Fitted, Section, Stacks};
+use cards::{Bubble, Buttons, Card, Fitted, Progress, Section, Stacks};
 pub use executor::Executor;
 use geometry::{CARD_RADIUS, CLOSE_SIZE, CardFrame, HALO, HEADER_H, HEADER_RADIUS, MENU_RADIUS, Motion};
 pub use geometry::{INLINE_MENU, MENU, Rect, SPRITE, SURFACE};
@@ -55,6 +56,11 @@ use settings::{Page, Settings};
 use sprite::Sprite;
 
 /// The bubble an empty pet shows while you point at it.
+/// A tracker action under way: its bubble, the action, and where its outcome comes.
+type TrackerAct = (Arc<str>, tracker::Action, Receiver<Result<(), String>>);
+/// How long a task bubble says what a tracker action did (fnt-81), and at most how long it says it's sending one.
+const TRACKER_NOTE: f64 = 6.0;
+const TRACKER_NOTE_SENDING: f64 = 30.0;
 const GHOST: &str = "_ghost";
 /// The widest a bubble's title or detail gets (TextBlock.MaxWidth): at rest, and beside the bubble's buttons while the
 /// pointer is on it (UpdateChrome).
@@ -369,17 +375,23 @@ pub struct PetUi {
     skipped: Vec<aipet_sprite::load::Skipped>,
     /// Device px per logical px on the pet's output, as the shell says: a pixel pack's pixels are snapped to them.
     scale: f32,
-    /// Each avatar standing still, for the picker: the worn one in its theme, the others in their default.
-    stills: Vec<Handle>,
+    /// Each avatar standing still, for the picker: in the theme it was last worn in, else its default.
+    stills: Vec<Still>,
     avatar: usize,
     /// The worn avatar's theme: one it has.
     theme: String,
+    /// The style and theme each pet was last worn in this run, by pet: its tile shows them and puts them back on.
+    chosen: HashMap<String, (String, String)>,
     /// How big the pet and the bubbles are drawn, in percent.
     pet_size: i32,
     bubble_size: i32,
     stacks: Stacks,
     /// The core's last Board, if one came.
     board: Option<Arc<Board>>,
+    /// fnt-81: the tracker actions under way, by bubble, and what each bubble says of the last one's outcome, until
+    /// when (the pet's clock).
+    tracker_acts: Vec<TrackerAct>,
+    tracker_notes: HashMap<Arc<str>, (String, f64)>,
     /// The bubbles shown, in stack order (each tick refills it from the Board).
     show: Vec<Bubble>,
     /// How many reviews wait: the review bubbles shown, and those the stack leaves out.
@@ -458,10 +470,7 @@ impl FrameTimes {
     }
 }
 
-/// The avatar and theme the preferences name: the avatar by its name, or by an older "<pet> (<theme>)" name for one
-/// of a pet's themes (any case), as "Hood (green)" names the Hood in Green; else the first. The theme is the one
-/// the preferences name, else the one the older name does, else the avatar's default.
-/// The way a pet faces at rest: the way its art does (the Hamster is drawn turned to the left).
+/// The way a pet faces at rest: the way its art does (a pack drawn turned to the left, `"faces": "left"`, faces left).
 fn drawn_facing(pack: &aipet_sprite::pack::Pack) -> i32 {
     match pack.faces {
         aipet_sprite::pose::Facing::Left => -1,
@@ -469,6 +478,9 @@ fn drawn_facing(pack: &aipet_sprite::pack::Pack) -> i32 {
     }
 }
 
+/// The avatar and theme the preferences name: the avatar by its name, or by an older "<pet> (<theme>)" name for one
+/// of a pet's themes (any case), as "Hood (green)" names the Hood in Green; else the first. The theme is the one
+/// the preferences name, else the one the older name does, else the avatar's default.
 fn choose(avatars: &[shelf::Shelved], prefs: &Prefs) -> (usize, String) {
     let name = prefs.avatar.as_deref().unwrap_or_default();
     let groups = pets(avatars);
@@ -508,6 +520,23 @@ fn pets(avatars: &[shelf::Shelved]) -> Vec<aipet_sprite::load::Group> {
     aipet_sprite::load::groups_of(avatars.iter().map(|a| &a.pack))
 }
 
+/// An avatar's tile picture: the pet standing still in a theme, and that theme's accent, which the tile's dot takes.
+#[derive(Clone, Debug)]
+struct Still {
+    image: Handle,
+    /// 0xAARRGGBB.
+    accent: u32,
+}
+
+impl Still {
+    fn of(pet: &aipet_sprite::load::LoadedPack) -> Still {
+        Still {
+            image: sprite::still(pet),
+            accent: pet.pack.accent,
+        }
+    }
+}
+
 /// `pet` in its theme `theme`, which it has.
 fn themed(pet: &aipet_sprite::load::LoadedPack, theme: &str) -> aipet_sprite::load::LoadedPack {
     pet.in_theme(theme).unwrap_or_else(|| pet.clone())
@@ -524,11 +553,15 @@ impl PetUi {
     pub fn new(setup: Setup) -> Self {
         let found = aipet_sprite::load::all(&setup.avatars);
         let skipped = found.skipped;
-        let mut stills: Vec<Handle> = found.pets.iter().map(sprite::still).collect();
+        let mut stills: Vec<Still> = found.pets.iter().map(Still::of).collect();
         let avatars = shelf::shelve(found.pets);
         let (avatar, theme) = choose(&avatars, &setup.prefs);
         let worn = themed(&avatars[avatar].unpacked(), &theme);
-        stills[avatar] = sprite::still(&worn);
+        stills[avatar] = Still::of(&worn);
+        let chosen = HashMap::from([(
+            worn.pack.pet().to_owned(),
+            (worn.pack.style().to_owned(), theme.clone()),
+        )]);
         let mut pet = Pet::new();
         pet.set_pack(worn.clone());
         pet.set_reduced_motion(reduce_motion(&*setup.platform));
@@ -557,10 +590,13 @@ impl PetUi {
             stills,
             avatar,
             theme,
+            chosen,
             pet_size: setup.prefs.pet_size,
             bubble_size: setup.prefs.bubble_size,
             stacks: Stacks::default(),
             board: None,
+            tracker_acts: Vec::new(),
+            tracker_notes: HashMap::new(),
             show: Vec::new(),
             waiting: 0,
             header: None,
@@ -587,6 +623,8 @@ impl PetUi {
             settings: Settings::new(setup.services),
         };
         ui.sized();
+        // Settings' theme editor shows the theme worn
+        settings::avatars::follow(&mut ui);
         ui
     }
 
@@ -617,6 +655,7 @@ impl PetUi {
         }
         self.t = t;
         settings::tick(self);
+        self.tracker_tick();
 
         let board = self.board.as_deref();
         let state = board.map_or("sleep", Board::state);
@@ -696,6 +735,7 @@ impl PetUi {
                     more: 0,
                     app: None,
                     buttons: Buttons::default(),
+                    progress: None,
                 });
             }
         }
@@ -721,7 +761,8 @@ impl PetUi {
     }
 
     /// The Board's bubbles, in its order: each chat with its app, whose name comes before the detail unless every chat
-    /// is in the Claude app (or Claude Code); the last of a stack says how many more there are; and each with the
+    /// is in the Claude app (or Claude Code); a tracker task with the tracker's border, its acceptance count after the
+    /// detail and its subtasks and agents to draw; the last of a stack says how many more there are; and each with the
     /// buttons it shows while the pointer is on it.
     fn fill(&mut self, board: &Board) {
         let cards = board.cards();
@@ -732,12 +773,28 @@ impl PetUi {
             .collect();
         let several_apps = apps.len() > 1;
         for (i, s) in cards.iter().enumerate() {
-            let app = (s.kind == "chat").then(|| board::app_of(s));
+            let app = match s.kind {
+                "chat" => Some(board::app_of(s)),
+                "task" => Some(("Tracker", board::TRACKER_TEAL)),
+                _ => None,
+            };
             let detail = match app {
-                Some((label, _)) if several_apps || !matches!(label, "Claude app" | "Claude") => {
+                Some((label, _)) if s.kind == "chat" && (several_apps || !matches!(label, "Claude app" | "Claude")) => {
                     format!("{label} · {}", s.detail)
                 }
                 _ => s.detail.clone(),
+            };
+            let task = s.task.as_deref();
+            // what a tracker action of this bubble's said last, for a while
+            let detail = match self.tracker_notes.get(s.id.as_str()) {
+                Some((note, _)) => note.clone(),
+                None => detail,
+            };
+            let detail = match task.map(|t| t.acceptance) {
+                Some(criteria) if criteria.total > 0 => {
+                    format!("{detail} · {}/{} criteria", criteria.done, criteria.total)
+                }
+                _ => detail,
             };
             let last = !cards[i + 1..].iter().any(|x| x.section() == s.section());
             self.show.push(Bubble {
@@ -749,7 +806,12 @@ impl PetUi {
                 detail: Cow::Owned(detail),
                 more: if last { board.extra(s.section()) } else { 0 },
                 app,
-                buttons: buttons(s),
+                buttons: buttons(s, board.tracker_actions()),
+                progress: task.map(|t| Progress {
+                    done: t.subtasks.done,
+                    total: t.subtasks.total,
+                    agents: t.agents.total,
+                }),
             });
         }
         self.waiting = cards.iter().filter(|s| matches!(s.kind, "jira" | "github")).count() + board.extra("reviews");
@@ -918,9 +980,11 @@ impl PetUi {
             },
             Message::SelectAvatar(i) => {
                 if let Some(avatar) = self.avatars.get(i).filter(|_| i != self.avatar) {
-                    let theme = avatar.pack.palette.theme.clone();
-                    // the theme editor was for the pet taken off
-                    self.settings.avatars.theme = None;
+                    // the theme it was last worn in (wear takes the default where it has none by that name)
+                    let theme = match self.chosen.get(avatar.pack.pet()) {
+                        Some((_, theme)) => theme.clone(),
+                        None => avatar.pack.palette.theme.clone(),
+                    };
                     self.wear(i, &theme);
                     self.save_prefs();
                 }
@@ -992,6 +1056,7 @@ impl PetUi {
         match s.map(|s| (s.kind, s.url.as_deref())) {
             Some(("jira-error", _)) => return Some(self.open_settings(Page::Jira)),
             Some(("github-error", _)) => return Some(self.open_settings(Page::GitHub)),
+            Some(("tracker-error", _)) => return Some(self.open_settings(Page::Tracker)),
             Some(("music", _)) => {
                 if let Some(player) = self.platform.media() {
                     player.focus();
@@ -1038,8 +1103,69 @@ impl PetUi {
                 }
             }
             Button::Open => return self.open_item(id),
+            Button::Allow | Button::Deny | Button::PauseRun | Button::StopRun => self.act(id, button),
         }
         None
+    }
+
+    /// A task bubble's Allow once, Deny, Pause or Stop (fnt-81): done in the tracker on a thread of its own, the
+    /// bubble saying so meanwhile and then how it went ([`PetUi::tracker_acts`], picked up in `tick`).
+    fn act(&mut self, id: &str, button: Button) {
+        let task = self
+            .board
+            .as_deref()
+            .and_then(|board| board.find(id))
+            .and_then(|s| s.task.as_deref());
+        let action = task.and_then(|task| match button {
+            Button::Allow | Button::Deny => task.prompt().map(|(run, request)| {
+                let (run, request) = (run.to_owned(), request.to_owned());
+                if button == Button::Allow {
+                    tracker::Action::Allow { run, request }
+                } else {
+                    tracker::Action::Deny { run, request }
+                }
+            }),
+            Button::PauseRun => task.run_id().map(|run| tracker::Action::Pause { run: run.into() }),
+            Button::StopRun => task.run_id().map(|run| tracker::Action::Stop { run: run.into() }),
+            _ => None,
+        });
+        let (Some(action), Some(watcher)) = (action, self.settings.services.tracker.clone()) else {
+            return;
+        };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let doing = action.clone();
+        let spawned = std::thread::Builder::new()
+            .name("aipet-tracker-act".into())
+            .spawn(move || {
+                // a pet that stopped waiting misses nothing it wants
+                let _ = sender.send(watcher.act(&doing));
+            });
+        let id: Arc<str> = id.into();
+        let note = match spawned {
+            Ok(_) => {
+                self.tracker_acts.push((Arc::clone(&id), action, receiver));
+                "Sending to the tracker…".to_owned()
+            }
+            Err(error) => format!("Couldn't reach the tracker: {error}"),
+        };
+        self.tracker_notes.insert(id, (note, self.t + TRACKER_NOTE_SENDING));
+    }
+
+    /// Picks the tracker actions' outcomes up, and lets the notes they left run out.
+    fn tracker_tick(&mut self) {
+        let t = self.t;
+        let notes = &mut self.tracker_notes;
+        self.tracker_acts
+            .retain(|(id, action, outcome)| match outcome.try_recv() {
+                Ok(outcome) => {
+                    let note = outcome.map_or_else(|why| why, |()| action.done_text().to_owned());
+                    notes.insert(Arc::clone(id), (note, t + TRACKER_NOTE));
+                    false
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => true,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => false,
+            });
+        notes.retain(|_, (_, until)| *until > t);
     }
 
     fn set_on_top(&mut self, on: bool) -> Option<Effect> {
@@ -1115,9 +1241,14 @@ impl PetUi {
         if i != self.avatar
             && let Some(old) = self.avatars.get(self.avatar)
         {
-            self.stills[self.avatar] = sprite::still(&old.unpacked());
+            // its tile keeps the theme it was worn in
+            self.stills[self.avatar] = Still::of(&themed(&old.unpacked(), &self.theme));
         }
-        self.stills[i] = sprite::still(&worn);
+        self.stills[i] = Still::of(&worn);
+        self.chosen.insert(
+            base.pack.pet().to_owned(),
+            (base.pack.style().to_owned(), theme.clone()),
+        );
         self.avatar = i;
         self.theme = theme;
         self.pet.set_pack(worn.clone());
@@ -1128,6 +1259,8 @@ impl PetUi {
             self.input.facing = drawn_facing(&worn.pack);
         }
         self.sized();
+        // Settings' theme editor follows, whoever put it on
+        settings::avatars::follow(self);
     }
 
     fn save_prefs(&mut self) {
@@ -1371,11 +1504,19 @@ fn section_of(s: &Session) -> Section {
 /// The round buttons a bubble shows while the pointer is on it (UpdateChrome): Open in Jira where it has a ticket,
 /// the pull request's where it has one, the player's three on the player's, and Open on a working or thinking chat in
 /// its agent's desktop app, where the C#'s Stop stood.
-fn buttons(s: &Session) -> Buttons {
+fn buttons(s: &Session, tracker_actions: bool) -> Buttons {
     let music = s.kind == "music";
     let busy_in_app =
         s.kind == "chat" && matches!(s.eff, "working" | "thinking") && s.r#where.as_deref() == Some("desktop");
+    // a tracker task's, when the tracker lets this pet act: its prompt's answers, else its live run's pause and stop
+    let task = s.task.as_deref().filter(|_| tracker_actions);
+    let prompt = task.is_some_and(|t| t.prompt().is_some());
+    let run = !prompt && task.is_some_and(|t| t.agents.runs > 0 && t.run_id().is_some());
     Buttons::default()
+        .with(Button::Allow, prompt)
+        .with(Button::Deny, prompt)
+        .with(Button::PauseRun, run)
+        .with(Button::StopRun, run)
         .with(Button::Ticket, s.ticket_url.is_some())
         .with(Button::PullRequest, s.pr_url.is_some())
         .with(Button::Previous, music)
@@ -1619,6 +1760,120 @@ pub(crate) mod tests {
             .iter()
             .find(|b| *b.id == *id)
             .unwrap_or_else(|| panic!("no {id}: {:?}", ui.show))
+    }
+
+    /// fnt-81: a tracker task's bubble has the tracker's border, its acceptance count after the detail and its
+    /// counts to draw; its chat collapsed into it, and a click on its error bubble opens the Tracker page.
+    #[test]
+    fn a_tracker_task_is_a_bubble_with_its_counts() {
+        use aipet_core::board::TrackerSources;
+        use aipet_core::tracker::TrackerTask;
+        use aipet_core::tracker::wire::{Agents, Count, Links};
+
+        let task = TrackerTask {
+            id: "fnt-81".into(),
+            short_id: "FNT-81".into(),
+            title: "Task bubbles".into(),
+            phase: Some("testing".into()),
+            subtasks: Count { done: 3, total: 7 },
+            acceptance: Count { done: 2, total: 5 },
+            agents: Agents {
+                total: 2,
+                ..Agents::default()
+            },
+            sessions: vec!["run".into()],
+            links: Links {
+                task: Some("fnt://task/FNT-81".into()),
+                run: None,
+            },
+            ..TrackerTask::default()
+        };
+        let (ui, _) = shown(board(&Sources {
+            chats: vec![chat("claude:run", "working", "Run", "Editing", "terminal", NOW)],
+            tracker: TrackerSources {
+                tasks: vec![task],
+                connected: true,
+                ..TrackerSources::default()
+            },
+            ..Sources::default()
+        }));
+        assert!(!shows(&ui, "claude:run"));
+        let b = bubble(&ui, "task:fnt-81");
+        assert_eq!(b.app, Some(("Tracker", board::TRACKER_TEAL)));
+        assert_eq!(&*b.title, "FNT-81 · Task bubbles");
+        assert_eq!(&*b.detail, "Testing · 2/5 criteria");
+        assert_eq!(
+            b.progress,
+            Some(Progress {
+                done: 3,
+                total: 7,
+                agents: 2
+            })
+        );
+
+        let (mut ui, _) = shown(board(&Sources {
+            tracker: TrackerSources {
+                error: Some("this pet was revoked; enroll it again".into()),
+                ..TrackerSources::default()
+            },
+            ..Sources::default()
+        }));
+        ui.update(Message::CardPressed("tracker:_error".into()));
+        assert_eq!(ui.settings.page, Page::Tracker);
+    }
+
+    /// fnt-81: a task bubble offers its prompt's answers, else its run's pause and stop, only where the tracker lets
+    /// this pet act; a press without a tracker to ask does nothing.
+    #[test]
+    fn a_task_bubble_offers_actions_only_where_the_tracker_allows_them() {
+        use aipet_core::board::TrackerSources;
+        use aipet_core::tracker::wire::{Agents, Links};
+        use aipet_core::tracker::{Need, TrackerTask};
+
+        let task = |id: &str, prompt: bool| TrackerTask {
+            id: id.into(),
+            short_id: id.to_uppercase(),
+            agents: Agents {
+                total: 1,
+                runs: 1,
+                ..Agents::default()
+            },
+            needs: if prompt {
+                vec![Need::Permission {
+                    run_id: Some("run-7".into()),
+                    request_id: Some("req-3".into()),
+                    tool: Some("Bash".into()),
+                }]
+            } else {
+                Vec::new()
+            },
+            links: Links {
+                task: None,
+                run: Some("fnt://run/run-7".into()),
+            },
+            ..TrackerTask::default()
+        };
+        let with = |actions_allowed| {
+            shown(board(&Sources {
+                tracker: TrackerSources {
+                    tasks: vec![task("asks", true), task("runs", false)],
+                    connected: true,
+                    actions_allowed,
+                    ..TrackerSources::default()
+                },
+                ..Sources::default()
+            }))
+        };
+        let names = |ui: &PetUi, id: &str| bubble(ui, id).buttons.iter().collect::<Vec<_>>();
+        let (ui, _) = with(false);
+        assert!(names(&ui, "task:asks").is_empty() && names(&ui, "task:runs").is_empty());
+        let (mut ui, _) = with(true);
+        assert_eq!(names(&ui, "task:asks"), [Button::Allow, Button::Deny]);
+        assert_eq!(names(&ui, "task:runs"), [Button::PauseRun, Button::StopRun]);
+        assert_eq!(Button::StopRun.tip(None), "Stop the run");
+        // the detached pet has no tracker to ask
+        ui.update(Message::Button("task:asks".into(), Button::Allow));
+        assert!(ui.tracker_acts.is_empty() && ui.tracker_notes.is_empty());
     }
 
     #[test]
@@ -1943,6 +2198,64 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_config_naming_a_pet_that_isnt_there_wears_the_first_and_an_own_pet_of_that_name_is_worn() {
+        // the Hamster was built in up to 0.2.0: a config.json from then still names it, and the owner's own pack
+        // of that name (here the baked Hood renamed, and drawn turned to the left) is a pet like any other
+        let dir = std::env::temp_dir().join(format!("aipet-ui-own-pet-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let start = |config: &str, avatars: &std::path::Path| {
+            let file = dir.join("config.json");
+            std::fs::write(&file, config).unwrap();
+            let (config, _) = Config::load_from(&file);
+            PetUi::new(Setup {
+                prefs: Prefs::from(&config),
+                avatars: avatars.to_owned(),
+                ..Setup::detached()
+            })
+        };
+        let pet = |ui: &PetUi| ui.avatars[ui.avatar].pack.pet().to_owned();
+        let index = |ui: &PetUi, name: &str| ui.avatars.iter().position(|a| a.name() == name).unwrap();
+        let none = dir.join("no-avatars");
+        for config in [
+            r#"{"Avatar":"Hamster"}"#,
+            r#"{"Avatar":"Hamster (pixel)"}"#,
+            r#"{"Avatar":"Hamster","AvatarStyle":"Pixel","AvatarTheme":"Blue"}"#,
+        ] {
+            let ui = start(config, &none);
+            assert_eq!(pet(&ui), "Sprout", "{config}");
+            assert_eq!(ui.theme(), ui.avatars[ui.avatar].pack.palette.theme, "{config}");
+            assert_eq!(ui.input.facing, 1, "{config}");
+            assert_eq!(ui.prefs().avatar.as_deref(), Some("Sprout"), "{config}");
+        }
+
+        let avatars = dir.join("avatars");
+        let own = avatars.join("Hamster");
+        std::fs::create_dir_all(&own).unwrap();
+        let baked = aipet_sprite::bake::bake(&aipet_sprite::Avatar::hood());
+        for (name, bytes) in aipet_sprite::manifest::files(&baked.pack, &baked.sheets) {
+            std::fs::write(own.join(name), bytes).unwrap();
+        }
+        let manifest = std::fs::read_to_string(own.join("pack.json")).unwrap();
+        let renamed = manifest.replacen("\"name\": \"Hood\"", "\"name\": \"Hamster\",\n  \"faces\": \"left\"", 1);
+        assert_ne!(renamed, manifest);
+        std::fs::write(own.join("pack.json"), renamed).unwrap();
+        let mut ui = start(r#"{"Avatar":"Hamster"}"#, &avatars);
+        assert!(ui.skipped().is_empty(), "{:?}", ui.skipped());
+        assert_eq!(pet(&ui), "Hamster");
+        assert_eq!(ui.prefs().avatar.as_deref(), Some("Hamster"));
+        assert!(settings::avatars::tiles(&ui).contains(&("Hamster", true)));
+        // drawn turned to the left, it stands facing left; another pet faces right, and put back on it faces left
+        assert_eq!(ui.input.facing, -1);
+        ui.update(Message::SelectAvatar(index(&ui, "Sprout")));
+        assert_eq!((pet(&ui), ui.input.facing), ("Sprout".to_owned(), 1));
+        ui.update(Message::SelectAvatar(index(&ui, "Hamster")));
+        assert_eq!((pet(&ui), ui.input.facing), ("Hamster".to_owned(), -1));
+        assert_eq!(ui.prefs().avatar.as_deref(), Some("Hamster"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn the_avatar_wears_its_theme_and_an_older_name_for_a_theme_still_works() {
         let start = |avatar: &str, theme: Option<&str>| {
             PetUi::new(Setup {
@@ -1981,6 +2294,88 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_pets_tile_puts_back_the_style_and_theme_it_was_last_worn_in() {
+        let mut ui = PetUi::new(Setup {
+            prefs: Prefs {
+                avatar: Some("Hood".into()),
+                ..Prefs::default()
+            },
+            ..Setup::detached()
+        });
+        let worn = |ui: &PetUi| {
+            let a = &ui.avatars[ui.avatar];
+            (
+                a.pack.pet().to_owned(),
+                a.pack.style().to_owned(),
+                ui.theme().to_owned(),
+            )
+        };
+        let tile = |ui: &PetUi, pet: &str| {
+            settings::avatars::shown(ui)
+                .find(|(_, a)| a.pack.pet() == pet)
+                .map(|(i, _)| i)
+                .unwrap()
+        };
+        let vector = settings::avatars::styles(&ui)[1].1;
+        ui.update(Message::SelectStyle(vector));
+        ui.update(Message::SelectTheme("Blue".into()));
+        assert_eq!(worn(&ui), ("Hood".into(), "Vector".into(), "Blue".into()));
+        // another pet, then the Hood's tile again: the vector Hood in Blue, not its pixel style in its default
+        ui.update(Message::SelectAvatar(tile(&ui, "Sprout")));
+        assert_eq!(worn(&ui).0, "Sprout");
+        let hood = tile(&ui, "Hood");
+        assert_eq!(
+            ui.avatars[hood].pack.style(),
+            "Vector",
+            "the tile shows the style last worn"
+        );
+        // and in the theme last worn (handles differ by id: the pixels are compared)
+        let rgba = |h: &Handle| match h {
+            Handle::Rgba { pixels, .. } => pixels.clone(),
+            other => panic!("{other:?}"),
+        };
+        let blue = sprite::still(&themed(&ui.avatars[hood].unpacked(), "Blue"));
+        assert_eq!(rgba(&ui.stills[hood].image), rgba(&blue));
+        ui.update(Message::SelectAvatar(hood));
+        assert_eq!(worn(&ui), ("Hood".into(), "Vector".into(), "Blue".into()));
+        // a pet not worn yet goes on in its default style and theme
+        ui.update(Message::SelectAvatar(tile(&ui, "Pip")));
+        let pip = &ui.avatars[ui.avatar];
+        assert_eq!(ui.theme(), pip.pack.palette.theme);
+    }
+
+    #[test]
+    fn a_tiles_dot_is_the_accent_of_the_drawing_and_theme_its_still_shows() {
+        let mut ui = PetUi::new(Setup {
+            prefs: Prefs {
+                avatar: Some("Hood".into()),
+                avatar_theme: Some("Green".into()),
+                ..Prefs::default()
+            },
+            ..Setup::detached()
+        });
+        let accent = |ui: &PetUi, pet: &str| {
+            settings::avatars::tile_accents(ui)
+                .into_iter()
+                .find(|&(n, _)| n == pet)
+                .unwrap()
+                .1
+        };
+        let tile = |ui: &PetUi, name: &str| ui.avatars.iter().position(|a| a.name() == name).unwrap();
+        let hood = ui.avatars[tile(&ui, "Hood")].unpacked();
+        let green = hood.in_theme("Green").unwrap().pack.accent;
+        assert_ne!(green, hood.pack.accent, "Green has an accent of its own");
+        assert_eq!(accent(&ui, "Hood"), green);
+        // taken off, the Hood's tile still shows it in Green, and its dot is Green's: not its default Blue's
+        ui.update(Message::SelectAvatar(tile(&ui, "Sprout")));
+        assert_eq!(accent(&ui, "Hood"), green);
+        assert_eq!(accent(&ui, "Sprout"), ui.pet.pack().accent);
+        // a pet not worn yet: its default's
+        let pip = &ui.avatars[tile(&ui, "Pip")];
+        assert_eq!(accent(&ui, "Pip"), pip.pack.accent);
+    }
+
+    #[test]
     fn a_pet_is_one_tile_with_its_styles_and_older_names_wear_the_right_one() {
         // FNT-74 R3, R4
         let start = |avatar: &str, style: Option<&str>, theme: Option<&str>| {
@@ -2006,7 +2401,7 @@ pub(crate) mod tests {
         let mut ui = start("Hood", None, Some("Green"));
         assert_eq!(
             settings::avatars::tiles(&ui),
-            [("Sprout", false), ("Hood", true), ("Pip", false), ("Hamster", false)]
+            [("Sprout", false), ("Hood", true), ("Pip", false)]
         );
         let styles: Vec<&str> = settings::avatars::styles(&ui).iter().map(|s| s.0).collect();
         assert_eq!(styles, ["Pixel", "Vector"]);
@@ -2028,7 +2423,6 @@ pub(crate) mod tests {
         // older names for a pet's drawings, and for a pet in a theme
         assert_eq!(worn(&start("Hood (vector)", None, None)), it("Hood", "Vector", "Green"));
         assert_eq!(worn(&start("Pip (painted)", None, None)), it("Pip", "Painted", "Peach"));
-        assert_eq!(worn(&start("Hamster (pixel)", None, None)).1, "Pixel");
         assert_eq!(worn(&start("Sprout (vector)", None, None)).1, "Vector");
         assert_eq!(worn(&start("Hood (green)", None, None)), it("Hood", "Pixel", "Green"));
         assert_eq!(
@@ -2041,7 +2435,7 @@ pub(crate) mod tests {
             it("Hood", "Pixel", "Blue")
         );
         // the default style isn't kept
-        assert_eq!(start("Hamster", Some("Vector"), None).prefs().avatar_style, None);
+        assert_eq!(start("Pip", Some("Vector"), None).prefs().avatar_style, None);
     }
 
     #[test]

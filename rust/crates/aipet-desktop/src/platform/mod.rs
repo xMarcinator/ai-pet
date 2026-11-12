@@ -1,5 +1,5 @@
 //! The pet's operating-system services on the desktop ([`Platform`]), which both shells use: the C#'s
-//! `WindowsPlatform`, `LinuxPlatform` and `MacPlatform` (`src/AiPet.UI/Platform/`), a file each:
+//! `WindowsPlatform`, `LinuxPlatform` and `MacPlatform` (`AiPet.UI/Platform/`), a file each:
 //! - Windows (`windows.rs`): an agent's windows found by their exe with `EnumWindows` and brought forward with
 //!   `SetForegroundWindow` (with `AttachThreadInput` when that fails), `ShellExecuteW` for links and folders, and
 //!   Spotify through its window's title and `WM_APPCOMMAND`;

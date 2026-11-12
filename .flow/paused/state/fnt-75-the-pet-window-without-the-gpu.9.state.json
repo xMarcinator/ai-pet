@@ -1,0 +1,18 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-11-09T19:53:32.069601Z",
+  "evidence": {
+    "commits": [
+      "a8ebbc0",
+      "67dd686"
+    ],
+    "tests": [
+      "ICED_BACKEND=tiny-skia runs of every Settings page",
+      "/proc maps grep",
+      "pet-calm.sh MAX_LOAD=3"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-09T20:13:34.544797Z"
+}

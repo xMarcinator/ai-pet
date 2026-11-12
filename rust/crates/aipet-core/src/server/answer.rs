@@ -1,4 +1,6 @@
-//! A request's answer: the version check, then a ping or an event, else a refusal (`HookServer.cs:266-299`).
+//! A request's answer: the version check, then a ping or an event, else a refusal (`HookServer.cs:266-299`). Version 2
+//! (fnt-81) adds an event like version 1's and a task message, which is refused here: task messages come from the
+//! tracker watcher only.
 //!
 //! The line is read as the C#'s `JsonNode.Parse` reads it: valid JSON nesting at most 128 deep, and an object. Nested
 //! values are only checked for being JSON (numbers past a double's range, lone surrogates in escapes and repeated
@@ -10,9 +12,10 @@
 
 use std::collections::HashSet;
 use std::fmt::{self, Write};
-use std::time::SystemTime;
 
-use aipet_ipc::protocol::{APP, ERROR, KIND, MAX_DEPTH, OK, OUTCOME, PID, RECENT, V, VERSION, unix_time};
+use aipet_ipc::protocol::{
+    APP, ERROR, KIND, MAX_DEPTH, OK, OUTCOME, PID, RECENT, TASK, TASK_ONLY_FROM_WATCHER, V, VERSION, VERSION_2,
+};
 use serde::de::{self, Deserialize, Deserializer, MapAccess, Visitor};
 use serde_json::value::RawValue;
 
@@ -23,7 +26,8 @@ use crate::sessions::Envelope;
 pub(super) fn answer(server: &Shared, line: &str) -> Option<String> {
     let request = Request::parse(line)?;
     let version = request.v.and_then(|v| serde_json::from_str::<f64>(v.get()).ok());
-    if version != Some(f64::from(VERSION)) {
+    let v2 = version == Some(f64::from(VERSION_2));
+    if version != Some(f64::from(VERSION)) && !v2 {
         return Some(refuse("unsupported version"));
     }
     let kind = match request.kind {
@@ -32,17 +36,19 @@ pub(super) fn answer(server: &Shared, line: &str) -> Option<String> {
         _ => None,
     };
     match kind.as_deref() {
+        // version 2 has no ping, and the C# refuses {"v":2,"type":"ping"} as a version it doesn't know
+        Some("ping") if v2 => Some(refuse("unsupported version")),
         Some("ping") => Some(ping(server)),
         Some("event") => event(server, line),
+        Some(TASK) if v2 => Some(refuse(TASK_ONLY_FROM_WATCHER)),
         _ => Some(refuse("unknown request")),
     }
 }
 
 /// `{"ok":true,"app":"AiPet","pid":…,"recent":[the last 30 hook-events.log lines]}`: the doctor's ping.
 fn ping(server: &Shared) -> String {
-    let record = server.record();
     let mut recent = String::new();
-    for (i, line) in record.recent().enumerate() {
+    for (i, line) in server.ingress.recent().iter().enumerate() {
         if i > 0 {
             recent.push(',');
         }
@@ -54,24 +60,18 @@ fn ping(server: &Shared) -> String {
     )
 }
 
-/// An event goes to the chats, and its line to hook-events.log. `changed` runs unless the event changed nothing or
-/// failed; a failed one is refused with its `error:` outcome.
+/// An event goes through the ingress: to the chats, and its line to hook-events.log ([`Ingress::apply`]). A failed
+/// one is refused with its `error:` outcome.
+///
+/// [`Ingress::apply`]: super::Ingress::apply
 fn event(server: &Shared, line: &str) -> Option<String> {
     let envelope = Envelope::parse(line)?;
-    let applied = server.sessions.apply(&envelope, unix_time(SystemTime::now()));
-    let failed = applied.outcome.strip_prefix("error:");
-    if let Some(error) = failed {
-        server.log(&format!("hooks: an event failed: {error}"));
-    }
-    server.record().add(&applied.log, SystemTime::now());
-    if failed.is_some() {
-        return Some(refuse(applied.outcome));
-    }
-    if !matches!(applied.outcome, "ignored" | "stale") {
-        server.changed();
+    let outcome = server.ingress.apply(&envelope);
+    if outcome.starts_with("error:") {
+        return Some(refuse(outcome));
     }
     let mut reply = format!(r#"{{"{OK}":true,"{OUTCOME}":"#);
-    quote(&mut reply, applied.outcome);
+    quote(&mut reply, outcome);
     reply.push('}');
     Some(reply)
 }

@@ -1,5 +1,5 @@
 //! The Jira watcher: the issues a JQL search finds on the user's Jira Cloud site, by default their own open ones
-//! (`src/AiPet.Core/Jira.cs`).
+//! (`AiPet.Core/Jira.cs`).
 //!
 //! The settings are `jira.json` in the data folder ([`JiraSettings`]); the API token is `AiPet:Jira` in the secret
 //! store. [`search`] is the C#'s `SearchAsync`: its request, and the error texts the pet's Jira bubble and the

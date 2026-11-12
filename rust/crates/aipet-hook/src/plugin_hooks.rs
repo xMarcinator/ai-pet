@@ -1,4 +1,4 @@
-//! `aipet-hook --print-plugin-hooks claude|codex` (`src/AiPet.Hook/PluginHooks.cs`): the aipet plugin's hook file for
+//! `aipet-hook --print-plugin-hooks claude|codex` (`AiPet.Hook/PluginHooks.cs`): the aipet plugin's hook file for
 //! an agent (plugins/aipet/hooks/hooks.json or codex.json), made from the tables the direct hooks come from, byte for
 //! byte as committed. CI compares the two (scripts/check-plugin.sh --hook), so the plugin can't drift from the code.
 //! Codex's file is frozen (Codex trusts a hook by a hash of its definition): this has to print it as it is, never the
@@ -8,8 +8,8 @@ use std::io::{self, Write};
 
 use crate::claude::{self, EVENTS};
 use crate::install::warn;
-use crate::json::{Node, Object};
 use crate::json_out;
+use aipet_ipc::json::{Node, Object};
 
 pub(crate) const USAGE: &str = "usage: aipet-hook --print-plugin-hooks claude|codex";
 

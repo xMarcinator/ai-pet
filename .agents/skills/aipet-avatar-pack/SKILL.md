@@ -29,9 +29,9 @@ looks.
    sleepy eyes, the envelope); a pet that skips them shows attention or idle instead. The generator draws only the pet's own parts per pose; the
    shared `pet_states.py` adds the effects (the tears, hearts and golden glow too), the magnifier, the envelope, the headphones, the whole-body motion, the shadow, mirroring, the
    review page and the state sheet.
-4. **Draw with a generator**, a Python script beside the pack, modelled on `avatars/reference/hood_gen.py`,
-   `hamster_gen.py` and `sprout_gen.py` (vector), or `hamster_pixel_gen.py` (pixel). Named parts at their origins,
-   canvas-ready shapes only, poses by moving, rotating or swapping parts. Never hand-edit a generated `pack.json`:
+4. **Draw with a generator**, a Python script beside the pack, modelled on `avatars/reference/hood_gen.py` and
+   `sprout_gen.py` (vector; a pixel pet's generator writes its sheets instead, see
+   `references/pixel-and-painted.md`). Named parts at their origins, canvas-ready shapes only, poses by moving, rotating or swapping parts. Never hand-edit a generated `pack.json`:
    change the generator and run it again.
 5. **Produce the review page and the state sheet**: every state in 130 × 120 boxes on white, mid-grey and
    near-black, with the user's original beside the new drawing (`pet_states.write_pages`). See

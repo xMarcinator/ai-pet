@@ -1,0 +1,17 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-11-09T12:55:22.774603Z",
+  "evidence": {
+    "commits": [
+      "b0b7deb"
+    ],
+    "prs": [],
+    "tests": [
+      "cargo test -p aipet-desktop (a_pet_left_on_no_screen_goes_back_to_its_corner_and_one_that_shows_stays)",
+      "cargo test -p aipet-wayland (a_pet_whose_output_goes_away_is_made_again_on_one_that_is_there)"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-09T12:57:20.092373Z"
+}

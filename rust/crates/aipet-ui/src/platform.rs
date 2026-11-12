@@ -1,5 +1,5 @@
 //! What the pet asks of the operating system beyond its windows: the C#'s `IPlatform` and `IMediaPlayer`
-//! (`src/AiPet.Core/Platform.cs`), without `SendEscape`: the Rust pet has no Stop button, and never sends another app
+//! (`AiPet.Core/Platform.cs`), without `SendEscape`: the Rust pet has no Stop button, and never sends another app
 //! simulated keys (see the spec's Decision Context).
 //!
 //! - [`Platform`]: opening links and folders, bringing an agent's desktop app to the front, and the music player.

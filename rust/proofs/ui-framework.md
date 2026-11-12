@@ -270,3 +270,111 @@ The tasks for "move the pet window only":
   DirectComposition window are all untried there.
 - X11 and XWayland: not tried for any candidate.
 - Scales other than 1, and other compositors (Sway, KDE).
+
+## Settings in the pet process on iced's CPU renderer (FNT-75 task 9)
+
+Scope: task fnt-75-the-pet-window-without-the-gpu.9. Can Settings stay in the pet process without a GPU library:
+iced's tiny-skia renderer for Settings, iced owning the main thread with no window open, and the pet's own window on
+a second thread? Measured 2026-11-09, 20:55–21:15, on the machine above (Hyprland 0.57.0 by now), with only the
+Claude desktop app and the flow-next tracker running. Throwaway code on the scratch branch
+`worktree-agent-af0c406e01f20bf2e`, commit 67dd686 (fn-2's branch merged in at 88eb367 first, so today's Settings):
+`rust/Cargo.toml` with iced's `tiny-skia` feature added, and `spikes/ui-framework/settings-thread/`.
+
+Input: no ydotool or wtype is installed, so a throwaway Python driver wrote a virtual mouse and keyboard to
+`/dev/uinput` (the owner's user has an ACL on it) and placed the pointer with `hl.dsp.cursor.move`; every page and
+widget was then clicked, typed into and scrolled for real, and checked by eye in `grim` screenshots. Lesson for the
+next GUI run: look up the window's place with `hyprctl clients` after it opens and check `hyprctl activewindow`
+before each click; a window tiled somewhere else than expected let a few navigation clicks reach another app once.
+
+### 1. Today's Settings on tiny-skia: works
+
+The release app (fn-2 merged, the workspace's iced features plus `tiny-skia`), run in a sandbox data folder with
+`ICED_BACKEND=tiny-skia AIPET_OPEN_SETTINGS=1`. Every page renders and works the same as on wgpu; side-by-side
+screenshots of General are indistinguishable.
+
+- **General:** text in every weight and size, toggles (Spotify turned on), the Pet size slider (clicked to 160 %:
+  the pet grew at once), scrolling to the More and About sections.
+- **Avatars:** the four avatar cards with their images, the tooltip ("Wear Hood"), picking Hood (the pet changed at
+  once and every accent turned blue), Style Pixel → Vector (the pet redrew as vector Hood), the theme buttons, New
+  theme (the editor with its live preview, a name field and eleven colour fields with swatches), scrolling.
+- **Jira:** the checkbox (unticked), typing into Site, the long JQL line.
+- **GitHub:** checkbox, fields, buttons, the status line.
+- Not tried: the file dialogs (Import defaults, Open folder; rfd, not the renderer), Save and Test (network), and
+  Tab between fields (it doesn't move focus on wgpu either).
+- **The pet window on tiny-skia is opaque:** a black 380×600 box with the pet in it, as expected (softbuffer
+  presents XRGB). So the app can't simply run on `ICED_BACKEND=tiny-skia` today; only Settings can, once the pet
+  window is the minimal stack's.
+
+### 2. No GPU library: none mapped
+
+`grep -E 'libGL|libEGL|libvulkan|nvidia|libgallium|/dri/' /proc/<pid>/maps`, the same binary both ways:
+
+| Run | Settings open (after use) | After Settings closed |
+|---|---|---|
+| `ICED_BACKEND=tiny-skia` | no match; RSS 37.6 MB | no match; RSS 33.1 MB |
+| default (wgpu) | 20 lines: libEGL_mesa, libEGL, libgallium-26.2.6, libGLdispatch (5 mappings each); RSS 165 MB | the same 20 lines; RSS 165 MB |
+
+Under tiny-skia the process maps only libc, libm, libgcc_s, libffi, libwayland-client, libxkbcommon and the X11
+client libraries (libX11, libX11-xcb, libxcb, libXau, libXdmcp; winit links them, they are not GPU libraries).
+The 33 MB is the whole app (core, watchers, the pet window on tiny-skia), against 165 MB on wgpu. With the wgpu
+feature still compiled in, anything that unsets `ICED_BACKEND` brings the GPU back; the real change should build
+iced without `wgpu`, as the prototype in check 3 does, so no GPU library can load at all.
+
+### 3. iced on the main thread, the pet on a second thread: works
+
+`spikes/ui-framework/settings-thread/` (about 190 lines of its own, plus `minimal/`'s pet moved into a module):
+`iced::daemon` with iced's features `tiny-skia`, `wayland`, `x11`, `tokio` (no `wgpu`) runs on the main thread
+and opens no window at start. The minimal prototype's layer-surface pet runs on a thread named `pet`, with its own
+Wayland connection and calloop loop. Pet → iced: a `futures` unbounded channel (a plain synchronous send from the
+pet thread), read by `Subscription::run`. iced → pet: a calloop channel (std mpsc plus a wake-up of the pet's
+loop). A click on the pet sends Toggle; iced's `update` answers with `window::open` or `window::close`, and
+`window::close_events` tells the pet. A Settings-like window has a text input, a pick list, a checkbox, a toggler,
+a slider, a button and a scrollable.
+
+- **Opened and closed by real clicks on the pet** (two runs), and by a timer (`SPIKE_TOGGLE`, three runs).
+  Typing, the pick list's overlay, the checkbox, toggler, slider, button and scrolling all worked.
+- **The pet kept animating:** 57–59 draws every 2 s (30 Hz) throughout, open or closed; the transparent pet
+  surface stays above the iced window.
+- **Memory and libraries:** 14.4 MB RSS at start with no window (iced makes its compositor only when a window
+  opens), 21.8 MB with the window open, 17.5 MB after it closed, 22.1 MB reopened. No GPU line in maps at any point.
+  Threads: main, `pet`, and tokio's default 24 workers (the app's own Executor has fewer).
+- **No blocker on Linux.** winit wants the main thread, and gets it; the pet needs no shared Wayland connection;
+  the daemon API opens and closes windows from any message, so a subscription on a channel is enough.
+- **Findings:** `iced::exit()` from the daemon with no window open panicked in two of four runs inside
+  iced_winit 0.14.1 (`async fn resumed after completion`, exit code 101), both when the timer's Toggle and the
+  quit came together (a window opening while the daemon exits), a shutdown race: the real app should end
+  the process itself after the pet thread is done. On Windows winit's main-thread rule is the same and the pet's
+  layered window can live on any thread (untried). On macOS (not a release target) both AppKit windows want the
+  main thread, so this layout doesn't carry over; it keeps today's iced shell there.
+
+### 4. Idle cost: no extra calm CPU
+
+`scripts/perf/pet-calm.sh` (60 s settle, five 30 s samples, the median) with `MAX_LOAD=3`, the two back to back
+at 21:04–21:12, wearing Sprout, no iced window open. The 1-minute load was 1.58 at the start, 1.51 between the
+runs and 1.76 at the end (Claude desktop app and the tracker running).
+
+| Prototype | Calm CPU median | Samples | RSS | PSS |
+|---|---|---|---|---|
+| minimal (the pet alone) | 4.83 % | 4.47, 4.93, 5.06, 4.83, 4.30 | 9.0 MB | 6.2 MB |
+| settings-thread (iced daemon, no window, + the pet) | 4.60 % | 4.47, 4.67, 4.33, 4.73, 4.60 | 14.3 MB | 10.8 MB |
+
+- **CPU:** no measurable cost; the two medians are within each other's spread (the threaded one came out 0.23
+  points lower, which is noise). An idle iced daemon with no window wakes for nothing. The minimal prototype's
+  4.83 % against its 4.13 % in the earlier calm run shows this machine's run-to-run spread.
+- **Memory:** iced idle adds about 5 MB RSS (4.6 MB PSS): the winit event loop, its own Wayland connection and tokio's
+  threads (not broken down further). Settings open adds about 7 MB more, and about 3 MB stays after it closes.
+
+### Verdict
+
+**Settings can stay in the pet process on iced's CPU renderer.** Today's Settings works on tiny-skia page for
+page, the process maps no GPU library with Settings open or closed, iced can own the main thread with no window
+while the pet runs on a second thread, and that costs no calm CPU and about 5 MB of RSS while Settings is closed.
+
+Task 4 becomes **"Settings in-process on iced's CPU renderer"** instead of the `AiPet --settings` child: iced
+built without `wgpu` (tiny-skia only); an iced daemon owns the main thread and opens Settings on demand; each pet
+shell (sctk on Wayland, the X11 window, the Windows layered window) runs its loop on a `pet` thread; the two talk
+over channels (pet → iced: open, raise, state changes; iced → pet: the changes Settings makes, as `Effect`s today).
+No Settings pipe, no child process, no JSON contract. The spec changes with it: R7's text, the "Settings child"
+edge cases and the Settings pipe go; the threads constraint ("each shell runs its own event loop on the main
+thread") becomes "iced on the main thread, the shell on the pet thread". Still to try with the owner: Windows
+(softbuffer's opaque window there is fine for Settings; the pet's layered window off the main thread).

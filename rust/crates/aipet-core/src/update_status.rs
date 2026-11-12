@@ -1,4 +1,4 @@
-//! The update status texts Settings shows (`src/AiPet.Core/UpdateStatus.cs`).
+//! The update status texts Settings shows (`AiPet.Core/UpdateStatus.cs`).
 //!
 //! Only the copy the Windows installer put there updates itself (with Velopack); any other copy is
 //! [`Kind::Off`] and never checks.

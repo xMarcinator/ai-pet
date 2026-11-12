@@ -1,7 +1,7 @@
 """Writes avatars/reference/aura-prototype.html: the golden aura that would open every done (fnt-72, R3 and R12),
-for the owner to approve before any pet draws it. Each variant is shown on the vector Hood (green) and the vector
-Hamster beside today's done (sparkles), animated (the aura plays once, about 1.8 s, then today's sparkles) and as its
-first frame (what reduced motion shows: the aura fully built), on light, dark and desktop backgrounds.
+for the owner to approve before any pet draws it. Each variant is shown on the vector Hood (green) beside today's
+done (sparkles), animated (the aura plays once, about 1.8 s, then today's sparkles) and as its first frame (what
+reduced motion shows: the aura fully built), on light, dark and desktop backgrounds.
 
 The aura is drawn art in fixed gold (themes never change it), with plain shapes only, so it can become pack layers:
 a part behind the body and a part in front. The CSS animation is only a preview; the app drives the motion.
@@ -12,7 +12,6 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import hamster_gen  # noqa: E402
 import hood_gen  # noqa: E402
 import pet_states  # noqa: E402
 
@@ -22,7 +21,7 @@ GOLD, GOLD_HI, GOLD_DEEP = "#FFC83D", "#FFF1B0", "#E39B12"
 DONE = {"expr": "happy", "arms": "wave", "dy": -16}
 
 # Where each pet's body sits on the 260 x 250 canvas (centre and half sizes of the aura), so the aura hugs it.
-PETS = [("Hood (green)", hood_gen, (130, 132, 96, 104)), ("Hamster", hamster_gen, (128, 132, 98, 100))]
+PETS = [("Hood (green)", hood_gen, (130, 132, 96, 104))]
 
 
 def el(tag, **a):
@@ -127,7 +126,7 @@ def main():
   @media (prefers-reduced-motion: reduce) {{ .aura {{ animation: none; }} .after {{ animation: none; }} }}
 </style></head><body>
 <h1>The aura that opens every done</h1>
-<p>Three ways to draw it, on the vector Hood (green) and the vector Hamster. The animated columns loop for review:
+<p>Three ways to draw it, on the vector Hood (green). The animated columns loop for review:
 the aura builds, holds and fades in about 1.8 s, then today's sparkles take over (in the pet it plays once per done).
 "First frame" is what reduced motion shows. "Today" is done as it is now. Gold is fixed, so a theme never changes it.
 Pick a variant, or say what to change.</p>

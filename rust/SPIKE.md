@@ -1,5 +1,13 @@
 # The iced front-end spike
 
+> **A record.** This is the spike as it stood on 2026-09-28, before it became the migration to Rust. The spike's
+> binary, `aipet-spike`, is gone: its shells, `aipet-ui` and `aipet-sprite` are the real pet's, whose binary is
+> `AiPet` (`rust/crates/aipet`). The commands below run the real pet in its demo, which plays the spike's scripted
+> day without the core, the single instance or the data folder (`cargo run -p aipet --features demo`); the layer
+> namespace is `aipet` and the X11 class and title `AiPet`. How the code works now is in
+> [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) (§4, and Appendix A for the other records); the Linux desktops'
+> hands-on checks below are still open (flow-next spec fn-3).
+
 A trial rewrite of the pet's front end in Rust with iced 0.14, on branch `spike/iced`. On Wayland compositors with
 layer-shell (Hyprland, Sway, KDE, COSMIC) it uses [iced_exwlshell](https://github.com/waycrate/exwlshelleventloop)
 0.20.1; everywhere else it uses plain iced (winit) with native code for the clickable area. The goal is to find out
@@ -18,15 +26,15 @@ trade-offs left open. See "Review findings". Next come the hands-on tests below,
 
 ```bash
 cd rust
-cargo run -p aipet-spike
+cargo run -p aipet --features demo    # was: cargo run -p aipet-spike
 ```
 
 To build it you need Rust 1.98 or newer, a C linker, pkg-config and the libxkbcommon development files (Arch:
 `pkgconf libxkbcommon`; Debian/Ubuntu: `pkg-config libxkbcommon-dev`; Fedora: `pkgconf-pkg-config libxkbcommon-devel`).
 The first build downloads about 300 crates. To run it on Linux you need Wayland, EGL/GL (Mesa) and, for the desktop
-shell, X11 or XWayland. The spike starts about 420 px left of the bottom-right corner, so it doesn't
-cover the real pet. It uses the layer namespace / X11 class `aipet-spike` and never touches the real pet's socket or
-config.
+shell, X11 or XWayland. The spike started about 420 px left of the bottom-right corner, so it didn't
+cover the real pet, and used the layer namespace / X11 class `aipet-spike`. The demo starts where the real pet does,
+and never touches its socket or config.
 
 | Variable | Effect |
 |---|---|
@@ -47,8 +55,8 @@ The desktop shell needs `WAYLAND_DISPLAY` set to an empty value and no `WAYLAND_
 both stay on X11. `main` does that itself before choosing the desktop shell, so nothing changes for you.
 
 Checks: `cargo test --workspace` (93 tests), `cargo clippy --workspace --all-targets` and `cargo fmt --check`, all
-clean. The golden data is regenerated from the C# with `dotnet run --project rust/golden -c Release`, from the repo
-root (needs .NET 10).
+clean. The golden data was regenerated from the C# with the golden generator (needs .NET 10), which the cutover
+removed: the fixtures are frozen.
 
 ## Layout
 
@@ -58,8 +66,8 @@ root (needs .NET 10).
 | `crates/aipet-ui` | Shared by both shells: the pet (sprite images, CPU-blurred glow halo, shadow), the demo bubbles with their animations and dismissal, the menu, the Settings view, the layout, `hit_rects()` (what takes clicks), `drawn_rects()` (what is drawn on, shadows included) and `frame_interval()` (the frame pacing). `SPRITE` and `INLINE_MENU` say where the sprite and the menu are. |
 | `crates/aipet-wayland` | The layer-shell shell: a registry probe (`available()`), the pet layer surface with an exact input region, dragging (a pure state machine in `drag.rs`, 14 tests), the right-click menu as an xdg popup (inline fallback), and Settings as an xdg toplevel. |
 | `crates/aipet-desktop` | The winit shell: a transparent, undecorated, always-on-top window, and `native/` for the clickable area (X11 input and bounding shapes via x11rb, Win32 `SetWindowRgn` plus a `WS_EX_TOOLWINDOW` subclass, macOS `setIgnoresMouseEvents` polling). Dragging reads the global pointer and its button, so a lost release is noticed. The menu is drawn inline, and Settings is a normal window. |
-| `crates/aipet-spike` | The binary: chooses the shell, sets up the environment for it, and prints a clear line when one fails (also when the Wayland shell panics). |
-| `golden/` | The C# program that writes `crates/aipet-sprite/tests/golden/frames.json`. |
+| `crates/aipet-spike` | (Now `crates/aipet`.) The binary: chooses the shell, sets up the environment for it, and prints a clear line when one fails (also when the Wayland shell panics). |
+| `golden/` | The C# program that wrote `crates/aipet-sprite/tests/golden/frames.json` (removed at the cutover; the frames are frozen). |
 | `notes/` | Research notes with file:line citations into the crate sources: `exwlshell.md`, `iced.md`, `native.md`. Also compile-checked prototypes (`notes/prototypes/*`), each built on its own: `cd notes/prototypes/native-spike && cargo check`. Their `target/` and `Cargo.lock` are ignored, and the notes' `--offline` commands need one online run first. The cited crate sources are under `~/.cargo/registry/src/index.crates.io-*/` after `cargo fetch` in `rust/` (a build alone skips a few, such as iced_tiny_skia and softbuffer). The `EX/` and `REPO/` paths in `exwlshell.md` need `git clone --branch v0.20.1 https://github.com/waycrate/exwlshelleventloop`. |
 
 ## What's verified
@@ -134,7 +142,7 @@ traces. Hyprland 0.56 with a Lua config rejects `hyprctl dispatch movecursor X Y
 ## Hands-on tests still to do (need real clicks)
 
 Everything here was changed by the fixes, or never tried. Run from `rust/` with
-`AIPET_BACKEND=wayland AIPET_DEBUG=1 cargo run -p aipet-spike`:
+`AIPET_BACKEND=wayland AIPET_DEBUG=1 cargo run -p aipet --features demo`:
 
 1. **Poke:** left-click the sprite without moving. It should bounce. The log shows `drag: idle -> pressed`, then
    `-> idle`, with no `surface:` line. Quick taps and touchpad taps must never leave the pet following the pointer.
@@ -169,9 +177,9 @@ Everything here was changed by the fixes, or never tried. Run from `rust/` with
    pet. The pet must come back at home, neither held (arms down) nor hovered (its eyes don't follow a pointer that
    is elsewhere).
 10. **Desktop shell on a real X11 session** (GNOME on Xorg, KDE X11, XFCE):
-    `AIPET_BACKEND=desktop AIPET_DEBUG=1 cargo run -p aipet-spike`. Check:
+    `AIPET_BACKEND=desktop AIPET_DEBUG=1 cargo run -p aipet --features demo`. Check:
     - Clicks beside the pet reach the window below.
-    - `xprop -id $(xdotool search --name '^AiPet spike$') _NET_WM_STATE` lists ABOVE, SKIP_TASKBAR and SKIP_PAGER.
+    - `xprop -id $(xdotool search --name '^AiPet$') _NET_WM_STATE` lists ABOVE, SKIP_TASKBAR and SKIP_PAGER.
     - A poke bounces, and a drag feels smooth and lands with its squash.
     - A lost release: start a drag, then let a WM or screenshot grab (or Super+drag) take the release. Within about
       0.1 s of letting go the pet must stop following, and the log says `drag cancelled`.
@@ -179,7 +187,7 @@ Everything here was changed by the fixes, or never tried. Run from `rust/` with
       still spreads or dismisses). A click on the menu's padding or separator keeps it open, and every item works.
     - While the pet hops and bubbles slide or fold: no clipped glow, shadow or bubble edges, and no flicker from the
       region updates. Measure the CPU, calm and with Settings open.
-11. **GNOME Wayland:** plain `cargo run -p aipet-spike` takes the desktop shell and must start through XWayland
+11. **GNOME Wayland:** plain `cargo run -p aipet --features demo` takes the desktop shell and must start through XWayland
     without a panic. Then put Settings on another workspace: does the pet drop to about 1 frame a second?
 12. **Windows and macOS:** whether the window is transparent (the wgpu swapchain alpha), click-through, staying out
     of Alt+Tab and the taskbar, topmost, and dragging with DPI scaling. The same checks for clipping and flicker as
@@ -207,6 +215,7 @@ surface's position. So the margin drag glides behind the pointer, and the overla
 The likely fix is a layer rule with `no_anim` for namespace `aipet-spike`; for the real app it would go in
 `packaging/linux/hyprland/`. Untested, and the syntax is unconfirmed:
 `hyprctl eval 'hl.layer_rule({ name = "aipet-spike", match = { namespace = "^aipet-spike$" }, no_anim = true })'`.
+(Since done: `packaging/linux/hyprland/` has the rule, for the namespace `aipet`.)
 
 ## Review findings
 
@@ -329,7 +338,7 @@ feels with Hyprland's layer animation, and how the cost compares with the C# pet
 ```bash
 git fetch
 git switch spike/iced
-cd rust && cargo build -p aipet-spike
+cd rust && cargo build -p aipet-spike    # on that branch; on main: cargo build -p aipet
 ```
 
 Everything needed is in the repo: this file, `notes/` (research), and the code's doc comments. Before committing,

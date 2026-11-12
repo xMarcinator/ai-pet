@@ -1,14 +1,15 @@
-# Velopack proof: does an install of the .NET app update in place to a release whose AiPet.exe is Rust, and does the
-# Rust app's uninstall hook run? The results are in rust/proofs/velopack.md.
+# Velopack proof: does an installed Rust pet update itself in place, and does its uninstall hook run? The results
+# are in rust/proofs/velopack.md.
 #
-#   pack     the .NET app as FROM_VERSION, packed as release.yml packs a release; the Rust stand-in
-#            (rust/notes/prototypes/velopack-proof) as TO_VERSION with the same packId, a full package and a delta
-#            against FROM_VERSION; and the update driver, which updates the way the installed .NET pet does
-#   update   each on a fresh runner: install FROM_VERSION with its Setup, update it to TO_VERSION from a local feed,
-#            check what that left, start the app again, uninstall it (proof.ps1 has the steps and the checks)
-#              full    the feed has only the full package
-#              delta   the feed lists both, but only the delta's file is there: a delta the .NET client can't apply,
-#                      or won't take, fails the job instead of falling back to the full package
+#   rust-update  the real Rust pet, as release.yml builds and packs it, as FROM_VERSION and TO_VERSION: install
+#            FROM_VERSION, register the hook it ships, start the pet on a local feed (AIPET_TEST_UPDATE_FEED, which
+#            makes it check at once and log each update status), let it download TO_VERSION, quit it so the update
+#            installs, and check the status texts (the .NET pet's, which Settings keeps), the data, the hook and its
+#            registration; then uninstall it, which must remove that registration (the pet's uninstall hook)
+#
+# Until the cutover to Rust (spec fn-1-migrate-aipet-from-net-to-rust, task 25) it also packed the .NET app and
+# updated an install of it to a Rust stand-in, with a full package and with a delta: the update from a .NET release
+# to a Rust one, which rust/proofs/velopack.md records. It needed the C# projects, so it went with them.
 #
 # Nothing is published and no release is read. Run it from the Actions tab, or push to the branch proof/velopack.
 name: Velopack proof
@@ -31,8 +32,8 @@ env:
   TO_VERSION: 0.1.99
 
 jobs:
-  pack:
-    name: Pack the .NET and Rust releases
+  rust-update:
+    name: The Rust pet updates itself
     runs-on: windows-2022
     timeout-minutes: 40
     permissions:
@@ -44,145 +45,128 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # vpk is a .NET tool
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
-      # the workspace's toolchain (ci.yml)
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: 1.98.1
-      - name: Read the pinned vpk, and check every Velopack here is its version
+      - name: Build the pet and the hook, as both versions
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static   # as release.yml builds them
         run: |
-          # (a Windows checkout has CRLF line ends)
-          vpk=$(tr -d '\r' < .github/workflows/release.yml | sed -n 's/^ *VPK_VERSION: *\([^ #]*\).*/\1/p')
-          if [ -z "$vpk" ]; then echo "::error::release.yml has no VPK_VERSION"; exit 1; fi
-          echo "VPK_VERSION=$vpk" >> "$GITHUB_ENV"
-          bad=0
-          check() {
-            if [ "$2" = "$vpk" ]; then echo "$1: Velopack $2"
-            else echo "::error file=$1::$1 has Velopack ${2:-(none)}, and release.yml's vpk is $vpk"; bad=1; fi
-          }
-          package() { tr -d '\r' < "$1" | sed -n 's/.*<PackageReference Include="Velopack" Version="\([^"]*\)".*/\1/p'; }
-          check src/AiPet.UI/AiPet.UI.csproj "$(package src/AiPet.UI/AiPet.UI.csproj)"
-          check rust/notes/prototypes/velopack-proof/driver/Driver.csproj "$(package rust/notes/prototypes/velopack-proof/driver/Driver.csproj)"
-          check rust/notes/prototypes/velopack-proof/Cargo.toml \
-            "$(tr -d '\r' < rust/notes/prototypes/velopack-proof/Cargo.toml | sed -n 's/^velopack = "=\([^"]*\)".*/\1/p')"
-          exit "$bad"
-
-      # FROM_VERSION: the app as release.yml's win job builds it
-      - name: Publish the .NET app and hook
-        run: |
-          dotnet publish src/AiPet.UI/AiPet.UI.csproj -c Release -r win-x64 --self-contained -o out/dotnet \
-            -p:Version="$FROM_VERSION" -p:DebugType=none --nologo
-          # NativeAOT finds the MSVC linker through vswhere
-          export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"
-          dotnet publish src/AiPet.Hook/AiPet.Hook.csproj -c Release -r win-x64 -o out/hook \
-            -p:Version="$FROM_VERSION" -p:PublishAot=true -p:DebugType=none --nologo
-          cp out/hook/aipet-hook.exe out/dotnet/
-          find out/dotnet -name '*.pdb' -delete
-      - name: Install vpk
+          # The version is built in (AIPET_VERSION), and the update tells the two packages apart by the one vpk gives them
+          for v in "$FROM_VERSION" "$TO_VERSION"; do
+            (cd rust && AIPET_VERSION="$v" cargo build -p aipet -p aipet-hook --release --locked --target x86_64-pc-windows-msvc)
+            mkdir -p "out/app-$v"
+            cp rust/target/x86_64-pc-windows-msvc/release/AiPet.exe rust/target/x86_64-pc-windows-msvc/release/aipet-hook.exe "out/app-$v/"
+          done
+      - name: Pack both, as release.yml packs a release
         env:
           DOTNET_ROLL_FORWARD: Major   # vpk may target an older .NET than the one installed
-        run: dotnet tool install vpk --version "$VPK_VERSION" --tool-path out/tools
-      - name: Pack the .NET app
-        env:
-          DOTNET_ROLL_FORWARD: Major
         run: |
-          mkdir -p out/proof/feed
-          # release.yml's vpk pack, with the proof's version and feed
-          out/tools/vpk pack --packId AiPetApp --packVersion "$FROM_VERSION" --packDir out/dotnet --mainExe AiPet.exe \
-            --packTitle AiPet --packAuthors xMarcinator --icon assets/icon/aipet.ico \
-            --channel win --shortcuts StartMenuRoot --noPortable --outputDir out/proof/feed
-          # the next pack writes its own Setup over this one
-          shopt -s nullglob
-          setups=(out/proof/feed/*-Setup.exe)
-          if [ ${#setups[@]} -ne 1 ]; then echo "::error::Expected one Setup.exe from vpk, found ${#setups[@]}"; exit 1; fi
-          cp "${setups[0]}" "out/proof/setup-$FROM_VERSION.exe"
-
-      # TO_VERSION: the Rust stand-in
-      - name: Build the Rust stand-in
-        working-directory: rust/notes/prototypes/velopack-proof
-        run: |
-          cargo build --release
-          mkdir -p ../../../../out/proof/rust
-          cp target/release/AiPet.exe Cargo.lock ../../../../out/proof/rust/
-          mkdir -p ../../../../out/rust
-          cp target/release/AiPet.exe ../../../../out/rust/
-      - name: Pack the Rust stand-in, with a delta against the .NET app
-        env:
-          DOTNET_ROLL_FORWARD: Major
-        run: |
-          # vpk makes the delta from the newest full package already in the output folder: FROM_VERSION's
-          out/tools/vpk pack --packId AiPetApp --packVersion "$TO_VERSION" --packDir out/rust --mainExe AiPet.exe \
-            --packTitle AiPet --packAuthors xMarcinator --icon assets/icon/aipet.ico \
-            --channel win --shortcuts StartMenuRoot --noPortable --outputDir out/proof/feed
-          ls -la out/proof/feed
-          cat out/proof/feed/releases.win.json
-          for f in "AiPetApp-$FROM_VERSION-full.nupkg" "AiPetApp-$TO_VERSION-full.nupkg" "AiPetApp-$TO_VERSION-delta.nupkg"; do
-            if [ ! -f "out/proof/feed/$f" ]; then echo "::error::vpk made no $f"; exit 1; fi
+          vpk=$(tr -d '\r' < .github/workflows/release.yml | sed -n 's/^ *VPK_VERSION: *\([^ #]*\).*/\1/p')
+          dotnet tool install vpk --version "$vpk" --tool-path out/tools
+          mkdir -p out/feed
+          for v in "$FROM_VERSION" "$TO_VERSION"; do
+            out/tools/vpk pack --packId AiPetApp --packVersion "$v" --packDir "out/app-$v" --mainExe AiPet.exe \
+              --packTitle AiPet --packAuthors xMarcinator --icon assets/icon/aipet.ico \
+              --channel win --shortcuts StartMenuRoot --noPortable --outputDir out/feed
+            if [ "$v" = "$FROM_VERSION" ]; then
+              shopt -s nullglob
+              setups=(out/feed/*-Setup.exe)
+              cp "${setups[0]}" "out/setup-$v.exe"
+            fi
           done
-          {
-            echo "| Package | Bytes |"
-            echo "|---|---|"
-            for f in out/proof/feed/*.nupkg out/proof/setup-*.exe out/proof/rust/AiPet.exe; do
-              echo "| $(basename "$f") | $(wc -c < "$f" | tr -d ' ') |"
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Build the update driver
-        run: dotnet publish rust/notes/prototypes/velopack-proof/driver/Driver.csproj -c Release -o out/proof/driver --nologo
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: velopack-proof
-          path: out/proof
-          if-no-files-found: error
-          retention-days: 7
-
-  update:
-    name: Update ${{ matrix.mode }}
-    needs: pack
-    strategy:
-      fail-fast: false
-      matrix:
-        mode: [full, delta]
-    runs-on: windows-2022
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    defaults:
-      run:
-        shell: pwsh
-    env:
-      LOGS: ${{ github.workspace }}\logs
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # the update driver's runtime
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 10.0.x
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: velopack-proof
-          path: proof
-      - name: Install ${{ env.FROM_VERSION }} (.NET)
-        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 install -Proof proof -Logs $env:LOGS
-      - name: Update to ${{ env.TO_VERSION }} (Rust, ${{ matrix.mode }})
-        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 update -Mode ${{ matrix.mode }} -Proof proof -Logs $env:LOGS
-      - name: Check the update
-        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 check -Proof proof -Logs $env:LOGS
-      - name: Start it again
-        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 restart -Proof proof -Logs $env:LOGS
-      - name: Uninstall
-        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 uninstall -Proof proof -Logs $env:LOGS
-      - name: Logs
+          ls -la out/feed
+      - name: Install ${{ env.FROM_VERSION }} and register its hook
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          root=$local_app/AiPetApp data=$local_app/AiPet
+          # a file the pet doesn't know, which every step must leave alone
+          mkdir -p "$data"
+          echo "the user's own" > "$data/keep.txt"
+          "out/setup-$FROM_VERSION.exe" --silent
+          taskkill //F //IM AiPet.exe > /dev/null 2>&1 || true   # a Setup may start the app
+          grep -q "$FROM_VERSION" "$root/current/sq.version"
+          test -f "$root/current/aipet-hook.exe"
+          # as install.ps1 registers it where Git Bash is missing
+          mkdir -p "$HOME/.claude"
+          "$root/current/aipet-hook.exe" --install claude
+          grep -F 'AiPetApp' "$HOME/.claude/settings.json"
+      - name: Download ${{ env.TO_VERSION }} from the local feed, and install it on quit
+        env:
+          # GL, the pet's default, has no driver on a runner: Direct3D 12 has WARP, its software adapter
+          WGPU_BACKEND: dx12
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          root=$local_app/AiPetApp log=$local_app/AiPet/aipet.log
+          AIPET_TEST_UPDATE_FEED=$(cygpath -w "$PWD/out/feed") "$root/current/AiPet.exe" > out/pet.log 2>&1 &
+          ready=no
+          for _ in $(seq 180); do
+            if grep -qF "updates: status: AiPet $TO_VERSION is ready" "$log" 2>/dev/null; then ready=yes; break; fi
+            sleep 1
+          done
+          cat "$log" || true
+          cat out/pet.log || true
+          if [ "$ready" != yes ]; then echo "::error::The pet didn't download $TO_VERSION in 3 minutes"; exit 1; fi
+          # quit as Alt+F4 does (a close, not a kill): the update installs once the pet has exited
+          taskkill //IM AiPet.exe
+          for _ in $(seq 180); do
+            if grep -q "$TO_VERSION" "$root/current/sq.version" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if ! grep -q "$TO_VERSION" "$root/current/sq.version"; then
+            echo "::error::$TO_VERSION wasn't installed at quit"; cat "$root/current/sq.version" || true; exit 1
+          fi
+          # the pet stays closed after an update at quit
+          sleep 5
+          if tasklist //FI "IMAGENAME eq AiPet.exe" | grep -qi aipet; then echo "::error::The pet started again"; exit 1; fi
+      - name: Check the status texts, the data and the hook
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          root=$local_app/AiPetApp data=$local_app/AiPet
+          # Settings' texts, as the .NET pet had them (AiPet.Core/UpdateStatus.cs:30-33 at bf3696ea4a), in the order
+          # the update went through them
+          checking="Checking for updates…"
+          downloading="Downloading AiPet $TO_VERSION…"
+          ready="AiPet $TO_VERSION is ready. It's installed when you quit the pet, or restart now."
+          tr -d '\r' < "$data/aipet.log" | sed -n 's/.*updates: status: //p' > statuses.txt
+          cat statuses.txt
+          first() { grep -nF -- "$1" statuses.txt | head -n 1 | cut -d: -f1; }
+          c=$(first "$checking") d=$(first "$downloading 100%") r=$(first "$ready")
+          if [ -z "$c" ] || [ -z "$d" ] || [ -z "$r" ] || [ "$c" -gt "$d" ] || [ "$d" -gt "$r" ]; then
+            echo "::error::The statuses aren't the .NET pet's: '$checking', '$downloading 100%', '$ready', in that order"; exit 1
+          fi
+          ls -la "$data"
+          if ! grep -qx "the user's own" "$data/keep.txt"; then echo "::error::The update changed the data folder"; exit 1; fi
+          # the update replaced current\ completely, and brought the hook the registration runs
+          if [ ! -f "$root/current/aipet-hook.exe" ]; then echo "::error::The update left no current\\aipet-hook.exe"; exit 1; fi
+          if ! grep -F 'AiPetApp' "$HOME/.claude/settings.json"; then echo "::error::The update lost the hook's registration"; exit 1; fi
+          "$root/current/aipet-hook.exe" --doctor claude || true
+      - name: Uninstall, which removes the hook's registration
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          root=$local_app/AiPetApp data=$local_app/AiPet
+          # what Settings > Apps runs, made silent
+          "$root/Update.exe" --uninstall --silent
+          for _ in $(seq 60); do [ -d "$root/current" ] || break; sleep 1; done
+          if [ -d "$root/current" ]; then echo "::error::The uninstall left $root/current"; exit 1; fi
+          if grep -F 'aipet-hook' "$HOME/.claude/settings.json"; then
+            echo "::error::The uninstall left the hook's registration in ~/.claude/settings.json"; exit 1
+          fi
+          grep -qx "the user's own" "$data/keep.txt"
+      - name: Collect the logs
         if: always()
-        run: ./rust/notes/prototypes/velopack-proof/proof.ps1 logs -Proof proof -Logs $env:LOGS
+        run: |
+          local_app=$(cygpath -u "$LOCALAPPDATA")
+          mkdir -p out/logs
+          cp out/pet.log statuses.txt "$local_app/AiPet/aipet.log" "$local_app"/AiPetApp/*.log out/logs/ 2>/dev/null || true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: velopack-proof-logs-${{ matrix.mode }}
-          path: logs
+          name: rust-update-logs
+          path: out/logs
           if-no-files-found: warn
           retention-days: 7

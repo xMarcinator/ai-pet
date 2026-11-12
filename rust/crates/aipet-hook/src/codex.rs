@@ -1,4 +1,4 @@
-//! Codex's registration (`CodexConfig`, `src/AiPet.Hook/CodexConfig.cs`): AiPet's hooks in `config.toml` in
+//! Codex's registration (`CodexConfig`, `AiPet.Hook/CodexConfig.cs`): AiPet's hooks in `config.toml` in
 //! `$CODEX_HOME` (else `~/.codex`), or in `hooks.json` there when the user's other hooks already are, since Codex
 //! warns when one layer uses both.
 //!
@@ -24,9 +24,9 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::install::{NEWLINE, StagedBackup, backup, is_file, read_text, real_path, save, stage, thrown, upper};
-use crate::json::{Node, Object};
 use crate::json_out::{self, deep_equals, member, read};
 use crate::toml_text::{self, Segment};
+use aipet_ipc::json::{Node, Object};
 
 /// One of Codex's hook events AiPet registers for.
 pub(crate) struct Event {
@@ -1196,12 +1196,8 @@ mod tests {
 
     fn corpus() -> Value {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/codex/codex.json");
-        let text = fs::read_to_string(&path).unwrap_or_else(|e| {
-            panic!(
-                "{}: {e} (write it with: dotnet run --project rust/golden -c Release -- registration)",
-                path.display()
-            )
-        });
+        let text = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{}: {e} (a frozen corpus: see tests/golden/README.md)", path.display()));
         serde_json::from_str(&text).unwrap()
     }
 

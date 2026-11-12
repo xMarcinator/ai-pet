@@ -1,9 +1,10 @@
-//! The pet's core, without a UI: what the C#'s `src/AiPet.Core` (and the data parts of `src/AiPet.UI`) does.
+//! The pet's core, without a UI: what the C#'s `AiPet.Core` (and the data parts of `AiPet.UI`) does.
 //!
 //! - [`server`]: the hook server, on the endpoint `aipet-ipc` names, with the C#'s trust boundary;
 //! - [`sessions`]: the chats' state from the hooks' events, and their ordering (AgentSessions);
 //! - [`codex_watcher`]: Codex's own session logs;
 //! - [`jira`], [`github`] and [`presets`]: the review watchers and their settings;
+//! - [`tracker`]: the flow-next tracker's active tasks, as its companion device (fnt-81);
 //! - [`board`]: the sources merged into the pet's bubbles;
 //! - [`config`], [`secrets`], [`log`], [`cleanup`] and [`update_status`]: the data, tokens and logs the .NET app
 //!   reads and writes too, the uninstaller's hook cleanup, and the update texts.
@@ -22,4 +23,5 @@ pub mod presets;
 pub mod secrets;
 pub mod server;
 pub mod sessions;
+pub mod tracker;
 pub mod update_status;

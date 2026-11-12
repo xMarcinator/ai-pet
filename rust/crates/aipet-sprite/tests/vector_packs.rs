@@ -43,12 +43,7 @@ fn generate(generator: &str, out: &Path) {
 
 #[test]
 fn the_vector_packs_are_what_their_generators_write() {
-    for (generator, folder) in [
-        ("hood_gen.py", "hood-vector"),
-        ("hamster_gen.py", "hamster-vector"),
-        ("sprout_gen.py", "sprout-vector"),
-        ("hamster_pixel_gen.py", "hamster-pixel"),
-    ] {
+    for (generator, folder) in [("hood_gen.py", "hood-vector"), ("sprout_gen.py", "sprout-vector")] {
         let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join(folder);
         let _ = std::fs::remove_dir_all(&out);
         generate(generator, &out);
@@ -139,7 +134,7 @@ const MOODS: [(&str, Channel, &str); 3] = [
 fn every_built_in_pack_drawn_to_pet_states_has_every_state() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("no-custom-pets");
     let pets = aipet_sprite::load::all(&dir).pets;
-    assert!(pets.len() >= 8, "{} packs", pets.len());
+    assert!(pets.len() >= 6, "{} packs", pets.len());
     assert!(pets.iter().any(|p| p.pack.kind == Kind::Pixel) && pets.iter().any(|p| p.pack.kind == Kind::Vector));
     for loaded in pets.iter().flat_map(|p| {
         // every theme too: a sheet theme swaps in its own art

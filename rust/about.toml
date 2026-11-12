@@ -1,0 +1,59 @@
+# cargo-about's settings for THIRD-PARTY-NOTICES.md (fn-1 R19). about.hbs renders the whole file; regenerate it with
+# `scripts/check-notices.sh --write` from the repository root, which runs (in rust/)
+#
+#   cargo about generate --frozen --fail -m crates/aipet/Cargo.toml about.hbs | tr -d '\r' > ../THIRD-PARTY-NOTICES.md
+#
+# and CI's notices job checks that the committed file is exactly that. The release builds are `aipet` and
+# `aipet-hook` (release.yml), with no features: the graph is rooted at aipet, whose crates include every crate
+# aipet-hook builds (check-notices.sh fails if that stops being so), and it is limited to the release targets below.
+# Build and dev dependencies aren't in the binaries, so they're left out, as are the workspace's own crates (MIT,
+# AiPet's LICENSE) and aipet-testkit, which nothing in a release build depends on.
+
+# The release targets: Windows x64 (MSVC) and Linux x64 and arm64 (release.yml's matrix)
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# AiPet's own crates are under its own LICENSE
+private = { ignore = true }
+# In priority order: where a crate offers a choice, the first of these it offers is the one AiPet uses it under
+accepted = [
+    "MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib",
+    "Unicode-3.0", "BSL-1.0", "CC0-1.0", "CDLA-Permissive-2.0",
+]
+
+# Clarifications, for crates whose license files cargo-about can't find by itself. Each file is pinned by its
+# checksum (sha256 of the file), so a new version of the crate that changes one fails the generation (--fail) until
+# it's looked at again.
+
+# ring: the license files are LICENSE-BoringSSL (Apache-2.0, for the code from BoringSSL, with the notices for its
+# support code), LICENSE-other-bits (ISC, ring's own code) and third_party/fiat/LICENSE (fiat-crypto's Apache-2.0
+# notice). Its LICENSE only points at those, so cargo-about otherwise scans the sources and takes the license header
+# of every .rs and .h file as a license text. cargo-about's built-in `ring` workaround is for ring 0.16's single
+# LICENSE file and doesn't match 0.17's.
+[ring.clarify]
+license = "Apache-2.0 AND ISC"
+
+[[ring.clarify.files]]
+path = "LICENSE-BoringSSL"
+license = "Apache-2.0"
+checksum = "005fc765ddc5115da796cca915baa9557abae13ff35e0a47c47affc56f6c414d"
+
+[[ring.clarify.files]]
+path = "LICENSE-other-bits"
+license = "ISC"
+checksum = "f025ccfb7dfb6bdfedc75ca0f67acc69e6fb4998143d834f7c2f38a29989680f"
+
+[[ring.clarify.files]]
+path = "third_party/fiat/LICENSE"
+license = "Apache-2.0"
+checksum = "9eacbcb81be660840c714a560a9d65ba07913db98dd4baf969f78dd499fdd60f"
+
+# kamadak-exif: its LICENSE is the license; without this cargo-about also takes the BSD-2-Clause header of an example,
+# a test and a source file as license texts
+[kamadak-exif.clarify]
+license = "BSD-2-Clause"
+
+[[kamadak-exif.clarify.files]]
+path = "LICENSE"
+license = "BSD-2-Clause"
+checksum = "17c496a77909a1f26006427d27e58a1d1514baa6a332240aa5fc543e3fa7295d"

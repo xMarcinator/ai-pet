@@ -1,11 +1,10 @@
 //! The hook server (`aipet_core::server`) against the C#'s own tests of HookServer, case for case:
-//! tests/AiPet.Tests/HookServerTests.cs (EndToEndTests and HookServerTests), HookServerUnixTests.cs and
-//! StarvedPoolTests.cs. NoPetTests, the hook with no pet at all, are aipet-hook's (tests/event.rs).
+//! AiPet.Tests/HookServerTests.cs (EndToEndTests and HookServerTests), HookServerUnixTests.cs and
+//! StarvedPoolTests.cs, and the cases of HookContractTests.cs that ran the hook against the pet (the others are
+//! aipet-testkit's tests/hook_contract.rs). NoPetTests, the hook with no pet at all, are aipet-hook's (tests/event.rs).
 //!
-//! The hooks are real: the Rust hook built with these tests (`cargo test --workspace` builds it first), or the one
-//! `AIPET_TEST_HOOK` names, run through `dotnet` when it's a .dll: the C# hook, as cross-runtime.yml runs it against
-//! this server. Every server has an endpoint and folders of its own: nothing here reaches the user's pet, data or
-//! `~/.codex`.
+//! The hooks are real: the Rust hook built with these tests (`cargo test --workspace` builds it first). Every server
+//! has an endpoint and folders of its own: nothing here reaches the user's pet, data or `~/.codex`.
 
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -21,7 +20,7 @@ use std::time::{Duration, Instant, SystemTime};
 use aipet_core::server::{HookServer, Options};
 use aipet_core::sessions::{AgentSessions, Entry};
 use aipet_ipc::connect::connect_to;
-use aipet_ipc::protocol::{CONNECT, MAX_DEPTH, MAX_REQUEST, TIMEOUT, unix_time};
+use aipet_ipc::protocol::{CONNECT, HOOK_BUDGET, MAX_DEPTH, MAX_REQUEST, MAX_STRING, STDIN, TIMEOUT, unix_time};
 use serde_json::{Value, json};
 
 /// How long a hook may take to run, starting included (a fresh exe can be scanned first).
@@ -278,21 +277,6 @@ struct Hook {
 fn hook() -> &'static Hook {
     static HOOK: OnceLock<Hook> = OnceLock::new();
     HOOK.get_or_init(|| {
-        if let Some(asked) = std::env::var_os("AIPET_TEST_HOOK").filter(|h| !h.is_empty()) {
-            let path = std::path::absolute(&asked).unwrap();
-            assert!(path.is_file(), "AIPET_TEST_HOOK: there's no hook at {}", path.display());
-            return if path.extension() == Some(OsStr::new("dll")) {
-                Hook {
-                    program: "dotnet".into(),
-                    args: vec![path.into()],
-                }
-            } else {
-                Hook {
-                    program: path.into(),
-                    args: vec![],
-                }
-            };
-        }
         // <target>/<profile>/deps/server-<hash>: the hook is two folders up
         let exe = std::env::current_exe().unwrap();
         let path = exe
@@ -743,6 +727,87 @@ fn a_hook_with_garbage_on_stdin_exits_0_silently() {
     assert!(traced.contains("isn't JSON"), "{traced}");
 }
 
+// ------------------------------------------------------------------ HookContractTests: the hook against the pet
+
+/// JSON.stringify (Node, so Claude) writes a lone surrogate as an escape: text cut in the middle of an emoji.
+/// System.Text.Json parsed it but couldn't read it back, which used to lose the whole event: the hook mends it.
+#[test]
+fn lone_surrogates_still_reach_the_pet() {
+    let _side = side_by_side();
+    let env = Env::new("lone-surrogates");
+    let pet = Pet::start(&env, &env.sessions());
+    let tmp = env.dir("tmp-surrogates");
+    let (claude, codex) = (uuid(), uuid());
+    let big = "x".repeat(MAX_STRING);
+    let runs = [
+        (
+            "claude",
+            &claude,
+            format!(
+                "{{\"hook_event_name\":\"UserPromptSubmit\",\"session_id\":\"{claude}\",\"prompt\":\"Half \\ud83d an emoji\",\
+                 \"k\\udc00ey\":\"\\udfff\",\"list\":[\"\\ud800\",{{\"big\":\"{big}\\ud800\"}}]}}"
+            ),
+            "thinking",
+        ),
+        (
+            "codex",
+            &codex,
+            format!(
+                "{{\"hook_event_name\":\"PreToolUse\",\"session_id\":\"{codex}\",\"turn_id\":\"{}\",\
+                 \"tool_name\":\"Bash\",\"tool_use_id\":\"call_1\",\"tool_input\":{{\"command\":\"echo \\ud800\"}}}}",
+                uuid7(now())
+            ),
+            "working",
+        ),
+    ];
+    for (agent, sid, stdin, outcome) in runs {
+        finish(start_hook(&env, agent, &stdin, &tmp, &[]), HOOK_LIMIT).silent();
+        assert_eq!(pet.outcomes(sid), [outcome], "{agent}");
+    }
+    // nothing went wrong, so nothing was traced
+    assert_eq!(contents(&tmp), Vec::<PathBuf>::new());
+}
+
+/// An agent that never closes the hook's stdin: the hook gives up within STDIN and sends nothing (the pet would
+/// ignore an empty event), well within Claude's 5 s.
+#[test]
+fn stdin_that_stays_open_sends_nothing_and_writes_nothing() {
+    let _side = side_by_side();
+    let env = Env::new("stdin-open");
+    let pet = Pet::start(&env, &env.sessions());
+    let tmp = env.dir("tmp-stdin");
+    let hook = hook();
+    let since = Instant::now();
+    let mut child = Command::new(&hook.program)
+        .args(&hook.args)
+        .args(["--agent", "claude"])
+        .env("AIPET_PIPE", &env.endpoint)
+        .env("AIPET_DATA_DIR", env.data())
+        .env("TMPDIR", &tmp)
+        .env("TMP", &tmp)
+        .env("TEMP", &tmp)
+        .env("CODEX_HOME", env.codex())
+        .env_remove("CLAUDE_CODE_ENTRYPOINT")
+        .env_remove("CLAUDE_CODE_HOST_SESSION_ID")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // held open until the hook is done
+    let stdin = child.stdin.take();
+    let pid = child.id();
+    let run = finish((child, now()), HOOK_BUDGET + Duration::from_secs(3));
+    let took = since.elapsed();
+    drop(stdin);
+    run.silent();
+    assert!(took < STDIN + Duration::from_secs(2), "took {took:?}");
+    // the pet logs every event it gets, ignored ones too
+    let pid = format!(" pid={pid} ");
+    assert!(!logged(&pet.events_log).iter().any(|l| l.contains(&pid)));
+    assert_eq!(contents(&tmp), Vec::<PathBuf>::new());
+}
+
 // ------------------------------------------------------------------ HookServerTests: clients that misbehave, and Stop
 
 #[test]
@@ -860,6 +925,42 @@ fn json_it_cant_serve_is_refused() {
         (&json!(false), &json!("unknown request"))
     );
     assert_eq!(pet.serve(), "thinking");
+}
+
+/// fnt-81: version 2's event is version 1's; its task message is the tracker watcher's only, never the pipe's or
+/// socket's, and it has no ping.
+#[test]
+fn version_2_takes_events_and_refuses_task_lines() {
+    let _side = side_by_side();
+    let env = Env::new("version-2");
+    let pet = Pet::start(&env, &env.sessions());
+    let sid = uuid();
+    let mut event: Value = serde_json::from_str(&envelope(
+        "claude",
+        now(),
+        payload(&sid, "UserPromptSubmit", json!({"prompt": "hi"})),
+    ))
+    .unwrap();
+    event["v"] = json!(2);
+    let reply = ask_json(&pet.endpoint, &event.to_string()).unwrap();
+    assert_eq!((&reply["ok"], &reply["outcome"]), (&json!(true), &json!("thinking")));
+    assert!(pet.chat(&format!("claude:{sid}")).is_some());
+
+    let task =
+        r#"{"v":2,"type":"task","op":"upsert","source":"tracker","task":{"id":"t","short_id":"T-1","tone":"red"}}"#;
+    for (line, error) in [
+        (task, "task messages come from the tracker watcher only"),
+        (r#"{"v":2,"type":"ping"}"#, "unsupported version"),
+        (r#"{"v":1,"type":"task","op":"remove","id":"t"}"#, "unknown request"),
+        (r#"{"v":3,"type":"event"}"#, "unsupported version"),
+    ] {
+        let reply = ask_json(&pet.endpoint, line).unwrap();
+        assert_eq!(
+            (&reply["ok"], &reply["error"]),
+            (&json!(false), &json!(error)),
+            "{line}"
+        );
+    }
 }
 
 #[test]

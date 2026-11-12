@@ -1,4 +1,4 @@
-//! `aipet.log`, deleted past 256 KB (`Log.Write`, `src/AiPet.Core/Platform.cs`).
+//! `aipet.log`, deleted past 256 KB (`Log.Write`, `AiPet.Core/Platform.cs`).
 //!
 //! One line per call, `HH:mm:ss.fff <line>` in local time, appended as UTF-8, with the current culture's time
 //! separator in place of `:` as .NET's format has it (12.34.56.789 in Danish or Finnish). Logging never fails its

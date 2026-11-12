@@ -34,6 +34,8 @@ pub const MAX_DECODED: u64 = 64 * 1024 * 1024;
 pub struct LoadedPack {
     pub pack: Pack,
     pub sheets: Vec<Sheet>,
+    /// Whether it is one of the built-in pets ([`crate::builtin::all`]), not one from the avatars folder.
+    pub builtin: bool,
 }
 
 impl LoadedPack {
@@ -118,7 +120,11 @@ impl LoadedPack {
             let b = bake(avatar);
             (b.pack, b.sheets)
         });
-        LoadedPack { pack, sheets }
+        LoadedPack {
+            pack,
+            sheets,
+            builtin: false,
+        }
     }
 }
 
@@ -570,7 +576,11 @@ pub fn load_folder(folder: &Path) -> Result<LoadedPack, String> {
         None => return Err("no pack.json, Aseprite export or .aseprite file".to_owned()),
     };
     fits(&pack)?;
-    Ok(LoadedPack { pack, sheets })
+    Ok(LoadedPack {
+        pack,
+        sheets,
+        builtin: false,
+    })
 }
 
 /// Every raster frame within the art box and its halo, at the pack's pixel size.
@@ -1245,7 +1255,7 @@ mod tests {
     }
 
     #[test]
-    fn the_built_ins_are_four_pets_with_their_styles() {
+    fn the_built_ins_are_three_pets_with_their_styles() {
         // FNT-74 R2: one entry per pet, its drawings as styles, the one named as the pet worn by default
         let found = all(Path::new("/nonexistent"));
         let shown: Vec<(String, Vec<&str>, &str)> = found
@@ -1262,7 +1272,6 @@ mod tests {
                 ("Sprout".to_owned(), vec!["Pixel", "Vector"], "Pixel"),
                 ("Hood".to_owned(), vec!["Pixel", "Vector"], "Pixel"),
                 ("Pip".to_owned(), vec!["Vector", "Painted"], "Vector"),
-                ("Hamster".to_owned(), vec!["Vector", "Pixel"], "Vector"),
             ]
         );
     }
@@ -1378,9 +1387,7 @@ mod tests {
                 "Pip",
                 "Pip (painted)",
                 "Hood (vector)",
-                "Hamster",
                 "Sprout (vector)",
-                "Hamster (pixel)",
                 "Other"
             ]
         );
@@ -2119,38 +2126,49 @@ mod tests {
 
     #[test]
     fn a_pixel_theme_swaps_exact_colours_and_leaves_the_effects_alone() {
-        let hamster = crate::builtin::all()
-            .into_iter()
-            .find(|p| p.name() == "Hamster (pixel)")
+        // the pixel Hood: a pixel pack with named colours, whose notes take the accent
+        let hood = crate::builtin::all().into_iter().find(|p| p.name() == "Hood").unwrap();
+        assert_eq!(hood.pack.kind, Kind::Pixel);
+        let (accent, body) = (hood.pack.palette.colours["accent"], hood.pack.palette.colours["body"]);
+        assert_eq!(hood.pack.accent, accent);
+        let swap = BTreeMap::from([(accent, 0xFF3050FF), (body, 0xFFFF3020)]);
+        let red = hood
+            .recoloured(&BTreeMap::from([
+                ("accent".to_owned(), 0xFF3050FF),
+                ("body".to_owned(), 0xFFFF3020),
+            ]))
             .unwrap();
-        let orange = hamster.pack.palette.colours["orange"];
-        assert_eq!(hamster.pack.accent, orange);
-        let blue = hamster
-            .recoloured(&BTreeMap::from([("orange".to_owned(), 0xFF3050FF)]))
-            .unwrap();
-        assert_eq!(blue.pack.accent, 0xFF3050FF);
-        for (i, layer) in hamster.pack.layers.iter().enumerate() {
-            let (before, after) = (&hamster.sheets[i].pixels, &blue.sheets[i].pixels);
+        assert_eq!(red.pack.accent, 0xFF3050FF);
+        assert!(
+            hood.pack.layers.iter().any(|l| !l.themed),
+            "some layers are effects, which no theme changes"
+        );
+        for (i, layer) in hood.pack.layers.iter().enumerate() {
+            let (before, after) = (&hood.sheets[i].pixels, &red.sheets[i].pixels);
             if layer.themed {
                 for (&p, &q) in before.iter().zip(after) {
-                    let want = if p & 0x00FF_FFFF == orange & 0x00FF_FFFF && p >> 24 != 0 {
-                        (p & 0xFF00_0000) | 0x3050FF
-                    } else {
-                        p
-                    };
+                    let to = swap
+                        .iter()
+                        .find(|&(&from, _)| p & 0x00FF_FFFF == from & 0x00FF_FFFF && p >> 24 != 0);
+                    let want = to.map_or(p, |(_, &to)| (p & 0xFF00_0000) | (to & 0x00FF_FFFF));
                     assert_eq!(q, want, "layer {}", layer.name);
                 }
             } else {
                 assert_eq!(before, after, "the effects layer {} is as it was", layer.name);
             }
         }
-        let body = hamster.pack.layers.iter().position(|l| l.name == "body").unwrap();
-        assert_ne!(hamster.sheets[body], blue.sheets[body], "the body is orange somewhere");
-        let fx = hamster.pack.layers.iter().position(|l| l.name == "fx").unwrap();
-        assert!(hamster.sheets[fx].pixels.contains(&orange), "the notes take the accent");
+        let at = |name: &str| hood.pack.layers.iter().position(|l| l.name == name).unwrap();
+        assert_ne!(
+            hood.sheets[at("body")],
+            red.sheets[at("body")],
+            "the body is body-coloured somewhere"
+        );
         assert!(
-            hamster
-                .recoloured(&BTreeMap::from([("fur".to_owned(), 0xFF3050FF)]))
+            hood.sheets[at("fx")].pixels.contains(&accent),
+            "the notes take the accent"
+        );
+        assert!(
+            hood.recoloured(&BTreeMap::from([("fur".to_owned(), 0xFF3050FF)]))
                 .unwrap_err()
                 .contains("no colour named \"fur\"")
         );

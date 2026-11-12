@@ -1,0 +1,17 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-11-09T17:41:45.409546Z",
+  "evidence": {
+    "commits": [
+      "b068334"
+    ],
+    "tests": [
+      "cargo test -p aipet-sprite",
+      "AiPet --check-pack avatars/samples/skill-example",
+      "diff -r of the two skill copies"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-09T17:44:55.849030Z"
+}

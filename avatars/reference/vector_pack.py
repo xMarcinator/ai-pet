@@ -1,5 +1,5 @@
 """Turns a reference generator's drawing into a vector pack (rust/crates/aipet-sprite/packs/<folder>/pack.json), shared
-by hood_gen.py, hamster_gen.py and sprout_gen.py (run one with --pack).
+by hood_gen.py and sprout_gen.py (run one with --pack).
 
 The generators already draw every state as SVG groups named after their parts (body, eye-left, hand-right, prop,
 caret, ...). This module reads those groups back from the generator's own output, so the pack is the approved
@@ -520,10 +520,18 @@ def feet(d, part_ids):
     return layer("feet", "feet", "stand", hit=True, parts=parts, shapes=shapes_, poses=poses, transition_ms=90)
 
 
+def fine(steps, step_ms):
+    """How many keys of 40 ms or more each of `steps` steps of `step_ms` splits into, and how many keys that is: a
+    key holds still for its time, so a slow rise in big steps hops (the sleep's Zs did, 1 px three times a second)."""
+    sub = max(d for d in range(1, 9) if step_ms % d == 0 and step_ms // d >= 40)
+    return sub, steps * sub
+
+
 def float_up(rise, steps, step_ms, drift=0.0):
-    """Rising and fading out, then back."""
-    return keys([(step_ms, {"dx": drift * i / steps, "dy": -rise * i / steps, "opacity": 1 - 0.8 * i / steps})
-                 for i in range(steps)])
+    """Rising and fading out, then back: `steps` steps of `step_ms`, each split into short keys so it glides."""
+    sub, n = fine(steps, step_ms)
+    return keys([(step_ms // sub, {"dx": drift * i / n, "dy": -rise * i / n, "opacity": 1 - 0.8 * i / n})
+                 for i in range(n)])
 
 
 def effect_layers(accent, outline, norm, face=None, box=pet_states.AURA_BOX):

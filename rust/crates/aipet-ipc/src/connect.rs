@@ -1,5 +1,5 @@
 //! Connecting to the pet and asking it one thing, within the C#'s time limits: `Ipc.Connect`, `Ipc.Ask` and
-//! `Ipc.ReadLine` (`src/AiPet.Core/Ipc.cs:59-154`).
+//! `Ipc.ReadLine` (`AiPet.Core/Ipc.cs:59-154`).
 //!
 //! A connect that finds no pet writes nothing anywhere: the hook then leaves no trace at all.
 //!

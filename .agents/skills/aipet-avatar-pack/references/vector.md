@@ -49,8 +49,7 @@ moved by `poses`; each Z, dot, note, sparkle or dust puff is a part of its effec
 - Origins and pose targets lie in the art box and its margin (−10 to 140 across, −10 to 130 down).
 - `poses` move parts per value; `transition_ms` eases between poses.
 - Part animations add keys: `dx`, `dy`, `rotate` (degrees about the origin), `scale` (about the origin),
-  `opacity`. Put a part's origin where it should turn: a shoulder for an arm (the Hamster), a stem's base for a sprout
-  (Pip).
+  `opacity`. Put a part's origin where it should turn: a shoulder for an arm, a stem's base for a sprout (Pip).
 - `look` (eyes layer only) offsets the eye parts per direction. Small: 2 to 6 px.
 - Parts keep their origins whatever the body draws: when a state's body drawing moves the face (a squatter `sleep`,
   say), the eyes stay where they were. Keep the face at the same place in every body drawing, or move the eyes with
@@ -65,11 +64,11 @@ Every vector built-in is written by a Python script, never by hand. Two ways, by
 **Small pets: write the manifest's shapes directly.** `avatars/samples/skill_example_gen.py` builds the shapes as
 dicts, writes `pack.json`, and draws its review page from the pack it wrote. See `worked-example.md`.
 
-**Full pets: draw SVG, convert with `vector_pack.py`.** `avatars/reference/hood_gen.py`, `hamster_gen.py` and
-`sprout_gen.py`:
+**Full pets: draw SVG, convert with `vector_pack.py`.** `avatars/reference/hood_gen.py` and `sprout_gen.py`:
 
 1. Constants: the palette `C` (and other themes, such as `hood_gen.BLUE`), the geometry in a 260 × 250 drawing
-   whose ground is `GROUND` (the Hamster traces its reference in cells through `X(c)`, `Y(r)` and `P(d)`).
+   whose ground is `GROUND` (a pet traced from a pixel reference can place its shapes in the reference's cells
+   through small helpers, such as `X(c)` and `Y(r)`).
 2. `figure(pose)` returns the pet's SVG for one `pet_states` pose: groups with stable ids (`body`, `face`,
    `eye-left`, `eye-right`, `arm-left`, `foot-left`, `prop`, `caret`, `headphones`, …), each part group
    `translate`d (and for arms `rotate`d) to its place, its contents drawn around (0, 0). Canvas-ready only: `path`,
@@ -96,5 +95,5 @@ Run a generator with `python3 avatars/reference/<name>_gen.py` (pages) and `--pa
 `--check-pack <folder>`. Copy the closest generator and change its drawing; keep `pet_states` and `vector_pack`
 shared, and don't change them for one pet (every built-in depends on them).
 
-Pip is the odd one: `pip_gen.py` converts a drawing from an HTML page with its own helpers, and `hamster_pixel_gen.py`
-writes a pixel pack (`pixel-and-painted.md`).
+Pip is the odd one: `pip_gen.py` converts a drawing from an HTML page with its own helpers. A pixel pet's generator
+writes PNG sheets instead (`pixel-and-painted.md`).

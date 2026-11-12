@@ -6,8 +6,10 @@
 //!    another pet runs, .NET or Rust, this one quits quietly;
 //! 3. the GPU's and the shell's environment, while no other thread reads or writes it;
 //! 4. the update checks ([`updates::start`]);
-//! 5. the core ([`core_thread`]), with `config.json` read ([`config`]) and the platform's services;
-//! 6. the shell, until the pet quits; then the core stops, and the single instance is let go.
+//! 5. the core ([`core_thread`]), with `config.json` read ([`config`]) and the platform's services, and beside its
+//!    pipe server the HTTP listener for MCP and Claude's HTTP hooks (`aipet_mcp`), which shares the core's way in for
+//!    hook events; when its port is taken, the log says so once and the pet runs without it;
+//! 6. the shell, until the pet quits; then the listener and the core stop, and the single instance is let go.
 //!
 //! The app's side of the pet ([`App`], the pet's [`Host`]) keeps `config.json`, tells the core of dismissed bubbles and
 //! of music, places the window ([`placement`]) and does Settings' actions.
@@ -16,10 +18,9 @@
 //! its compositor has layer-shell, and the desktop shell everywhere else (through XWayland in a Wayland session).
 //! `AIPET_DEBUG=1` says which shell runs and makes it log pointer events and input-region updates to stderr;
 //! `AIPET_OPEN_SETTINGS=1` opens Settings at start (both shells), and `AIPET_OPEN_SETTINGS=avatars` (or another
-//! page's name) opens it on that page. The pet renders on the low-power GPU unless
-//! `WGPU_POWER_PREF` says otherwise, and through GL unless `WGPU_BACKEND` does; on Linux, with only Mesa's EGL
-//! driver loaded when an Intel or AMD GPU drives the screen ([`mesa`]), unless `__EGL_VENDOR_LIBRARY_FILENAMES` says
-//! otherwise.
+//! page's name) opens it on that page. The pet renders on the low-power GPU unless `WGPU_POWER_PREF` says otherwise,
+//! and through GL (Vulkan on Windows) unless `WGPU_BACKEND` does; on Linux, with only Mesa's EGL driver loaded when an
+//! Intel or AMD GPU drives the screen ([`mesa`]), unless `__EGL_VENDOR_LIBRARY_FILENAMES` says otherwise.
 //!
 //! With the `demo` feature it plays the demo's scripted day instead, for development and screenshots: no single
 //! instance, no core, and nothing read or written in the data folder.
@@ -153,16 +154,18 @@ fn set_gpu_defaults() {
         unsafe { env::set_var("WGPU_POWER_PREF", "low") };
     }
     if (cfg!(target_os = "linux") || cfg!(windows)) && env::var_os("WGPU_BACKEND").is_none() {
-        // GL only, in either shell. On Linux, to list Vulkan adapters the loader opens every driver, and NVIDIA's
-        // keeps a hybrid laptop's discrete GPU awake the whole time the pet runs, though the pet renders on the
-        // integrated one; through EGL the pet renders with the driver of the GPU the display server uses, on a
-        // transparent surface (a layer surface, or XWayland's 32-bit window), and shows at once instead of 2 s
-        // later. On Windows GL is transparent too, shows the pet in 0.9 s where Vulkan takes 4.5 to 7.3 s, doesn't
-        // load the NVIDIA driver, and never falls back to DX12, whose window iced 0.14 can't make transparent
-        // (rust/proofs/windows.md).
+        // On Linux GL only, in either shell: to list Vulkan adapters the loader opens every driver, and NVIDIA's keeps
+        // a hybrid laptop's discrete GPU awake the whole time the pet runs, though the pet renders on the integrated
+        // one; through EGL the pet renders with the driver of the GPU the display server uses, on a transparent
+        // surface (a layer surface, or XWayland's 32-bit window), and shows at once instead of 2 s later.
+        // On Windows Vulkan only: through GL, stale copies of the pet stayed on screen where it had been when it
+        // jumped or changed size, and Vulkan has none (the owner's run, 2026-11-10). It shows the pet in 4.5 to 7.3 s
+        // where GL took 0.9 s and loads the NVIDIA driver, until the pet draws without the GPU (FNT-75). Never DX12,
+        // whose window iced 0.14 can't make transparent (rust/proofs/windows.md).
+        let backend = if cfg!(windows) { "vulkan" } else { "gl" };
         // SAFETY: no other thread reads or writes the environment: the single instance leaves none that does
         // (`only_pet`)
-        unsafe { env::set_var("WGPU_BACKEND", "gl") };
+        unsafe { env::set_var("WGPU_BACKEND", backend) };
     }
     // SAFETY: as above
     #[cfg(target_os = "linux")]
@@ -223,10 +226,13 @@ fn pet(wayland: bool, instance: single::Instance) -> Result<(), String> {
     let (secrets, http) = (Arc::clone(&options.secrets), options.http.clone());
     let (news, heard) = mpsc::channel();
     let core = core_thread::start(options, news);
+    // a pet without the listener (its port taken) still has the pipe and Settings: the start logged why
+    let listener = aipet_mcp::Listener::start(aipet_mcp::Options::app(updates::version()), core.ingress()).ok();
     let services = Services {
         data_dir: data_dir.clone(),
         jira: Some(core.jira()),
         github: Some(core.github()),
+        tracker: Some(core.tracker()),
         secrets,
         http,
         version: updates::version(),
@@ -248,7 +254,8 @@ fn pet(wayland: bool, instance: single::Instance) -> Result<(), String> {
         services,
     });
     let shown = shell(wayland, Launch { ui, news: heard });
-    // the core stops (its server and watchers with it) before the single instance is let go
+    // the listener and the core stop (its server and watchers with it) before the single instance is let go
+    drop(listener);
     drop(core);
     drop(instance);
     shown.inspect_err(|e| aipet_core::log::write(e))

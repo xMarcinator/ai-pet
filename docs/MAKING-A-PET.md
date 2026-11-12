@@ -52,7 +52,7 @@ A pack is a list of **layers**, drawn in the order the manifest gives them, bott
 | `eyes` | `open`, `closed` (asleep), `blink`, `happy`, `squint` (poked), `wide` (held), `up` (thinking, or the pointer is above), `down` (reading the laptop, or sad) and `sleepy` (tired). The eyes also have a look direction: see [`look`](#part-motion). |
 | `arms` | `rest`, `raised` (held, or stretching), `wave-a` and `wave-b` (waving), `run-a` and `run-b` (dragged), `hold` (at the laptop, or holding the envelope) and `lens` (holding the lens) |
 | `feet` | `stand`, `tap`, `dangle-a` and `dangle-b` (held), `run-a` and `run-b` (dragged) |
-| `prop` | `none`, `laptop` (working), `lens` (searching or reading) and `envelope` (news). The `lens` is whatever the pack draws for it: a magnifier, or glasses as the Hamster wears. |
+| `prop` | `none`, `laptop` (working), `lens` (searching or reading) and `envelope` (news). The `lens` is whatever the pack draws for it: a magnifier, or glasses. |
 | `headphones` | `on` and `off` |
 | `fx` | `none`, `zs` (asleep), `dots` (thinking), `notes` (listening), `alert` (attention), `sparkles` (done, or poked), `dust` (running), `tears` (sad), `aura` (the golden glow that opens a done) and `heart` (poked). Sparkles can come on top of another effect: `zs+sparkles`, `dots+sparkles`, `notes+sparkles`, `alert+sparkles` and `dust+sparkles`. `tears`, `aura` and `heart` never combine. |
 | `facing` | `left` and `right` |
@@ -90,8 +90,8 @@ first frame, and the pet doesn't bob, squash or play idle acts.
 if the pack's `mirror` is `flip`, unless the layer has a `mirror` of its own. A layer may also give a value's
 left-facing frames as `<value>@left` (for example `run-a@left`), which are drawn as they are, unmirrored.
 
-Mirror the whole pet only if it is drawn in perspective (turned, like the Hamster's three-quarter view); if it is
-turned to the left, say so with `"faces": "left"`, so it turns the way it is dragged. A pet
+Mirror the whole pet only if it is drawn in perspective (turned, as in a three-quarter view); if it is turned to
+the left, say so with `"faces": "left"`, so it turns the way it is dragged. A pet
 drawn facing the viewer sets the pack's `mirror` to `none` and flips only what has a direction: its hands or arms,
 its feet and the dust. Its body and everything on it (a sprout, laces, markings) stay as drawn, as they would on a
 real thing that turns its head; the eyes already look the way it moves.
@@ -196,7 +196,7 @@ The top-level keys:
 | `pixel_size` | How big one pixel of the art is, in logical px: 5 for the 26 × 24 grid of the original pets, 1 for vector art. |
 | `anchor` | `[x, y]`: the point of the art that stands on the ground shadow, in the art's own pixels. |
 | `mirror` | `flip` (the default) or `none`. |
-| `faces` | `right` (the default) or `left`: the way the art faces. A pet drawn turned to the left (the Hamster) is mirrored when it faces right and drawn as it is when it faces left. Effects are always drawn as for a pet facing right. |
+| `faces` | `right` (the default) or `left`: the way the art faces. A pet drawn turned to the left (in a three-quarter view, say) is mirrored when it faces right and drawn as it is when it faces left. Effects are always drawn as for a pet facing right. |
 | `accent` | The pet's accent colour, which Settings and the menu take on while the pet is worn. A colour, or `$name` for a palette colour. |
 | `glow` | The colour of the glow around glowing layers. A colour, or `$name`. |
 | `palette`, `theme`, `themes` | Named colours and the pet's themes (see [Themes](#themes)). Optional. |
@@ -228,8 +228,8 @@ refused. The pet's ground is near the bottom middle of the box, at (65, 110).
 
 - **pixel**: pixel-art PNG sheets. They are drawn with nearest-neighbour scaling and snapped to whole device pixels,
   so they stay crisp at every display scale. `pixel_size` is the size of one art pixel: the built-in Sprout and Hood
-  are 26 × 24 pixels at 5 px each, and the Hamster (pixel) is 3 px a pixel. The `anchor` is in art pixels:
-  `[13, 22]` for Sprout and Hood.
+  are 26 × 24 pixels at 5 px each; a 43 × 40 pet would be 3 px a pixel. The `anchor` is in art pixels: `[13, 22]`
+  for Sprout and Hood.
 - **painted**: smooth, high-resolution PNG sheets, drawn with smooth scaling. Use a `pixel_size` below 1 for art drawn
   at more than one pixel per logical px: Pip (painted) is drawn at twice the size, with a `pixel_size` of 0.5 and an
   `anchor` of `[130, 220]`. A painted pack has no named colours; its themes are [sheet themes](#themes).
@@ -298,7 +298,7 @@ Vector packs load nothing from outside the manifest: there are no SVG files, ima
 ## Part motion
 
 Parts say where a layer's movable pieces are and how they move: the eyes, the hands, the feet, a lens, a caret, each
-Z or sparkle. This is how the Hamster's arms swing from the shoulder and Pip's sprout sways.
+Z or sparkle. This is how the Hood's hands float out to wave and Pip's sprout sways.
 
 - **`parts`**: `{"id", "origin", "shape"}` each. The `id` is unique in the pack, and the `origin` is a point in the
   art box. `shape` is optional (see above).
@@ -387,9 +387,10 @@ the same size as the sheet it replaces, so the frames still line up:
 A theme changes colours or sheets, never both. Pip (painted)'s Lilac theme is a sheet theme.
 
 **Your own themes.** You can add a theme to any pet with named colours, the built-in ones included, without
-touching its pack. On the Avatars page, **New theme** opens an editor on the worn pet in the theme it has on: give
-it a name, change any colour, and **Save**. **Edit** and **Delete** work on your own themes only; a pet's own themes
-come with it. Each is a file in the avatars folder's `themes/` folder:
+touching its pack. On the Avatars page the theme editor shows the worn pet in the theme it has on. A theme that
+comes with the pet is locked: **Copy as new theme** makes one of your own from it, to name, colour and **Save**. Your
+own themes (under "Your own") can be changed and saved, copied or deleted. Each is a file in the avatars folder's
+`themes/` folder:
 
 ```json
 {
@@ -511,15 +512,14 @@ folder.
 
 ## The built-in pets and their generators
 
-AiPet ships eight pets: Sprout and Hood (in Blue, with a Green theme), baked once from the original pixel pets;
-Pip (in Peach, with a Lilac theme) as a vector pack and Pip (painted), painted from it; Hood (vector) (in Green, with
-a Blue theme), Hamster and Sprout (vector), drawn as vector packs; and Hamster (pixel). Their packs are in
+AiPet ships six drawings of three pets: Sprout and Hood (in Blue, with a Green theme), baked once from the original
+pixel pets; Pip (in Peach, with a Lilac theme) as a vector pack and Pip (painted), painted from it; and Hood (vector)
+(in Green, with a Blue theme) and Sprout (vector), drawn as vector packs. Their packs are in
 [rust/crates/aipet-sprite/packs/](../rust/crates/aipet-sprite/packs/), embedded in the app.
 
-The vector and pixel pets beyond Sprout and Hood are written by Python scripts in
-[avatars/reference/](../avatars/reference/), which are a good starting point for a pet of your own:
-- `hood_gen.py`, `hamster_gen.py` and `sprout_gen.py` draw every state as SVG (the reference drawings, review pages
-  and state sheets beside them), and with `--pack` write the vector pack from that drawing through `vector_pack.py`;
+The vector pets are written by Python scripts in [avatars/reference/](../avatars/reference/), which are a good
+starting point for a pet of your own:
+- `hood_gen.py` and `sprout_gen.py` draw every state as SVG (the reference drawings, review pages and state sheets
+  beside them), and with `--pack` write the vector pack from that drawing through `vector_pack.py`;
 - `pip_gen.py` writes the vector Pip;
-- `hamster_pixel_gen.py` writes the Hamster (pixel);
 - `pet_states.py` is the list of states and alternating frames every built-in pet draws.

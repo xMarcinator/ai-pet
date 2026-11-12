@@ -1,8 +1,8 @@
-//! The hook server: the pet's end of the endpoint, on threads of its own (`src/AiPet.Core/HookServer.cs`).
+//! The hook server: the pet's end of the endpoint, on threads of its own (`AiPet.Core/HookServer.cs`).
 //!
-//! Each hook run connects, sends its event and waits for the outcome: the event goes to [`AgentSessions`], and one
-//! line to hook-events.log and to the recent list the doctor pings for. Garbage, oversized or silent connections are
-//! dropped.
+//! Each hook run connects, sends its event and waits for the outcome: the event goes through the [`Ingress`] the
+//! server shares with the pet's HTTP listener, to [`AgentSessions`], and one line to hook-events.log and to the recent
+//! list the doctor pings for. Garbage, oversized or silent connections are dropped.
 //!
 //! Listening and answering run on threads of their own, `changed` too, and only ever block: nothing waits for the UI
 //! thread, so answers keep coming while the rest of the pet is busy.
@@ -11,6 +11,7 @@
 //! - Unix (`unix`): one socket, only ever used blocking, and a deadline for each connection.
 
 mod answer;
+mod ingress;
 mod record;
 #[cfg(unix)]
 mod unix;
@@ -33,6 +34,8 @@ use std::time::{Duration, Instant};
 
 use aipet_ipc::connect::read_line;
 use aipet_ipc::protocol::MAX_REQUEST;
+
+pub use ingress::Ingress;
 
 use crate::sessions::AgentSessions;
 
@@ -73,16 +76,14 @@ pub struct HookServer {
 
 /// What the server's threads share.
 struct Shared {
-    sessions: Arc<AgentSessions>,
-    changed: Box<dyn Fn() + Send + Sync>,
-    options: Options,
+    ingress: Arc<Ingress>,
+    /// The pipe's name (Windows) or the socket's path.
+    endpoint: OsString,
     stopping: AtomicBool,
     /// Connections being handled.
     handling: AtomicUsize,
     /// When the log last got a line about connections the pet couldn't take.
     warned: Mutex<Option<Instant>>,
-    /// The lines kept for pings, and hook-events.log: one lock for both, as the C#'s `logLock`.
-    record: Mutex<record::Record>,
     sys: sys::State,
 }
 
@@ -99,16 +100,23 @@ impl HookServer {
         changed: impl Fn() + Send + Sync + 'static,
         options: Options,
     ) -> Self {
-        let record = record::Record::new(options.events_log.clone());
+        let Options {
+            endpoint,
+            events_log,
+            log,
+        } = options;
+        Self::serving(Arc::new(Ingress::new(sessions, changed, events_log, log)), endpoint)
+    }
+
+    /// A server at `endpoint` whose events go through `ingress`, which the pet's HTTP listener shares: the core's.
+    pub fn serving(ingress: Arc<Ingress>, endpoint: OsString) -> Self {
         Self {
             shared: Arc::new(Shared {
-                sessions,
-                changed: Box::new(changed),
-                options,
+                ingress,
+                endpoint,
                 stopping: AtomicBool::new(false),
                 handling: AtomicUsize::new(0),
                 warned: Mutex::new(None),
-                record: Mutex::new(record),
                 sys: sys::State::default(),
             }),
         }
@@ -124,7 +132,7 @@ impl HookServer {
     /// line in the log saying how many run.
     pub fn start(&self) -> io::Result<()> {
         let shared = &self.shared;
-        let endpoint = shared.options.endpoint.to_string_lossy();
+        let endpoint = shared.endpoint.to_string_lossy();
         let started = sys::start(shared);
         match &started {
             Ok(()) => shared.log(&format!("hooks: listening on {endpoint}")),
@@ -152,7 +160,7 @@ impl Shared {
     }
 
     fn log(&self, line: &str) {
-        (self.options.log)(line);
+        self.ingress.log(line);
     }
 
     /// Starts the listeners, each with `start_one`, as the C# starts its Unix ones: when one can't start, those
@@ -211,18 +219,6 @@ impl Shared {
         };
         if let Some(reply) = answer::answer(self, &line) {
             let _ = conn.write_all(format!("{reply}\n").as_bytes());
-        }
-    }
-
-    fn record(&self) -> MutexGuard<'_, record::Record> {
-        lock(&self.record)
-    }
-
-    /// Runs `changed`. A panic in it is logged, and the hook still gets its answer, as the C# catches what its
-    /// subscribers throw.
-    fn changed(&self) {
-        if let Err(panic) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (self.changed)())) {
-            self.log(&format!("hooks: {}", panic_message(&*panic)));
         }
     }
 }

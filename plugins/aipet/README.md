@@ -67,18 +67,22 @@ disturbs a chat:
 ## For maintainers
 
 - The binaries in `native/<rid>/` aren't in the main repository. The release workflow builds them with cargo, from
-  the Rust hook in `rust/crates/aipet-hook`, and commits them, with this folder, to
+  `rust/crates/aipet-hook` (for Linux with cargo-zigbuild, for glibc 2.27 and newer), and commits them, with this folder, to
   [ai-pet-plugin](https://github.com/xMarcinator/ai-pet-plugin), tagged `v<version>`. Only the release workflow
   writes to that repository. It then pins both marketplace files (`.claude-plugin/marketplace.json` and
   `.agents/plugins/marketplace.json`) to that commit, by setting `ref` to the tag and `sha` to the commit. The value
   `0000000000000000000000000000000000000000` means "not released yet", and installing it fails.
+- To try the plugin before a release, `build.sh` (or `build.ps1`) copies a local hook build into `native/<rid>/`
+  and writes a local marketplace in `artifacts/marketplace/`; `claude --plugin-dir plugins/aipet` uses the folder
+  for one session.
 - The release job stamps the release's version into both `plugin.json` files of the commit it pushes, so there's
   nothing to bump by hand. Claude Code and Codex only pick up an update when the version changes.
 - `hooks/hooks.json` and `hooks/codex.json` must be exactly what `aipet-hook --print-plugin-hooks claude` and
   `codex` print. CI and the release check this with `scripts/check-plugin.sh --hook`, against the Rust hook. Claude's
-  events are in `rust/crates/aipet-hook/src/claude.rs` (and, until the .NET hook is removed, in its
-  `ClaudeConfig.Events`: the tests compare its output with the file too). After a change, regenerate the file:
-  `cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook -- --print-plugin-hooks claude > plugins/aipet/hooks/hooks.json`.
+  events are in `rust/crates/aipet-hook/src/claude.rs`, Codex's in `plugin_hooks.rs`. After a change to Claude's,
+  regenerate the file from the repository's root:
+  `cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook -- --print-plugin-hooks claude > plugins/aipet/hooks/hooks.json`,
+  then check both: `scripts/check-plugin.sh --marketplaces . plugins/aipet --hook cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook --`.
 - `hooks/codex.json` is frozen. Codex trusts a hook by a hash of its definition, so changing a handler makes every
   Codex user trust the hooks again.
 - Don't rename the plugin or the marketplace (`aipet@aipet`): the name is part of every Codex trust entry.

@@ -1,0 +1,24 @@
+{
+  "branch_name": "fnt-81-tracker-task-bubbles-in-the-pet-fnt-64",
+  "created_at": "2026-11-10T16:44:04.189289Z",
+  "depends_on_epics": [],
+  "id": "fnt-81-tracker-task-bubbles-in-the-pet-fnt-64",
+  "next_task": 1,
+  "plan_review_status": "unknown",
+  "plan_reviewed_at": null,
+  "spec_path": ".flow/specs/fnt-81-tracker-task-bubbles-in-the-pet-fnt-64.md",
+  "status": "open",
+  "title": "Tracker task bubbles in the pet (FNT-64 companion)",
+  "tracker": {
+    "baseHashFlow": null,
+    "baseHashTracker": null,
+    "depRelations": [],
+    "id": null,
+    "identifier": "FNT-81",
+    "lastSyncedAt": null,
+    "mergeBaseFlow": null,
+    "mergeBaseTracker": null,
+    "url": null
+  },
+  "updated_at": "2026-11-10T16:44:04.193808Z"
+}

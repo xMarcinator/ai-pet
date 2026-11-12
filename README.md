@@ -10,8 +10,8 @@ thinks, types and searches while a chat works, waves when a chat needs you, and 
 - If you want them: a bubble for each Jira issue your search finds and each GitHub pull request waiting on your
   review, and one for the track playing in Spotify.
 
-AiPet runs on Windows 10/11 x64 and on Linux x64 or arm64 (X11, or XWayland under Wayland). macOS isn't supported
-yet.
+AiPet runs on Windows 10/11 x64 and on Linux x64 or arm64: on Wayland (natively where the compositor has
+layer-shell, such as Hyprland, Sway and KDE; through XWayland on GNOME) and on X11. macOS isn't supported yet.
 
 ## Disclaimer
 > [!WARNING]
@@ -97,17 +97,20 @@ and run the one-liner again to switch to the plugin. Claude Code and Codex also 
     asks D-Bus with `dbus-send`.
   - `secret-tool` (package `libsecret-tools`): keeps the Jira and GitHub tokens in your desktop keyring. Without
     it they go into a file only you can read (see [Privacy](#privacy)).
-  - `xdotool`: the stop button needs it to bring the agent's app forward and press Escape. `wmctrl` can bring an
-    app forward, but then the pet never presses a key.
-- The pet is an X11 window, so on Wayland it runs through XWayland. Apps that run as native Wayland windows can't
-  be found or brought forward.
+  - `xdotool` (or `wmctrl`): brings the agent's app forward when you click a chat that has no link. Apps that run
+    as native Wayland windows can't be found or brought forward; for them only the chat's link opens.
+- **Wayland.** On a compositor with layer-shell (Hyprland, Sway, KDE, COSMIC) the pet is a layer surface: only the
+  pet and its bubbles take the mouse, and it shows on every workspace. Elsewhere (GNOME, X11) it's an X11 window,
+  through XWayland on GNOME. `AIPET_BACKEND=wayland` or `AIPET_BACKEND=desktop` picks one yourself.
+- **Graphics.** The pet draws through OpenGL (Mesa, or your GPU's driver) on the low-power GPU. `WGPU_BACKEND` and
+  `WGPU_POWER_PREF` override that.
 
 ### Hyprland
 
-Hyprland frames, rounds, blurs and animates every window. On the pet's transparent window that draws a frame around
-the whole rectangle, and animated moves make dragging overshoot. AiPet ships window rules for this. The installers
-copy them to `~/.local/share/AiPet/hyprland/` and, when they run under Hyprland, print the line that includes them.
-They never edit your config.
+Hyprland animates the pet's moves, so while you drag it the pet glides behind the pointer, and it frames, rounds
+and blurs the transparent Settings window. AiPet ships rules for this. The installers copy them to
+`~/.local/share/AiPet/hyprland/` and, when they run under Hyprland, print the line that includes them. They never
+edit your config.
 
 For `~/.config/hypr/hyprland.lua` (Hyprland 0.55 and later):
 
@@ -123,18 +126,11 @@ For `~/.config/hypr/hyprland.conf` (Hyprland 0.53 and 0.54):
 source = ~/.local/share/AiPet/hyprland/aipet.conf
 ```
 
-For Hyprland 0.52 and earlier, the end of `aipet.conf` has the same rules as `windowrulev2` lines.
+For Hyprland 0.52 and earlier, the end of `aipet.conf` has the same rules as `layerrule` and `windowrulev2` lines.
 
 The rules:
-- The pet's window floats and is pinned, so it stays on its monitor whichever workspace is shown. It has no border,
-  rounding, blur, shadow or animations.
+- The pet (the layer namespace `aipet`) has no animations.
 - The Settings window has no border, rounding, blur or shadow.
-
-Don't add `no_focus` to these rules: an XWayland window with it gets no mouse input at all.
-
-Hyprland ignores the X11 input shape, so every pixel of the pet's window would take the mouse. AiPet therefore
-keeps its window only as big as what it shows. Inside that box, the transparent parts around the pet and between
-the bubbles still take the mouse. `AIPET_NOFIT=1` keeps the window at its full size.
 
 Uninstalling AiPet removes the rules and the line that includes them. The config is backed up first, to
 `<config>.aipet-<time>.bak`.
@@ -145,7 +141,7 @@ Uninstalling AiPet removes the rules and the line that includes them. The config
 
 The pet shows the mood of all your chats together: asleep when nothing is going on, thinking, working, waving when
 a chat needs you, or done. Drag it and it runs; it remembers where you put it. Hover over it and it waves; click
-it and it reacts. The Rust pet also has moods of its own: it holds up an envelope when a review comes in, looks sad
+it and it reacts. It also has moods of its own: it holds up an envelope when a review comes in, looks sad
 when a chat's turn fails, glows gold as a chat finishes, and gets tired late at night or after a long chat.
 
 ### Bubbles
@@ -164,23 +160,29 @@ shortly after the mouse leaves the pet.
   the app is brought forward instead.
 - Clicking a Jira or GitHub bubble opens the issue or pull request. Clicking the music bubble brings the player
   forward.
+- With the flow-next tracker connected (Settings › Tracker), each task it's working on has a bubble with a teal
+  border: its id and title, what waits on you ("Needs your permission: Edit", "Needs your decision", ...) or its
+  phase ("Reviewing · round 2"), how many acceptance criteria are met, a strip along the bottom for its subtasks done,
+  and a badge with how many agents work on it when there's more than one. Amber means it needs you, red that its run
+  failed or was paused. The chats that are the tracker's runs join their task's bubble. Clicking it opens the task
+  in the tracker's desktop client (`fnt://task/<id>`).
 
 Hover over the front bubble (or any bubble of a spread stack) for its buttons:
 - ✕ dismisses the bubble.
-- ■ stops a chat in a desktop app. The pet brings the app forward and presses Escape, which stops the chat the app
-  has open. It only presses Escape when that must be this chat: the only chat of that agent the pet knows about,
-  with the app really in front, and not in the pet's first 15 minutes (it only knows the chats it has heard from
-  since it started). Otherwise it only brings the app forward, so you can stop the chat yourself. Only a chat in a
-  desktop app has this button, while it works.
+- **Open** on a chat that works in a desktop app opens the chat, so you can stop it there. The pet never presses
+  keys in another app.
 - Jira and GitHub bubbles have buttons that open the Jira issue and the pull request, when the pet knows them.
 - The music bubble has previous, play/pause and next.
+- A tracker task's bubble has **Allow once** and **Deny** while a prompt waits, else **Pause** and **Stop** for its
+  run, only when you've switched "Answers and pause/stop" on for this pet in the tracker. The bubble says how it went
+  (someone may have answered first).
 
 The pet never sends anything to a chat.
 
 ### Menu
 
 Right-click the pet for its menu:
-- **Show chats**: hides or shows the bubbles.
+- **Show bubbles**: hides or shows the bubbles.
 - **Always on top**
 - **Avatars…**: opens Settings on the Avatars page.
 - **Settings…**
@@ -197,12 +199,13 @@ Right-click the pet for its menu:
   - Team defaults: **Import defaults…** reads a preset file (below).
   - About: the version, and whether this copy updates itself. The installed Windows app shows the state of its
     updates here, with **Check for updates**.
-- **Avatars**: the pets, one tile each. Click one to wear it. Four are built in, each in two styles: Sprout and Hood
-  (pixel or vector), Pip (vector or painted) and Hamster (vector or pixel). The worn pet's **Style** picks one, saved
-  as `AvatarStyle` in `config.json`. The Hamster's design, and the ideas for its newer states, come from JLandbo's [hamster-pet](https://github.com/JLandbo/hamster-pet), used with its author's permission.
-  - Themes: under the tiles, the worn pet's themes (the Hood in Blue or Green, say). **New theme** makes one of your
-    own from any pet with named colours: pick its colours and save it. **Edit** and **Delete** change or remove your
-    own themes.
+- **Avatars**: the pets, one tile each, marked "Built in" or "Your own". Click one to wear it. Three are built in,
+  each in two styles: Sprout and Hood (pixel or vector) and Pip (vector or painted). The worn pet's **Style** picks
+  one, saved as `AvatarStyle` in `config.json`.
+  - Themes: under the tiles, the worn pet's themes (the Hood in Blue or Green, say), the built-in ones and your own
+    apart. Under them the theme editor shows the theme worn, with every named colour. A built-in theme is locked:
+    **Copy as new theme** makes one of your own from it, to name, colour and **Save**. Your own themes can be changed
+    and saved, copied, or deleted.
   - Your own pets: put a pack folder in the avatars folder (**Open folder**) and click **Reload**. A pack is a
     `pack.json` with its art: pixel-art or painted PNG sheets, vector shapes, or straight from Aseprite. An older
     avatar `.json` file still works too. Anything that doesn't load is listed with the reason, and
@@ -214,6 +217,13 @@ Right-click the pet for its menu:
 - **GitHub**: the host (github.com, or a GitHub Enterprise Server host), an access token, and the organisations to
   search for the pull request of a Jira issue. A pull request that mentions a Jira key (in its title, branch,
   description or commits) joins that issue's bubble. GitHub stays off until you save a token.
+- **Tracker**: follows a flow-next tracker's active tasks as the
+  tracker's companion device. Make a companion code on the tracker's Devices & runners page, enter the tracker's
+  address and the code here, and click **Enroll**. A tracker on this computer is `http://127.0.0.1:3210` (its own
+  service); a hosted one is its `https://` address, and its code (`<secret>.<fingerprint>`) also tells the pet which
+  certificate authority to trust. The page says whether the pet is connected and whether its answers and pause/stop
+  are on, and can hide chats that aren't tracker tasks while the tracker is connected. **Forget this tracker** removes
+  the pet's credential; revoke the pet in the tracker to cut it off there.
 
 **Presets.** A team can share its Jira and GitHub defaults as a JSON file, for **Import defaults…**:
 
@@ -264,7 +274,9 @@ The logs:
 The data folder is `%LOCALAPPDATA%\AiPet` on Windows and `~/.local/share/AiPet` on Linux. Settings > General > Data
 folder opens it.
 
-On Linux, `AIPET_SOFTWARE=1` draws without OpenGL, for virtual GPUs (such as WSLg) where OpenGL output doesn't show.
+`AIPET_DEBUG=1` makes the pet say on stderr which window it uses (the Wayland or the desktop one) and why, and log
+the pointer and the clickable area. The pet needs a working GPU driver (OpenGL on Linux, Vulkan on Windows): it has
+no software fallback.
 
 ## Privacy
 
@@ -282,17 +294,22 @@ keeps nothing.
 (`~/.codex/session_index.jsonl` and `~/.codex/sessions/`), and never writes to them. In its data folder it stores:
 - `config.json`: the pet's position, avatar and its theme, sizes and switches.
 - `jira.json` and `github.json`: your Jira and GitHub settings (site, email, search, host, organisations), without
-  the tokens.
+  the tokens; `tracker.json`: the tracker's address and whether chats without a task hide, without its credential.
 - `aipet.log` and `hook-events.log`. The event log has no prompt text.
 - `avatars/`: your own pets (pack folders and avatar `.json` files), and in `avatars/themes/` your own themes.
 
 **Tokens.** The Jira and GitHub tokens are only ones you paste into Settings, and Settings can remove them again.
+The tracker's credential is what enrolling gave the pet (a token, and for a hosted tracker a certificate and the key
+the pet made for it); Forget removes it.
 They're kept in Windows Credential Manager, or on Linux in your keyring through `secret-tool`. Without a keyring,
 Linux keeps them in `secrets.json` in the data folder, a file only you can read (mode `0600`). AiPet reads no other
 credentials on the machine.
 
 **Network.** The pet contacts:
 - your Jira site and GitHub, only once you turn them on in Settings and save a token;
+- the flow-next tracker, only once you enroll the pet there. It reads the tracker's active tasks, and sends it
+  nothing your agents' hooks report except a chat's id, to ask whether that chat is one of the tracker's runs; with
+  your switch on in the tracker, also your answer to a prompt or a pause or stop;
 - GitHub's releases, to check for updates, only in the app installed on Windows. The check sends no token. The
   portable zip and Linux never check.
 
@@ -313,38 +330,73 @@ Your settings and logs stay in the data folder: delete it to remove them too. Th
 
 ## Building from source
 
-Needs:
-- the [.NET 10 SDK](https://dotnet.microsoft.com/download), for the app;
-- Rust, installed with [rustup](https://rustup.rs) (1.98 or newer), for the hook. On Windows that needs Visual Studio's
-  C++ build tools with a Windows SDK; on Linux, a C linker (gcc or clang).
+Needs Rust, installed with [rustup](https://rustup.rs) (1.98 or newer; `rust/Cargo.toml` says which), and:
+
+| System | What else |
+|---|---|
+| Windows | Visual Studio's C++ build tools with a Windows SDK (its `rc.exe` embeds the exes' icon and version) |
+| Arch | `base-devel pkgconf libxkbcommon` |
+| Debian, Ubuntu | `build-essential pkg-config libxkbcommon-dev` |
+| Fedora | `gcc pkgconf-pkg-config libxkbcommon-devel` |
+
+To run the pet on Linux you also need Mesa's EGL and OpenGL (or your GPU's driver), and a Wayland or X11 session.
+The first build downloads a few hundred crates.
 
 ```bash
-dotnet build AiPet.slnx
-dotnet test AiPet.slnx
-dotnet src/AiPet.UI/bin/Debug/net10.0/AiPet.dll     # runs the pet
-cd rust && cargo build -p aipet-hook                # the hook the releases ship: rust/target/debug/aipet-hook
-cargo test --workspace                              # the Rust tests
+cd rust
+cargo build -p aipet -p aipet-hook    # the pet and the hook: rust/target/debug/AiPet and aipet-hook
+cargo run -p aipet                    # runs the pet
+cargo test --workspace                # the tests
 ```
 
-**Windows developers:** antivirus reacts to PowerShell and to freshly built `.exe` files. Build and test with
-`-p:UseAppHost=false` (`dotnet build AiPet.slnx -p:UseAppHost=false`), so that no `.exe` is made, and run programs
-as `dotnet <dll>`. Cargo can't do without `.exe` files: a freshly built hook may be held for a scan for a while. Leave
-publishing to GitHub Actions: `build.ps1` and `scripts/install-from-source.ps1` publish `.exe` files.
+**sccache** (optional) keeps one cache of compiled crates for every checkout and worktree on the machine. It comes
+from the environment, never from a checked-in cargo config: run `eval "$(scripts/cargo-env.sh)"` (or source it) in
+your shell, `env $(scripts/cargo-env.sh --env) cargo ...` for one command, or
+`pwsh ./scripts/cargo-env.ps1 | Out-String | Invoke-Expression` on Windows. It sets `RUSTC_WRAPPER` to sccache,
+`SCCACHE_DIR` (default `~/.cache/sccache`, `%LOCALAPPDATA%\sccache` on Windows) and `SCCACHE_CACHE_SIZE` (default
+15G; sccache drops its oldest entries past that), keeping your own values for those two; without sccache it prints
+nothing and cargo builds as usual. [mise.toml](mise.toml) pins sccache and cargo-hakari: `mise trust`, then
+`mise install`. The script's own tests: `sh scripts/test-cargo-env.sh`.
+
+**The workspace-hack crate** (`rust/crates/workspace-hack`) is generated by
+[cargo-hakari](https://docs.rs/cargo-hakari) from `rust/.config/hakari.toml`. The headless crates depend on it, so
+`cargo test -p aipet-core` and `cargo test --workspace` build each shared crate with one feature set instead of one
+each. The hook, aipet-ipc and the pet's front end are left out: the hook builds with nothing but its own
+dependencies, and nothing headless builds iced. After adding a crate or changing a dependency, run
+`cargo hakari generate && cargo hakari manage-deps` in `rust/` (CI checks it); a merge conflict in the hack's
+`Cargo.toml` is resolved by running `cargo hakari generate` again. cargo-hakari: `mise install`, or
+`cargo install cargo-hakari --version 0.9.39 --locked`.
+
+**Sweeping old build output.** Cargo never deletes what it built before: every change of features, profile, flags or
+toolchain adds new hashed copies, and `rust/target` had reached 42 GB by 2026-11-08. After a gate (the checks before a
+commit, the end of a task or a wave), run `scripts/sweep.sh` in the checkout or worktree that ran it, or
+`scripts/sweep.sh <checkout>` for another. It runs [cargo-sweep](https://github.com/holmgr/cargo-sweep) twice in
+`rust/`, removing output not used for `DAYS` days (default 7) and output of toolchains no longer installed, and prints
+the size before and after. It refuses (exit 1) while cargo works in that checkout, and never touches another
+checkout's target. cargo-sweep: `mise install`, or `cargo install cargo-sweep --version 0.8.0 --locked`. The
+numbers behind all three (the hack crate, sccache, the sweep) are in
+[rust/proofs/build-hygiene.md](rust/proofs/build-hygiene.md).
+
+**Windows developers:** antivirus reacts to PowerShell and to freshly built `.exe` files: a freshly built pet or hook
+may be held for a scan for a while. Leave publishing to GitHub Actions.
 
 The scripts:
 
 | Script | What |
 |---|---|
-| [build.sh](build.sh), [build.ps1](build.ps1) | Publish the app, and build the hook with cargo, into `artifacts/<rid>/`; copy the hook into `plugins/aipet/native/<rid>/`, and make a local marketplace in `artifacts/marketplace/` for trying the plugin before a release. `build.sh` builds this machine's platform, or the ones named; `build.ps1` builds win-x64 and linux-x64, or `-Only <rid>`. A hook for another system needs [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) (Linux) or Windows (win-x64), and is left out without them. |
+| [build.sh](build.sh), [build.ps1](build.ps1) | Build the pet and the hook with cargo, as the release does, into `artifacts/<rid>/`; copy the hook into `plugins/aipet/native/<rid>/`, and make a local marketplace in `artifacts/marketplace/` for trying the plugin before a release. `build.sh` builds this machine's platform, or the ones named; `build.ps1` builds win-x64 and linux-x64, or `-Only <rid>`. A build for another Linux platform needs [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) and zig, and win-x64 needs Windows; each is left out, with a warning, without them. |
 | [scripts/install-from-source.sh](scripts/install-from-source.sh), [scripts/install-from-source.ps1](scripts/install-from-source.ps1) | Install that build: the app with a menu or Start menu entry, and the hook, registered directly with Claude Code and Codex (`--no-hooks` / `-NoHooks` skips that). They rebuild first when the build is missing or older than the source. |
 | [scripts/check-plugin.sh](scripts/check-plugin.sh) | Checks the plugin's manifests and the marketplaces, and with `--hook <command>` that the plugin's hook files are exactly what `aipet-hook --print-plugin-hooks` prints. |
+| [scripts/check-notices.sh](scripts/check-notices.sh) | Checks that [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) is what [cargo-about](https://github.com/EmbarkStudios/cargo-about) 0.9.3 makes of `rust/about.toml` and `rust/about.hbs`, with a licence for every crate the release builds compile in; `--write` regenerates it. Run it after changing `rust/Cargo.lock`. |
+| [scripts/cargo-env.sh](scripts/cargo-env.sh), [scripts/cargo-env.ps1](scripts/cargo-env.ps1) | Print the environment that makes cargo use sccache (above); `scripts/test-cargo-env.sh` tests the sh one. |
+| [scripts/sweep.sh](scripts/sweep.sh) | Sweeps stale output from a checkout's `rust/target` after a gate, unless cargo is running there (above); `scripts/test-sweep.sh` tests it. |
 
 [.github/workflows/release.yml](.github/workflows/release.yml) builds the releases. CI
 ([.github/workflows/ci.yml](.github/workflows/ci.yml)) builds and tests on Windows and Linux.
 
-The tests in [tests/AiPet.Tests](tests/AiPet.Tests) run the hook as the agents do (as `dotnet aipet-hook.dll`)
-against the pet's listener on a temporary pipe or socket. They never touch your pet, settings or data. The tests of
-the shell scripts run only on Linux.
+The tests run the hook as the agents do, against the pet's listener on a temporary pipe or socket, and run the
+scripts in a sandbox of fresh folders (`rust/crates/aipet-testkit`). They never touch your pet, settings or data. The
+tests of the shell scripts run only on Linux.
 
 ### Hooks without the plugins
 
@@ -354,8 +406,8 @@ the shell scripts run only on Linux.
 
 - Use either the plugins or these registrations, not both: with both, every event reaches the pet twice. When the
   plugin is enabled and can run, `--install` changes nothing and says so.
-- Run the `aipet-hook` executable itself. Under `dotnet aipet-hook.dll`, `--install` refuses, since it would
-  register `dotnet`.
+- Run the `aipet-hook` executable itself: `--install` registers the program that runs it, and refuses one with
+  another name.
 - Codex asks you to trust these hooks too. Changing them means trusting them again.
 - Each config is backed up before a change, as `<file>.aipet-<time>.bak` (the newest three are kept). Codex's is
   edited as text: your other hooks and their trust entries stay as they are.
@@ -370,10 +422,12 @@ the shell scripts run only on Linux.
 
 | Path | What |
 |---|---|
-| `src/AiPet.UI/` | The app (Avalonia, .NET 10). Platform code is in `Platform/` (Windows, Linux, a macOS stub). |
-| `src/AiPet.Core/` | The pet's animation, avatars, the chats and the hooks' listener, and the Jira, GitHub and Codex watchers. |
-| `rust/crates/aipet-hook/` | `aipet-hook`, which the agents run on each event, with `--install`, `--uninstall`, `--doctor` and `--print-plugin-hooks`. The rest of `rust/` is the pet's move to Rust, under way. |
-| `src/AiPet.Hook/` | The .NET `aipet-hook` that the Rust one replaced. The tests still run it until the move to Rust is done. |
+| `rust/crates/aipet/` | The app: one pet per user, the core on a thread of its own, and the Wayland or the desktop shell. |
+| `rust/crates/aipet-core/` | The chats and the hooks' listener, the Jira, GitHub and Codex watchers, the bubbles, and the data, secrets and logs. |
+| `rust/crates/aipet-sprite/` | The pets: avatars, packs, the animation and the renderer. |
+| `rust/crates/aipet-ui/`, `aipet-desktop/`, `aipet-wayland/` | The front end (bubbles, menu, Settings), and the window it lives in: an ordinary one (Windows, X11, macOS) or a layer-shell surface (Wayland). |
+| `rust/crates/aipet-hook/` | `aipet-hook`, which the agents run on each event, with `--install`, `--uninstall`, `--doctor` and `--print-plugin-hooks`. |
+| `rust/crates/aipet-ipc/` | What the hook and the pet share: the protocol, the endpoint and the data paths. |
+| `rust/crates/aipet-testkit/` | The sandbox the tests that run programs and scripts use. |
 | `plugins/aipet/` | The plugin for Claude Code and Codex. |
 | `packaging/` | The Linux package's installer, menu entry, icons and Hyprland rules; notes on the Windows packages. |
-| `tests/AiPet.Tests/` | The tests. |

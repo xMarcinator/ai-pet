@@ -81,6 +81,8 @@ Task fnt-72-new-pet-states-and-the-hamsters.1 validates the core approach: a pet
 
 ## Decision Context
 
+**2026-11-10 (owner):** the Hamster is no longer a built-in pet: it lives only as the owner's local avatar pack, made from JLandbo's own sprites, outside this repository. Its packs, generators, reference art and credits were removed, and so was R10's spike record (`rust/proofs/hamster-turnaround.md` and its two drawings); the record can still be read at commit 0f9fa5a. R10 and task 5 stay done as history; nothing more is planned for the Hamster here.
+
 The owner chose a red "Failed" bubble for failed turns over keeping "!", accepting one deliberate deviation from the C# board, so a failure reads differently from a question. Everything else stays outside the board, so fn-1's R9 parity and the frame goldens keep their meaning. The aura is an effect over done, not a mood: a new mood would change the golden frames' `anim_state`, and the owner's "glow replaces the first seconds of every done" fits an effect exactly. With that, glow's slot in the priority list has no separate effect. The owner chose `tired` to leave sleep alone, with hover as the window into it at night. The blink stays random for every pet. Rejected: baking JLandbo's blink rhythm into packs, which would fight the behaviour layer's blink. The owner asked to approve a prototype of the aura before it replaces done's opening sparkles (R12, task 7).
 
 Maintainability (plan review): duplication - the same channel, fallback and review guidance is edited in both copies of the aipet-avatar-pack skill; structure - the mood step stays out of `PetUi::tick`'s hot path, in its own module (task 1)

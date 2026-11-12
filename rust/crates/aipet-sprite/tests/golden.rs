@@ -1,9 +1,9 @@
-//! Replays the golden data the C# pet wrote (tests/golden/frames.json, from rust/golden) through the Rust port. Every
-//! pixel, PixelsChanged, AnimState and idle act must match exactly, and the doubles bit for bit (System.Text.Json
-//! writes a double so that it reads back exactly).
+//! Replays the golden data the C# pet wrote (tests/golden/frames.json, from the golden generator) through the Rust
+//! port. Every pixel, PixelsChanged, AnimState and idle act must match exactly, and the doubles bit for bit
+//! (System.Text.Json writes a double so that it reads back exactly).
 //!
-//! When the C# changes: `dotnet run --project rust/golden -c Release` from the repository root, then fix the port
-//! until this passes. Never edit frames.json by hand.
+//! frames.json is frozen: the C# and its generator are gone (tests/golden/README.md), so it is the contract as it
+//! stands. Never edit it by hand.
 
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
@@ -21,12 +21,8 @@ fn golden() -> &'static Value {
     static GOLDEN: OnceLock<Value> = OnceLock::new();
     GOLDEN.get_or_init(|| {
         let path = manifest_dir().join("tests/golden/frames.json");
-        let text = fs::read_to_string(&path).unwrap_or_else(|e| {
-            panic!(
-                "{}: {e} (write it with: dotnet run --project rust/golden -c Release)",
-                path.display()
-            )
-        });
+        let text = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{}: {e} (a frozen corpus: see tests/golden/README.md)", path.display()));
         serde_json::from_str(&text).expect("frames.json parses")
     })
 }
@@ -54,7 +50,7 @@ fn hex_bytes(s: &str) -> Vec<u8> {
         .collect()
 }
 
-/// The random source of a case, as in rust/golden: `None` panics (the C# Random threw), `Scripted` is the golden
+/// The random source of a case, as in the golden generator: `None` panics (the C# Random threw), `Scripted` is the golden
 /// program's ScriptedRandom: call k (counting on from the seed) gives next_double() = k * 0.6180339887498949 % 1
 /// and next_int(max) = k * 7 % max.
 enum TestRng {
@@ -98,7 +94,7 @@ fn avatars() -> &'static Vec<Avatar> {
                 let file = fs::read(manifest_dir().join("../../..").join(repo)).unwrap();
                 assert!(
                     file == bytes,
-                    "{repo} changed since frames.json was written: run rust/golden again"
+                    "{repo} changed since frames.json was written, which can't be written again (tests/golden/README.md)"
                 );
                 bytes = file;
             }
@@ -219,6 +215,12 @@ const TOLERANCE: usize = PIXELS * 2 / 100;
 /// report.
 static WORST: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static SHIFTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Laptop frames whose arms differ from the C#'s, as they may (see [`HOLD_ROWS`]).
+static HOLDING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// The rows the arms are drawn in. At the laptop the C# drew the resting arms, the screen-right one hidden behind it;
+/// the port draws a paw holding the lid and one typing (the owner, 2026-11-10), so in those frames the body layer may
+/// differ from the C#'s there, and only there.
+const HOLD_ROWS: std::ops::RangeInclusive<i32> = 14..=GH - 1;
 static SKIPPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// Whether the three drawn layers are the C#'s within [`TOLERANCE`]: else the layer, its count of differing pixels,
@@ -320,6 +322,12 @@ fn replay(case: &Value, layers: &[Vec<u32>]) -> Result<usize, String> {
             let either = (0..3).all(|l| (0..PIXELS).all(|p| [before[l][p], after[l][p]].contains(&expected[l][p])));
             if within(&expected, &before, outline).is_ok() || within(&expected, &after, outline).is_ok() || either {
                 SHIFTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            } else if layer == 0
+                && pet.drawn().0.arms == aipet_sprite::pose::Arms::Hold
+                && (0..PIXELS).all(|p| expected[0][p] == drawn[0][p] || HOLD_ROWS.contains(&(p as i32 / GW)))
+                && (1..3).all(|l| (0..PIXELS).all(|p| expected[l][p] == drawn[l][p]))
+            {
+                HOLDING.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             } else if name.starts_with("midpoint-z/") {
                 // these cases put the Zs on exact rounding midpoints, where the C#'s float error sends each glyph its
                 // own way and the glyphs wrap and overlap; baked frames can't follow that, so only their motion and
@@ -403,10 +411,11 @@ fn every_frame_matches_the_csharp() {
     );
     assert!(checked > 1000, "only {checked} samples checked");
     eprintln!(
-        "{checked} samples within the tolerance ({} only a millisecond off, {} midpoint-z layers not compared); the most \
-         pixels any layer differed in: {}",
+        "{checked} samples within the tolerance ({} only a millisecond off, {} midpoint-z layers not compared, {} laptop \
+         frames with the port's paws); the most pixels any layer differed in: {}",
         SHIFTED.load(std::sync::atomic::Ordering::Relaxed),
         SKIPPED.load(std::sync::atomic::Ordering::Relaxed),
+        HOLDING.load(std::sync::atomic::Ordering::Relaxed),
         WORST.load(std::sync::atomic::Ordering::Relaxed)
     );
 }

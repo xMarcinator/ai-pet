@@ -1,0 +1,16 @@
+{
+  "assignee": "25668644+xMarcinator@users.noreply.github.com",
+  "claim_note": "",
+  "claimed_at": "2026-11-09T15:22:34.053087Z",
+  "evidence": {
+    "commits": [
+      "181b9ca",
+      "dd42386"
+    ],
+    "tests": [
+      "scripts/perf/pet-bench.sh, two runs"
+    ]
+  },
+  "status": "done",
+  "updated_at": "2026-11-09T19:38:53.064579Z"
+}

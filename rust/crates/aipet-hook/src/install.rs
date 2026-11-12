@@ -1,4 +1,4 @@
-//! `--install` and `--uninstall` (`src/AiPet.Hook/Install.cs:1-71`): the checks before an agent's registration is
+//! `--install` and `--uninstall` (`AiPet.Hook/Install.cs:1-71`): the checks before an agent's registration is
 //! touched, the line that says why it failed, and the atomic write every registration saves with.
 //!
 //! What the C# prints goes through `Console`, one line at a time with `Environment.NewLine`; so does this ([`say`],

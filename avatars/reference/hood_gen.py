@@ -56,6 +56,11 @@ FACE = "M130 72 C155 72 174 88 174 110 C174 132 155 148 130 148 C105 148 86 132 
 # fnt-72: where a tear starts (under the screen-right eye, canvas coordinates), and the news envelope, where the
 # laptop sits between the hands.
 FACE_TEAR = (154, 152)
+# how far the effects are lowered, in art-box px (see build)
+FX_DROP = 12
+# the done's glow behind the pet: pet_states' box with its top as much lower, its bottom where it was, so it
+# stays within the art box as the pixel Hood's does
+AURA = (130, 144, 96, 92)
 ENVELOPE = (114, 150, 204, 202)
 
 # The drawstrings: from the hood opening's lower corners, curving in a little, to their tips; pulled unevenly, so the
@@ -306,8 +311,13 @@ def pack():
                         parts=[{"id": pid, "origin": poses["rest"][pid]}],
                         shapes=shapes, poses=poses, transition_ms=120, animations=animations)
 
+    # the hood stands lower in its drawing than Sprout does in its own, so the shared effects come out higher above
+    # its head than the pixel Hood's, and the bubbles with them (fn-2 R24): lowered to the pixel Hood's height.
+    effects = vp.effect_layers(C["hi"], C["outline"], d.norm.then(vp.translate(0, FX_DROP)), FACE_TEAR)
+    # The tears stay under the eye, and the dust at the feet.
+    kept = {fx["name"]: fx for fx in vp.effect_layers(C["hi"], C["outline"], d.norm, FACE_TEAR)}
+    effects = [kept[fx["name"]] if fx["name"] in ("tears", "dust") else fx for fx in effects]
     # facing left (only while dragged), the dust trails the other way, as the pixel Hood's does
-    effects = vp.effect_layers(C["hi"], C["outline"], d.norm, FACE_TEAR)
     for fx in effects:
         if fx["name"] == "dust":
             fx["mirror"] = "flip"
@@ -324,7 +334,7 @@ def pack():
         "accent": C["hi"],
         "glow": C["glow"],
         # the done's golden glow first, behind everything
-        "layers": [vp.aura_layer(d.norm), body, laces, eyes, prop, screen, phones,
+        "layers": [vp.aura_layer(d.norm, AURA), body, laces, eyes, prop, screen, phones,
                    # the screen-left hand types; the screen-right one holds the magnifier as it scans
                    hand("hand-left", "bob-l", {"hold": typing}), hand("hand-right", "bob-r", {"lens": vp.scan_keys()}),
                    *effects],

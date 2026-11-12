@@ -1,0 +1,29 @@
+# cargo-hakari's settings for the workspace-hack crate, aipet-workspace-hack (crates/workspace-hack): the members that
+# depend on it build each shared third-party crate with one feature set, whether cargo builds one package or the
+# workspace, so `cargo test -p aipet-core` and `cargo test --workspace` don't each build their own copy. After adding
+# a crate or changing a dependency, run `cargo hakari generate && cargo hakari manage-deps` in rust/; a merge conflict
+# in the hack's Cargo.toml is resolved by running `cargo hakari generate` again, never by hand.
+
+hakari-package = "aipet-workspace-hack"
+# members' path dependencies on the hack carry a version (cargo-hakari 0.9.22 or later)
+dep-format-version = "4"
+# the workspace's resolver
+resolver = "3"
+workspace-hack-line-style = "full"
+
+# The release targets (about.toml's). macOS only gets the hack's platform-independent part; it isn't released.
+platforms = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+
+# Left out of the computation, and without a dependency on the hack:
+# - aipet-hook and aipet-ipc: the hook is a tiny process started on every event, and must build with no more crates
+#   and features than its own. aipet-ipc goes with it, since the hook would get the hack through it.
+# - the pet's binary and its front end (aipet, aipet-ui, aipet-desktop, aipet-wayland): with them in, the hack takes
+#   iced's crates, x11rb and winit's windows-sys features, and aipet-core and every headless test would build them.
+# They still get the hack's features through aipet-core, as they would in a workspace build.
+[traversal-excludes]
+workspace-members = ["aipet-hook", "aipet-ipc", "aipet", "aipet-ui", "aipet-desktop", "aipet-wayland"]
+third-party = []
+
+[final-excludes]
+workspace-members = []
+third-party = []

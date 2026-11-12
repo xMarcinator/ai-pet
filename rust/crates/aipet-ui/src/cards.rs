@@ -47,19 +47,29 @@ pub enum Button {
     /// A working or thinking chat in its agent's desktop app: opens the chat, or brings the app forward. It stands
     /// where the C#'s Stop did, which opened the chat this way whenever it couldn't stop it.
     Open,
+    /// A tracker task's, when the tracker lets this pet act (fnt-81): answer its permission prompt once, or pause or
+    /// stop its run.
+    Allow,
+    Deny,
+    PauseRun,
+    StopRun,
 }
 
 impl Button {
-    const ALL: [Button; 6] = [
+    const ALL: [Button; 10] = [
         Button::Ticket,
         Button::PullRequest,
         Button::Previous,
         Button::PlayPause,
         Button::Next,
         Button::Open,
+        Button::Allow,
+        Button::Deny,
+        Button::PauseRun,
+        Button::StopRun,
     ];
 
-    fn bit(self) -> u8 {
+    fn bit(self) -> u16 {
         1 << self as u8
     }
 
@@ -72,13 +82,17 @@ impl Button {
             Button::PlayPause => "Play / pause".into(),
             Button::Next => "Next".into(),
             Button::Open => format!("Open in the {}", app.unwrap_or("app")),
+            Button::Allow => "Allow once".into(),
+            Button::Deny => "Deny".into(),
+            Button::PauseRun => "Pause the run".into(),
+            Button::StopRun => "Stop the run".into(),
         }
     }
 }
 
 /// A set of [`Button`]s.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Buttons(u8);
+pub struct Buttons(u16);
 
 /// A round button's size, the margin before each, and the margin before the first (Button.round, MakeCard's Actions).
 const BUTTON: f32 = 32.0;
@@ -118,7 +132,8 @@ impl Buttons {
 pub struct Bubble {
     pub id: Arc<str>,
     pub section: Section,
-    /// What it is, as the Board says: `chat`, `jira`, `jira-error`, `github`, `github-error` or `music`.
+    /// What it is, as the Board says: `chat`, `task`, `jira`, `jira-error`, `github`, `github-error`, `tracker-error`
+    /// or `music`.
     pub kind: &'static str,
     /// Its state, for the dot's colour and the style: thinking, working, attention, done, idle, review…
     pub state: &'static str,
@@ -131,6 +146,17 @@ pub struct Bubble {
     pub app: Option<(&'static str, u32)>,
     /// The round buttons it shows while the pointer is on it.
     pub buttons: Buttons,
+    /// A tracker task's counts (fnt-81).
+    pub progress: Option<Progress>,
+}
+
+/// A tracker task's counts on its bubble (fnt-81): its subtasks done of total as a thin strip along the bottom, and
+/// how many agents work on it as a badge on the dot.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Progress {
+    pub done: u32,
+    pub total: u32,
+    pub agents: u32,
 }
 
 /// A bubble's title and detail cut to fit, and the bubble's width.
@@ -156,6 +182,7 @@ pub struct Card {
     pub state: &'static str,
     pub app: Option<(&'static str, u32)>,
     pub buttons: Buttons,
+    pub progress: Option<Progress>,
     /// What its text is fitted from: the title, and the detail with its thinking dots and how many more there are.
     text: (String, String),
     /// Its text fitted at rest, and beside the buttons it was fitted for (made once the pointer is on it).
@@ -281,8 +308,8 @@ impl Stacks {
             let detail = detail(bubble, t);
             match self.cards.iter_mut().find(|c| c.id == bubble.id) {
                 Some(card) => {
-                    (card.kind, card.state, card.app, card.buttons) =
-                        (bubble.kind, bubble.state, bubble.app, bubble.buttons);
+                    (card.kind, card.state, card.app, card.buttons, card.progress) =
+                        (bubble.kind, bubble.state, bubble.app, bubble.buttons, bubble.progress);
                     if card.text.0 != *bubble.title || card.text.1 != detail {
                         card.rest = fit(&bubble.title, &detail, None);
                         card.chrome = None;
@@ -298,6 +325,7 @@ impl Stacks {
                         state: bubble.state,
                         app: bubble.app,
                         buttons: bubble.buttons,
+                        progress: bubble.progress,
                         text: (bubble.title.to_string(), detail),
                         rest,
                         chrome: None,
@@ -520,6 +548,7 @@ mod tests {
             more: 0,
             app: None,
             buttons: Buttons::default(),
+            progress: None,
         }
     }
 
@@ -722,6 +751,7 @@ mod tests {
             Bubble {
                 title: "A long title of an issue".into(),
                 buttons: two,
+                progress: None,
                 ..bubble("r1", Section::Reviews, "review")
             },
             bubble("r2", Section::Reviews, "review"),
