@@ -18,6 +18,7 @@
 //! through a Board of its own instead (`demo`).
 
 mod cards;
+mod control;
 #[cfg(any(test, feature = "demo"))]
 pub mod demo;
 mod executor;
@@ -142,6 +143,8 @@ pub enum Message {
     #[cfg(any(test, feature = "demo"))]
     SetMood(Option<&'static str>),
     Settings(settings::Message),
+    /// An agent's command over MCP: done as Settings would, and answered on the request.
+    Command(aipet_core::control::Request),
 }
 
 /// The menu's items.
@@ -177,6 +180,8 @@ pub enum News {
     Board(Arc<Board>),
     /// A review turned up.
     Alert,
+    /// An agent's command, from the MCP listener (it isn't the core's, but it comes the same way).
+    Command(aipet_core::control::Request),
 }
 
 impl From<News> for Message {
@@ -184,6 +189,7 @@ impl From<News> for Message {
         match news {
             News::Board(board) => Message::Board(board),
             News::Alert => Message::Alert,
+            News::Command(request) => Message::Command(request),
         }
     }
 }
@@ -1030,6 +1036,11 @@ impl PetUi {
             #[cfg(any(test, feature = "demo"))]
             Message::SetMood(mood) => self.mood = mood,
             Message::Settings(message) => return settings::update(self, message),
+            Message::Command(request) => {
+                let (answer, effect) = control::run(self, request.command.clone());
+                request.answer(answer);
+                return effect;
+            }
         }
         None
     }
@@ -1662,11 +1673,11 @@ pub(crate) mod tests {
             self.asked().quit_on_restart = quit;
         }
 
-        fn prefs(&self) -> Vec<Prefs> {
+        pub(crate) fn prefs(&self) -> Vec<Prefs> {
             self.asked().prefs.clone()
         }
 
-        fn dismissed(&self) -> Vec<String> {
+        pub(crate) fn dismissed(&self) -> Vec<String> {
             self.asked().dismissed.clone()
         }
     }
@@ -1726,7 +1737,7 @@ pub(crate) mod tests {
     // ------------------------------------------------------------------ the Board's bubbles and mood
 
     /// A hook chat.
-    fn chat(id: &str, state: &'static str, title: &str, detail: &str, place: &str, ts: f64) -> Entry {
+    pub(crate) fn chat(id: &str, state: &'static str, title: &str, detail: &str, place: &str, ts: f64) -> Entry {
         let mut chat = Entry::default();
         chat.id = id.into();
         chat.agent = Some(if id.starts_with("codex") { "codex" } else { "claude" });
@@ -1739,9 +1750,9 @@ pub(crate) mod tests {
         chat
     }
 
-    const NOW: f64 = 1_800_000_000.0;
+    pub(crate) const NOW: f64 = 1_800_000_000.0;
 
-    fn board(sources: &Sources) -> Arc<Board> {
+    pub(crate) fn board(sources: &Sources) -> Arc<Board> {
         let mut board = Board::new();
         board.refresh(sources, NOW);
         Arc::new(board)

@@ -225,9 +225,13 @@ fn pet(wayland: bool, instance: single::Instance) -> Result<(), String> {
     let options = core_thread::Options::app(Arc::clone(&platform), prefs.music);
     let (secrets, http) = (Arc::clone(&options.secrets), options.http.clone());
     let (news, heard) = mpsc::channel();
+    // agents' commands reach the pet the way the core's news does: the shell hands both over every frame
+    let commands = news.clone();
+    let pet: aipet_core::control::PetLink =
+        Arc::new(move |request| commands.send(aipet_ui::News::Command(request)).is_ok());
     let core = core_thread::start(options, news);
     // a pet without the listener (its port taken) still has the pipe and Settings: the start logged why
-    let listener = aipet_mcp::Listener::start(aipet_mcp::Options::app(updates::version()), core.ingress()).ok();
+    let listener = aipet_mcp::Listener::start(aipet_mcp::Options::app(updates::version(), pet), core.ingress()).ok();
     let services = Services {
         data_dir: data_dir.clone(),
         jira: Some(core.jira()),

@@ -6,6 +6,7 @@
 //! - [`jira`], [`github`] and [`presets`]: the review watchers and their settings;
 //! - [`tracker`]: the flow-next tracker's active tasks, as its companion device (fnt-81);
 //! - [`board`]: the sources merged into the pet's bubbles;
+//! - [`control`]: what agents ask of the pet over MCP, and its answers;
 //! - [`config`], [`secrets`], [`log`], [`cleanup`] and [`update_status`]: the data, tokens and logs the .NET app
 //!   reads and writes too, the uninstaller's hook cleanup, and the update texts.
 //!
@@ -15,6 +16,7 @@ pub mod board;
 pub mod cleanup;
 pub mod codex_watcher;
 pub mod config;
+pub mod control;
 pub mod github;
 mod http;
 pub mod jira;

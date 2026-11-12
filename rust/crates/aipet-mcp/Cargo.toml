@@ -21,6 +21,10 @@ tower.workspace = true
 tower-http.workspace = true
 aipet-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
+# the tools' tests drive a real pet, headless
+[dev-dependencies]
+aipet-ui = { path = "../aipet-ui" }
+
 # the token file: O_NOFOLLOW opens, fstat's owner and mode
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true

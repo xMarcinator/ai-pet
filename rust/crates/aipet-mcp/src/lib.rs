@@ -3,7 +3,9 @@
 //!
 //! It runs on a thread of its own with a current-thread tokio runtime, never on the shells' executor (aipet-ui's
 //! one-worker `Executor`), and it reaches the rest of the pet only through the core's [`Ingress`], which the pipe
-//! server shares: events from either side land in the same chats and the same record. Its status events go there
+//! server shares (events from either side land in the same chats and the same record), and through its [`PetLink`]:
+//! the tools that read or change the pet's avatar, settings and board ask the pet, which answers within
+//! [`ANSWER_WITHIN`] or the call is `isError`. The hooks' status events go to the ingress
 //! through one bounded queue and a thread of their own ([`events`]), in the order they arrived.
 //!
 //! Every request passes the same checks first ([`guard`]): a body over [`MAX_REQUEST`] gets 413, a Host that isn't
@@ -30,6 +32,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
 
+#[cfg(doc)]
+use aipet_core::control::ANSWER_WITHIN;
+use aipet_core::control::PetLink;
 use aipet_core::server::Ingress;
 use aipet_ipc::protocol::{MAX_REQUEST, MCP_PORT};
 use axum::Router;
@@ -54,16 +59,19 @@ pub struct Options {
     pub version: String,
     /// Where the listener's `mcp:` lines go: the app log, aipet.log.
     pub log: Arc<dyn Fn(&str) + Send + Sync>,
+    /// How the tools reach the pet.
+    pub pet: PetLink,
 }
 
 impl Options {
-    /// The pet's: [`MCP_PORT`] (or `AIPET_PORT`, for tests), its data folder's token, and aipet.log.
-    pub fn app(version: impl Into<String>) -> Options {
+    /// The pet's: [`MCP_PORT`] (or `AIPET_PORT`, for tests), its data folder's token, aipet.log, and the pet.
+    pub fn app(version: impl Into<String>, pet: PetLink) -> Options {
         Options {
             port: port(std::env::var("AIPET_PORT").ok().as_deref()),
             token_file: aipet_ipc::paths::mcp_token(),
             version: version.into(),
             log: Arc::new(aipet_core::log::write),
+            pet,
         }
     }
 }
@@ -102,6 +110,7 @@ impl Listener {
             token_file,
             version,
             log,
+            pet,
         } = options;
         // the port first: a pet that can't have it leaves the token file alone
         let socket = TcpListener::bind((Ipv4Addr::LOCALHOST, port))?;
@@ -119,6 +128,7 @@ impl Listener {
             version,
             ingress,
             events,
+            pet,
             log,
             refused: Mutex::new(None),
         });
@@ -157,6 +167,7 @@ pub(crate) struct State {
     pub(crate) ingress: Arc<Ingress>,
     /// Where the status events go on their way to the ingress, in the order they arrived.
     pub(crate) events: events::Events,
+    pub(crate) pet: PetLink,
     log: Arc<dyn Fn(&str) + Send + Sync>,
     /// When the log last got a line about a request without the right token.
     pub(crate) refused: Mutex<Option<Instant>>,

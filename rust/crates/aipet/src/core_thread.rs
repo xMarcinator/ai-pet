@@ -580,7 +580,7 @@ mod tests {
             loop {
                 match heard.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
                     Ok(News::Alert) => break,
-                    Ok(News::Board(_)) => {}
+                    Ok(News::Board(_) | News::Command(_)) => {}
                     Err(e) => panic!("no alert: {e}"),
                 }
             }

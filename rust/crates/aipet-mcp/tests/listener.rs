@@ -1,5 +1,6 @@
 //! The listener over real HTTP, on a port of the test's own: its checks (R2, R3), both MCP eras, the port taken, the
-//! tools' conformance (R11), which tasks 4-6 extend with their tools, and Claude's HTTP hooks (R4, R5).
+//! tools' conformance (R11), which task 6 extends with its tools, Claude's HTTP hooks (R4, R5), and the tools that
+//! drive the pet (R7, R8) against a real one, headless, with no Settings.
 //!
 //! The requests are written by hand on a TCP stream, so a test can send any Host, Origin or body it likes.
 
@@ -7,10 +8,13 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
+use aipet_core::board::{Board, Sources};
+use aipet_core::control::{PetLink, Request};
 use aipet_core::server::Ingress;
 use aipet_core::sessions::{AgentSessions, Entry, Envelope};
 use aipet_ipc::event;
@@ -28,8 +32,44 @@ struct Pet {
     root: PathBuf,
 }
 
+/// A real pet, headless: a `PetUi` on a thread of its own, handed its news as a shell does, with a board of one chat
+/// (`claude:c4rd`), up before the link is given (making one takes seconds in a debug build). It ends when the link
+/// goes.
+fn headless() -> PetLink {
+    let (news, heard) = mpsc::channel::<aipet_ui::News>();
+    let (up, ready) = mpsc::channel();
+    thread::spawn(move || {
+        let mut ui = aipet_ui::PetUi::new(aipet_ui::Setup::detached());
+        let mut chat = Entry::default();
+        chat.id = "claude:c4rd".into();
+        chat.agent = Some("claude");
+        chat.state = Some("working");
+        chat.title = Some("Fixing the build".into());
+        chat.ts = unix_time(SystemTime::now());
+        let mut board = Board::new();
+        board.refresh(
+            &Sources {
+                chats: vec![chat],
+                ..Sources::default()
+            },
+            unix_time(SystemTime::now()),
+        );
+        ui.update(aipet_ui::Message::Board(Arc::new(board)));
+        let _ = up.send(());
+        for news in heard {
+            ui.update(news.into());
+        }
+    });
+    ready.recv().expect("the pet starts");
+    Arc::new(move |request| news.send(aipet_ui::News::Command(request)).is_ok())
+}
+
 impl Pet {
     fn start(test: &str) -> Pet {
+        Pet::with_pet(test, headless())
+    }
+
+    fn with_pet(test: &str, pet: PetLink) -> Pet {
         let root = std::env::temp_dir().join(format!("aipet-mcp-{}-{test}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
@@ -40,7 +80,7 @@ impl Pet {
             root.join("hook-events.log"),
             Box::new(|_| {}),
         ));
-        let listener = Listener::start(options(&root, 0, &log), Arc::clone(&ingress)).unwrap();
+        let listener = Listener::start(options(&root, 0, &log, pet), Arc::clone(&ingress)).unwrap();
         let token = std::fs::read_to_string(root.join("mcp-token")).unwrap();
         Pet {
             listener,
@@ -91,6 +131,13 @@ impl Pet {
         let reply = self.mcp(&headers, &body);
         (reply.status, reply.json())
     }
+
+    /// A stateless tools/call: its result.
+    fn call(&self, name: &str, arguments: Value) -> Value {
+        let (status, reply) = self.stateless("tools/call", Some(name), json!({"name": name, "arguments": arguments}));
+        assert_eq!(status, 200, "{name}: {reply}");
+        reply["result"].clone()
+    }
 }
 
 impl Drop for Pet {
@@ -99,13 +146,14 @@ impl Drop for Pet {
     }
 }
 
-fn options(root: &std::path::Path, port: u16, log: &Arc<Mutex<Vec<String>>>) -> Options {
+fn options(root: &std::path::Path, port: u16, log: &Arc<Mutex<Vec<String>>>, pet: PetLink) -> Options {
     let log = Arc::clone(log);
     Options {
         port,
         token_file: root.join("mcp-token"),
         version: "9.9.9-test".into(),
         log: Arc::new(move |line| log.lock().unwrap().push(line.to_owned())),
+        pet,
     }
 }
 
@@ -303,7 +351,10 @@ fn a_body_over_4_mib_gets_413() {
 fn a_second_pet_on_the_same_port_logs_once_and_runs_without_the_listener() {
     let pet = Pet::start("taken");
     let log = Arc::new(Mutex::new(Vec::new()));
-    let second = Listener::start(options(&pet.root, pet.port(), &log), Arc::clone(&pet.ingress));
+    let second = Listener::start(
+        options(&pet.root, pet.port(), &log, headless()),
+        Arc::clone(&pet.ingress),
+    );
     assert!(second.is_err());
     let lines = log.lock().unwrap().clone();
     assert_eq!(lines.len(), 1, "{lines:?}");
@@ -380,7 +431,6 @@ fn a_2025_session_succeeds_and_an_unknown_session_gets_404() {
 #[derive(Clone, Copy, Debug)]
 enum Kind {
     ReadOnly,
-    #[allow(dead_code, reason = "tasks 5 and 6 add such tools")]
     Idempotent,
     #[allow(dead_code, reason = "task 6 adds such a tool")]
     Destructive,
@@ -388,7 +438,7 @@ enum Kind {
 }
 
 /// A tool of the table: its name and kind, a call that succeeds, and one that is a business failure (`isError`),
-/// where the tool has one. Tasks 4-6 add a row for each tool they add.
+/// where the tool has one. Task 6 adds a row for each tool it adds.
 struct Row {
     name: &'static str,
     kind: Kind,
@@ -410,6 +460,42 @@ fn table() -> Vec<Row> {
             ok: json!({"agent": "codex", "event": {"session_id": "c0dex", "hook_event_name": "SessionStart",
                 "cwd": "/w", "model": "gpt-5", "transcript_path": null, "source": "startup"}}),
             failing: Some(json!({"agent": "codex", "event": {"session_id": "c0dex", "hook_event_name": "Teleport"}})),
+        },
+        Row {
+            name: "list_avatars",
+            kind: Kind::ReadOnly,
+            ok: json!({}),
+            failing: None,
+        },
+        Row {
+            name: "wear_avatar",
+            kind: Kind::Idempotent,
+            ok: json!({"name": "Hood", "style": "Vector"}),
+            failing: Some(json!({"name": "Dragon"})),
+        },
+        Row {
+            name: "get_settings",
+            kind: Kind::ReadOnly,
+            ok: json!({}),
+            failing: None,
+        },
+        Row {
+            name: "set_settings",
+            kind: Kind::Idempotent,
+            ok: json!({"pet_size": 120}),
+            failing: Some(json!({"pet_size": 500})),
+        },
+        Row {
+            name: "get_board",
+            kind: Kind::ReadOnly,
+            ok: json!({}),
+            failing: None,
+        },
+        Row {
+            name: "dismiss_card",
+            kind: Kind::Idempotent,
+            ok: json!({"id": "claude:c4rd"}),
+            failing: Some(json!({"id": "claude:n0ne"})),
         },
     ]
 }
@@ -899,4 +985,74 @@ fn an_invalid_agent_or_event_is_an_error_and_changes_nothing() {
         "{:?}",
         pet.log.lock().unwrap()
     );
+}
+
+// ------------------------------------------------------------------------------------------- R7, R8: the pet's tools
+
+#[test]
+fn the_tools_drive_the_pet_and_read_back_what_they_did() {
+    let pet = Pet::start("drive");
+    let worn = pet.call("wear_avatar", json!({"name": "Hood", "style": "Vector"}));
+    assert_eq!(
+        worn["structuredContent"],
+        json!({"worn": "Hood", "style": "Vector", "theme": "Green"}),
+        "{worn}"
+    );
+    let listed = pet.call("list_avatars", json!({}));
+    let avatars = &listed["structuredContent"];
+    assert_eq!(
+        avatars["worn"],
+        json!({"name": "Hood", "style": "Vector", "theme": "Green"})
+    );
+    let names: Vec<&str> = avatars["avatars"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["Sprout", "Hood", "Pip"]);
+
+    let set = pet.call("set_settings", json!({"pet_size": 150, "bubbles": false}));
+    assert_eq!(set["structuredContent"]["pet_size"], 150, "{set}");
+    let got = pet.call("get_settings", json!({}));
+    assert_eq!(got["structuredContent"], set["structuredContent"]);
+
+    let board = pet.call("get_board", json!({}));
+    assert_eq!(
+        board["structuredContent"]["cards"],
+        json!([{"id": "claude:c4rd", "source": "claude", "title": "Fixing the build", "state": "working"}])
+    );
+}
+
+#[test]
+fn a_refused_change_names_the_range_or_the_choices_and_changes_nothing() {
+    let pet = Pet::start("refused");
+    let before = pet.call("get_settings", json!({}));
+    let refused = pet.call("set_settings", json!({"pet_size": 150, "bubble_size": 200}));
+    assert_eq!(refused["isError"], true, "{refused}");
+    assert!(refused.to_string().contains("80 to 120"), "{refused}");
+    assert_eq!(pet.call("get_settings", json!({})), before);
+
+    let unknown = pet.call("wear_avatar", json!({"name": "Hood", "style": "Crayon"}));
+    assert_eq!(unknown["isError"], true, "{unknown}");
+    assert!(unknown.to_string().contains("\\\"Vector\\\""), "{unknown}");
+}
+
+#[test]
+fn a_pet_that_never_answers_is_an_error_after_5_s() {
+    let kept: Arc<Mutex<Vec<Request>>> = Arc::default();
+    let held = Arc::clone(&kept);
+    let pet = Pet::with_pet(
+        "silent",
+        Arc::new(move |request| {
+            held.lock().unwrap().push(request);
+            true
+        }),
+    );
+    let started = Instant::now();
+    let reply = pet.call("get_settings", json!({}));
+    assert_eq!(reply["isError"], true, "{reply}");
+    assert!(reply.to_string().contains("didn't answer within 5 s"), "{reply}");
+    assert!(started.elapsed() >= Duration::from_secs(5));
+    assert_eq!(kept.lock().unwrap().len(), 1);
 }

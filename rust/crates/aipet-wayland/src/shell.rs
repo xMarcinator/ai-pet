@@ -276,14 +276,19 @@ impl Shell {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Frame(now) => {
+                // agents' commands come with the news, and may ask for an effect (keeping the pet on top)
+                let mut tasks = Vec::new();
                 while let Ok(news) = self.news.try_recv() {
-                    self.ui.update(news.into());
+                    if let Some(effect) = self.ui.update(news.into()) {
+                        tasks.push(self.apply(effect));
+                    }
                 }
                 self.ui.tick(now);
                 self.expire(now);
                 // `now` is when the tick was due, and a tick can come late: the region's wait is counted from when
                 // it really went out
-                self.sync_region(Instant::now())
+                tasks.push(self.sync_region(Instant::now()));
+                Task::batch(tasks)
             }
             Message::Ui(message) => {
                 // choosing an item closes the menu
