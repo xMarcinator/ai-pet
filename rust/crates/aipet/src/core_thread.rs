@@ -363,7 +363,12 @@ impl CoreThread {
             self.music,
         );
         sources.tracker = TrackerSources::read(&self.tracker);
-        self.board.refresh(&sources, unix_time(SystemTime::now()));
+        let now = unix_time(SystemTime::now());
+        // FNT-75's gate (spike branch only): a fixed board, the same as the gate binary draws
+        if let Some(fixed) = gate_sources(now) {
+            sources = fixed;
+        }
+        self.board.refresh(&sources, now);
         let shown = Shown::of(&self.board);
         if self.shown.as_ref() != Some(&shown) {
             self.shown = Some(shown);
@@ -615,4 +620,80 @@ mod tests {
         );
         drop(core);
     }
+}
+
+/// FNT-75's gate, on the spike branch only: with `AIPET_GATE_CASE=working`, two chats (one working at the laptop,
+/// one thinking) and a Jira issue in review; with `idle`, an idle chat (no bubble) and three Jira issues in review.
+/// Their texts are the gate binary's (`spikes/ui-framework/gate`), and they stay fresh, so the case holds.
+fn gate_sources(now: f64) -> Option<Sources> {
+    use aipet_core::config::JiraSettings;
+    use aipet_core::jira::Issue;
+    use aipet_core::sessions::Entry;
+    use std::collections::HashMap;
+
+    let case = std::env::var("AIPET_GATE_CASE").ok()?;
+    let chat = |id: &str, state: &'static str, title: &str, detail: &str, place: &str, prop: Option<&'static str>| {
+        let mut e = Entry::default();
+        e.id = id.into();
+        e.agent = Some("claude");
+        e.state = Some(state);
+        e.title = Some(title.into());
+        e.detail = Some(detail.into());
+        e.r#where = Some(place.into());
+        e.prop = prop;
+        e.ts = now;
+        e.dispatched = now;
+        e
+    };
+    let issue = |key: &str, summary: &str| Issue {
+        key: key.into(),
+        summary: summary.into(),
+        status: "In Review".into(),
+        updated: now,
+        url: format!("https://example.atlassian.net/browse/{key}"),
+    };
+    let jira = JiraSettings {
+        enabled: true,
+        site: Some("example.atlassian.net".into()),
+        ..JiraSettings::default()
+    };
+    let (chats, issues) = if case == "working" {
+        (
+            vec![
+                chat(
+                    "claude:gate-1",
+                    "working",
+                    "Refactor the payment reconciliation service so the nightly batch stops timing out",
+                    "Editing crates/reconcile/src/batch/scheduler.rs and its tests",
+                    "terminal",
+                    Some("laptop"),
+                ),
+                chat(
+                    "claude:gate-2",
+                    "thinking",
+                    "Why does the settlement export double-count refunds issued after midnight UTC",
+                    "Reading the export pipeline and the refund ledger's history",
+                    "desktop",
+                    None,
+                ),
+            ],
+            vec![issue("ABC-1423", "Migrate the customer notification templates to the new rendering engine")],
+        )
+    } else {
+        (
+            vec![chat("claude:gate-idle", "idle", "Waiting", "Idle", "terminal", None)],
+            vec![
+                issue("ABC-1423", "Migrate the customer notification templates to the new rendering engine"),
+                issue("ABC-1431", "Retry failed webhook deliveries with backoff instead of dropping them on the floor"),
+                issue("ABC-1440", "Move the invoice PDF renderer off the request path and into the worker queue"),
+            ],
+        )
+    };
+    Some(Sources {
+        chats,
+        jira,
+        issues,
+        pr_for_key: HashMap::from([("ABC-1423".into(), "https://github.com/acme/notifications/pull/882".into())]),
+        ..Sources::default()
+    })
 }
