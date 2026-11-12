@@ -378,3 +378,66 @@ No Settings pipe, no child process, no JSON contract. The spec changes with it: 
 edge cases and the Settings pipe go; the threads constraint ("each shell runs its own event loop on the main
 thread") becomes "iced on the main thread, the shell on the pet thread". Still to try with the owner: Windows
 (softbuffer's opaque window there is fine for Settings; the pet's layered window off the main thread).
+
+## The gate: the CPU stack against iced at the worst case (FNT-75 task 1)
+
+**Verdict: STOP.** The CPU-drawn pet uses more calm CPU than the iced pet in all eight cases, by 2 % to 127 %, so
+R1 fails and the spec's later tasks are not started. Memory is the one clear win: 15–39 MB against 112–176 MB, with
+no GPU library mapped.
+
+**Measured 2026-11-12, 21:20–22:15**, Hyprland 0.57.2, eDP-1 1920×1200 (i7-12850HX, `powersave` governor), with
+`spikes/ui-framework/gate.sh` on `spike/ui-framework`: the gate binary (`spikes/ui-framework/gate/`) against the
+release iced pet built from the same branch, showing the same cards through `AIPET_GATE_CASE` (spike-only). Paired
+by fn-1's method: both run at once, each in its own sandbox, settle 60 s, then five rounds of a 30 s sample of
+each, alternating; CPU is utime + stime as a percentage of one core. The output's scale was set before each round
+(`hyprctl eval 'hl.monitor({ output = "eDP-1", ..., scale = 2 })'`: `hyprctl keyword` answers "unknown request"
+on Hyprland 0.57's Lua config), and the script checked the gate drew at that scale.
+
+**Provisional load:** the load limit was raised from 1.0 to 4 (`MAX_LOAD=4`), at the owner's word to start at once.
+The machine had just booted, and the Claude desktop app alone kept the 1-minute load at about 1.8. A re-run at
+the method's 1.0 is not expected to change the verdict: the pairs are measured side by side, the samples' spread is
+under 0.5 points, and six of the eight gaps are over 1.9 points.
+
+| Scale | Case | iced CPU | Gate CPU | iced samples | Gate samples | iced RSS | Gate RSS |
+|---|---|---|---|---|---|---|---|
+| 2 | Sprout idle | 6.40 % | 14.50 % | 6.53, 5.73, 6.37, 6.53, 6.40 | 14.63, 13.96, 14.50, 14.76, 14.23 | 110 MB | 24 MB |
+| 2 | Sprout working | 6.50 % | 13.16 % | 6.53, 6.50, 6.50, 6.50, 6.46 | 13.13, 13.20, 13.13, 13.20, 13.16 | 161 MB | 38 MB |
+| 2 | Dewdrop idle | 6.76 % | 12.73 % | 6.40, 6.70, 6.76, 6.83, 7.13 | 12.66, 12.73, 12.73, 12.76, 12.63 | 169 MB | 21 MB |
+| 2 | Dewdrop working | 7.00 % | 10.80 % | 7.00, 6.96, 6.96, 7.03, 7.06 | 10.70, 10.73, 10.83, 10.90, 10.80 | 169 MB | 20 MB |
+| 1.5 | Sprout idle | 6.60 % | 10.70 % | 6.60, 6.03, 6.66, 7.03, 6.46 | 10.73, 10.70, 10.80, 10.70, 10.46 | 172 MB | 19 MB |
+| 1.5 | Sprout working | 6.53 % | 9.53 % | 6.50, 6.56, 6.53, 6.53, 6.46 | 9.60, 9.53, 9.50, 9.56, 9.50 | 172 MB | 26 MB |
+| 1.5 | Dewdrop idle | 6.56 % | 8.43 % | 6.50, 6.06, 7.13, 6.56, 7.03 | 8.56, 8.36, 8.43, 8.36, 8.50 | 170 MB | 15 MB |
+| 1.5 | Dewdrop working | 7.13 % | 7.26 % | 7.13, 7.06, 7.10, 7.23, 7.23 | 7.20, 7.20, 7.26, 7.26, 7.30 | 170 MB | 15 MB |
+
+GL maps: 15 in the iced pet, 0 in the gate, in every case.
+
+What the gate draws: the 380×600 window with three cards of long text, all spread (the iced pet folds its stacks
+and shows a reviews header instead; the cards are in the gate's static layer, drawn once per scale, so the
+difference costs no calm CPU), the pulsing dots, the ground shadow and the pet (Sprout pixel art with its halo, Dewdrop's
+vector render) idle or at the laptop. Damage tracking: the static layer (cards, shadows, text) is drawn once per
+scale; each frame restores it under what moved, redraws the moving items, copies only those rects into one of two
+reused `wl_shm` buffers and damages only them; a frame with nothing changed commits nothing.
+
+**Why it loses.** The pet is never still: its breathing changes the sprite's squash every frame, so the gate commits
+about 25 frames a second (9,000–9,700 per case), each about 85k device px at scale 2 (the sprite, its halo and
+the shadow, at a non-integer scale through tiny-skia's bilinear path). Damage tracking cannot help a region that
+changes every frame. In a tight loop a frame takes 1.1 ms (Sprout) and 0.9 ms (Dewdrop) at scale 2 and 0.28 ms at
+scale 1 (`spike-gate --png`), but live, ticking every 33 ms under the `powersave` governor, the same tick takes
+about 1.7 ms at scale 1: the CPU drops to low clocks between short bursts. Time inside the gate's ticks is 4.8 % of a
+core at scale 1 against 5.4 % for the whole process, so the cost is the drawing, not the event loop. The iced pet
+sends the same per-frame transform to the GPU and its CPU side stays at about 6.5 % at every scale; the gate's
+grows with the pixel count (scale 2 is 1.8 times scale 1.5's pixels). FNT-73's calm run at scale 1, with one bubble,
+had the minimal stack 0.27 points under iced; at the worst case it is 0.13–8.1 points over.
+
+What would have to change for a CPU stack to pass: a pet that draws far fewer pixels per frame (the squash at a
+whole-pixel step, or the breathing at a lower rate than the window's), which is a change to how the pet looks, out
+of R2's scope. A faster blit (a hand-written scale-only path in place of tiny-skia's general one) was not tried; it
+would have to more than halve the frame's cost at scale 2.
+
+**Options for the owner** (the spec's "Early proof point"):
+- **Keep iced** (and its 110–176 MB) and close FNT-75; fn-1.29's memory cuts stand.
+- **Accept the CPU cost** for the memory: about 1–8 points of one core more than iced while the pet animates, for
+  about 140 MB less. This needs R1 changed.
+- **Damage-tracked Slint**, the spec's other named path: FNT-73 had its software renderer a point under the
+  minimal stack at scale 1, but it would redraw the same moving sprite every frame, and it can't draw crisp pixel
+  art.
