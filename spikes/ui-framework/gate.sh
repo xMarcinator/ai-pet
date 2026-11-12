@@ -7,7 +7,8 @@
 # The iced pet shows the gate's board (AIPET_GATE_CASE, spike branch only): working, two chats and a review; idle,
 # three reviews over an idle chat. The gate draws the same cards, all spread. Both must draw at the same output
 # scale: run it once per scale, with the output the two windows open on set to that scale first (on Hyprland,
-# `hyprctl keyword monitor <name>,preferred,auto,2`, then 1.5), and pass the scale as the first argument; the gate
+# `hyprctl eval 'hl.monitor({ output = "<name>", mode = ..., position = ..., scale = 2 })'` on the Lua config, where
+# `hyprctl keyword` answers "unknown request"; then 1.5), and pass the scale as the first argument; the gate
 # logs the scale it got, and the script refuses a run where it isn't that.
 #
 # A case passes when the gate's CPU median is below the iced pet's and its RSS is at most 50 MB. It waits up to WAIT

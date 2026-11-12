@@ -154,6 +154,7 @@ mod linux {
             damaged_px: 0,
             commits: 0,
             report_at: Instant::now(),
+            busy: Duration::ZERO,
         };
 
         let mut event_loop: EventLoop<App> = EventLoop::try_new().unwrap();
@@ -238,6 +239,8 @@ mod linux {
         damaged_px: u64,
         commits: u64,
         report_at: Instant,
+        /// Time spent in ticks: drawing, copying and committing.
+        busy: Duration,
     }
 
     impl App {
@@ -258,6 +261,12 @@ mod linux {
             if !self.configured {
                 return;
             }
+            let start = Instant::now();
+            self.tick_inner(qh);
+            self.busy += start.elapsed();
+        }
+
+        fn tick_inner(&mut self, qh: &QueueHandle<Self>) {
             let damage = self.scene.frame(self.scene_time(), self.scale());
             if !damage.is_empty() {
                 self.draws += 1;
@@ -266,10 +275,11 @@ mod linux {
             }
             if self.debug && self.report_at.elapsed() >= Duration::from_secs(5) {
                 eprintln!(
-                    "gate: {} draws, {} commits, {:.2} Mpx damaged so far",
+                    "gate: {} draws, {} commits, {:.2} Mpx damaged so far, {:.1} % of a core in ticks",
                     self.draws,
                     self.commits,
-                    self.damaged_px as f64 / 1e6
+                    self.damaged_px as f64 / 1e6,
+                    self.busy.as_secs_f64() * 100.0 / self.started.elapsed().as_secs_f64()
                 );
                 self.report_at = Instant::now();
             }
