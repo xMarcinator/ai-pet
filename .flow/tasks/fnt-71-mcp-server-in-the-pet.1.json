@@ -8,7 +8,7 @@
   "priority": null,
   "spec": "fnt-71-mcp-server-in-the-pet",
   "spec_path": ".flow/tasks/fnt-71-mcp-server-in-the-pet.1.md",
-  "status": "todo",
+  "status": "done",
   "title": "Spike: Codex mcp_tool hooks and Claude HTTP hooks on real installs",
   "updated_at": "2026-11-09T09:18:28.094093Z"
 }

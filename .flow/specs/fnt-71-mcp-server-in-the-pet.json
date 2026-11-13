@@ -267,7 +267,7 @@
     "plan": 0
   },
   "spec_path": ".flow/specs/fnt-71-mcp-server-in-the-pet.md",
-  "status": "open",
+  "status": "done",
   "title": "MCP server in the pet",
   "tracker": {
     "baseHashFlow": null,
@@ -280,5 +280,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-12T21:24:51.266770Z"
+  "updated_at": "2026-11-13T18:36:53.397670Z"
 }

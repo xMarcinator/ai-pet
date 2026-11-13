@@ -1,0 +1,16 @@
+{
+  "assignee": null,
+  "claim_note": "",
+  "claimed_at": null,
+  "created_at": "2026-11-13T18:36:14.501826Z",
+  "depends_on": [
+    "fnt-76-windows-checks-with-the-owner.1"
+  ],
+  "id": "fnt-76-windows-checks-with-the-owner.4",
+  "priority": null,
+  "spec": "fnt-76-windows-checks-with-the-owner",
+  "spec_path": ".flow/tasks/fnt-76-windows-checks-with-the-owner.4.md",
+  "status": "todo",
+  "title": "The MCP server on Windows: hands-on and budgets (from FNT-71 task 8)",
+  "updated_at": "2026-11-13T18:36:14.501826Z"
+}
