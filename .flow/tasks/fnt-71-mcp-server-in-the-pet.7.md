@@ -38,9 +38,10 @@ Move `--install`, `--uninstall` and `--doctor` into `AiPet` and make them regist
 - [ ] Hands-on on Linux: a real Claude Code session and a real Codex session light the pet through the new hooks
 
 ## Done summary
-TBD
+AiPet --install/--uninstall/--doctor claude|codex and --print-token-header, on aipet-hook made a library. Claude: HTTP hooks for 16 events (no SessionStart, per task 3) in settings.json, mcpServers.aipet (http, headersHelper = AiPet --print-token-header) in .claude.json. Codex: [mcp_servers.aipet] (http_headers_helper = <data>/mcp-header script) and mcp_tool report_event hooks for 11 events in config.toml. Old exe hooks removed by either install; uninstall removes both kinds; invalid JSON/TOML untouched with a message (tests/agent_install.rs). The C# goldens still pass: aipet-hook's own --install keeps the C# behaviour for one release, its --uninstall also drops the new kinds (the uninstaller's cleanup finds registrations naming AiPet or the helper). Doctor asks status over HTTP with the token; Codex trust via codex app-server is a warning. Plugin: HTTP hooks, mcp_tool hooks, .mcp.json and hooks/codex-mcp.json (header via the bundled aipet-hook), checked by check-plugin.sh against the generator. install.sh/install.ps1 use AiPet. NOT done here: the hands-on with a real Claude Code and Codex session lighting the pet (needs the owner's screen) moves to task 8's hands-on pass; install.ps1 and the Windows paths are untested (FNT-76); the Codex plugin's MCP file format and ${PLUGIN_ROOT} in http_headers_helper are unverified on a real Codex.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: bd8653f
+- Tests: cargo test -p aipet-hook (goldens), cargo test -p aipet --test agent_install, scripts/check-plugin.sh --hook aipet-hook
 - PRs:
