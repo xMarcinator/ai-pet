@@ -10,7 +10,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.4.md",
-  "status": "todo",
+  "status": "done",
   "title": "Codex registration: config.toml text editor, hooks.json and trust preservation",
   "updated_at": "2026-09-28T18:32:13.328137Z"
 }

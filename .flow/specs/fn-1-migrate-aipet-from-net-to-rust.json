@@ -2908,7 +2908,7 @@
     "plan": 0
   },
   "spec_path": ".flow/specs/fn-1-migrate-aipet-from-net-to-rust.md",
-  "status": "open",
+  "status": "done",
   "title": "Migrate AiPet from .NET to Rust",
   "tracker": {
     "baseHashFlow": null,
@@ -2921,5 +2921,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-09T19:38:37.919326Z"
+  "updated_at": "2026-11-13T06:55:33.334502Z"
 }

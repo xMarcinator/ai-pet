@@ -10,7 +10,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.26.md",
-  "status": "todo",
+  "status": "done",
   "title": "Documentation for the Rust codebase",
   "updated_at": "2026-09-28T18:25:30.443937Z"
 }

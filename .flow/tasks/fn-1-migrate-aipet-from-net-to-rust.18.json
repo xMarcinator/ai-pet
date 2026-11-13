@@ -10,7 +10,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.18.md",
-  "status": "todo",
+  "status": "done",
   "title": "Platform services for Linux and Windows: focus, open, media",
   "updated_at": "2026-09-30T13:02:03.581783Z"
 }

@@ -7,7 +7,7 @@
   "plan_review_status": "unknown",
   "plan_reviewed_at": null,
   "spec_path": ".flow/specs/fnt-81-tracker-task-bubbles-in-the-pet-fnt-64.md",
-  "status": "open",
+  "status": "done",
   "title": "Tracker task bubbles in the pet (FNT-64 companion)",
   "tracker": {
     "baseHashFlow": null,
@@ -20,5 +20,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-10T16:44:04.193808Z"
+  "updated_at": "2026-11-13T06:55:34.877451Z"
 }

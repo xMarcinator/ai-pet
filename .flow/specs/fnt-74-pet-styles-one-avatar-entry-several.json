@@ -212,7 +212,7 @@
     "plan": 0
   },
   "spec_path": ".flow/specs/fnt-74-pet-styles-one-avatar-entry-several.md",
-  "status": "open",
+  "status": "done",
   "title": "Pet styles: one avatar entry, several drawings",
   "tracker": {
     "baseHashFlow": null,
@@ -225,5 +225,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-09T14:14:14.118319Z"
+  "updated_at": "2026-11-13T06:55:34.496314Z"
 }

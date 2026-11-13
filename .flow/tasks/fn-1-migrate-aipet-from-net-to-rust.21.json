@@ -11,7 +11,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.21.md",
-  "status": "todo",
+  "status": "done",
   "title": "Updates through the Velopack Rust SDK, and the uninstall hook",
   "updated_at": "2026-09-28T18:25:28.628006Z"
 }

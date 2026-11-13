@@ -8,7 +8,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.30.md",
-  "status": "todo",
+  "status": "done",
   "title": "CI parity on the Windows runner: known folders in the scenario's environment, and no NUL-device fixture",
   "updated_at": "2026-10-01T08:57:15.242096Z"
 }

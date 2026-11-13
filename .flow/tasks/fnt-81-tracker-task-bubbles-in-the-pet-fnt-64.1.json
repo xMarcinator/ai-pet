@@ -8,7 +8,7 @@
   "priority": null,
   "spec": "fnt-81-tracker-task-bubbles-in-the-pet-fnt-64",
   "spec_path": ".flow/tasks/fnt-81-tracker-task-bubbles-in-the-pet-fnt-64.1.md",
-  "status": "todo",
+  "status": "done",
   "title": "Protocol v2: task messages and v2 events in aipet-ipc",
   "updated_at": "2026-11-10T16:44:09.933386Z"
 }

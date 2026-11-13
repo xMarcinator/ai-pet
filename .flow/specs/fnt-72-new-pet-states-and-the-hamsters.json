@@ -228,7 +228,7 @@
     "plan": 0
   },
   "spec_path": ".flow/specs/fnt-72-new-pet-states-and-the-hamsters.md",
-  "status": "open",
+  "status": "done",
   "title": "New pet states and the Hamster's accessories",
   "tracker": {
     "baseHashFlow": null,
@@ -241,5 +241,5 @@
     "mergeBaseTracker": null,
     "url": null
   },
-  "updated_at": "2026-11-09T10:20:33.419064Z"
+  "updated_at": "2026-11-13T06:55:33.748052Z"
 }

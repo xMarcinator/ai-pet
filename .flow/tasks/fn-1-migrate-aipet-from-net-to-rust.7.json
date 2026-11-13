@@ -7,7 +7,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.7.md",
-  "status": "todo",
+  "status": "done",
   "title": "Core golden harness and AgentSessions (Claude path)",
   "updated_at": "2026-09-28T20:21:28.273367Z"
 }

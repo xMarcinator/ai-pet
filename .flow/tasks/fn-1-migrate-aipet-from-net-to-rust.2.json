@@ -10,7 +10,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.2.md",
-  "status": "todo",
+  "status": "done",
   "title": "Rust hook event path, trace log and panic safety, run against the C# black-box suites",
   "updated_at": "2026-09-28T18:25:22.223038Z"
 }
