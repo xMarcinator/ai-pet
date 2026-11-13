@@ -36,7 +36,12 @@ impl Default for General {
     fn default() -> General {
         General {
             import_status: None,
-            pick: Arc::new(pick_preset),
+            // the crate's own tests never open the desktop's picker: one that wants a choice puts its own in
+            pick: if cfg!(test) {
+                Arc::new(|| None)
+            } else {
+                Arc::new(pick_preset)
+            },
             picking: None,
         }
     }
