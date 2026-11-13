@@ -769,7 +769,7 @@ impl PetUi {
 
     /// The Board's bubbles, in its order: each chat with its app, whose name comes before the detail unless every chat
     /// is in the Claude app (or Claude Code); a tracker task with the tracker's border, its acceptance count after the
-    /// detail and its subtasks and agents to draw; the last of a stack says how many more there are; and each with the
+    /// detail and its subtasks' ring to draw; the last of a stack says how many more there are; and each with the
     /// buttons it shows while the pointer is on it.
     fn fill(&mut self, board: &Board) {
         let cards = board.cards();
@@ -814,11 +814,7 @@ impl PetUi {
                 more: if last { board.extra(s.section()) } else { 0 },
                 app,
                 buttons: buttons(s, board.tracker_actions()),
-                progress: task.map(|t| Progress {
-                    done: t.subtasks.done,
-                    total: t.subtasks.total,
-                    agents: t.agents.total,
-                }),
+                progress: task.map(|t| Progress { ring: t.ring() }),
             });
         }
         self.waiting = cards.iter().filter(|s| matches!(s.kind, "jira" | "github")).count() + board.extra("reviews");
@@ -1814,14 +1810,7 @@ pub(crate) mod tests {
         assert_eq!(b.app, Some(("Tracker", board::TRACKER_TEAL)));
         assert_eq!(&*b.title, "FNT-81 · Task bubbles");
         assert_eq!(&*b.detail, "Testing · 2/5 criteria");
-        assert_eq!(
-            b.progress,
-            Some(Progress {
-                done: 3,
-                total: 7,
-                agents: 2
-            })
-        );
+        assert_eq!(b.progress, Some(Progress { ring: [3, 0, 0, 0, 4] }));
 
         let (mut ui, _) = shown(board(&Sources {
             tracker: TrackerSources {

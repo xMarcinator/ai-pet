@@ -169,8 +169,9 @@ shortly after the mouse leaves the pet.
   forward.
 - With the flow-next tracker connected (Settings › Tracker), each task it's working on has a bubble with a teal
   border: its id and title, what waits on you ("Needs your permission: Edit", "Needs your decision", ...) or its
-  phase ("Reviewing · round 2"), how many acceptance criteria are met, a strip along the bottom for its subtasks done,
-  and a badge with how many agents work on it when there's more than one. Amber means it needs you, red that its run
+  phase ("Reviewing · round 2"), how many acceptance criteria are met, and in place of the dot a ring of its subtasks
+  by status: done (green), in progress (teal), needs you (amber), blocked (pink) and not started (grey), each arc as
+  long as its share. Amber means it needs you, red that its run
   failed or was paused. The chats that are the tracker's runs join their task's bubble. Clicking it opens the task
   in the tracker's desktop client (`fnt://task/<id>`).
 
