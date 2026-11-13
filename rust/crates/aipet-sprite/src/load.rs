@@ -141,6 +141,9 @@ pub struct Skipped {
 pub struct Found {
     pub pets: Vec<LoadedPack>,
     pub skipped: Vec<Skipped>,
+    /// Where each of the user's drawings loaded from, by its name: its pack folder (a style in a pet folder is its
+    /// own folder there) or its legacy file. Built-ins have none.
+    pub places: BTreeMap<String, PathBuf>,
 }
 
 impl Found {
@@ -198,7 +201,7 @@ pub fn all(dir: &Path) -> Found {
 fn pets(dir: &Path) -> Found {
     let mut found = Found {
         pets: crate::builtin::all(),
-        skipped: Vec::new(),
+        ..Found::default()
     };
     let Ok(entries) = fs::read_dir(dir) else {
         return found;
@@ -222,19 +225,38 @@ fn pets(dir: &Path) -> Found {
         } else {
             continue;
         };
-        keep(&mut found, file, loaded);
+        keep(&mut found, file, &path, loaded);
     }
     found
 }
 
+/// The drawings in a folder that is a pack or a pet folder (FNT-74), as the avatars folder would load it, with what
+/// didn't load and why; nothing else is read.
+pub fn drawings(folder: &Path) -> Found {
+    let mut found = Found::default();
+    let file = name_of(folder);
+    if !is_pack(folder) && has_folders(folder) {
+        pet_folder(&mut found, folder, &file);
+    } else {
+        keep(&mut found, file, folder, load_folder(folder));
+    }
+    found
+}
+
+/// Whether `folder` is a pet folder (FNT-74), which holds styles, rather than a pack.
+pub fn is_pet_folder(folder: &Path) -> bool {
+    !is_pack(folder) && has_folders(folder)
+}
+
 /// A loaded drawing joins the list unless it clashes with one there: the same name, the same pet and style, or a name
 /// that is another pet's (so a pack name or a pet name always means one drawing); what didn't load is skipped with why.
-fn keep(found: &mut Found, file: String, loaded: Result<LoadedPack, String>) {
+fn keep(found: &mut Found, file: String, from: &Path, loaded: Result<LoadedPack, String>) {
     let reason = match loaded {
         Err(reason) => reason,
         Ok(new) => match clash(&found.pets, &new.pack) {
             Some(reason) => reason,
             None => {
+                found.places.insert(new.name().to_owned(), from.to_owned());
                 found.pets.push(new);
                 return;
             }
@@ -244,7 +266,7 @@ fn keep(found: &mut Found, file: String, loaded: Result<LoadedPack, String>) {
 }
 
 /// Why `new` can't join `pets`, if it can't.
-fn clash(pets: &[LoadedPack], new: &Pack) -> Option<String> {
+pub(crate) fn clash(pets: &[LoadedPack], new: &Pack) -> Option<String> {
     pets.iter().find_map(|p| {
         let old = &p.pack;
         if old.name == new.name {
@@ -304,7 +326,7 @@ fn pet_folder(found: &mut Found, folder: &Path, file: &str) {
             p.pack.pet.get_or_insert_with(|| file.to_owned());
             p
         });
-        keep(found, format!("{file}/{}", name_of(&path)), loaded);
+        keep(found, format!("{file}/{}", name_of(&path)), &path, loaded);
     }
     if found.pets.len() == before {
         found.skipped.push(Skipped {
@@ -449,7 +471,7 @@ fn name_of(path: &Path) -> String {
 }
 
 /// Device names Windows keeps for itself, which no file in a pack may have.
-const DEVICES: [&str; 22] = [
+pub(crate) const DEVICES: [&str; 22] = [
     "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2",
     "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
 ];
@@ -493,14 +515,14 @@ fn inside(folder: &Path, name: &str) -> Result<PathBuf, String> {
 }
 
 #[cfg(windows)]
-fn reparse_point(meta: &fs::Metadata) -> bool {
+pub(crate) fn reparse_point(meta: &fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
     meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
 }
 
 #[cfg(not(windows))]
-fn reparse_point(_: &fs::Metadata) -> bool {
+pub(crate) fn reparse_point(_: &fs::Metadata) -> bool {
     false
 }
 

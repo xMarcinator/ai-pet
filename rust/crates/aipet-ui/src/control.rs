@@ -2,7 +2,12 @@
 //! Settings sends, so the pet changes, saves `config.json` and shows the change in an open Settings exactly as it
 //! does for the user. A refused command changes nothing.
 
-use aipet_core::control::{Answer, Avatar, Card, Command, Settings, SettingsChange, Skipped, Style, Worn};
+use std::collections::BTreeMap;
+
+use aipet_core::control::{
+    Answer, Avatar, Card, Command, Settings, SettingsChange, Skipped, Style, ThemeColours, Worn,
+};
+use aipet_sprite::vector::colour_name;
 
 use crate::{Effect, Message, PetUi, geometry, pets};
 
@@ -21,6 +26,23 @@ pub(crate) fn run(pet: &mut PetUi, command: Command) -> (Result<Answer, String>,
         },
         Command::GetBoard => (Ok(Answer::Board(cards(pet))), None),
         Command::Dismiss(id) => (dismiss(pet, id), None),
+        Command::ListThemes { pet: name, style } => (list_themes(pet, &name, style.as_deref()), None),
+        Command::SaveTheme {
+            pet: name,
+            style,
+            name: theme,
+            palette,
+            create,
+        } => (save_theme(pet, &name, style.as_deref(), &theme, &palette, create), None),
+        Command::DeleteTheme {
+            pet: name,
+            style,
+            name: theme,
+        } => (delete_theme(pet, &name, style.as_deref(), &theme), None),
+        Command::Reload => {
+            reload(pet);
+            (Ok(avatars(pet)), None)
+        }
     }
 }
 
@@ -83,6 +105,36 @@ fn listed(names: &[&str]) -> String {
 /// Wears the pet `name` in `style` and `theme`, else its default style and that style's default theme: as Settings'
 /// picker does, saving the choice. Names match in any case.
 fn wear(pet: &mut PetUi, name: &str, style: Option<&str>, theme: Option<&str>) -> Result<Answer, String> {
+    let (pet_name, i) = drawing(pet, name, style)?;
+    let palette = &pet.avatars[i].pack.palette;
+    let theme = match theme {
+        None => palette.theme.clone(),
+        Some(theme) => palette
+            .names()
+            .find(|n| n.eq_ignore_ascii_case(theme))
+            .map(str::to_owned)
+            .ok_or_else(|| no_theme(pet, &pet_name, i, theme))?,
+    };
+    if i != pet.avatar || theme != pet.theme {
+        pet.wear(i, &theme);
+        pet.save_prefs();
+    }
+    Ok(Answer::Worn(worn(pet)))
+}
+
+/// Why `theme` isn't one of drawing `i`'s, naming those it has.
+fn no_theme(pet: &PetUi, name: &str, i: usize, theme: &str) -> String {
+    let names: Vec<&str> = pet.avatars[i].pack.palette.names().collect();
+    format!(
+        "{name} in {} has no theme \"{theme}\": its themes are {}",
+        pet.avatars[i].pack.style(),
+        listed(&names)
+    )
+}
+
+/// The pet `name` (any case) and its drawing in `style`, else its default style; or why there is none, naming those
+/// there are.
+fn drawing(pet: &PetUi, name: &str, style: Option<&str>) -> Result<(String, usize), String> {
     let groups = pets(&pet.avatars);
     let Some(group) = groups.iter().find(|g| g.pet.eq_ignore_ascii_case(name)) else {
         let names: Vec<&str> = groups.iter().map(|g| g.pet.as_str()).collect();
@@ -104,28 +156,7 @@ fn wear(pet: &mut PetUi, name: &str, style: Option<&str>, theme: Option<&str>) -
                 )
             })?,
     };
-    let palette = &pet.avatars[i].pack.palette;
-    let theme = match theme {
-        None => palette.theme.clone(),
-        Some(theme) => palette
-            .names()
-            .find(|n| n.eq_ignore_ascii_case(theme))
-            .map(str::to_owned)
-            .ok_or_else(|| {
-                let names: Vec<&str> = palette.names().collect();
-                format!(
-                    "{} in {} has no theme \"{theme}\": its themes are {}",
-                    group.pet,
-                    pet.avatars[i].pack.style(),
-                    listed(&names)
-                )
-            })?,
-    };
-    if i != pet.avatar || theme != pet.theme {
-        pet.wear(i, &theme);
-        pet.save_prefs();
-    }
-    Ok(Answer::Worn(worn(pet)))
+    Ok((group.pet.clone(), i))
 }
 
 fn settings(pet: &PetUi) -> Settings {
@@ -173,6 +204,110 @@ fn set(pet: &mut PetUi, change: SettingsChange) -> Option<Effect> {
         effect = pet.update(message).or(effect);
     }
     effect
+}
+
+/// The avatars folder read again, as Settings' Reload does.
+fn reload(pet: &mut PetUi) {
+    pet.update(Message::Settings(crate::settings::Message::Avatars(
+        crate::settings::avatars::Message::Reload,
+    )));
+}
+
+/// The pet's theme by `theme` in any case, if it has it.
+fn theme_named<'a>(pet: &'a PetUi, i: usize, theme: &str) -> Option<&'a str> {
+    pet.avatars[i]
+        .pack
+        .palette
+        .names()
+        .find(|n| n.eq_ignore_ascii_case(theme))
+}
+
+fn list_themes(pet: &PetUi, name: &str, style: Option<&str>) -> Result<Answer, String> {
+    let (pet_name, i) = drawing(pet, name, style)?;
+    let pack = &pet.avatars[i].pack;
+    let themes = pack
+        .palette
+        .names()
+        .map(|n| ThemeColours {
+            name: n.to_owned(),
+            builtin: pack.palette.find(n).is_none_or(|t| t.file.is_none()),
+            palette: pack
+                .palette
+                .in_theme(n)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(c, v)| (c, colour_name(Some(v))))
+                .collect(),
+        })
+        .collect();
+    Ok(Answer::Themes {
+        pet: pet_name,
+        style: pack.style().to_owned(),
+        themes,
+    })
+}
+
+/// Saves a theme with Settings' code ([`aipet_sprite::themes::save`]) and reads the avatars folder again, so the pet
+/// and an open Settings show it.
+fn save_theme(
+    pet: &mut PetUi,
+    name: &str,
+    style: Option<&str>,
+    theme: &str,
+    palette: &BTreeMap<String, String>,
+    create: bool,
+) -> Result<Answer, String> {
+    let (pet_name, i) = drawing(pet, name, style)?;
+    let editing = if create {
+        None
+    } else {
+        Some(
+            theme_named(pet, i, theme)
+                .ok_or_else(|| format!("{} (create it with create: true)", no_theme(pet, &pet_name, i, theme)))?
+                .to_owned(),
+        )
+    };
+    let pack = &pet.avatars[i].pack;
+    // a new theme from the default's colours, a changed one from its own
+    let mut colours = pack
+        .palette
+        .in_theme(editing.as_deref().unwrap_or(&pack.palette.theme))
+        .unwrap_or_default();
+    for (n, text) in palette {
+        let c = aipet_sprite::vector::colour(text.trim())
+            .ok()
+            .flatten()
+            .ok_or_else(|| format!("{n}: {text:?} isn't a colour (#RRGGBB)"))?;
+        colours.insert(n.clone(), c);
+    }
+    let avatars = aipet_sprite::Avatar::custom_dir(&pet.settings.services.data_dir);
+    let saved = aipet_sprite::themes::save(&avatars, pack, theme, &colours, editing.as_deref())?;
+    reload(pet);
+    Ok(Answer::ThemeSaved {
+        pet: pet_name,
+        name: saved.name,
+        file: saved.file,
+    })
+}
+
+/// Deletes a theme of the user's with Settings' code: its file to the trash, the avatars folder read again, and a pet
+/// that wore it in its default theme, saved.
+fn delete_theme(pet: &mut PetUi, name: &str, style: Option<&str>, theme: &str) -> Result<Answer, String> {
+    let (pet_name, i) = drawing(pet, name, style)?;
+    let found = theme_named(pet, i, theme).ok_or_else(|| no_theme(pet, &pet_name, i, theme))?;
+    let Some(file) = pet.avatars[i].pack.palette.find(found).and_then(|t| t.file.clone()) else {
+        return Err(format!(
+            "{found} is one of {pet_name}'s built-in themes, which can't be deleted"
+        ));
+    };
+    let deleted = found.to_owned();
+    let to = aipet_sprite::themes::delete(&pet.settings.services.data_dir, &file)?;
+    reload(pet);
+    pet.save_prefs();
+    Ok(Answer::ThemeDeleted {
+        deleted,
+        trashed_to: to.display().to_string(),
+    })
 }
 
 fn cards(pet: &PetUi) -> Vec<Card> {
@@ -493,6 +628,138 @@ mod tests {
         by_button.update(Message::Dismiss(Arc::from("claude:a")));
         assert_eq!(host.dismissed(), button_host.dismissed());
         assert_eq!(host.dismissed(), ["claude:a"]);
+    }
+
+    /// A pet whose data folder is a fresh one of its own, and that folder.
+    fn with_data(test: &str) -> (PetUi, std::path::PathBuf, Host) {
+        let data = std::env::temp_dir().join(format!("aipet-ui-control-{}-{test}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&data);
+        std::fs::create_dir_all(&data).unwrap();
+        let host = Host::default();
+        let ui = PetUi::new(crate::Setup {
+            host: Box::new(host.clone()),
+            avatars: aipet_sprite::Avatar::custom_dir(&data),
+            services: crate::settings::Services::detached(data.clone()),
+            ..crate::Setup::detached()
+        });
+        (ui, data, host)
+    }
+
+    fn save(pet: &str, name: &str, palette: &[(&str, &str)], create: bool) -> Command {
+        Command::SaveTheme {
+            pet: pet.into(),
+            style: Some("vector".into()),
+            name: name.into(),
+            palette: palette.iter().map(|&(n, c)| (n.to_owned(), c.to_owned())).collect(),
+            create,
+        }
+    }
+
+    fn themes_of(ui: &mut PetUi, pet: &str) -> Vec<(String, bool)> {
+        match ask(
+            ui,
+            Command::ListThemes {
+                pet: pet.into(),
+                style: Some("Vector".into()),
+            },
+        )
+        .0
+        {
+            Ok(Answer::Themes { themes, .. }) => themes.into_iter().map(|t| (t.name, t.builtin)).collect(),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn theme_tools_save_list_and_delete_with_settings_files() {
+        let (mut ui, data, _host) = with_data("themes");
+        let themes = aipet_sprite::Avatar::custom_dir(&data).join("themes");
+        assert_eq!(
+            themes_of(&mut ui, "hood"),
+            [("Green".into(), true), ("Blue".into(), true)]
+        );
+        // a new theme: the same file Settings writes (tests/settings.rs: hood-vector-red.json)
+        let (answer, _) = ask(&mut ui, save("Hood", "Red", &[("body", "#441010")], true));
+        assert_eq!(
+            answer,
+            Ok(Answer::ThemeSaved {
+                pet: "Hood".into(),
+                name: "Red".into(),
+                file: "hood-vector-red.json".into()
+            })
+        );
+        let saved: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(themes.join("hood-vector-red.json")).unwrap()).unwrap();
+        assert_eq!(
+            saved,
+            serde_json::json!({"pet": "Hood (vector)", "theme": "Red", "palette": {"body": "#441010"}})
+        );
+        assert_eq!(themes_of(&mut ui, "Hood").last(), Some(&("Red".into(), false)));
+        // worn, then changed: the rest of its colours stay, and the pet wears it as it is now
+        ask(
+            &mut ui,
+            Command::Wear {
+                name: "Hood".into(),
+                style: Some("Vector".into()),
+                theme: Some("red".into()),
+            },
+        )
+        .0
+        .unwrap();
+        ask(&mut ui, save("Hood", "Red", &[("hi", "#FF4A3A")], false))
+            .0
+            .unwrap();
+        let worn = crate::settings::avatars::worn(&ui);
+        assert_eq!(worn.pack.palette.colours["body"], 0xFF441010);
+        assert_eq!(worn.pack.palette.colours["hi"], 0xFFFF4A3A);
+
+        // refused, changing nothing
+        let before: Vec<_> = std::fs::read_dir(&themes).unwrap().map(|e| e.unwrap().path()).collect();
+        for (command, says) in [
+            (save("Hood", "RED", &[], true), "already has a theme named Red"),
+            (save("Hood", "Green", &[], false), "built-in"),
+            (save("Hood", "Gone", &[], false), "create it with create: true"),
+            (save("Hood", "a/b", &[], true), "only letters"),
+            (save("Hood", "Odd", &[("body", "red")], true), "isn't a colour"),
+            (save("Hood", "Odd", &[("fur", "#000000")], true), "no colour named fur"),
+            (
+                Command::DeleteTheme {
+                    pet: "Hood".into(),
+                    style: Some("Vector".into()),
+                    name: "Blue".into(),
+                },
+                "can't be deleted",
+            ),
+        ] {
+            let e = ask(&mut ui, command).0.unwrap_err();
+            assert!(e.contains(says), "{e}");
+        }
+        let after: Vec<_> = std::fs::read_dir(&themes).unwrap().map(|e| e.unwrap().path()).collect();
+        assert_eq!(before, after);
+
+        // deleted while worn: to the trash, and the pet wears its default, saved
+        let (answer, _) = ask(
+            &mut ui,
+            Command::DeleteTheme {
+                pet: "hood".into(),
+                style: Some("Vector".into()),
+                name: "red".into(),
+            },
+        );
+        let Ok(Answer::ThemeDeleted { deleted, trashed_to }) = answer else {
+            panic!("{answer:?}")
+        };
+        assert_eq!(deleted, "Red");
+        assert!(std::path::Path::new(&trashed_to).starts_with(data.join("trash")));
+        assert!(!themes.join("hood-vector-red.json").exists());
+        assert_eq!(ui.theme(), "Green");
+        assert_eq!(ui.prefs().avatar_theme, None);
+        // never listed: the trash is outside the avatars folder
+        let Answer::Avatars { skipped, .. } = ask(&mut ui, Command::Reload).0.unwrap() else {
+            panic!()
+        };
+        assert!(skipped.is_empty(), "{skipped:?}");
+        assert_eq!(themes_of(&mut ui, "Hood").len(), 2);
     }
 }
 

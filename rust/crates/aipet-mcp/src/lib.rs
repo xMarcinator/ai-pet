@@ -30,9 +30,8 @@ use std::net::{Ipv4Addr, TcpListener};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-#[cfg(doc)]
 use aipet_core::control::ANSWER_WITHIN;
 use aipet_core::control::PetLink;
 use aipet_core::server::Ingress;
@@ -61,6 +60,12 @@ pub struct Options {
     pub log: Arc<dyn Fn(&str) + Send + Sync>,
     /// How the tools reach the pet.
     pub pet: PetLink,
+    /// The pet's data folder: its avatars folder, and the staging folder packs are copied to.
+    pub data: PathBuf,
+    /// The user's home folder, which a pack to install must be inside.
+    pub home: PathBuf,
+    /// How long a tool waits for the pet's answer: [`ANSWER_WITHIN`] (a debug build's tests, under load, wait longer).
+    pub answer_within: Duration,
 }
 
 impl Options {
@@ -72,6 +77,9 @@ impl Options {
             version: version.into(),
             log: Arc::new(aipet_core::log::write),
             pet,
+            data: aipet_ipc::paths::data_dir().to_owned(),
+            home: aipet_ipc::paths::home().to_owned(),
+            answer_within: ANSWER_WITHIN,
         }
     }
 }
@@ -111,6 +119,9 @@ impl Listener {
             version,
             log,
             pet,
+            data,
+            home,
+            answer_within,
         } = options;
         // the port first: a pet that can't have it leaves the token file alone
         let socket = TcpListener::bind((Ipv4Addr::LOCALHOST, port))?;
@@ -129,6 +140,9 @@ impl Listener {
             ingress,
             events,
             pet,
+            data,
+            home,
+            answer_within,
             log,
             refused: Mutex::new(None),
         });
@@ -168,6 +182,9 @@ pub(crate) struct State {
     /// Where the status events go on their way to the ingress, in the order they arrived.
     pub(crate) events: events::Events,
     pub(crate) pet: PetLink,
+    pub(crate) data: PathBuf,
+    pub(crate) home: PathBuf,
+    pub(crate) answer_within: Duration,
     log: Arc<dyn Fn(&str) + Send + Sync>,
     /// When the log last got a line about a request without the right token.
     pub(crate) refused: Mutex<Option<Instant>>,

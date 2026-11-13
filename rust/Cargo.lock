@@ -122,6 +122,7 @@ version = "0.1.0"
 dependencies = [
  "aipet-core",
  "aipet-ipc",
+ "aipet-sprite",
  "aipet-ui",
  "aipet-workspace-hack",
  "axum",

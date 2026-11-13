@@ -5,6 +5,7 @@
 //!
 //! The pet is whatever [`PetLink`] reaches: today the iced pet's state, as news its shell hands it every frame.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::mpsc::{self, RecvTimeoutError, SyncSender};
 use std::time::Duration;
@@ -30,6 +31,39 @@ pub enum Command {
     GetBoard,
     /// Dismiss a card, as its close button does.
     Dismiss(String),
+    /// A pet's themes (in `style`, else its default style), with their colours.
+    ListThemes {
+        pet: String,
+        style: Option<String>,
+    },
+    /// Save a theme of the user's for a pet (in `style`, else its default style), as Settings → Avatars does: a new
+    /// one when `create`, else a change to the user's theme by that name. `palette` is colour names and `#RRGGBB`
+    /// texts: a new theme takes the rest from the default, a changed one keeps the rest it had.
+    SaveTheme {
+        pet: String,
+        style: Option<String>,
+        name: String,
+        palette: BTreeMap<String, String>,
+        create: bool,
+    },
+    /// Delete a theme of the user's: its file moves to the trash, and a pet wearing it wears its default.
+    DeleteTheme {
+        pet: String,
+        style: Option<String>,
+        name: String,
+    },
+    /// Read the avatars folder again, as Settings' Reload does (after a pack is installed).
+    Reload,
+}
+
+/// One of a drawing's themes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ThemeColours {
+    pub name: String,
+    /// Whether it comes with the pet (and so can't be changed or deleted).
+    pub builtin: bool,
+    /// Its colours, by name, as `#RRGGBB` (or `#RRGGBBAA`); empty for a theme of sheets.
+    pub palette: BTreeMap<String, String>,
 }
 
 /// The settings an agent may read and change.
@@ -111,6 +145,22 @@ pub enum Answer {
     Settings(Settings),
     Board(Vec<Card>),
     Dismissed(String),
+    Themes {
+        pet: String,
+        style: String,
+        themes: Vec<ThemeColours>,
+    },
+    /// A theme saved: the pet, the theme's name and its file in the themes folder.
+    ThemeSaved {
+        pet: String,
+        name: String,
+        file: String,
+    },
+    /// A theme deleted, and where its file went.
+    ThemeDeleted {
+        deleted: String,
+        trashed_to: String,
+    },
 }
 
 /// A command and where its answer goes: an [`Answer`], or why the pet refused, which changed nothing.

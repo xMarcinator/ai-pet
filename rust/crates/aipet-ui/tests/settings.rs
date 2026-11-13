@@ -674,6 +674,15 @@ fn the_worn_pets_themes_are_picked_made_edited_and_deleted_and_the_choice_persis
     // deleted: its file goes, and the pet is back in its default, which the editor shows
     ui.update(avatars(A::DeleteTheme("My theme".into())));
     assert!(!themes.join("hood-my-theme.json").exists());
+    // to the trash beside the avatars folder (fnt-71), which the loader never reads
+    let trashed: Vec<String> = std::fs::read_dir(scratch.0.join("trash"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        trashed.len() == 1 && trashed[0].starts_with("hood-my-theme-"),
+        "{trashed:?}"
+    );
     assert_eq!(ui.theme(), "Blue");
     assert_eq!(
         settings::avatars::themes(&ui),

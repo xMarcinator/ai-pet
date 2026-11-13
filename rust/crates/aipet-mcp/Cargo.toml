@@ -10,6 +10,8 @@ publish.workspace = true
 [dependencies]
 aipet-core = { path = "../aipet-core" }
 aipet-ipc = { path = "../aipet-ipc" }
+# the pack check and install: the same code as --check-pack and Settings
+aipet-sprite = { path = "../aipet-sprite" }
 axum.workspace = true
 getrandom.workspace = true
 rmcp.workspace = true

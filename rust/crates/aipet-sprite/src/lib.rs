@@ -15,12 +15,14 @@ mod avatar;
 pub mod bake;
 mod builtin;
 pub mod compose;
+pub mod install;
 pub mod load;
 pub mod manifest;
 pub mod pack;
 pub mod painted;
 mod pet;
 pub mod pose;
+pub mod themes;
 pub mod vector;
 
 pub use avatar::{Avatar, AvatarJson, drawable, read_all_text, try_parse_color};

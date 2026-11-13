@@ -1,11 +1,12 @@
 //! The MCP tools. Each returns `structuredContent` matching its `outputSchema` and the same JSON as a text block,
 //! carries read-only, idempotent or destructive annotations, and reports a business failure as `isError` with the
 //! reason; unknown tools and malformed calls are JSON-RPC errors (rmcp's). They are listed in [`TOOLS`]' order, not
-//! rmcp's (by name). Task 6 adds its here, to [`TOOLS`], and to the conformance test's table.
-//!
+//! rmcp's (by name). //!
 //! The avatar, settings and board tools ask the pet ([`aipet_core::control`]) on a blocking thread, so a pet slow to
 //! answer holds up no other request.
 
+use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -21,12 +22,12 @@ use rmcp::{ErrorData, Json, ServerHandler, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use aipet_core::control::{self, ANSWER_WITHIN, Answer, Command, SettingsChange};
+use aipet_core::control::{self, Answer, Command, SettingsChange};
 
 use crate::{State, hook, report};
 
 /// Every tool, in the order `tools/list` gives them.
-pub const TOOLS: [&str; 8] = [
+pub const TOOLS: [&str; 13] = [
     "status",
     "report_event",
     "list_avatars",
@@ -35,6 +36,11 @@ pub const TOOLS: [&str; 8] = [
     "set_settings",
     "get_board",
     "dismiss_card",
+    "list_themes",
+    "save_theme",
+    "delete_theme",
+    "check_pack",
+    "install_pack",
 ];
 
 /// What `status` says: the pet's version and port, the last 30 hook events it recorded (from the pipe or HTTP, as
@@ -219,6 +225,131 @@ pub(crate) struct Dismissed {
     dismissed: String,
 }
 
+/// Which pet's themes: `list_themes` takes it.
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct ThemesOf {
+    /// The pet, as list_avatars names it (any case).
+    pet: String,
+    /// One of its styles; its default when left out. Each style has its own themes.
+    style: Option<String>,
+}
+
+/// What `list_themes` says.
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct Themes {
+    pet: String,
+    style: String,
+    /// Its themes, its default first.
+    themes: Vec<ThemeColours>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct ThemeColours {
+    name: String,
+    /// Whether it comes with the pet: a built-in theme can't be changed or deleted.
+    builtin: bool,
+    /// Its colours by name, as "#RRGGBB" (or "#RRGGBBAA"); empty for a theme of sheets.
+    palette: BTreeMap<String, String>,
+}
+
+/// What `save_theme` takes.
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct SaveTheme {
+    /// The pet, as list_avatars names it (any case).
+    pet: String,
+    /// One of its styles; its default when left out.
+    style: Option<String>,
+    /// The theme's name: letters, digits, spaces, - and _, at most 40 characters.
+    name: String,
+    /// Colours by the names list_themes gives, as "#RRGGBB". A new theme takes the others from the default theme;
+    /// a changed one keeps the others it has.
+    palette: BTreeMap<String, String>,
+    /// true for a new theme (refused when the name is taken), false to change one of the user's.
+    create: bool,
+}
+
+/// What `save_theme` answers.
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct ThemeSaved {
+    pet: String,
+    name: String,
+    /// Its file in the avatars folder's themes folder.
+    file: String,
+}
+
+/// What `delete_theme` takes.
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct DeleteTheme {
+    /// The pet, as list_avatars names it (any case).
+    pet: String,
+    /// One of its styles; its default when left out.
+    style: Option<String>,
+    /// One of the user's themes (not a built-in one).
+    name: String,
+    /// The theme's name again, exactly as `name`, to show the deletion is meant.
+    confirm_name: String,
+}
+
+/// What `delete_theme` answers.
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct ThemeDeleted {
+    deleted: String,
+    /// Where its file went: the trash, beside the avatars folder.
+    trashed_to: String,
+}
+
+/// A pack's folder (or a theme or legacy avatar file, for `check_pack`).
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct PackPath {
+    /// An absolute path.
+    path: String,
+}
+
+/// What `check_pack` says.
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct Checked {
+    /// Whether the pet would load it.
+    ok: bool,
+    /// What `AiPet --check-pack` prints for it.
+    report: String,
+}
+
+/// What `install_pack` takes.
+#[derive(Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct Install {
+    /// The pack's folder, or a pet folder of styles: an absolute path inside the user's home.
+    path: String,
+    /// Replace the user's pack with the same name, or the same pet and style. A built-in is never replaced.
+    #[serde(default)]
+    replace: bool,
+}
+
+/// What `install_pack` answers.
+#[derive(Serialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub(crate) struct Installed {
+    /// The folder it is in now, in the avatars folder.
+    installed: String,
+    /// The pet it is (wear_avatar takes it).
+    name: String,
+    /// Its drawings' names.
+    drawings: Vec<String>,
+    /// Whether it replaced one of the user's packs.
+    replaced: bool,
+    /// The pack check's report.
+    report: String,
+}
+
 /// An answer the command doesn't give: the pet and the listener disagree.
 fn unexpected(answer: &Answer) -> String {
     format!("the pet answered something else: {answer:?}")
@@ -239,10 +370,11 @@ impl Pet {
         }
     }
 
-    /// Asks the pet, on a blocking thread, waiting up to [`ANSWER_WITHIN`].
+    /// Asks the pet, on a blocking thread, waiting up to the options' `answer_within`.
     async fn ask(&self, command: Command) -> Result<Answer, String> {
         let pet = Arc::clone(&self.state.pet);
-        tokio::task::spawn_blocking(move || control::ask(&pet, command, ANSWER_WITHIN))
+        let within = self.state.answer_within;
+        tokio::task::spawn_blocking(move || control::ask(&pet, command, within))
             .await
             .unwrap_or_else(|e| Err(format!("asking the pet failed: {e}")))
     }
@@ -453,6 +585,146 @@ impl Pet {
             Answer::Dismissed(id) => Ok(Json(Dismissed { dismissed: id })),
             other => Err(unexpected(&other)),
         }
+    }
+
+    #[tool(
+        description = "A pet's colour themes on the AiPet desktop pet, in one of its styles (its default when left \
+                       out): each one's colours, and whether it is built in.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn list_themes(&self, Parameters(of): Parameters<ThemesOf>) -> Result<Json<Themes>, String> {
+        match self
+            .ask(Command::ListThemes {
+                pet: of.pet,
+                style: of.style,
+            })
+            .await?
+        {
+            Answer::Themes { pet, style, themes } => Ok(Json(Themes {
+                pet,
+                style,
+                themes: themes
+                    .into_iter()
+                    .map(|t| ThemeColours {
+                        name: t.name,
+                        builtin: t.builtin,
+                        palette: t.palette,
+                    })
+                    .collect(),
+            })),
+            other => Err(unexpected(&other)),
+        }
+    }
+
+    #[tool(
+        description = "Makes a colour theme for a pet on the AiPet desktop pet (create: true), or changes one of the \
+                       user's (create: false), as Settings → Avatars does: a theme file in its avatars folder. \
+                       wear_avatar puts it on.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn save_theme(&self, Parameters(save): Parameters<SaveTheme>) -> Result<Json<ThemeSaved>, String> {
+        let command = Command::SaveTheme {
+            pet: save.pet,
+            style: save.style,
+            name: save.name,
+            palette: save.palette,
+            create: save.create,
+        };
+        match self.ask(command).await? {
+            Answer::ThemeSaved { pet, name, file } => Ok(Json(ThemeSaved { pet, name, file })),
+            other => Err(unexpected(&other)),
+        }
+    }
+
+    #[tool(
+        description = "Deletes one of the user's colour themes from the AiPet desktop pet: its file moves to the \
+                       trash beside the avatars folder. A pet wearing it wears its default theme. confirm_name must \
+                       repeat the name.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn delete_theme(&self, Parameters(delete): Parameters<DeleteTheme>) -> Result<Json<ThemeDeleted>, String> {
+        if delete.confirm_name != delete.name {
+            return Err(format!(
+                "confirm_name must be the theme's name, {:?}, to delete it",
+                delete.name
+            ));
+        }
+        let command = Command::DeleteTheme {
+            pet: delete.pet,
+            style: delete.style,
+            name: delete.name,
+        };
+        match self.ask(command).await? {
+            Answer::ThemeDeleted { deleted, trashed_to } => Ok(Json(ThemeDeleted { deleted, trashed_to })),
+            other => Err(unexpected(&other)),
+        }
+    }
+
+    #[tool(
+        description = "Checks a pack folder, pet folder, theme file or legacy avatar file as the AiPet desktop pet \
+                       would load it, and says what `AiPet --check-pack` says. It changes nothing.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn check_pack(&self, Parameters(pack): Parameters<PackPath>) -> Result<Json<Checked>, String> {
+        let (report, ok) = tokio::task::spawn_blocking(move || aipet_sprite::load::check(Path::new(&pack.path)))
+            .await
+            .map_err(|e| format!("checking the pack failed: {e}"))?;
+        Ok(Json(Checked { ok, report }))
+    }
+
+    #[tool(
+        description = "Installs a pack (or a pet folder of styles) on the AiPet desktop pet from a folder inside the \
+                       user's home: the pet copies it (no links, at most 64 MiB and 2,000 files), checks it as \
+                       check_pack does, moves it into its avatars folder and reads that again, so list_avatars shows \
+                       it. One the pet has already is refused unless replace.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn install_pack(&self, Parameters(install): Parameters<Install>) -> Result<Json<Installed>, String> {
+        let (data, home) = (self.state.data.clone(), self.state.home.clone());
+        let done = tokio::task::spawn_blocking(move || {
+            aipet_sprite::install::install(&data, &home, Path::new(&install.path), install.replace)
+        })
+        .await
+        .map_err(|e| format!("installing the pack failed: {e}"))??;
+        // the pet reads the avatars folder again: the pack is in either way, so a pet that doesn't answer is said
+        if let Err(e) = self.ask(Command::Reload).await {
+            return Err(format!(
+                "the pack is installed in {}, but the pet didn't read it: {e}",
+                done.folder.display()
+            ));
+        }
+        Ok(Json(Installed {
+            installed: done.folder.display().to_string(),
+            name: done.pet,
+            drawings: done.names,
+            replaced: done.replaced,
+            report: done.report,
+        }))
     }
 }
 
