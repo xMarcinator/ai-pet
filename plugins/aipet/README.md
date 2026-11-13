@@ -52,9 +52,11 @@ remove an older direct registration (of `AiPet --install` or `aipet-hook --insta
 - **Windows: Claude Code needs Git Bash** for the MCP server's token helper, `sh` with the launcher, which comes with
   [Git for Windows](https://gitforwindows.org/). The hooks themselves need no shell. Without Git Bash, register AiPet
   with `AiPet --install claude` instead of using the plugin. The Windows one-line installer does that.
-- Codex runs its token helper, `native/token-header.sh`, which runs the launcher. Whether Codex reads the plugin's MCP
-  file (`hooks/codex-mcp.json`) and runs that helper as expected hasn't been tried on a real Codex yet, on Windows
-  especially.
+- Codex runs its token helper, `native/token-header.sh`, which runs the launcher. Codex gives a header helper a bare
+  environment (HOME, PATH, USER, SHELL, LANG and LOGNAME on Linux), so the helper finds the token only in the
+  default data folder: with `XDG_DATA_HOME` or `AIPET_DATA_DIR` set, register with `AiPet --install codex` instead,
+  whose helper names the folder. Whether Codex reads the plugin's MCP file (`hooks/codex-mcp.json`) and runs that
+  helper as expected hasn't been tried on a real Codex yet, on Windows especially.
 
 The launcher, `native/aipet-hook.sh`, picks the `aipet-hook` binary for the OS and CPU: `win-x64` on Windows (Git
 Bash), `linux-x64` or `linux-arm64` on Linux. The plugin runs it only for the token's header. Anything it can't run is

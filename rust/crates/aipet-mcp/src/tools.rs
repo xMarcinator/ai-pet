@@ -43,6 +43,12 @@ pub const TOOLS: [&str; 13] = [
     "install_pack",
 ];
 
+/// Drops a field's `format`: schemars calls a `u16` `"format": "uint16"`, which isn't a JSON Schema format, and
+/// Claude Code prints a warning about it at every start.
+fn plain_integer(schema: &mut rmcp::schemars::Schema) {
+    schema.remove("format");
+}
+
 /// What `status` says: the pet's version and port, the last 30 hook events it recorded (from the pipe or HTTP, as
 /// the doctor's ping gives them), and which agents' hooks have reported since the pet started.
 #[derive(Serialize, JsonSchema)]
@@ -51,6 +57,7 @@ pub(crate) struct Status {
     /// The pet's version.
     version: String,
     /// The port the pet listens on.
+    #[schemars(transform = plain_integer)]
     port: u16,
     /// The last 30 lines of hook-events.log this pet wrote, oldest first.
     hook_events: Vec<String>,

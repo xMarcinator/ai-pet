@@ -248,21 +248,29 @@ pub(crate) fn codex_helper(data: &Path) -> PathBuf {
     data.join(if cfg!(windows) { "mcp-header.cmd" } else { "mcp-header" })
 }
 
-/// The helper's text, running `exe`.
-pub(crate) fn codex_helper_text(exe: &Path) -> String {
+/// The helper's text, running `exe` for the pet's data folder `data`. Codex runs the helper with a bare environment
+/// (HOME, PATH, USER, SHELL, LANG and LOGNAME on Linux, Codex 0.167), so `XDG_DATA_HOME` and `AIPET_DATA_DIR` don't
+/// reach it: the script names the data folder itself, or a pet with its data elsewhere would get no token.
+pub(crate) fn codex_helper_text(exe: &Path, data: &Path) -> String {
     if cfg!(windows) {
-        format!("@\"{}\" --print-token-header\r\n", exe.display())
-    } else {
         format!(
-            "#!/bin/sh\nexec '{}' --print-token-header\n",
-            exe.to_string_lossy().replace('\'', "'\\''")
+            "@set \"AIPET_DATA_DIR={}\"\r\n@\"{}\" --print-token-header\r\n",
+            data.display(),
+            exe.display()
+        )
+    } else {
+        let quoted = |p: &Path| p.to_string_lossy().replace('\'', "'\\''");
+        format!(
+            "#!/bin/sh\nAIPET_DATA_DIR='{}' exec '{}' --print-token-header\n",
+            quoted(data),
+            quoted(exe)
         )
     }
 }
 
 /// Writes the helper when it isn't there as it should be.
-fn write_codex_helper(path: &Path, exe: &Path) -> Result<(), String> {
-    let text = codex_helper_text(exe);
+fn write_codex_helper(path: &Path, exe: &Path, data: &Path) -> Result<(), String> {
+    let text = codex_helper_text(exe, data);
     if fs::read_to_string(path).is_ok_and(|t| t == text) {
         return Ok(());
     }
@@ -303,7 +311,7 @@ pub(crate) fn install_codex(
     let config = home.join("config.toml");
     check_toml(&config)?;
     let helper = codex_helper(data);
-    write_codex_helper(&helper, exe)?;
+    write_codex_helper(&helper, exe, data)?;
     let url = claude::mcp_url();
     let helper_text = helper.to_string_lossy().into_owned();
     let wanted = Wanted::Mcp {
@@ -371,8 +379,8 @@ mod tests {
         } else {
             assert_eq!(claude_helper(exe), "\"/opt/it's/AiPet\" --print-token-header");
             assert_eq!(
-                codex_helper_text(exe),
-                "#!/bin/sh\nexec '/opt/it'\\''s/AiPet' --print-token-header\n"
+                codex_helper_text(exe, Path::new("/home/u/it's/AiPet")),
+                "#!/bin/sh\nAIPET_DATA_DIR='/home/u/it'\\''s/AiPet' exec '/opt/it'\\''s/AiPet' --print-token-header\n"
             );
         }
     }

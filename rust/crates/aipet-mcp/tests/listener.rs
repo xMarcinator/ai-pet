@@ -588,6 +588,16 @@ fn every_tool_conforms() {
     // the fixed order, every tool in the table
     assert_eq!(names, TOOLS);
     assert_eq!(table.iter().map(|r| r.name).collect::<Vec<_>>(), TOOLS);
+    // only formats a client's validator knows: Claude Code warns at every start about one it doesn't (uint16 did)
+    let formats: std::collections::BTreeSet<String> = listed
+        .to_string()
+        .split("\"format\":\"")
+        .skip(1)
+        .map(|rest| rest.split('"').next().unwrap().to_owned())
+        .collect();
+    for format in &formats {
+        assert!(["int32", "int64", "date-time", "uri"].contains(&format.as_str()), "format {format}: {listed}");
+    }
 
     for (row, tool) in table.iter().zip(tools) {
         let name = row.name;

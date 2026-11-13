@@ -213,11 +213,13 @@ fn codex_install_replaces_the_exe_hooks_and_uninstall_takes_out_both_kinds() {
         assert_eq!(handler["input"]["event"]["session_id"].as_str(), Some("${session_id}"));
     }
     assert_eq!(hooks.len(), events.len());
-    // the helper runs AiPet for the header
+    // the helper runs AiPet for the header, in the bare environment Codex gives it: no AIPET_DATA_DIR, so the
+    // helper has to name the data folder itself
     std::fs::write(sb.path("data/mcp-token"), "t0ken\n").unwrap();
     let header = Command::new(&helper)
-        .env("AIPET_DATA_DIR", sb.path("data"))
+        .env_clear()
         .env("HOME", &sb.0)
+        .env("PATH", "/usr/bin:/bin")
         .output()
         .unwrap();
     assert_eq!(
