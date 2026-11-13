@@ -38,9 +38,10 @@ Move the theme file logic out of the Avatars page into shared code, then build `
 - [ ] Tests: replacing a user style whose folder is named differently swaps that folder; replacing a built-in style is `isError`
 
 ## Done summary
-TBD
+Theme naming, save and delete moved to aipet-sprite::themes (allowlist, trash under <data>/trash); the Avatars page uses it. Five tools: list_themes, save_theme, delete_theme, check_pack (load::check, same as --check-pack, tested against the binary), install_pack (staging copy with no links and the 64 MiB / 2,000 entry caps, check, clash rules with replace, backup swap of the style's own folder, restored on failure, one at a time, then the pet reloads). Conformance table has all 13 tools.
 
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 301d403
+- Tests: cargo test -p aipet-sprite -p aipet-ui -p aipet-mcp -p aipet, aipet-mcp tests/listener.rs every_tool_conforms, aipet tests/check_pack.rs
 - PRs:
