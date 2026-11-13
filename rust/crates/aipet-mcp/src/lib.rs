@@ -84,6 +84,46 @@ impl Options {
     }
 }
 
+/// A listening socket on 127.0.0.1 at `port`, as `TcpListener::bind` makes it, but on Windows with
+/// `SO_EXCLUSIVEADDRUSE`: without it, a program that sets `SO_REUSEADDR` could bind the same port and take the agents'
+/// connections, and with them the token. On Unix, `SO_REUSEADDR` (std's choice) lets nothing take a port that is
+/// listening.
+fn bind(port: u16) -> io::Result<TcpListener> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
+    #[cfg(unix)]
+    socket.set_reuse_address(true)?;
+    #[cfg(windows)]
+    exclusive(&socket)?;
+    socket.bind(&std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, port)).into())?;
+    socket.listen(128)?;
+    Ok(socket.into())
+}
+
+/// `SO_EXCLUSIVEADDRUSE` on `socket`, before it binds. windows-sys doesn't define it: Winsock's header makes it
+/// `~SO_REUSEADDR`.
+#[cfg(windows)]
+fn exclusive(socket: &socket2::Socket) -> io::Result<()> {
+    use std::os::windows::io::AsRawSocket;
+    use windows_sys::Win32::Networking::WinSock::{SO_REUSEADDR, SOCKET_ERROR, SOL_SOCKET, WSAGetLastError, setsockopt};
+    let on: i32 = 1;
+    // SAFETY: a valid socket handle, and a pointer to an i32 with its length, as setsockopt takes them
+    let failed = unsafe {
+        setsockopt(
+            socket.as_raw_socket() as _,
+            SOL_SOCKET,
+            !SO_REUSEADDR,
+            (&on as *const i32).cast(),
+            std::mem::size_of::<i32>() as i32,
+        )
+    } == SOCKET_ERROR;
+    if failed {
+        // SAFETY: no arguments; reads this thread's last Winsock error
+        return Err(io::Error::from_raw_os_error(unsafe { WSAGetLastError() }));
+    }
+    Ok(())
+}
+
 /// `AIPET_PORT` when it is a port number, else [`MCP_PORT`].
 fn port(var: Option<&str>) -> u16 {
     var.and_then(|v| v.parse().ok()).unwrap_or(MCP_PORT)
@@ -124,7 +164,7 @@ impl Listener {
             answer_within,
         } = options;
         // the port first: a pet that can't have it leaves the token file alone
-        let socket = TcpListener::bind((Ipv4Addr::LOCALHOST, port))?;
+        let socket = bind(port)?;
         socket.set_nonblocking(true)?;
         let port = socket.local_addr()?.port();
         let token = token::load_or_make(&token_file, &*log)?;
