@@ -16,9 +16,9 @@
 #   GITHUB_TOKEN      a token that can read the repositories, while they are private. Fetch the script with it too:
 #     (iwr -UseBasicParsing -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; Accept = 'application/vnd.github.raw+json' } https://api.github.com/repos/xMarcinator/ai-pet/contents/install.ps1).Content | iex
 #
-# The Claude Code plugin runs its hook through Git Bash (Git for Windows). Where there's no Git Bash, the hook is
-# registered in ~/.claude/settings.json instead (aipet-hook --install claude), which needs no shell. Uninstalling AiPet
-# removes that registration too.
+# The Claude Code plugin runs its MCP header helper through Git Bash (Git for Windows). Where there's no Git Bash,
+# AiPet is registered directly instead (AiPet --install claude: HTTP hooks and the MCP server), which needs no shell.
+# Uninstalling AiPet removes that registration too.
 # To build and install from a clone of the repository instead: scripts\install-from-source.ps1.
 #
 # Everything runs inside a script block, so nothing it sets stays behind in your PowerShell session.
@@ -103,10 +103,11 @@
         $null
     }
 
-    # Whether one of these config files still registers AiPet's hook directly (aipet-hook --install).
+    # Whether one of these config files still registers AiPet directly: the exe's hooks (aipet-hook --install, older
+    # installs) or the HTTP hooks and MCP server of AiPet --install.
     function Test-Registered([string[]]$Files) {
         foreach ($f in $Files) {
-            if ($f -and (Test-Path -LiteralPath $f) -and (Select-String -LiteralPath $f -Pattern 'aipet-hook' -SimpleMatch -Quiet)) { return $true }
+            if ($f -and (Test-Path -LiteralPath $f) -and (Select-String -LiteralPath $f -Pattern 'aipet-hook|127\.0\.0\.1:47615' -Quiet)) { return $true }
         }
         $false
     }
@@ -168,7 +169,6 @@
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
     $appExe = Join-Path $root 'current\AiPet.exe'
-    $hook = Join-Path $root 'current\aipet-hook.exe'
     if (-not (Test-Path -LiteralPath $appExe)) { throw "The installer finished, but $appExe isn't there (its log is $log)." }
 
     # Older versions started themselves at sign-in (AiPet, and ClaudePet before it); now nothing does. A value that
@@ -209,21 +209,20 @@
                     ((Invoke-Agent $claude @('plugin', 'install', 'aipet@aipet')) -eq 0) -and
                     ((Invoke-Agent $claude @('plugin', 'update', 'aipet@aipet')) -eq 0)
                 if ($claudeDone) {
-                    # a direct registration (aipet-hook --install claude, from an older install or from this script
-                    # without Git Bash) next to the plugin would report every event twice
-                    if ((Test-Path -LiteralPath $hook) -and (Test-Registered @(Join-Path $claudeDir 'settings.json'))) {
-                        Step 'Removing the direct hook registration from Claude Code (the plugin replaces it)'
-                        & $hook --uninstall claude | Out-Host
+                    # a direct registration (aipet-hook or AiPet --install claude, from an older install or from this
+                    # script without Git Bash) next to the plugin would report every event twice
+                    $claudeJson = if ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR '.claude.json' } else { Join-Path $HOME '.claude.json' }
+                    if (Test-Registered @((Join-Path $claudeDir 'settings.json'), $claudeJson)) {
+                        Step 'Removing the direct registration from Claude Code (the plugin replaces it)'
+                        & $appExe --uninstall claude | Out-Host
                     }
                 } else {
                     Warn "Couldn't add the plugin to Claude Code. Try it yourself: claude plugin marketplace add $repo, then claude plugin install aipet@aipet"
                 }
-            } elseif (Test-Path -LiteralPath $hook) {
-                Step 'Registering the hook with Claude Code (the plugin needs Git Bash, which was not found)'
-                & $hook --install claude | Out-Host
-                $claudeRegistered = $LASTEXITCODE -eq 0
             } else {
-                Warn "The Claude Code plugin needs Git Bash (Git for Windows), which was not found, and $hook is missing."
+                Step 'Registering AiPet with Claude Code (the plugin needs Git Bash, which was not found)'
+                & $appExe --install claude | Out-Host
+                $claudeRegistered = $LASTEXITCODE -eq 0
             }
         }
 
@@ -234,9 +233,9 @@
                 ((Invoke-Agent $codex @('plugin', 'add', 'aipet@aipet')) -eq 0)
             if ($codexDone) {
                 $codexDir = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
-                if ((Test-Path -LiteralPath $hook) -and (Test-Registered @((Join-Path $codexDir 'config.toml'), (Join-Path $codexDir 'hooks.json')))) {
-                    Step 'Removing the direct hook registration from Codex (the plugin replaces it)'
-                    & $hook --uninstall codex | Out-Host
+                if (Test-Registered @((Join-Path $codexDir 'config.toml'), (Join-Path $codexDir 'hooks.json'))) {
+                    Step 'Removing the direct registration from Codex (the plugin replaces it)'
+                    & $appExe --uninstall codex | Out-Host
                 }
             } else {
                 Warn "Couldn't add the plugin to Codex. Try it yourself: codex plugin marketplace add $repo, then codex plugin add aipet@aipet"
@@ -258,9 +257,9 @@
     Write-Host ' It shows your chats while it runs (Start menu: AiPet); nothing starts it at sign-in.'
     if ($claudeDone) { Write-Host 'Claude Code: new sessions pick up the plugin (in an open one, run /reload-plugins).' }
     if ($claudeRegistered) {
-        Write-Host 'Claude Code: new sessions pick up the hook. Install Git for Windows and run this again to switch to the plugin.'
-        # the uninstaller runs aipet-hook --uninstall claude before it deletes the hook (the app's uninstall hook)
-        Write-Host 'Uninstalling AiPet (Settings > Apps) removes the hook from Claude Code too.'
+        Write-Host 'Claude Code: new sessions pick up the hooks. Install Git for Windows and run this again to switch to the plugin.'
+        # the uninstaller runs aipet-hook --uninstall claude before it deletes the app (the app's uninstall hook)
+        Write-Host 'Uninstalling AiPet (Settings > Apps) removes them from Claude Code too.'
     }
     if ($codexDone) {
         Write-Host 'One step left for Codex:' -ForegroundColor Yellow -NoNewline

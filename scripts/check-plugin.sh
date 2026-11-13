@@ -11,9 +11,9 @@
 # --hook takes the rest of the arguments, so it comes last: a command that runs aipet-hook, the Rust one that ships,
 # e.g. --hook rust/target/release/aipet-hook, or, to build it first,
 # --hook cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook --
-# hooks/hooks.json and hooks/codex.json must be what it prints with --print-plugin-hooks claude and codex, byte for
-# byte, which it makes from its event tables (rust/crates/aipet-hook/src/claude.rs and plugin_hooks.rs). Without
-# --hook they're only checked to be JSON.
+# hooks/hooks.json, hooks/codex.json, .mcp.json and hooks/codex-mcp.json must be what it prints with
+# --print-plugin-hooks claude, codex, claude-mcp and codex-mcp, byte for byte, which it makes from its event tables
+# (rust/crates/aipet-hook/src/claude.rs, codex.rs and plugin_hooks.rs). Without --hook they're only checked to be JSON.
 # Needs jq.
 set -euo pipefail
 
@@ -87,7 +87,9 @@ if [ ${#versions[@]} -eq 2 ] && [ "${versions[0]}" != "${versions[1]}" ]; then
   fail "the two plugin.json files disagree on the version (${versions[0]} and ${versions[1]})"
 fi
 if [ -f "$codex_manifest" ] && jq empty < "$codex_manifest" >/dev/null 2>&1; then
-  check "$codex_manifest" 'if .hooks != "./hooks/codex.json" then "hooks is \(.hooks | tojson), expected \"./hooks/codex.json\"" else empty end'
+  check "$codex_manifest" '
+    (if .hooks != "./hooks/codex.json" then "hooks is \(.hooks | tojson), expected \"./hooks/codex.json\"" else empty end),
+    (if .mcpServers != "./hooks/codex-mcp.json" then "mcpServers is \(.mcpServers | tojson), expected \"./hooks/codex-mcp.json\"" else empty end)'
 fi
 
 # ---------------------------------------------------------------- hook files
@@ -114,17 +116,23 @@ hook_file() {
 }
 hook_file claude "$plugin/hooks/hooks.json"
 hook_file codex "$plugin/hooks/codex.json"
+# the MCP server the hooks report to (fnt-71): Claude's .mcp.json, and the file Codex's manifest names
+hook_file claude-mcp "$plugin/.mcp.json"
+hook_file codex-mcp "$plugin/hooks/codex-mcp.json"
 
 # ---------------------------------------------------------------- the launcher and the binaries
-launcher="$plugin/native/aipet-hook.sh"
-if [ ! -f "$launcher" ]; then
-  fail "$launcher is missing"
-else
+# and Codex's header helper, which it runs as it is: executable
+for launcher in "$plugin/native/aipet-hook.sh" "$plugin/native/token-header.sh"; do
+  if [ ! -f "$launcher" ]; then
+    fail "$launcher is missing"
+    continue
+  fi
   if [ "$(head -c 2 "$launcher")" != "#!" ]; then fail "$launcher doesn't start with #!"; fi
   if [ "$(tr -d '\r' < "$launcher" | wc -c)" != "$(wc -c < "$launcher")" ]; then
     fail "$launcher has CRLF line endings, which sh can't run"
   fi
-fi
+done
+if [ ! -x "$plugin/native/token-header.sh" ]; then fail "$plugin/native/token-header.sh isn't executable (Codex runs it as it is)"; fi
 if [ "$release" = 1 ]; then
   for bin in win-x64/aipet-hook.exe linux-x64/aipet-hook linux-arm64/aipet-hook; do
     f="$plugin/native/$bin"

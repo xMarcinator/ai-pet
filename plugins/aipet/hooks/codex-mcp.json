@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "aipet": {
+      "url": "http://127.0.0.1:47615/mcp",
+      "http_headers_helper": "${PLUGIN_ROOT}/native/token-header.sh"
+    }
+  }
+}

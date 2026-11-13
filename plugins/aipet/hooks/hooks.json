@@ -1,28 +1,21 @@
 {
-  "description": "Report each Claude Code chat's status to the AiPet desktop pet (observe only: the hook prints nothing and never answers Claude).",
+  "description": "Report each Claude Code chat's status to the AiPet desktop pet, over HTTP (observe only: the pet never answers Claude).",
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ],
     "UserPromptSubmit": [
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -31,11 +24,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ],
         "matcher": "*"
@@ -45,11 +44,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ],
         "matcher": "*"
@@ -59,11 +64,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ],
         "matcher": "*"
@@ -73,11 +84,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ],
         "matcher": "*"
@@ -87,11 +104,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -100,11 +123,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -113,11 +142,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -126,11 +161,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -139,11 +180,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -152,11 +199,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -165,11 +218,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -178,11 +237,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -191,10 +256,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -203,11 +275,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }
@@ -216,11 +294,17 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --agent claude",
-            "shell": "bash",
-            "timeout": 5,
-            "async": true
+            "type": "http",
+            "url": "http://127.0.0.1:47615/hook/claude",
+            "timeout": 2,
+            "headers": {
+              "X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}",
+              "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"
+            },
+            "allowedEnvVars": [
+              "CLAUDE_CODE_ENTRYPOINT",
+              "CLAUDE_CODE_HOST_SESSION_ID"
+            ]
           }
         ]
       }

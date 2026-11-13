@@ -21,6 +21,8 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 pub struct AgentConfigs {
     /// Claude's `settings.json`, found as the hook's `ClaudeConfig.Settings` finds it.
     pub claude_settings: PathBuf,
+    /// Claude's user config, `.claude.json`, which holds the MCP server `AiPet --install claude` registers (fnt-71).
+    pub claude_users: PathBuf,
     /// Codex's user layer, where the hook's `CodexConfig` registers: `config.toml`, or `hooks.json`.
     pub codex_files: [PathBuf; 2],
 }
@@ -29,13 +31,18 @@ impl AgentConfigs {
     /// `$CLAUDE_CONFIG_DIR/settings.json` (else `~/.claude`), and `config.toml` and `hooks.json` in Codex's home, as
     /// the environment has them now.
     pub fn current() -> Self {
-        let claude = std::env::var_os("CLAUDE_CONFIG_DIR")
+        let set = std::env::var_os("CLAUDE_CONFIG_DIR")
             .filter(|d| !d.is_empty())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| aipet_ipc::paths::home().join(".claude"));
+            .map(PathBuf::from);
+        let claude_users = set.as_ref().map_or_else(
+            || aipet_ipc::paths::home().join(".claude.json"),
+            |d| d.join(".claude.json"),
+        );
+        let claude = set.unwrap_or_else(|| aipet_ipc::paths::home().join(".claude"));
         let codex = aipet_ipc::paths::codex_home();
         AgentConfigs {
             claude_settings: claude.join("settings.json"),
+            claude_users,
             codex_files: [codex.join("config.toml"), codex.join("hooks.json")],
         }
     }
@@ -44,7 +51,10 @@ impl AgentConfigs {
     pub fn agents(&self, hooks: &[&str], ignore_case: bool) -> Vec<&'static str> {
         let read = |path: &Path| std::fs::read(path).ok().map(|bytes| crate::config::read_text(&bytes));
         let mut agents = Vec::new();
-        if names(read(&self.claude_settings).as_deref(), hooks, ignore_case) {
+        if [&self.claude_settings, &self.claude_users]
+            .iter()
+            .any(|f| names(read(f).as_deref(), hooks, ignore_case))
+        {
             agents.push("claude");
         }
         if self
@@ -218,15 +228,24 @@ const LETTERS_AND_DIGITS: [u16; 802] = [
 /// or on Windows with its folder, or the whole path, in 8.3 short form, as Codex's command has it when the path has
 /// spaces. Each run gets 10 s and no window, and what it says goes to the app's log. Nothing here fails the
 /// uninstall.
-pub fn run(hook: &Path) {
-    run_with(&AgentConfigs::current(), hook, &mut |line| crate::log::write(&line));
+///
+/// `also` are more paths of this install that a registration may name: AiPet itself, the header helper of the MCP
+/// server that `AiPet --install` registers (fnt-71). The hook's `--uninstall` takes out both kinds.
+pub fn run(hook: &Path, also: &[PathBuf]) {
+    run_with(&AgentConfigs::current(), hook, also, &mut |line| {
+        crate::log::write(&line)
+    });
 }
 
-fn run_with(configs: &AgentConfigs, hook: &Path, log: &mut dyn FnMut(String)) {
+fn run_with(configs: &AgentConfigs, hook: &Path, also: &[PathBuf], log: &mut dyn FnMut(String)) {
     if !hook.is_file() {
         return;
     }
-    let paths: Vec<String> = forms(hook).iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    let paths: Vec<String> = std::iter::once(hook)
+        .chain(also.iter().map(PathBuf::as_path))
+        .flat_map(forms)
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
     let hooks: Vec<&str> = paths.iter().map(String::as_str).collect();
     for agent in configs.agents(&hooks, cfg!(windows)) {
         log(match uninstall(hook, agent) {
@@ -368,6 +387,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let configs = AgentConfigs {
             claude_settings: dir.join("settings.json"),
+            claude_users: dir.join(".claude.json"),
             codex_files: [dir.join("config.toml"), dir.join("hooks.json")],
         };
         (Dir(dir), configs)
@@ -440,6 +460,38 @@ mod tests {
         );
     }
 
+    /// AiPet --install's registrations (fnt-71) name AiPet or Codex's header helper, not the hook: Claude's MCP server
+    /// in .claude.json, Codex's in config.toml. The hook's --uninstall runs for them too.
+    #[cfg(unix)]
+    #[test]
+    fn run_uninstalls_the_registrations_that_name_aipet_or_its_helper() {
+        use std::os::unix::fs::PermissionsExt;
+        let (d, configs) = dir("run-mcp");
+        let hook = d.0.join("aipet-hook");
+        let calls = d.0.join("calls");
+        fs::write(&hook, format!("#!/bin/sh\necho \"$*\" >> '{}'\n", calls.display())).unwrap();
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+        let (app, helper) = (d.0.join("AiPet"), d.0.join("data").join("mcp-header"));
+        fs::write(
+            &configs.claude_users,
+            format!(
+                r#"{{"mcpServers":{{"aipet":{{"type":"http","url":"http://127.0.0.1:47615/mcp","headersHelper":"\"{}\" --print-token-header"}}}}}}"#,
+                app.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            &configs.codex_files[0],
+            format!("[mcp_servers.aipet]\nhttp_headers_helper = \"{}\"\n", helper.display()),
+        )
+        .unwrap();
+        run_with(&configs, &hook, &[app, helper], &mut |_| {});
+        assert_eq!(
+            fs::read_to_string(&calls).unwrap(),
+            "--uninstall claude\n--uninstall codex\n"
+        );
+    }
+
     /// Run starts `<hook> --uninstall <agent>` for each agent that names it, and only those
     /// (HookCleanupTests.Run_UninstallsFromTheAgentsThatNameTheHook). The hook is a stand-in script.
     #[cfg(unix)]
@@ -473,7 +525,7 @@ mod tests {
         .unwrap();
 
         let mut logged = Vec::new();
-        run_with(&configs, &hook, &mut |line| logged.push(line));
+        run_with(&configs, &hook, &[], &mut |line| logged.push(line));
         assert_eq!(fs::read_to_string(&calls).unwrap(), "--uninstall claude\n");
         assert_eq!(
             logged,
@@ -482,7 +534,7 @@ mod tests {
 
         // a hook that's gone (a broken install) has nothing to run
         fs::remove_file(&calls).unwrap();
-        run_with(&configs, &d.0.join("missing").join("aipet-hook"), &mut |line| {
+        run_with(&configs, &d.0.join("missing").join("aipet-hook"), &[], &mut |line| {
             logged.push(line)
         });
         assert!(!calls.exists());
@@ -506,7 +558,7 @@ mod tests {
         .unwrap();
         let started = Instant::now();
         let mut logged = Vec::new();
-        run_with(&configs, &hook, &mut |line| logged.push(line));
+        run_with(&configs, &hook, &[], &mut |line| logged.push(line));
         let took = started.elapsed().as_secs_f64();
         assert!((9.0..20.0).contains(&took), "{took}");
         assert_eq!(
@@ -528,7 +580,7 @@ mod tests {
         let named = hook.to_string_lossy().replace('\\', "/").to_uppercase();
         fs::write(&configs.claude_settings, format!(r#"{{"command":"{named}"}}"#)).unwrap();
         let mut logged = Vec::new();
-        run_with(&configs, &hook, &mut |line| logged.push(line));
+        run_with(&configs, &hook, &[], &mut |line| logged.push(line));
         assert_eq!(logged.len(), 1, "{logged:?}");
         assert!(
             logged[0].starts_with("uninstall: aipet-hook --uninstall claude (exit 1): "),

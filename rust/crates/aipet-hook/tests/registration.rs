@@ -473,7 +473,7 @@ fn a_mode_without_an_agent_is_a_usage_error() {
 }
 
 // ------------------------------------------------------------------ --print-plugin-hooks
-/// PluginHooksTests: the plugin's hook files as committed, byte for byte (a Windows checkout may have given them
+/// PluginHooksTests: the plugin's hook and MCP files as committed, byte for byte (a Windows checkout may have given them
 /// CRLF, which git doesn't keep), and nothing written anywhere.
 #[test]
 fn print_plugin_hooks_is_the_plugin_files() {
@@ -481,6 +481,9 @@ fn print_plugin_hooks_is_the_plugin_files() {
         ("claude", "hooks.json"),
         ("codex", "codex.json"),
         ("CODEX", "codex.json"),
+        // the MCP server the hooks report to (fnt-71)
+        ("claude-mcp", "../.mcp.json"),
+        ("codex-mcp", "codex-mcp.json"),
     ] {
         let scratch = new_scratch(&format!("print-{agent}"));
         let out = print(&["--print-plugin-hooks", agent], &scratch);

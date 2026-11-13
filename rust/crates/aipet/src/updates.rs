@@ -51,7 +51,14 @@ fn startup_with(args: Vec<String>, installed: bool, hook: PathBuf) {
 fn app(args: Vec<String>, installed: bool, hook: &Path) -> VelopackApp<'_> {
     let app = VelopackApp::build().set_args(args).set_auto_apply_on_startup(false);
     #[cfg(windows)]
-    let app = app.on_before_uninstall_fast_callback(move |_| aipet_core::cleanup::run(hook));
+    let app = app.on_before_uninstall_fast_callback(move |_| {
+        // AiPet --install's registrations name AiPet (Claude's header helper) and Codex's header helper (fnt-71)
+        let also: Vec<PathBuf> = std::env::current_exe()
+            .into_iter()
+            .chain([aipet_ipc::paths::data_dir().join("mcp-header.cmd")])
+            .collect();
+        aipet_core::cleanup::run(hook, &also);
+    });
     #[cfg(not(windows))]
     let _ = hook;
     if installed {

@@ -52,12 +52,15 @@ version = "0.1.0"
 dependencies = [
  "aipet-core",
  "aipet-desktop",
+ "aipet-hook",
  "aipet-ipc",
  "aipet-mcp",
  "aipet-sprite",
  "aipet-ui",
  "aipet-wayland",
  "libc",
+ "serde_json",
+ "toml",
  "velopack",
  "windows-sys 0.52.0",
  "winresource",
@@ -103,6 +106,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "toml",
  "windows-sys 0.52.0",
  "winresource",
 ]

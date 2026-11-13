@@ -1,15 +1,25 @@
 {
-  "description": "Report each Codex chat's status to the AiPet desktop pet (observe only: the hook prints nothing).",
+  "description": "Report each Codex chat's status to the AiPet desktop pet, through its MCP server (observe only).",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
-            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
-            "timeout": 30,
-            "async": true
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}",
+                "source": "${source}"
+              }
+            }
           }
         ]
       }
@@ -18,11 +28,22 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
-            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
-            "timeout": 30,
-            "async": true
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}",
+                "turn_id": "${turn_id}",
+                "prompt": "${prompt}"
+              }
+            }
           }
         ]
       }
@@ -31,11 +52,24 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
-            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
-            "timeout": 30,
-            "async": true
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}",
+                "turn_id": "${turn_id}",
+                "tool_name": "${tool_name}",
+                "tool_use_id": "${tool_use_id}",
+                "tool_input": "${tool_input}"
+              }
+            }
           }
         ]
       }
@@ -44,11 +78,49 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
-            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
-            "timeout": 30,
-            "async": true
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}",
+                "turn_id": "${turn_id}",
+                "tool_name": "${tool_name}",
+                "tool_input": "${tool_input}"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}",
+                "turn_id": "${turn_id}",
+                "tool_name": "${tool_name}",
+                "tool_use_id": "${tool_use_id}",
+                "tool_input": "${tool_input}"
+              }
+            }
           }
         ]
       }
@@ -57,11 +129,21 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
-            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
-            "timeout": 30,
-            "async": true
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}",
+                "turn_id": "${turn_id}"
+              }
+            }
           }
         ]
       }
@@ -70,11 +152,20 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
-            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
-            "timeout": 30,
-            "async": true
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}"
+              }
+            }
           }
         ]
       }
@@ -83,11 +174,20 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
-            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
-            "timeout": 30,
-            "async": true
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}"
+              }
+            }
           }
         ]
       }
@@ -96,11 +196,20 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
-            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
-            "timeout": 30,
-            "async": true
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}"
+              }
+            }
           }
         ]
       }
@@ -109,11 +218,42 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex",
-            "commandWindows": "& (Join-Path $env:PLUGIN_ROOT 'native\\win-x64\\aipet-hook.exe') --agent codex",
-            "timeout": 30,
-            "async": true
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 5,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "aipet",
+            "tool": "report_event",
+            "timeout": 3,
+            "input": {
+              "agent": "codex",
+              "event": {
+                "session_id": "${session_id}",
+                "hook_event_name": "${hook_event_name}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "transcript_path": "${transcript_path}"
+              }
+            }
           }
         ]
       }

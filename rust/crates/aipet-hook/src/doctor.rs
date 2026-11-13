@@ -840,6 +840,29 @@ fn pet_got(sid13: &str) -> bool {
 }
 
 // ------------------------------------------------------------------ Codex's own answer
+/// [`hooks_list`] of the codex on PATH (or Codex's own install folder on Windows), for `AiPet --doctor codex`.
+pub(crate) fn hooks_list_on_path() -> Option<Vec<Node>> {
+    let names: &[&str] = if cfg!(windows) {
+        &["codex.exe", "codex.cmd"]
+    } else {
+        &["codex"]
+    };
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let found = std::env::split_paths(&path)
+        .flat_map(|dir| names.iter().map(move |n| dir.join(n)))
+        .find(|p| is_file(p))
+        .or_else(|| {
+            let installed = aipet_ipc::paths::local_app_data()
+                .join("Programs")
+                .join("OpenAI")
+                .join("Codex")
+                .join("bin")
+                .join("codex.exe");
+            (cfg!(windows) && is_file(&installed)).then_some(installed)
+        });
+    hooks_list(found.as_deref())
+}
+
 /// `HooksList`: `codex app-server` over stdio: `initialize`, then `hooks/list` for the home folder, all within 30 s.
 /// `None` when Codex can't be asked: it isn't there, doesn't start, quits, answers something else or nothing in time.
 /// It is ended, with everything it started, either way.
