@@ -330,6 +330,13 @@ fn codex_registrations(r: &mut Report) {
     trust(r);
 }
 
+/// Whether a `hooks/list` entry is one of AiPet's: an `mcpTool` handler (app-server's spelling; config.toml's is
+/// `mcp_tool`) on the `aipet` server.
+fn listed_ours(h: &Node) -> bool {
+    let text = |k: &str| member(h, k).ok().flatten().and_then(as_str).map(str::to_owned);
+    text("handlerType").as_deref() == Some("mcpTool") && text("server").as_deref() == Some(SERVER)
+}
+
 /// Whether Codex trusts AiPet's hooks, from Codex itself (`codex app-server`, `hooks/list`). Untrusted hooks are a
 /// warning: Codex skips them quietly until the user trusts them.
 fn trust(r: &Report) {
@@ -337,14 +344,7 @@ fn trust(r: &Report) {
         r.warn("couldn't ask Codex (codex app-server hooks/list), so whether it trusts the hooks is unknown");
         return;
     };
-    let ours: Vec<&Node> = listed
-        .iter()
-        .filter(|h| {
-            let text = |k: &str| member(h, k).ok().flatten().and_then(as_str).map(str::to_owned);
-            text("handlerType").as_deref() == Some("mcp_tool")
-                && json_out::to_string(h, "\n").contains(&format!("\"{SERVER}\""))
-        })
-        .collect();
+    let ours: Vec<&Node> = listed.iter().filter(|h| listed_ours(h)).collect();
     if ours.is_empty() {
         r.warn("Codex lists none of AiPet's hooks yet");
         return;
@@ -376,5 +376,24 @@ fn trust(r: &Report) {
              /hooks), once",
             untrusted.join(", ")
         ));
+    }
+}
+
+#[cfg(test)]
+mod listed_tests {
+    use super::*;
+
+    /// A `hooks/list` entry as Codex 0.167's app-server gives it (fnt-71 task 8's hands-on).
+    #[test]
+    fn an_aipet_mcp_tool_hook_is_ours_in_app_servers_spelling() {
+        let entry = |handler: &str, server: &str| {
+            json_out::parse(&format!(
+                r#"{{"key":"/h/.codex/config.toml:stop:0:0","eventName":"stop","handlerType":"{handler}","server":"{server}","tool":"report_event","trustStatus":"trusted","currentHash":"sha256:0"}}"#
+            ))
+            .unwrap()
+        };
+        assert!(listed_ours(&entry("mcpTool", "aipet")));
+        assert!(!listed_ours(&entry("mcpTool", "docs")));
+        assert!(!listed_ours(&entry("command", "aipet")));
     }
 }

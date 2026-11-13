@@ -33,9 +33,14 @@ Afterwards `~/.claude/settings.json` and `~/.codex/config.toml` had their old mt
 | L6 | A whole Claude session with the pet down | The session finished normally (exit 0); each hook failed in about 4 ms with ECONNREFUSED. Claude **prints** `SessionEnd hook [...] failed: connect ECONNREFUSED` in `-p` mode, where the exe hook was silent: the spec's fail-fast choice; worth a line in the docs | Pass |
 | L7 | The pet restarted between two Codex turns in one thread | The second turn's hooks all completed and reached the new pet: Codex reconnects to a server that went away mid-thread (only one that was down at thread start stays failed, per the spike) | Pass |
 | L8 | Claude's startup output | Claude printed `unknown format "uint16" ignored` for `status`'s `port`. **Fixed**: the field's schema has no format now, and the conformance test allows only formats a validator knows | Pass (after the fix) |
-| L9 | Codex re-trust through the UI ("Hooks need review" in an interactive `codex`) | The trust here came from `hooks.state` overrides; the interactive review needs the owner | Not run |
-| L10 | Settings showing a tool's change while open | `config.json` changed as Settings expects; Settings wasn't opened (GUI, with the owner) | Not run |
+| L9 | Codex re-trust through the UI, with the owner | The owner signed in to Codex in the sandbox `CODEX_HOME`, reviewed and trusted the AiPet hooks in an interactive `codex`. Codex saved 11 `trusted_hash` entries under `[hooks.state]`, which it put inside AiPet's marked block. A turn with only the saved config and trust (no overrides): MCP ready, all hooks completed, the pet got the events. `AiPet --doctor codex` said "Codex lists none of AiPet's hooks yet": app-server spells the handler type `mcpTool`, and the doctor looked for config.toml's `mcp_tool`. **Fixed**; it now says "Codex trusts AiPet's 11 hooks" | Pass (after the fix) |
+| L9b | The trust across a reinstall, an upgrade and an uninstall, with another hook's trust entry planted in `[hooks.state]` | Reinstall: unchanged. A reinstall with a new helper path (an upgrade): `[hooks.state]` moved out of AiPet's block to the top of the file, all 12 entries kept, so the hooks needn't be trusted again. Uninstall (in place, since trust keys carry the file's path): AiPet's 11 entries dropped, the other hook's kept | Pass |
+| L10 | Settings showing a tool's change while open, with the owner | With Settings open, `wear_avatar` (Hood) and `set_settings` (bubbles off) through the tools: the owner saw both appear in the open Settings, and the pet change to Hood | Pass |
 | L11 | The Codex plugin's `hooks/codex-mcp.json` and `${PLUGIN_ROOT}` in its header helper | Installing the plugin would change `~/.codex`; with the owner | Not run |
+
+**`codex exec` runs no hooks.** A plain `codex exec` in the trusted sandbox reached no hook (the pet saw nothing, as
+in the spike), while the same prompt through app-server, which the interactive `codex` and the desktop app use, ran
+them all. Scripted `codex exec` runs don't move the pet.
 
 **A limit the fix can't cover:** the Codex plugin's `token-header.sh` can't know a data folder moved by
 `XDG_DATA_HOME` or `AIPET_DATA_DIR`, because Codex drops both. Plugin users with the default data folder are fine.
