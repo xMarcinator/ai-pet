@@ -67,16 +67,19 @@ remove_old_autostart() {
   done
 }
 
-# Hooks registered straight at the app's aipet-hook (aipet-hook --install) would fail on every event once it's gone.
-# Only when the config names that path: --uninstall removes every AiPet hook, also one a build from source registered.
-# aipet-hook registers the path with symlinks resolved, so that one counts too.
+# Hooks registered straight at the app's aipet-hook (aipet-hook --install) would fail on every event once it's gone,
+# and so would AiPet --install's MCP server, whose header helper runs the app's AiPet (Claude's .claude.json) or
+# $data/mcp-header (Codex's config.toml). Only when the config names one of those paths: --uninstall removes every
+# AiPet hook and the MCP server, also ones a build from source registered. aipet-hook registers the path with
+# symlinks resolved, so that one counts too.
 # Usage: unregister <agent> <config file>...
 unregister() {
   agent=$1
   shift
   real=$(cd "$app" 2>/dev/null && pwd -P || true)
   for f in "$@"; do
-    if [ -f "$f" ] && { grep -qF "$app/aipet-hook" "$f" || { [ -n "$real" ] && grep -qF "$real/aipet-hook" "$f"; }; }; then
+    if [ -f "$f" ] && { grep -qF -e "$app/aipet-hook" -e "$app/AiPet\"" -e "$data/mcp-header" "$f" \
+        || { [ -n "$real" ] && grep -qF -e "$real/aipet-hook" -e "$real/AiPet\"" "$f"; }; }; then
       step "Removing the hooks registered with $agent"
       "$app/aipet-hook" --uninstall "$agent" < /dev/null || warn "Couldn't remove them: remove the hooks that run $app/aipet-hook from $f by hand."
       return 0
@@ -137,7 +140,7 @@ remove_hyprland_include() {
 if [ "$action" = uninstall ]; then
   stop_pet
   if [ -x "$app/aipet-hook" ]; then
-    unregister claude "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+    unregister claude "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" "${CLAUDE_CONFIG_DIR:+$CLAUDE_CONFIG_DIR/.claude.json}" "$HOME/.claude.json"
     unregister codex "${CODEX_HOME:-$HOME/.codex}/config.toml" "${CODEX_HOME:-$HOME/.codex}/hooks.json"
   fi
   remove_hyprland_include

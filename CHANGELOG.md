@@ -18,6 +18,18 @@ in the milestone 2 release, and an installed copy of any earlier release updates
   tracker tasks can hide while it's connected. Nothing the hooks report is sent to the tracker but a chat's id.
 - Protocol version 2 between the hook and the pet: a v2 event is a v1 event, and the tracker's task messages are the
   pet's own (the pipe and socket refuse them). Hooks keep sending version 1.
+- The pet is an MCP server. While it runs it listens on `127.0.0.1:47615` (`/mcp`, both MCP eras), and agents can
+  wear a pet (`list_avatars`, `wear_avatar`), change the pet and bubble sizes and switches (`get_settings`,
+  `set_settings`), read and dismiss bubbles (`get_board`, `dismiss_card`), list, save and delete themes
+  (`list_themes`, `save_theme`, `delete_theme`), check and install packs (`check_pack`, `install_pack`), and read its
+  status (`status`). Each change goes through the pet as the same change in Settings does, with Settings closed or
+  open. The tools need a per-user token the pet makes in its data folder (`mcp-token`); requests from web pages are
+  refused. A port that is taken leaves the pet without the listener, with a line in its log.
+- `AiPet --install|--uninstall claude|codex`, `AiPet --doctor claude|codex` and `AiPet --print-token-header`: the
+  pet registers its HTTP hooks and MCP server with each agent, checks them (the token, the pet's answer, the
+  registrations, and whether Codex trusts the hooks), and gives the agents the token's header.
+- `install_pack` copies a pack from a folder in your home folder (no links, at most 64 MiB and 2,000 files), checks
+  it, and moves it into the avatars folder; a failed install leaves the avatars folder as it was.
 
 ### Removed
 - The C# projects (`src/AiPet.Core`, `src/AiPet.UI`, `src/AiPet.Hook`), their tests (`tests/AiPet.Tests`), the
@@ -35,6 +47,19 @@ in the milestone 2 release, and an installed copy of any earlier release updates
   that isn't there, and a pack of your own named Hamster loads and is worn like any other.
 
 ### Changed
+- The agents report to the pet's listener, and no hook process starts per event. Claude Code posts its events with
+  HTTP hooks (16 events: Claude doesn't run HTTP hooks on SessionStart, so a chat appears with its first other
+  event). Codex calls the pet's `report_event` tool from `mcp_tool` hooks, with the same 11 events on Windows and
+  Linux, so Codex on Windows no longer waits for PowerShell and now reports PostToolUse and Interrupt too. The
+  `aipet` plugin (same name) ships these hooks and registers the pet's MCP server. **Codex users trust the hooks once
+  more** after this update: `codex`, then `/hooks`.
+- The one-line installers use `AiPet` for direct registrations: `install.ps1` without Git Bash runs
+  `AiPet --install claude`, and both remove a direct registration of either kind once the plugin is in. Uninstalling
+  the Windows app removes `AiPet --install`'s registrations too.
+- Deleting a theme in Settings → Avatars moves its file to `trash/` in the data folder. Theme naming, saving and
+  deleting is shared code that the MCP tools use too.
+- `aipet-hook` and the pet's pipe and socket stay for this release only, so hooks registered before it keep
+  reporting; nothing new registers the exe. Its `--uninstall` removes both kinds of registration.
 - Settings → Avatars says whether each pet is built in or your own, and lists the worn pet's built-in themes and
   your own apart. The theme editor is always there, on the theme worn: a built-in theme is locked, and Copy as new
   theme makes your own from it; your own can be edited, saved and deleted where they are. Each tile's dot is the

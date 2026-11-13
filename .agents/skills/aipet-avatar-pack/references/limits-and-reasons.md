@@ -1,7 +1,8 @@
 # Limits, and every reason `--check-pack` prints
 
 `AiPet --check-pack` prints `OK …` or **one** reason, the first the loader hits, and exits 1. Fix it and run it
-again: the next problem may be behind it. The Avatars page shows the same reason under "Your own avatars".
+again: the next problem may be behind it. The Avatars page shows the same reason under "Your own avatars", and the
+pet's `check_pack` MCP tool gives it as its `report` (and `install_pack`, in its error).
 
 The reasons below are the loader's own wording (`rust/crates/aipet-sprite/src/{load,manifest,pack,vector,
 aseprite_file}.rs`). `…` and `<…>` stand for names and numbers the line fills in; strings are quoted as JSON is.

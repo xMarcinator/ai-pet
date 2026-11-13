@@ -6,8 +6,8 @@
 #   pwsh ./scripts/install-from-source.ps1 -Rebuild     # build even if the last build looks current
 #
 # App:   %LOCALAPPDATA%\Programs\AiPet      (+ Start menu shortcut)
-# Hook:  %LOCALAPPDATA%\AiPet\hooks\aipet-hook.exe, registered in ~/.claude/settings.json and ~/.codex/config.toml
-#        (Codex then asks you to trust it: run `codex` once and choose Review hooks; see aipet-hook --doctor codex)
+# Hooks: AiPet --install claude|codex (HTTP hooks and the MCP server; Codex then asks you to trust its hooks: run
+#        `codex` once and choose Review hooks; see AiPet --doctor codex). The aipet-hook.exe copy stays for one release.
 # These registrations stand in for the plugins: don't use both, or every event reaches the pet twice.
 param([switch]$NoHooks, [switch]$NoStart, [switch]$Rebuild)
 $ErrorActionPreference = 'Stop'
@@ -54,12 +54,13 @@ Remove-Item ('inbox', 'app-path.txt', 'state.json', 'state.json.*.tmp', 'state.l
     'claude-hook.log', 'codex-hook.log' | ForEach-Object { Join-Path $data $_ }) -Recurse -Force -ErrorAction SilentlyContinue
 
 if (-not $NoHooks) {
-    $hook = Join-Path $hookDir 'aipet-hook.exe'
+    # AiPet --install: HTTP hooks and the MCP server (fnt-71); piped, so PowerShell waits for the GUI exe
+    $app = Join-Path $appDir 'AiPet.exe'
     if ((Get-Command claude -ErrorAction SilentlyContinue) -or (Test-Path "$HOME\.claude")) {
-        Step 'Registering the hook with Claude Code'; & $hook --install claude
+        Step 'Registering AiPet with Claude Code'; & $app --install claude | Out-Host
     }
     if ((Get-Command codex -ErrorAction SilentlyContinue) -or (Test-Path "$HOME\.codex")) {
-        Step 'Registering the hook with Codex'; & $hook --install codex
+        Step 'Registering AiPet with Codex'; & $app --install codex | Out-Host
     }
 }
 

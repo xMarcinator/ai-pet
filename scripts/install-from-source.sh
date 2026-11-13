@@ -10,8 +10,9 @@
 # Uses artifacts/<rid> from build.sh or build.ps1; rebuilds them first when they're missing or older than the source
 # (that needs Rust, as build.sh does).
 # App:   ~/.local/share/AiPet/app      (+ menu entry)
-# Hook:  ~/.local/share/AiPet/hooks/aipet-hook, registered in ~/.claude/settings.json and ~/.codex/config.toml
-#        (Codex then asks you to trust it: run `codex` once and choose Review hooks; see aipet-hook --doctor codex)
+# Hooks: AiPet --install claude|codex: HTTP hooks in ~/.claude/settings.json and the MCP server in ~/.claude.json;
+#        the MCP server and its hooks in ~/.codex/config.toml (Codex then asks you to trust them: run `codex` once and
+#        choose Review hooks; see AiPet --doctor codex). ~/.local/share/AiPet/hooks/aipet-hook stays for one release.
 # These registrations stand in for the plugins: don't use both, or every event reaches the pet twice.
 # Hyprland: window rules in ~/.local/share/AiPet/hyprland, for your config to include (the line is printed)
 set -euo pipefail
@@ -38,9 +39,13 @@ if [ "$UNINSTALL" = 1 ]; then
   # aipet-hook registers the path with symlinks resolved, so that one counts too (as in packaging/linux/install.sh).
   hook="$data/hooks/aipet-hook"
   real=$(cd "$data/hooks" 2>/dev/null && pwd -P || true)
-  names_hook() { grep -qsF "$hook" "$@" || { [ -n "$real" ] && grep -qsF "$real/aipet-hook" "$@"; }; }
+  # AiPet --install's registrations name the app (Claude's header helper) or $data/mcp-header (Codex's)
+  names_hook() {
+    grep -qsF -e "$hook" -e "$data/app/AiPet\"" -e "$data/mcp-header" "$@" \
+      || { [ -n "$real" ] && grep -qsF "$real/aipet-hook" "$@"; }
+  }
   if [ -x "$hook" ]; then
-    if names_hook "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"; then
+    if names_hook "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" "${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json"; then
       step "Removing the hooks registered with Claude Code"; "$hook" --uninstall claude < /dev/null || true
     fi
     if names_hook "${CODEX_HOME:-$HOME/.codex}/config.toml" "${CODEX_HOME:-$HOME/.codex}/hooks.json"; then
@@ -129,10 +134,10 @@ rm -f "$data"/{state.json,state.lock,heartbeat,autostart-disabled,claude-hook.lo
 
 if [ "$HOOKS" = 1 ]; then
   if command -v claude >/dev/null || [ -d "$HOME/.claude" ]; then
-    step "Registering the hook with Claude Code"; "$data/hooks/aipet-hook" --install claude
+    step "Registering AiPet with Claude Code (HTTP hooks and the MCP server)"; "$data/app/AiPet" --install claude
   fi
   if command -v codex >/dev/null || [ -d "$HOME/.codex" ]; then
-    step "Registering the hook with Codex"; "$data/hooks/aipet-hook" --install codex
+    step "Registering AiPet with Codex (the MCP server and its hooks)"; "$data/app/AiPet" --install codex
   fi
 fi
 

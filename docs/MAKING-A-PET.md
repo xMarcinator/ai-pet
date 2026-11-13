@@ -19,6 +19,7 @@ older avatar `.json` files (see [Legacy avatars](#legacy-avatars)).
 - [Rive](#rive)
 - [Limits](#limits)
 - [Checking a pack](#checking-a-pack)
+- [From an agent](#from-an-agent)
 - [Legacy avatars](#legacy-avatars)
 - [The built-in pets and their generators](#the-built-in-pets-and-their-generators)
 
@@ -32,6 +33,8 @@ older avatar `.json` files (see [Legacy avatars](#legacy-avatars)).
 3. Check it: `AiPet --check-pack <folder>` prints `OK Blob (vector, 4 layers, 0 frames, themes Mint, Plum)`, or what
    is wrong with it.
 4. Click **Reload** on the Avatars page. The pet gets a tile of its own: click it to wear it.
+
+A coding agent connected to the pet's MCP server can do steps 3 and 4 for you: see [From an agent](#from-an-agent).
 
 A pack that doesn't load is listed under "Your own avatars" with the reason, one line each, and the other pets load
 as usual. A pack loads completely or not at all.
@@ -389,8 +392,8 @@ A theme changes colours or sheets, never both. Pip (painted)'s Lilac theme is a 
 **Your own themes.** You can add a theme to any pet with named colours, the built-in ones included, without
 touching its pack. On the Avatars page the theme editor shows the worn pet in the theme it has on. A theme that
 comes with the pet is locked: **Copy as new theme** makes one of your own from it, to name, colour and **Save**. Your
-own themes (under "Your own") can be changed and saved, copied or deleted. Each is a file in the avatars folder's
-`themes/` folder:
+own themes (under "Your own") can be changed and saved, copied or deleted. A deleted theme's file moves to `trash/` in
+the data folder. Each is a file in the avatars folder's `themes/` folder:
 
 ```json
 {
@@ -491,6 +494,24 @@ doesn't name a `pet` is a legacy avatar, and prints `OK <name> (a legacy avatar)
 writes anything.
 
 On Windows, run it from a terminal: `AiPet.exe --check-pack <folder>`.
+
+## From an agent
+
+The running pet is an MCP server (`aipet`), which the `aipet` plugin and `AiPet --install claude|codex` register with
+Claude Code and Codex (see the [README](../README.md#agents)). An agent connected to it can make and try a pet
+without you opening Settings:
+
+| Tool | What it does |
+|---|---|
+| `check_pack` | `{path}`: checks a pack folder, pet folder, theme file or legacy avatar file and answers `{ok, report}`, where `report` is what `--check-pack` prints. It changes nothing. |
+| `install_pack` | `{path, replace?}`: installs a pack, or a pet folder of styles, from a folder inside your home folder. The pet copies it (no links, at most 64 MiB and 2,000 files), checks it as `check_pack` does, moves it into the avatars folder and reloads, so it shows on the Avatars page and in `list_avatars`. A pack with the same folder name, or the same pet and style, is refused unless `replace` is true; then your own one is replaced where it is. A built-in pet is never replaced. If anything fails, the avatars folder is as it was. |
+| `list_themes` | `{pet, style?}`: the pet's themes, built in or yours, with their colours by name. |
+| `save_theme` | `{pet, style?, name, palette, create}`: makes a theme file (`create: true`), or changes one of yours (`create: false`). `palette` is colour names and `#RRGGBB` values; a new theme takes the others from the default theme. A name has letters, digits, spaces, `-` and `_`, at most 40 characters. |
+| `delete_theme` | `{pet, style?, name, confirm_name}`: moves one of your theme files to `trash/` in the data folder. `confirm_name` must repeat the name. A pet wearing it goes back to its default theme. |
+| `list_avatars`, `wear_avatar` | Lists the pets, with their styles and themes, and wears one (`{name, style?, theme?}`). |
+
+Built-in themes can't be changed or deleted. The theme tools write the same files as the Avatars page, which shows
+the change at once if it is open.
 
 ## Legacy avatars
 
