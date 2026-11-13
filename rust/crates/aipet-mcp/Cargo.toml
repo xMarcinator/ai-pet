@@ -10,25 +10,34 @@ publish.workspace = true
 [dependencies]
 aipet-core = { path = "../aipet-core" }
 aipet-ipc = { path = "../aipet-ipc" }
+# the pack check and install: the same code as --check-pack and Settings
+aipet-sprite = { path = "../aipet-sprite" }
 axum.workspace = true
 getrandom.workspace = true
 rmcp.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+# the listener's socket: SO_EXCLUSIVEADDRUSE on Windows before it binds
+socket2.workspace = true
 # the listener's own runtime (never the shells' executor): a current-thread one, its socket, and select!
 tokio = { workspace = true, features = ["net", "macros"] }
 tower.workspace = true
 tower-http.workspace = true
 aipet-workspace-hack = { version = "0.1", path = "../workspace-hack" }
 
+# the tools' tests drive a real pet, headless
+[dev-dependencies]
+aipet-ui = { path = "../aipet-ui" }
+
 # the token file: O_NOFOLLOW opens, fstat's owner and mode
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
 
-# the token file: its owner and an ACL for the user alone
+# the token file: its owner and an ACL for the user alone; the listener's SO_EXCLUSIVEADDRUSE
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_Networking_WinSock",
     "Win32_Security",
     "Win32_Security_Authorization",
     "Win32_Storage_FileSystem",

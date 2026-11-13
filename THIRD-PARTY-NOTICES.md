@@ -32,7 +32,7 @@ counts twice):
 
 | License | Crates |
 |---|---|
-| MIT License | 342 |
+| MIT License | 347 |
 | Apache License 2.0 | 22 |
 | Unicode License v3 | 19 |
 | BSD 3-Clause "New" or "Revised" License | 4 |
@@ -287,6 +287,7 @@ counts twice):
 | serde_derive | 1.0.229 | MIT OR Apache-2.0 |
 | serde_derive_internals | 0.30.0 | MIT OR Apache-2.0 |
 | serde_json | 1.0.151 | MIT OR Apache-2.0 |
+| serde_spanned | 1.1.1 | MIT OR Apache-2.0 |
 | sha1 | 0.11.0 | MIT OR Apache-2.0 |
 | sha2 | 0.11.0 | MIT OR Apache-2.0 |
 | simd-adler32 | 0.3.10 | MIT |
@@ -332,6 +333,9 @@ counts twice):
 | tokio-macros | 2.7.2 | MIT |
 | tokio-stream | 0.1.19 | MIT |
 | tokio-util | 0.7.20 | MIT |
+| toml | 1.1.6+spec-1.1.0 | MIT OR Apache-2.0 |
+| toml_datetime | 1.1.1+spec-1.1.0 | MIT OR Apache-2.0 |
+| toml_parser | 1.1.3+spec-1.1.0 | MIT OR Apache-2.0 |
 | tower | 0.5.3 | MIT |
 | tower-http | 0.6.11 | MIT |
 | tower-layer | 0.3.3 | MIT |
@@ -406,6 +410,7 @@ counts twice):
 | winit | 0.30.13 | Apache-2.0 |
 | winit-common | 0.31.0-beta.3 | Apache-2.0 |
 | winit-core | 0.31.0-beta.3 | Apache-2.0 |
+| winnow | 1.0.4 | MIT |
 | winreg | 0.56.0 | MIT |
 | writeable | 0.6.4 | Unicode-3.0 |
 | x11-dl | 2.21.0 | MIT |
@@ -5661,6 +5666,33 @@ SOFTWARE.
 
 ### MIT License
 
+Used by: serde_spanned 1.1.1, toml 1.1.6+spec-1.1.0, toml_datetime 1.1.1+spec-1.1.0, toml_parser 1.1.3+spec-1.1.0
+
+```
+Copyright (c) Individual contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+```
+
+### MIT License
+
 Used by: num-conv 0.2.2
 
 ```
@@ -7283,6 +7315,32 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
+```
+
+### MIT License
+
+Used by: winnow 1.0.4
+
+```
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 ```
 
 ### MIT License

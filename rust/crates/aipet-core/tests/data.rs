@@ -271,6 +271,7 @@ fn hook_cleanup_finds_the_agents_as_the_app_does() {
     let scratch = Scratch::new("agents");
     let configs = AgentConfigs {
         claude_settings: scratch.0.join("claude").join("settings.json"),
+        claude_users: scratch.0.join("claude").join(".claude.json"),
         codex_files: [
             scratch.0.join("codex").join("config.toml"),
             scratch.0.join("codex").join("hooks.json"),

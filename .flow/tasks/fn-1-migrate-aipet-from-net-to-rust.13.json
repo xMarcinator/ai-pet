@@ -8,7 +8,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.13.md",
-  "status": "todo",
+  "status": "done",
   "title": "Windows proof for the winit shell: transparency, click-through, topmost, Alt+Tab, DPI, font",
   "updated_at": "2026-09-28T18:32:14.220854Z"
 }

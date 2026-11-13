@@ -8,7 +8,7 @@
   "priority": null,
   "spec": "fnt-73-ui-framework-spike-gpui-or-something",
   "spec_path": ".flow/tasks/fnt-73-ui-framework-spike-gpui-or-something.1.md",
-  "status": "todo",
+  "status": "done",
   "title": "Spike: gpui, a minimal stack and one toolkit against iced for the pet's windows",
   "updated_at": "2026-11-09T10:41:12.043445Z"
 }

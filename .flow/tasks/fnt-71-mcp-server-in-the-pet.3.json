@@ -10,7 +10,7 @@
   "priority": null,
   "spec": "fnt-71-mcp-server-in-the-pet",
   "spec_path": ".flow/tasks/fnt-71-mcp-server-in-the-pet.3.md",
-  "status": "todo",
+  "status": "done",
   "title": "Claude status over HTTP hooks, ordered under parallel posts",
   "updated_at": "2026-11-09T21:07:42.339501Z"
 }

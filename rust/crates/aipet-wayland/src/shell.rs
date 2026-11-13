@@ -82,6 +82,9 @@ enum Message {
     Shell(Box<ShellEvent>),
     /// The pet has no surface: time to try making one.
     Retry,
+    /// An agent's command changed the pet: every window draws anew, as for a change from Settings (a frame draws
+    /// only the pet's surface, so an open Settings would show the old values until the pointer moved over it).
+    Commanded,
 }
 
 /// Where the pet's surface is in its life.
@@ -276,14 +279,24 @@ impl Shell {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Frame(now) => {
+                // agents' commands come with the news, and may ask for an effect (keeping the pet on top)
+                let mut tasks = Vec::new();
+                let mut commanded = false;
                 while let Ok(news) = self.news.try_recv() {
-                    self.ui.update(news.into());
+                    commanded |= matches!(news, News::Command(_));
+                    if let Some(effect) = self.ui.update(news.into()) {
+                        tasks.push(self.apply(effect));
+                    }
+                }
+                if commanded {
+                    tasks.push(Task::done(Message::Commanded));
                 }
                 self.ui.tick(now);
                 self.expire(now);
                 // `now` is when the tick was due, and a tick can come late: the region's wait is counted from when
                 // it really went out
-                self.sync_region(Instant::now())
+                tasks.push(self.sync_region(Instant::now()));
+                Task::batch(tasks)
             }
             Message::Ui(message) => {
                 // choosing an item closes the menu
@@ -791,7 +804,7 @@ fn screen_of(info: &OutputInfo) -> Option<Screen> {
 /// What a message draws anew. The pet's ticks draw its surface, and so do its bubbles' clicks and its surface's own
 /// events (during a drag the pet may be drawn elsewhere on it). Its frames draw nothing, or each would draw the next,
 /// and neither does the pointer's news: the next tick shows it, a [`aipet_ui::SMOOTH_FRAME`] later while the pointer
-/// is on the pet. What the menu and Settings send may change any window.
+/// is on the pet. What the menu and Settings send may change any window, and so may an agent's command.
 fn redraw_scope(pet: window::Id, message: &Message) -> Scope {
     use aipet_ui::Message as Ui;
     match message {
@@ -1011,6 +1024,8 @@ mod tests {
         assert_eq!(scope(Message::Ui(Ui::Dismiss("claude".into()))), Scope::Window(id));
         assert_eq!(scope(Message::Ui(Ui::Menu(MenuItem::Bubbles))), Scope::All);
         assert_eq!(scope(Message::Ui(Ui::SetMusic(true))), Scope::All);
+        // an agent's command may have changed what an open Settings shows
+        assert_eq!(scope(Message::Commanded), Scope::All);
     }
 
     #[test]

@@ -54,6 +54,79 @@ pub(crate) const EVENTS: [Event; 17] = [
     event("SessionEnd", false, true),
 ];
 
+/// What an edit of settings.json writes: the exe's command hooks (the C#'s, kept for its goldens and the migration),
+/// or HTTP hooks that post to the pet's listener (fnt-71, which `AiPet --install claude` writes). Either kind is
+/// AiPet's, so an edit for one takes out the other.
+pub(crate) enum Wanted<'a> {
+    Exe(&'a str),
+    Http,
+}
+
+/// Where the HTTP hooks post: the pet's listener on this machine.
+pub(crate) fn hook_url() -> String {
+    format!(
+        "http://127.0.0.1:{}{}",
+        aipet_ipc::protocol::MCP_PORT,
+        aipet_ipc::protocol::CLAUDE_HOOK_PATH
+    )
+}
+
+/// The pet's MCP endpoint.
+pub(crate) fn mcp_url() -> String {
+    format!("http://127.0.0.1:{}/mcp", aipet_ipc::protocol::MCP_PORT)
+}
+
+/// The events the HTTP hooks report: all of [`EVENTS`] but SessionStart, which Claude doesn't send over HTTP (the
+/// spike, `rust/proofs/mcp-spike.md`): the pet makes the chat from its first event instead (fnt-71 task 3).
+pub(crate) fn http_events() -> impl Iterator<Item = &'static Event> {
+    EVENTS.iter().filter(|e| e.name != "SessionStart")
+}
+
+/// An HTTP hook: posts the event to the pet within 2 s, with Claude's two variables as headers. Never async (Claude
+/// waits at most the timeout, and a refused connection fails at once) and never blocking.
+pub(crate) fn http_hook() -> Object {
+    let mut headers = Object::default();
+    let mut allowed = Vec::new();
+    for (header, var) in aipet_ipc::protocol::CLAUDE_ENV_HEADERS
+        .iter()
+        .zip(aipet_ipc::protocol::CLAUDE_ENV)
+    {
+        headers.push(*header, Node::String(format!("${{{var}}}")));
+        allowed.push(Node::String(var.into()));
+    }
+    let mut hook = Object::default();
+    hook.push("type", Node::String("http".into()));
+    hook.push("url", Node::String(hook_url()));
+    hook.push("timeout", Node::Number("2".into()));
+    hook.push("headers", Node::Object(headers));
+    hook.push("allowedEnvVars", Node::Array(allowed));
+    hook
+}
+
+/// An event's group around the HTTP hook.
+pub(crate) fn http_group(event: &Event) -> Node {
+    let mut group = Object::default();
+    group.push("hooks", Node::Array(vec![Node::Object(http_hook())]));
+    if event.matcher {
+        group.push("matcher", Node::String("*".into()));
+    }
+    Node::Object(group)
+}
+
+/// An HTTP hook of AiPet's: one posting to the pet's hook path on this machine.
+pub(crate) fn is_http_ours(hook: &Node) -> Result<bool, String> {
+    if !matches!(hook, Node::Object(_)) {
+        return Ok(false);
+    }
+    let (Some(Node::String(kind)), Some(Node::String(url))) = (member(hook, "type")?, member(hook, "url")?) else {
+        return Ok(false);
+    };
+    let local = ["http://127.0.0.1:", "http://localhost:", "http://[::1]:"]
+        .iter()
+        .any(|p| url.starts_with(p));
+    Ok(kind == "http" && local && url.ends_with(aipet_ipc::protocol::CLAUDE_HOOK_PATH))
+}
+
 /// The environment the registration reads: the process's ([`process_vars`]), or a test's.
 pub(crate) type Vars<'a> = &'a dyn Fn(&str) -> Option<OsString>;
 
@@ -263,6 +336,8 @@ pub(crate) fn install(exe: &Path, vars: Vars, say: &mut dyn FnMut(&str)) -> Resu
 
 /// `ClaudeConfig.Uninstall`.
 pub(crate) fn uninstall(vars: Vars, say: &mut dyn FnMut(&str)) -> Result<i32, String> {
+    // AiPet's MCP server (fnt-71) goes too, quietly: the uninstaller runs this exe's --uninstall
+    let _ = crate::mcp_install::set_server(&crate::mcp_install::claude_json(vars), None);
     say(if edit(&settings(vars), None)? {
         "AiPet hooks removed from Claude Code"
     } else {
@@ -282,6 +357,11 @@ fn blank(text: &str) -> bool {
 /// What the C# reads throws as it does there: an object that names a member twice once it is read, a hook that isn't
 /// an object. Nothing is written then.
 fn edit(path: &Path, command: Option<&str>) -> Result<bool, String> {
+    edit_as(path, command.map(Wanted::Exe).as_ref())
+}
+
+/// [`edit`] for either kind of hook. Whether it changed anything.
+pub(crate) fn edit_as(path: &Path, command: Option<&Wanted>) -> Result<bool, String> {
     let exists = is_file(path);
     if !exists && command.is_none() {
         return Ok(false);
@@ -317,7 +397,10 @@ fn edit(path: &Path, command: Option<&str>) -> Result<bool, String> {
                 kept.push(true);
                 continue;
             };
-            let ours = list.iter().map(is_ours).collect::<Result<Vec<bool>, String>>()?;
+            let ours = list
+                .iter()
+                .map(|h| Ok(is_ours(h)? || is_http_ours(h)?))
+                .collect::<Result<Vec<bool>, String>>()?;
             let mut ours = ours.into_iter();
             list.retain(|_| !ours.next().unwrap_or(false));
             // a group left empty goes, the user's own empty ones too
@@ -326,7 +409,18 @@ fn edit(path: &Path, command: Option<&str>) -> Result<bool, String> {
         let mut kept = kept.into_iter();
         groups.retain(|_| kept.next().unwrap_or(true));
     }
-    if let Some(command) = command {
+    if let Some(Wanted::Http) = command {
+        for event in http_events() {
+            let group = http_group(event);
+            match hooks.get_mut(event.name) {
+                Some(Node::Array(groups)) => groups.push(group),
+                Some(other) => *other = Node::Array(vec![group]),
+                None => hooks.push(event.name, Node::Array(vec![group])),
+            }
+        }
+    }
+    if let Some(Wanted::Exe(command)) = command {
+        let command = *command;
         for event in &EVENTS {
             let mut hook = Object::default();
             hook.push("type", Node::String("command".into()));

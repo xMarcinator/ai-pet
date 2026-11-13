@@ -8,7 +8,7 @@
   "priority": null,
   "spec": "fnt-71-mcp-server-in-the-pet",
   "spec_path": ".flow/tasks/fnt-71-mcp-server-in-the-pet.2.md",
-  "status": "todo",
+  "status": "done",
   "title": "Listener thread, token, both MCP eras and the status tool, measured against R18",
   "updated_at": "2026-11-09T21:05:00.789776Z"
 }

@@ -8,7 +8,7 @@
   "priority": null,
   "spec": "fnt-72-new-pet-states-and-the-hamsters",
   "spec_path": ".flow/tasks/fnt-72-new-pet-states-and-the-hamsters.1.md",
-  "status": "todo",
+  "status": "done",
   "title": "Pet-mood step, the error chat, and the behaviour for sad, tired, news, aura and heart",
   "updated_at": "2026-11-09T10:19:34.163472Z"
 }

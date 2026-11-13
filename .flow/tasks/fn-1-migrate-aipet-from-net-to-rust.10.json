@@ -10,7 +10,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.10.md",
-  "status": "todo",
+  "status": "done",
   "title": "Secrets, config, logs, uninstall cleanup and update status with .NET compatibility",
   "updated_at": "2026-09-28T18:25:24.936159Z"
 }

@@ -1,13 +1,14 @@
 {
   "name": "aipet",
   "version": "0.2.0",
-  "description": "Shows each Codex chat's status on the AiPet desktop pet. Needs the AiPet app running; does nothing otherwise.",
-  "keywords": ["desktop-pet", "status", "hooks"],
+  "description": "Shows each Codex chat's status on the AiPet desktop pet, and lets Codex drive the pet through its MCP server. Needs the AiPet app running; does nothing otherwise.",
+  "keywords": ["desktop-pet", "status", "hooks", "mcp"],
   "hooks": "./hooks/codex.json",
+  "mcpServers": "./hooks/codex-mcp.json",
   "interface": {
     "displayName": "AiPet",
     "shortDescription": "Show your Codex chats on the AiPet desktop pet",
-    "longDescription": "A floating pixel pet that mirrors your chats. The hook only observes: it prints nothing to Codex and does nothing while the pet is closed.",
+    "longDescription": "A floating pixel pet that mirrors your chats. The hooks only observe: they report each event to the pet's MCP server, print nothing to Codex and do nothing while the pet is closed. Codex can also use the pet's tools to wear a pet, change its sizes, or save a theme.",
     "developerName": "xMarcinator",
     "category": "Productivity",
     "websiteURL": "https://github.com/xMarcinator/ai-pet",

@@ -21,6 +21,7 @@ serde = "1"
 # float_roundtrip: parse numbers exactly (correctly rounded), as System.Text.Json does; raw_value: avatar files read
 # their numbers from the raw text, where System.Text.Json and serde_json disagree (-0 as an int, 1e400 as a double)
 serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
+toml = { version = "1", default-features = false, features = ["parse", "serde", "std"] }
 # Unix system calls: peer credentials, O_NOFOLLOW opens, fstat, flock, access
 libc = "0.2"
 # the hook server's Unix socket, bound and chmodded before it listens (std's UnixListener::bind also listens)

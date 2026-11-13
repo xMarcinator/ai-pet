@@ -83,10 +83,11 @@ agent() {
   )
 }
 
-# Whether a config file still registers AiPet's hook directly (aipet-hook --install), which the plugin replaces.
+# Whether a config file still registers AiPet directly, which the plugin replaces: the exe's hooks (aipet-hook
+# --install, older installs) or the HTTP hooks and MCP server of AiPet --install.
 registered() {
   for f in "$@"; do
-    if [ -f "$f" ] && grep -q aipet-hook "$f"; then return 0; fi
+    if [ -f "$f" ] && grep -qE 'aipet-hook|127\.0\.0\.1:47615' "$f"; then return 0; fi
   done
   return 1
 }
@@ -144,7 +145,7 @@ main() {
   if [ "${AIPET_NO_START:-0}" = 1 ]; then (unset GITHUB_TOKEN; sh "$folder/install.sh" --no-start < /dev/null)
   else (unset GITHUB_TOKEN; sh "$folder/install.sh" < /dev/null)
   fi
-  hook=${XDG_DATA_HOME:-$HOME/.local/share}/AiPet/app/aipet-hook
+  app=${XDG_DATA_HOME:-$HOME/.local/share}/AiPet/app/AiPet
 
   # ------------------------------------------------------------ the plugins
   claude_done=0
@@ -167,11 +168,13 @@ main() {
       if agent claude plugin marketplace update aipet && agent claude plugin install aipet@aipet \
           && agent claude plugin update aipet@aipet; then
         claude_done=1
-        # hooks registered directly by older installs (aipet-hook --install claude) would report every event twice
+        # hooks registered directly (aipet-hook --install claude, AiPet --install claude) would report every event
+        # twice
         claude_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
-        if [ -x "$hook" ] && registered "$claude_dir/settings.json"; then
-          say "Removing the older direct hook registration from Claude Code"
-          "$hook" --uninstall claude < /dev/null || warn "Couldn't remove it: run $hook --uninstall claude"
+        claude_json=${CLAUDE_CONFIG_DIR:+$CLAUDE_CONFIG_DIR/.claude.json}
+        if [ -x "$app" ] && registered "$claude_dir/settings.json" "${claude_json:-$HOME/.claude.json}"; then
+          say "Removing the direct registration from Claude Code (the plugin replaces it)"
+          "$app" --uninstall claude < /dev/null || warn "Couldn't remove it: run $app --uninstall claude"
         fi
       else
         warn "Couldn't add the plugin to Claude Code. Try it yourself:"
@@ -185,9 +188,9 @@ main() {
       if agent codex plugin marketplace upgrade aipet && agent codex plugin add aipet@aipet; then
         codex_done=1
         codex_dir=${CODEX_HOME:-$HOME/.codex}
-        if [ -x "$hook" ] && registered "$codex_dir/config.toml" "$codex_dir/hooks.json"; then
-          say "Removing the older direct hook registration from Codex"
-          "$hook" --uninstall codex < /dev/null || warn "Couldn't remove it: run $hook --uninstall codex"
+        if [ -x "$app" ] && registered "$codex_dir/config.toml" "$codex_dir/hooks.json"; then
+          say "Removing the direct registration from Codex (the plugin replaces it)"
+          "$app" --uninstall codex < /dev/null || warn "Couldn't remove it: run $app --uninstall codex"
         fi
       else
         warn "Couldn't add the plugin to Codex. Try it yourself:"

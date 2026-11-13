@@ -7,6 +7,9 @@ license.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "aipet-hook"
 path = "src/main.rs"
@@ -15,6 +18,8 @@ path = "src/main.rs"
 aipet-ipc = { path = "../aipet-ipc" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+# whether config.toml is TOML before AiPet --install edits it (as text)
+toml.workspace = true
 
 # the trace log's O_NOFOLLOW open and fstat checks, and the modes registration keeps
 [target.'cfg(unix)'.dependencies]

@@ -35,7 +35,28 @@ pub(crate) async fn loopback(Shared(state): Shared<Arc<State>>, request: Request
     if !host_allowed(headers, state.port) || !origin_allowed(headers, &state.origins()) {
         return empty(StatusCode::FORBIDDEN);
     }
-    next.run(request).await
+    // a large body (or one that declares no length) is read and parsed in this thread's malloc arena
+    let large = declared.is_none_or(|len| len >= LARGE_REQUEST);
+    let response = next.run(request).await;
+    if large {
+        give_back_freed_memory();
+    }
+    response
+}
+
+/// From this size a request's freed memory is handed back to the OS when it is done (R15).
+const LARGE_REQUEST: u64 = 256 * 1024;
+
+/// Hands the heap's free pages back to the OS. glibc keeps what a large request freed in the listener thread's
+/// arena: a hook body at the cap left the pet 5 MB of anonymous memory above a pet without the listener, for good
+/// (R15's paired run, 2026-11-13). Windows' heap gives blocks over 512 kB back by itself, and musl and the BSDs'
+/// allocators return large frees too.
+fn give_back_freed_memory() {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    // SAFETY: malloc_trim only walks glibc's own arenas; it takes their locks and frees no live allocation.
+    unsafe {
+        libc::malloc_trim(0);
+    }
 }
 
 /// `/mcp`'s check: `Authorization: Bearer <the token>`, else 401, logged at most once a minute and never with what

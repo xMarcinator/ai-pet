@@ -52,12 +52,15 @@ version = "0.1.0"
 dependencies = [
  "aipet-core",
  "aipet-desktop",
+ "aipet-hook",
  "aipet-ipc",
  "aipet-mcp",
  "aipet-sprite",
  "aipet-ui",
  "aipet-wayland",
  "libc",
+ "serde_json",
+ "toml",
  "velopack",
  "windows-sys 0.52.0",
  "winresource",
@@ -103,6 +106,7 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "toml",
  "windows-sys 0.52.0",
  "winresource",
 ]
@@ -122,6 +126,8 @@ version = "0.1.0"
 dependencies = [
  "aipet-core",
  "aipet-ipc",
+ "aipet-sprite",
+ "aipet-ui",
  "aipet-workspace-hack",
  "axum",
  "getrandom 0.4.3",
@@ -129,6 +135,7 @@ dependencies = [
  "rmcp",
  "serde",
  "serde_json",
+ "socket2",
  "tokio",
  "tower",
  "tower-http",
@@ -196,6 +203,7 @@ dependencies = [
  "serde_json",
  "socket2",
  "syn 3.0.6",
+ "windows-sys 0.52.0",
  "windows-sys 0.61.2",
 ]
 

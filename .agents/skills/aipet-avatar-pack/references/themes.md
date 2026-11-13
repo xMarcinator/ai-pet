@@ -57,7 +57,15 @@ Windows):
 - Files load in sorted order after every pack. One that doesn't fit is listed on the Avatars page with its reason.
 - In the app: Settings → Avatars shows the theme editor on the worn pet's theme. A pet's own themes are locked, and
   **Copy as new theme** makes a new one from them; the user's theme files can be edited (**Save**) and deleted
-  (**Delete**), which write or remove these files.
+  (**Delete**), which write these files or move them to the data folder's `trash/`.
+- Over the pet's MCP server (`aipet`), with the same code and files as the Avatars page:
+  - `list_themes` `{pet, style?}`: the pet's themes, `builtin` or not, with each one's colours by name.
+  - `save_theme` `{pet, style?, name, palette, create}`: `create: true` makes a theme (refused if the name is
+    taken), `create: false` changes one of the user's. `palette` is colour names and `#RRGGBB`; a new theme takes
+    the rest from the default theme. Names: letters, digits, spaces, `-` and `_`, at most 40 characters, unique per
+    pet in any case. Built-in themes can't be changed. `wear_avatar` `{name, style?, theme}` puts it on.
+  - `delete_theme` `{pet, style?, name, confirm_name}`: moves one of the user's files to `trash/`; `confirm_name`
+    must repeat the name. Only when the user asks for it.
 - Example: `avatars/samples/themes/hood-red.json`.
 - Check one: `AiPet --check-pack <file>`. In a `themes/` folder it is checked against the pets of the avatars
   folder above it, with the other theme files there; elsewhere against the built-ins and the pack folders beside it.

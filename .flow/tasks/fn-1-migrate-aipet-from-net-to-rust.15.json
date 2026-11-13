@@ -13,7 +13,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.15.md",
-  "status": "todo",
+  "status": "done",
   "title": "Pet app wiring: real data from the core, the shared single-instance lock, demo as a dev feature",
   "updated_at": "2026-09-28T18:32:14.516849Z"
 }

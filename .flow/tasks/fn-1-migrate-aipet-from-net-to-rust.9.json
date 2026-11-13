@@ -12,7 +12,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.9.md",
-  "status": "todo",
+  "status": "done",
   "title": "Rust hook server for Unix and Windows, with cross-runtime tests",
   "updated_at": "2026-09-28T18:32:13.916891Z"
 }

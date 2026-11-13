@@ -15,22 +15,26 @@ graph LR
     CX["Codex<br/>(CLI / exec / ChatGPT app)"]
   end
 
-  CC -- "direct hooks: runs the exe itself,<br/>args --agent claude (exec form)" --> HOOK
-  CC -- "aipet plugin: bash runs<br/>sh native/aipet-hook.sh --agent claude" --> LAUNCH
-  CX -- "direct hooks: pwsh -NoProfile -Command (Windows) /<br/>sh -c (Linux), the exe with --agent codex" --> HOOK
-  CX -- "aipet plugin (Linux):<br/>sh native/aipet-hook.sh --agent codex" --> LAUNCH
-  CX -- "aipet plugin (Windows): PowerShell runs<br/>native/win-x64/aipet-hook.exe --agent codex" --> HOOK
-  LAUNCH["native/aipet-hook.sh<br/>(picks the binary for this OS and CPU)"] --> HOOK["aipet-hook<br/>(Rust, one process per event)"]
+  CC -- "HTTP hooks: POST /hook/claude<br/>(AiPet --install claude, or the aipet plugin)" --> L
+  CX -- "mcp_tool hooks call report_event<br/>on the aipet MCP server (bearer token)" --> L
+  CC -- "MCP tools (bearer token)" --> L
+  CX -- "MCP tools (bearer token)" --> L
+  CC -. "registrations made before the listener:<br/>aipet-hook --agent claude per event" .-> HOOK
+  CX -. "the same, aipet-hook --agent codex<br/>(one more release, as a bridge)" .-> HOOK
+  HOOK["aipet-hook<br/>(Rust, one process per event)"]
 
   HOOK -- "one JSON line each way, over a current-user<br/>named pipe (Windows) / Unix socket (Linux)" --> SRV
   HOOK -. "nothing listening: exit 0,<br/>nothing written, nothing started" .-> NOOP(("no-op"))
 
   subgraph APP["AiPet app (rust/crates/aipet)"]
-    SRV["HookServer<br/>(pipe instances / a blocking socket,<br/>on threads of their own)"] --> SESS["AgentSessions<br/>(the chats, in memory)"]
+    L["Listener (aipet-mcp)<br/>127.0.0.1:47615, /mcp and /hook/claude,<br/>a thread with its own tokio runtime"] --> Q["event queue<br/>(one thread, arrival order)"] --> ING
+    SRV["HookServer<br/>(pipe instances / a blocking socket,<br/>on threads of their own)"] --> ING["Ingress"]
+    ING --> SESS["AgentSessions<br/>(the chats, in memory)"]
     SESS --> BOARD["Board::refresh, on the core's thread<br/>(every 250 ms, and on a change)"] --> MW["PetUi in a shell<br/>pet + bubbles"]
+    L -- "tools: a command, then the pet's answer (5 s)" --> MW
   end
 
-  SRV --> LOG["DataDir/hook-events.log"]
+  ING --> LOG["DataDir/hook-events.log"]
   CXS["~/.codex/session_index.jsonl<br/>~/.codex/sessions/**/rollout-*.jsonl"] --> CW["CodexWatcher<br/>(2 s poll)"] --> BOARD
   JIRA["Jira Cloud REST v3"] --> JW["JiraWatcher"] --> BOARD
   GH["GitHub GraphQL"] --> GW["GitHubWatcher"] --> BOARD
@@ -38,13 +42,14 @@ graph LR
 ```
 
 **Key design choices.**
-- The agent-facing part is a separate tiny process. `aipet-hook` is a native Rust program ([rust/crates/aipet-hook/](../rust/crates/aipet-hook/)), so a process spawned on every event starts quickly. Releases build it with cargo for Windows and Linux (§7.9). It is a port of the .NET hook, and behaves as it did, byte for byte where the agents or the pet can see it.
-- The hook only observes. On the hook path it never writes to stdout, never fails, and always exits 0 (`main.rs`), so it cannot inject text into a chat or disturb the agent.
-- The hook is a thin forwarder. Each run connects to the running pet over a local socket that only the current user can open, sends the event as one JSON line and waits for one line back ([aipet-ipc](../rust/crates/aipet-ipc/)). All state logic lives in the pet (aipet-core's `sessions/`), so the chats exist only while it runs. When it isn't running, a hook does nothing at all: it writes nothing anywhere and starts nothing. Only the user, an installer, or the Windows updater after an update starts the pet. Both ends share the endpoint, limits and field names through the `aipet-ipc` crate, with the data paths (`paths.rs`).
-- Claude reaches the hook in one of two ways: hooks registered directly in its settings (exec form, no shell), or the `aipet` plugin, whose hooks run `sh` on a launcher script with `"shell": "bash"`. Codex likewise has direct hooks (through PowerShell on Windows, `sh -c` elsewhere) or the same plugin. §6 and §7 cover both.
+- The agents report to the pet itself. The pet runs a small HTTP listener on 127.0.0.1, port 47615 ([aipet-mcp](../rust/crates/aipet-mcp/), §6.10). Claude Code posts each hook event to it with an HTTP hook, and Codex calls the pet's `report_event` tool from an `mcp_tool` hook on its MCP connection to the pet. No process starts per event, so Codex on Windows no longer waits 1-4 s for PowerShell. `AiPet --install claude|codex` and the `aipet` plugin register both (§7.10, §7.6).
+- The same listener is an MCP server. Agents (Claude Code, Codex, any MCP client) can list and wear pets, read and change the pet's sizes and switches, read and dismiss the board's cards, list, save and delete themes, and check and install packs (§6.13). The tools ask the pet, which does each change as Settings does: Settings doesn't have to be open, or even exist.
+- The hooks only observe. `/hook/claude` answers 200 `{}` to every event, and `report_event` answers `{}`, so neither can put text into a chat or block the agent. Claude's HTTP hooks give up after 2 s, and a refused connection fails at once.
+- All state logic lives in the pet (aipet-core's `sessions/`), so the chats exist only while it runs. When it isn't running, Claude's HTTP hooks find nothing listening and Codex's `mcp_tool` hooks are skipped: nothing is written and nothing starts. Only the user, an installer, or the Windows updater after an update starts the pet.
+- `aipet-hook`, the native program each event used to start ([rust/crates/aipet-hook/](../rust/crates/aipet-hook/)), stays for one release as a bridge, with the pet's pipe or socket server, so registrations made before the upgrade keep reporting. It connects to a local socket that only the current user can open, sends the event as one JSON line and waits for one line back ([aipet-ipc](../rust/crates/aipet-ipc/)). It never writes to stdout on the hook path, never fails, and always exits 0. Events from either way in go through one `Ingress` to the same chats and the same record (§6.10). Nothing new registers the exe.
 - Everything fails soft:
-  - A hook that finds nothing listening exits 0 at once. One that gets no event on stdin within 2 s sends nothing. One whose reply doesn't come within 2 s gives up and exits 0.
-  - The pet drops garbage, oversized or silent connections without a reply, and never crashes on them.
+  - A Claude HTTP hook with no pet fails at once, and one with a slow pet gives up after 2 s. A Codex `mcp_tool` hook with no connection to the pet is skipped. The old exe exits 0 when nothing listens, or when its stdin or the reply doesn't come within 2 s.
+  - The pet drops garbage, oversized or silent connections, and never crashes on them. A port that is taken leaves the pet without the listener, with one line in its log: Settings and the pipe still work.
   - Watcher errors become a bubble or a log line.
   - Platform features that are missing (for example X11 shapes) simply turn off.
 
@@ -55,13 +60,14 @@ graph LR
 | Path | What it is |
 |---|---|
 | [rust/](../rust/) | The Rust workspace ([Cargo.toml](../rust/Cargo.toml), one version and toolchain for every crate). Its crates are below; the exes' `build.rs` give them their Windows icon, manifest and version resource. |
-| [rust/crates/aipet/](../rust/crates/aipet/) | The pet's binary, `AiPet` (`AiPet.exe`): Velopack's startup, the single instance, the core's thread, `config.json` and the window's place, the updates, and the choice of shell (§4.1). |
-| [rust/crates/aipet-core/](../rust/crates/aipet-core/) | The pet without a UI: the hook server (`server/`), the chats' state (`sessions/`), the Codex, Jira and GitHub watchers, the Board, presets, `config.json` and the watchers' settings files, secrets, `aipet.log`, the uninstaller's hook cleanup and the update texts (§5, §6, §8). |
-| [rust/crates/aipet-sprite/](../rust/crates/aipet-sprite/) | The pet's behaviour, the Pose, packs and the compositor, the built-in packs (`packs/`) and their bake (§3). |
-| [rust/crates/aipet-ui/](../rust/crates/aipet-ui/) | The front end both shells share, `PetUi`: the sprite, the bubbles, the menu, Settings, and the geometry the view and the input region come from (§4). |
+| [rust/crates/aipet/](../rust/crates/aipet/) | The pet's binary, `AiPet` (`AiPet.exe`): Velopack's startup, the single instance, the core's thread, the listener's start, `config.json` and the window's place, the updates, and the choice of shell (§4.1). Also `--check-pack`, and `--install`, `--uninstall` and `--doctor` for the agents' HTTP hooks and MCP server, with `--print-token-header` (§7.10). |
+| [rust/crates/aipet-core/](../rust/crates/aipet-core/) | The pet without a UI: the hook server and the `Ingress` it shares with the listener (`server/`), the chats' state (`sessions/`), the agents' commands to the pet (`control.rs`, §6.13), the Codex, Jira and GitHub watchers, the Board, presets, `config.json` and the watchers' settings files, secrets, `aipet.log`, the uninstaller's hook cleanup and the update texts (§5, §6, §8). |
+| [rust/crates/aipet-sprite/](../rust/crates/aipet-sprite/) | The pet's behaviour, the Pose, packs and the compositor, the built-in packs (`packs/`) and their bake (§3), and the user's theme files and pack installs, which Settings and the MCP tools share (`themes.rs`, `install.rs`). |
+| [rust/crates/aipet-ui/](../rust/crates/aipet-ui/) | The front end both shells share, `PetUi`: the sprite, the bubbles, the menu, Settings, the agents' commands done as Settings' messages (`control.rs`), and the geometry the view and the input region come from (§4). |
+| [rust/crates/aipet-mcp/](../rust/crates/aipet-mcp/) | The pet's HTTP listener on 127.0.0.1: MCP at `/mcp` (rmcp, both MCP eras, a bearer token) and Claude's HTTP hooks at `/hook/claude`, on a thread of its own with a current-thread tokio runtime (§6.10-§6.13). |
 | [rust/crates/aipet-wayland/](../rust/crates/aipet-wayland/), [rust/crates/aipet-desktop/](../rust/crates/aipet-desktop/) | The shells: a layer-shell surface on Wayland, and an ordinary window on winit (Windows, X11, macOS) with its native calls. aipet-desktop also has the operating system's services both shells use (`platform/`, §8.6). |
-| [rust/crates/aipet-hook/](../rust/crates/aipet-hook/) | `aipet-hook`, which the agents run on every event, with `--install`, `--uninstall`, `--doctor` and `--print-plugin-hooks` (§6, §7). |
-| [rust/crates/aipet-ipc/](../rust/crates/aipet-ipc/) | What the hook and the pet share: the protocol, the endpoint, connecting, and the data paths (§6.5, §9). |
+| [rust/crates/aipet-hook/](../rust/crates/aipet-hook/) | `aipet-hook`, which registrations made before the listener run on every event, with `--install`, `--uninstall`, `--doctor` and `--print-plugin-hooks` (§6, §7). It stays one release as a bridge. Its library also holds `AiPet --install`, `--uninstall` and `--doctor` (`mcp_install.rs`, `mcp_doctor.rs`), and `--print-token-header`, the plugin's token helper. |
+| [rust/crates/aipet-ipc/](../rust/crates/aipet-ipc/) | What the hook, the listener and the pet share: the protocol (with the listener's port, `MCP_PORT`, and the hook path), the endpoint, connecting, the envelope and its trimming (`event.rs`, `json.rs`), and the data paths (§6.5, §9). |
 | [rust/crates/aipet-testkit/](../rust/crates/aipet-testkit/) | The sandbox the tests that run programs and scripts use: fresh folders, an `AIPET_PIPE` no pet listens on, stand-in tools. Not built into anything. |
 | [rust/crates/workspace-hack/](../rust/crates/workspace-hack/), [rust/.config/hakari.toml](../rust/.config/hakari.toml) | `aipet-workspace-hack`, generated by cargo-hakari: no code, only dependencies, so the headless crates (aipet-core, aipet-mcp, aipet-sprite, aipet-testkit) build each shared crate with one feature set. The hook, aipet-ipc and the front end's crates don't depend on it (README, Building from source). |
 | [rust/PARITY.md](../rust/PARITY.md) | The parity ledger: every test of the removed C# and the Rust tests that hold it. The .NET app (its projects, tests, solution and the icon generator) is at commit `bf3696ea4a`. |
@@ -69,13 +75,13 @@ graph LR
 | [rust/SPIKE.md](../rust/SPIKE.md), [rust/notes/](../rust/notes/), [rust/proofs/](../rust/proofs/) | The research records behind the migration and later work (Appendix A). |
 | [build/](../build/) | `default.win32manifest`, the manifest aipet-hook's `build.rs` embeds (the one the .NET hook had). |
 | [assets/icon/](../assets/icon/) | The app icon (`aipet.ico` and PNGs), and the plugin's and the Linux hicolor icons. They were drawn with the .NET pet's renderer by a generator that went with the C#; builds only use the committed files. |
-| [plugins/aipet/](../plugins/aipet/) | One plugin folder for both agents: `.claude-plugin/plugin.json` and `hooks/hooks.json` (Claude Code), `.codex-plugin/plugin.json` and `hooks/codex.json` (Codex), the launcher `native/aipet-hook.sh`, assets, README and LICENSE. The hook binaries (`native/<rid>/`) are gitignored: the release workflow adds them in the plugin repository. |
+| [plugins/aipet/](../plugins/aipet/) | One plugin folder for both agents: `.claude-plugin/plugin.json`, `hooks/hooks.json` and `.mcp.json` (Claude Code), `.codex-plugin/plugin.json`, `hooks/codex.json` and `hooks/codex-mcp.json` (Codex), the launcher `native/aipet-hook.sh`, Codex's token helper `native/token-header.sh`, assets, README and LICENSE. The hook binaries (`native/<rid>/`) are gitignored: the release workflow adds them in the plugin repository. |
 | [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json), [.agents/plugins/marketplace.json](../.agents/plugins/marketplace.json) | The marketplaces `aipet` for Claude Code and for Codex. Both point at `plugins/aipet` in the separate repository `xMarcinator/ai-pet-plugin`, pinned to a tag and a commit. |
 | [packaging/linux/](../packaging/linux/) | The Linux package's `install.sh` (install, update, `--uninstall`), the menu entry template `aipet.desktop.in`, the hicolor icons, and `hyprland/` with the Hyprland window rules (`aipet.lua`, `aipet.conf`). |
 | [packaging/windows/](../packaging/windows/) | A README on the Windows packages the release workflow builds. Nothing in it runs. |
 | [install.ps1](../install.ps1), [install.sh](../install.sh) | The end-user one-line installers: the latest release's app, then the plugin for each agent on `PATH`. |
 | [build.ps1](../build.ps1), [build.sh](../build.sh) | Build the pet and the hook with cargo per RID into `artifacts/`, bundle the hook into the plugin and make a local marketplace to try it (§7.7). |
-| [scripts/](../scripts/) | `install-from-source.sh` and `install-from-source.ps1` (install a build from a clone, with direct hooks); the checks CI runs: `check-plugin.sh` (the plugin and marketplace files are consistent, and the hook files match the code), `check-parity.sh` (the parity ledger), `check-removed-paths.sh` (nothing names what the cutover removed), `check-notices.sh` (THIRD-PARTY-NOTICES.md is what cargo-about makes) and `check-skill-copies.sh`; `cargo-env.sh` and `cargo-env.ps1` (sccache for cargo, from the environment); `sweep.sh` (stale output out of `rust/target` after a gate, with cargo-sweep); and `perf/`, the CPU and memory benchmarks. |
+| [scripts/](../scripts/) | `install-from-source.sh` and `install-from-source.ps1` (install a build from a clone, with direct hooks); the checks CI runs: `check-plugin.sh` (the plugin and marketplace files are consistent, and the hook and MCP files match the code), `check-parity.sh` (the parity ledger), `check-removed-paths.sh` (nothing names what the cutover removed), `check-notices.sh` (THIRD-PARTY-NOTICES.md is what cargo-about makes) and `check-skill-copies.sh`; `cargo-env.sh` and `cargo-env.ps1` (sccache for cargo, from the environment); `sweep.sh` (stale output out of `rust/target` after a gate, with cargo-sweep); and `perf/`, the CPU and memory benchmarks. |
 | [.github/](../.github/) | `workflows/ci.yml` (the hook and the plugin check on Windows and Linux, the Rust workspace, the notices and the workspace-hack, the scripts), `workflows/release.yml` (check, win, linux, plugin, publish), `workflows/velopack-proof.yml` (an installed pet updating itself on Windows, run by hand) and `dependabot.yml` (updates for the pinned actions). |
 | [avatars/](../avatars/) | A legacy sample avatar (`hood-green.json`), the built-in pets' reference drawings and generators (`reference/`), and sample packs and a sample theme file (`samples/`). The app does not read this folder (see §3.7). |
 | [docs/](../docs/), [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md), [CHANGELOG.md](../CHANGELOG.md) | This document, [MAKING-A-PET.md](MAKING-A-PET.md) (making packs and themes) and the work-in-progress handoff; the notices for every crate the release builds compile in, generated by cargo-about from `rust/about.toml` and `rust/about.hbs` (`scripts/check-notices.sh --write`); the changes per release. |
@@ -225,7 +231,7 @@ Rive packs aren't supported (the spike's measurements are in `rust/proofs/rive.m
 **The Avatars page** ([settings/avatars.rs](../rust/crates/aipet-ui/src/settings/avatars.rs)):
 - One tile per pet, each a still (in the style and theme the pet was last worn in, else its default) with the accent of that drawing in that theme as its dot, and "Built in" or "Your own" under its name (`LoadedPack::builtin`, which `builtin::all` sets). A click wears it: the pet takes it on, the accent colours Settings and the menu, and the config is saved.
 - For a pet with more than one style, a **Style** row of pills; a style keeps the worn theme where it has one by that name.
-- Under the tiles, the worn pet's themes as pills, in two groups: "Built in" (those that come with the pet) and "Your own" (theme files, when there are any). For a pet with named colours the theme editor is always under them, on the theme worn: a preview, the name and each named colour. A built-in theme's are locked, with **Copy as new theme**, which makes a new theme from it, to edit and **Save** (or **Cancel**). One of the user's can be edited, and offers **Save**, **Delete** and **Copy as new theme**. Save writes a theme file with the colours that differ from the pet's default, named `<pet>-<theme>.json` (an edited theme keeps its file), and wears it. Whatever puts on another pet, style or theme, Settings or not, puts the editor on it (`avatars::follow`, from `PetUi::wear` and Reload); edits not saved are dropped then. Sheet themes can't be edited.
+- Under the tiles, the worn pet's themes as pills, in two groups: "Built in" (those that come with the pet) and "Your own" (theme files, when there are any). For a pet with named colours the theme editor is always under them, on the theme worn: a preview, the name and each named colour. A built-in theme's are locked, with **Copy as new theme**, which makes a new theme from it, to edit and **Save** (or **Cancel**). One of the user's can be edited, and offers **Save**, **Delete** and **Copy as new theme**. Save writes a theme file with the colours that differ from the pet's default, named `<pet>-<theme>.json` (an edited theme keeps its file), and wears it. Delete moves the file to `DataDir/trash/`. The naming, saving and deleting are aipet-sprite's [themes.rs](../rust/crates/aipet-sprite/src/themes.rs), which the MCP tools use too (§6.13). Whatever puts on another pet, style or theme, Settings or not, puts the editor on it (`avatars::follow`, from `PetUi::wear` and Reload); edits not saved are dropped then. Sheet themes can't be edited.
 - "Your own avatars": **Reload** reruns `load::all`; **Open folder** opens `DataDir/avatars`, making it first if it is missing. Every pack, legacy file or theme file that didn't load is listed with its reason. When the worn drawing has gone or now fails to load, Reload puts on the pet's default style, else the first pet.
 
 **Sizes.** Settings → General has Pet size (75-200 %) and Bubble size (80-120 %), saved as `PetSize` and `BubbleSize`. The bubbles stay as far above the pet's head at every pet size. A pack's art box is the same at every size, so packs need nothing for it.
@@ -352,6 +358,7 @@ The pet's threads, and what each may wait on:
 - **One async worker** ([executor.rs](../rust/crates/aipet-ui/src/executor.rs)): iced's tokio runtime with one worker thread instead of one per core. It runs the frame timer, the shells' event listeners and the Wayland shell's broadcasts, each a future that waits.
 - **The core's thread** ([core_thread.rs](../rust/crates/aipet/src/core_thread.rs)): refreshes the Board every 250 ms and whenever a hook changed a chat or a watcher polled, and hands it to the pet (`News::Board`) when what it shows changed; new reviews go as `News::Alert`. The hook server's `changed`, the watchers' events and the pet's requests (dismiss a bubble, music on or off) only post to it, so nothing there waits for the pet.
 - **The hook server** (§6.5): 8 listener threads, a thread per connection (at most 64), and on Windows a thread that cuts off connections that wait too long.
+- **The HTTP listener** (§6.10): one thread with a current-thread tokio runtime of its own (`aipet-mcp`), never iced's worker; one thread that applies the hooks' events in arrival order; and tokio's blocking threads, on which the tools wait for the pet's answer and check or copy packs.
 - **The watchers:** Codex's log watcher, Jira's and GitHub's pollers, each on a thread of its own (aipet-core's `Poller`), and GitHub's key lookups; the music player's poll, once a second while the user listens along, since a poll may run a program.
 - **Short-lived threads:** the update checks (Windows install only), Settings' Test buttons and file pickers, the Linux tools' output readers, and the uninstaller's hook cleanup.
 
@@ -539,17 +546,19 @@ This mapping is best effort against the Codex 0.155/0.156 file formats.
 
 ## 6. The hooks at runtime
 
-Files: the hook, [aipet-hook](../rust/crates/aipet-hook/src/) (`main.rs`, `event.rs` for the event path, `trace.rs` for its log), [aipet-ipc](../rust/crates/aipet-ipc/src/) (`protocol.rs`, `endpoint.rs`, `connect.rs`, `paths.rs`), which the hook and the pet share, the plugin's launcher [aipet-hook.sh](../plugins/aipet/native/aipet-hook.sh), and in the pet [aipet-core/src/server/](../rust/crates/aipet-core/src/server/) (`mod.rs`, `unix.rs`, `windows.rs`, `answer.rs`, `record.rs`) and `sessions/`. Registration: aipet-hook's `install.rs`, `claude.rs`, `codex.rs`, [plugins/aipet/hooks/](../plugins/aipet/hooks/).
+The agents reach the pet in two ways. Registrations that `AiPet --install` or the current plugin make report to the pet's own listener: Claude posts each event to `/hook/claude`, and Codex calls `report_event` on its MCP connection to the pet (§6.10-§6.12). Registrations made before the listener run the `aipet-hook` exe on every event, which forwards the event over the pet's pipe or socket (§6.1-§6.9); the exe and that server stay for one release as a bridge. Both end in the same `Ingress`, so the event → state rules (§6.3), the ordering (§6.4) and the log (§6.9) are the same, with one ordering rule more for Claude's HTTP events.
+
+Files: the listener, [aipet-mcp](../rust/crates/aipet-mcp/src/) (`lib.rs`, `guard.rs`, `token.rs`, `hook.rs`, `report.rs`, `events.rs`, `tools.rs`); the hook, [aipet-hook](../rust/crates/aipet-hook/src/) (`main.rs`, `event.rs` for the event path, `trace.rs` for its log), [aipet-ipc](../rust/crates/aipet-ipc/src/) (`protocol.rs`, `endpoint.rs`, `connect.rs`, `paths.rs`), which the hook and the pet share, the plugin's launcher [aipet-hook.sh](../plugins/aipet/native/aipet-hook.sh), and in the pet [aipet-core/src/server/](../rust/crates/aipet-core/src/server/) (`mod.rs`, `unix.rs`, `windows.rs`, `answer.rs`, `record.rs`) and `sessions/`. Registration: aipet-hook's `install.rs`, `claude.rs`, `codex.rs`, [plugins/aipet/hooks/](../plugins/aipet/hooks/).
 
 ### 6.1 How each agent runs it
 
-Each agent runs the hook either through a direct registration (`--install`, §7) or through the `aipet` plugin. Don't use both: every event would reach the pet twice.
+This is the exe's path, for registrations made before the listener. Each agent runs the hook either through a direct registration (`aipet-hook --install`, §7) or through an older `aipet` plugin. Don't use both: every event would reach the pet twice. The current plugin and `AiPet --install` don't run the exe per event (§6.11, §6.12).
 
 | | Claude, direct | Claude, plugin | Codex, direct | Codex, plugin |
 |---|---|---|---|---|
 | Command | `<exe>` with `args: ["--agent","claude"]` (exec form, no shell; `claude.rs`) | `sh "${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh" --agent claude` with `"shell": "bash"` | `<exe> --agent codex` through a new shell per event: `pwsh`/`powershell -NoProfile -Command` on Windows (cmd.exe in a rare fallback), `sh -c` style elsewhere (`codex.rs`) | `sh "$PLUGIN_ROOT/native/aipet-hook.sh" --agent codex`; on Windows `commandWindows`, `& (Join-Path $env:PLUGIN_ROOT 'native\win-x64\aipet-hook.exe') --agent codex`, through PowerShell |
 | Process tree | Claude → hook | Claude → bash → sh (the launcher) → hook | Codex → shell → hook | Codex → shell → sh (the launcher) → hook; Windows: Codex → PowerShell → hook |
-| Events | 17, all async except `Stop` (`claude.rs`) | the same 17 ([hooks.json](../plugins/aipet/hooks/hooks.json)) | Windows 9; elsewhere 12, adding PostToolUse, Interrupt and SessionEnd (`codex.rs`) | the Windows 9 everywhere ([codex.json](../plugins/aipet/hooks/codex.json), `CODEX_EVENTS`) |
+| Events | 17, all async except `Stop` (`claude.rs`) | the same 17 | Windows 9; elsewhere 12, adding PostToolUse, Interrupt and SessionEnd (`codex.rs`) | the Windows 9 everywhere (`CODEX_EVENTS`, `plugin_hooks.rs`) |
 | Timeouts | 5 s | 5 s | 30 s async; Interrupt and SessionEnd sync with 3 s | 30 s async |
 | Missing `session_id` | recorded as `claude:default` | the same | ignored | ignored |
 
@@ -612,7 +621,7 @@ The pet, on a thread of its own (server/mod.rs, handle):
 
 All of this runs in the pet, in `AgentSessions`; the hook only forwards the event.
 
-**Claude** (`sessions/claude.rs`). 16 events are accepted, plus the `SessionEnd` tombstone. Direct registration and the plugin register all 17.
+**Claude** (`sessions/claude.rs`). 16 events are accepted, plus the `SessionEnd` tombstone. The exe's registrations register all 17; the HTTP hooks register 16, all but SessionStart (§6.11).
 
 | Event | State / detail |
 |---|---|
@@ -632,9 +641,9 @@ All of this runs in the pet, in `AgentSessions`; the hook only forwards the even
 | `StopFailure` | attention with `StopError(error_type)`: "Hit a rate limit", "The service is overloaded", "Hit a server error", "Needs you to sign in again", "Has a billing problem", "Hit the output limit", "Its model isn't available", "Hit a request error", "Has a cloud credentials problem", otherwise "Hit an error" (`sessions/claude.rs`) |
 | `SessionEnd` | tombstone |
 
-**Codex** (`sessions/codex.rs`). 11 events are accepted, plus the `SessionEnd` tombstone.
+**Codex** (`sessions/codex.rs`). 11 events are accepted, plus the `SessionEnd` tombstone. The `mcp_tool` hooks report all 11 on every OS, without SessionEnd (§6.12).
 
-| Event | State / detail | In the Windows and plugin set? |
+| Event | State / detail | In the exe's Windows and older plugin set? |
 |---|---|---|
 | `SessionStart` | idle "Ready" only if the chat is new or idle/done (also fires on resume, compact, fork). | yes |
 | `UserPromptSubmit` | Sets `title` only when `agent_id` is empty. thinking, "Delegating to a helper" if `agent_id` is set, else "Thinking". A late one only names the chat (§6.4). | yes |
@@ -740,7 +749,7 @@ Both ends share [aipet-ipc](../rust/crates/aipet-ipc/src/): the endpoint, the li
 
 ### 6.7 When the pet isn't running
 
-Nothing starts the pet but the user (the Start menu or app menu), the installers (unless told not to, §7) and Velopack's updater, which starts a pet it has just updated (§8). A hook that finds nothing listening reads its stdin as usual and returns from `Main` right after `Connect`: it has written nothing (no log, no temp file, no state) and started nothing (`event.rs`). The events of that time are gone; each chat shows up again with its next event once the pet runs (§10). The doctor reports a closed pet as a warning (§7).
+Nothing starts the pet but the user (the Start menu or app menu), the installers (unless told not to, §7) and Velopack's updater, which starts a pet it has just updated (§8). Claude's HTTP hooks find the port closed and fail at once; Claude goes on. Codex's `mcp_tool` hooks are skipped while Codex has no connection to the pet, and a Codex thread started while the pet was down doesn't connect later (§10). An MCP client that started before the pet shows the `aipet` server as failed until it reconnects (`/mcp` in Claude Code). The old exe that finds nothing listening reads its stdin as usual and returns from `Main` right after `Connect`: it has written nothing (no log, no temp file, no state) and started nothing (`event.rs`). The events of that time are gone; each chat shows up again with its next event once the pet runs (§10). The doctor reports a closed pet as a warning (§7).
 
 ### 6.8 One Codex turn on Windows
 
@@ -796,21 +805,105 @@ With the pet closed, each of these hooks reads its stdin, connects to nothing an
 - The hook's trace log (written by the hook, `trace.rs`): problems only, and only once the hook has reached the pet, plus the "stayed busy" line when the pet's pipe or socket is there but took no connection in time. Every line has `user=` and `pipe=`. It is deleted past 64 KB. It lives in the temp folder because a sandboxed agent user may not be able to write `DataDir`.
   - Windows: `%TMP%\aipet-hook.log` (else `%TEMP%`). The folder is the user's own, so rotation deletes the log and makes it anew.
   - Unix: `$TMPDIR` (else `/tmp`) `/aipet-hook-<euid>.log`, created 0600, because the temp folder is shared. Another user could put a file or a link at that name first, so the hook opens it without following a link (`O_NOFOLLOW`) and writes only to a file of mode exactly 0600, owned by the user, checked on the open file.
-- `DataDir/aipet.log` (the pet's app log) gets the server's `hooks:` lines: listening or can't listen, a listener that stopped, dropped connections, and events whose `apply` failed.
+- `DataDir/aipet.log` (the pet's app log) gets the server's `hooks:` lines: listening or can't listen, a listener that stopped, dropped connections, and events whose `apply` failed. The HTTP listener's lines start with `mcp:`: listening or can't listen, the token file made or replaced, a request refused for its token (at most once a minute), a handler that panicked, and dropped events (`mcp: dropped an event: …`, at most every 10 s with a count of the rest). The token is never logged.
+- Events that came over HTTP are logged in `hook-events.log` like the exe's, with `pid=0` (no hook process sent them) and, for Codex, `lag=?`.
+
+### 6.10 The listener
+
+The pet's HTTP listener ([lib.rs](../rust/crates/aipet-mcp/src/lib.rs)) serves MCP at `/mcp` and Claude's HTTP hooks at `/hook/claude`.
+
+- **Start** (`Listener::start`, [lib.rs](../rust/crates/aipet-mcp/src/lib.rs):102). The pet starts it after the core's thread. It binds 127.0.0.1 at `MCP_PORT`, 47615 ([protocol.rs](../rust/crates/aipet-ipc/src/protocol.rs):45), one constant that the listener, the registrations, the doctor and the plugin check share. `AIPET_PORT` moves it, for tests. It runs on a thread of its own (`aipet-mcp`) with a current-thread tokio runtime, never on the shells' one-worker executor (§4.7).
+- **A port that is taken** (another user's pet, another program) gives one line in `aipet.log`, and the pet runs without the listener: Settings and the pipe still work. Only one pet per machine can be reached over HTTP.
+- **Checks before any route** (`guard.rs`), each refusal with an empty body:
+  - a body over 4 MiB (`MAX_REQUEST`), declared or as it is read: 413;
+  - a Host that isn't loopback (`127.0.0.1`, `localhost` or `[::1]`, with the listener's port if one is named): 403;
+  - an Origin, when there is one, that isn't the listener's own: 403. The agents' CLIs send none. This keeps web pages out (DNS rebinding). rmcp checks Origin on `/mcp` too: its default list is empty, which would let any Origin in, so the pet sets it ([lib.rs](../rust/crates/aipet-mcp/src/lib.rs):226).
+  - At most 16 requests are handled at once (`CONCURRENT`); the rest wait. A handler that panics answers 500 with a log line, and the pet runs on.
+- **The token** ([token.rs](../rust/crates/aipet-mcp/src/token.rs)). `/mcp` needs `Authorization: Bearer <token>`. The token is 32 random bytes as 64 hex digits, in `DataDir/mcp-token`, which the pet makes on its first start. It is readable by the user alone: mode 0600 and the user's own on Unix, an ACL with the user's one entry on Windows. At every start a file that is missing is made, and one that can't be read, isn't 64 hex digits, is a link or isn't the user's alone is replaced, with one log line. A new file is written beside the old one and renamed over it. A missing or wrong token gets 401 with an empty body and no `WWW-Authenticate` (which might start Claude's OAuth discovery), logged at most once a minute. The token is compared in constant time and never logged or put in a URL. Nothing rotates it.
+- **MCP** is rmcp 3.9.0's Streamable HTTP service. It serves both MCP eras on one endpoint: 2026-07-28's stateless requests, and initialize with `Mcp-Session-Id` (and GET for SSE) for older clients. A session ends after 5 idle minutes and when the pet quits; an old id then gets 404, and the client starts again.
+- **`/hook/claude`** takes no token (the owner's decision: Claude's HTTP hooks can only fill headers from environment variables). It takes status events only, so the Host, Origin and size checks are all it has (§6.11).
+- **Status events** from either route go into one bounded queue (`events.rs`: 256 events, 16 MiB of lines) and are applied by one thread of their own, in the order they arrived, through the core's `Ingress` ([ingress.rs](../rust/crates/aipet-core/src/server/ingress.rs)). The pipe server uses the same `Ingress`: `AgentSessions::apply`, the record and `changed()`, so events from HTTP and from the exe land in the same chats, the same `hook-events.log` and the same Board. A route only queues and answers; it never waits on the chats or the transcripts they read. A full queue drops the event with a log line.
+
+### 6.11 Claude's HTTP hooks
+
+`AiPet --install claude` and the plugin register an HTTP hook for 16 events: claude.rs's `EVENTS` without SessionStart (`http_events`, [claude.rs](../rust/crates/aipet-hook/src/claude.rs):81), with matcher `"*"` on PreToolUse, PostToolUse, PostToolUseFailure and PermissionRequest:
+
+```json
+{"type": "http", "url": "http://127.0.0.1:47615/hook/claude", "timeout": 2,
+ "headers": {"X-AiPet-Entrypoint": "${CLAUDE_CODE_ENTRYPOINT}", "X-AiPet-Host-Session": "${CLAUDE_CODE_HOST_SESSION_ID}"},
+ "allowedEnvVars": ["CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_HOST_SESSION_ID"]}
+```
+
+- **Timing.** No hook is `async`, and none blocks: Claude waits at most 2 s for the answer, a refused connection fails at once, and nothing sets `onFailure`. The pet answers at once, so Stop's hook returns before the turn ends, as the spike measured ([mcp-spike.md](../rust/proofs/mcp-spike.md)).
+- **The request** ([hook.rs](../rust/crates/aipet-mcp/src/hook.rs)). The body is Claude's hook input as the exe got it on stdin. The two headers carry what the exe read from the environment; a header Claude left as an unexpanded `${VAR}` is dropped. The pet makes the envelope (v1, §6.5) the exe made, with the exe's code, now in `aipet_ipc::event`: escaped lone surrogates mended, no `tool_response`, every string cut to 256 Ki characters, `tool_input` cut to its key fields past 4 MiB, and `env` from the headers. `at` is the time the pet got it, there is no `pid`, and `"via":"http"` marks it. A `transcript_path` outside Claude's folder (`$CLAUDE_CONFIG_DIR` or `~/.claude`) or Codex's home is removed, because the chats read that file for titles and anything on the machine can post here.
+- **The answer** is always 200 `{}` (`application/json`), at once. A body that isn't a JSON object is dropped with a log line. An unknown event is applied, and the record says `ignored`. The only other answers are the guard's 403 and 413.
+- **No SessionStart.** Claude doesn't run HTTP hooks for SessionStart, so the pet makes the chat from its first event (task 3 of spec fnt-71). What SessionStart gave and is lost: the pet doesn't wake from sleep to idle when a session merely opens, and a `compact` SessionStart no longer resets a done chat, so a manual `/compact` shows "Compacted" (done) for its 20 s instead of going idle at once. The title, folder, `where` and host id come with every event; `/clear` and resume show from the next prompt.
+- **Ordering.** Claude sends no sequence number and runs the handlers of one event in parallel, so `at` is the arrival, and the order is the order of arrival. That can't tell a late event of a finished turn, so `claude::stale` has one rule for `via:http` events only ([claude.rs](../rust/crates/aipet-core/src/sessions/claude.rs):281): within 0.5 s (`STRAGGLERS`) of a turn's "done", or of the chat's end, an event that can't open a turn (anything but SessionStart, UserPromptSubmit and SessionEnd) is stale. The pairing of PreToolUse and PermissionRequest (§6.4) is unchanged, and so is everything for the exe's events. A replay test dispatches the Claude golden's chats with up to 500 ms of random delay and checks that the chats and the Board end as in order (`jitter`, [sessions.rs](../rust/crates/aipet-core/tests/sessions.rs)).
+
+### 6.12 Codex's `report_event`
+
+Codex hooks can only run a command or call an MCP tool. `AiPet --install codex` and the plugin register the pet as the MCP server `aipet`, and an `mcp_tool` hook for each of 11 events that calls its `report_event` (`MCP_EVENTS`, [codex.rs](../rust/crates/aipet-hook/src/codex.rs):114): SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PostToolUse, Stop, PreCompact, PostCompact, SubagentStart, SubagentStop and Interrupt. The list is the same on every OS, since no process starts. Codex skips MCP hooks on SessionEnd, so there is none.
+
+```toml
+[mcp_servers.aipet]
+url = "http://127.0.0.1:47615/mcp"
+http_headers_helper = "<DataDir>/mcp-header"   # prints {"Authorization":"Bearer <token>"}
+
+[[hooks.PreToolUse]]
+[[hooks.PreToolUse.hooks]]
+type = "mcp_tool"
+server = "aipet"
+tool = "report_event"
+timeout = 5
+input = { agent = "codex", event = { session_id = "${session_id}", hook_event_name = "${hook_event_name}", cwd = "${cwd}", model = "${model}", transcript_path = "${transcript_path}", turn_id = "${turn_id}", tool_name = "${tool_name}", tool_use_id = "${tool_use_id}", tool_input = "${tool_input}" } }
+```
+
+- **The input.** Codex fills `${field}` from the hook's payload, and a whole-string placeholder keeps the value's JSON type (`tool_input` stays an object). A placeholder the event's payload lacks fails the whole hook, so each event's `input` has only the fields that event has: the base fields `session_id`, `hook_event_name`, `cwd`, `model` and `transcript_path`; SessionStart adds `source`; UserPromptSubmit `turn_id` and `prompt`; PreToolUse and PostToolUse `turn_id`, `tool_name`, `tool_use_id` and `tool_input`; PermissionRequest the same without `tool_use_id`; Stop `turn_id`. The others have the base fields only. Every timeout is 5 s, but Interrupt's 3 s, Codex's limit. The chats would also read `trigger`, `agent_type` and `agent_id`, which aren't passed yet: they are unverified in Codex's payloads, and a missing one would fail the hook.
+- **The tool** ([report.rs](../rust/crates/aipet-mcp/src/report.rs)). It makes the envelope (v1) the exe made of Codex's input: no `tool_response`, strings cut, no `env`, no `pid`, the arrival as `at`, and `"via":"http"`. It queues it as `/hook/claude` does and answers `{}`. What the chats wouldn't take is refused before it is queued, as `isError` with the reason and a log line: another agent than `codex`, an event Codex's chats don't take, no `session_id`, an event too deep. A `transcript_path` outside Claude's and Codex's folders is dropped, as for Claude.
+- **Ordering.** Codex waits for each `mcp_tool` hook, and its chats order by turn and tool ids first (§6.4), so Codex's HTTP events need no rule of their own.
+- **Visible to the model.** Codex refuses a hook's call to a tool in `disabled_tools`, so `report_event` can't be hidden. Its description tells the model not to call it.
+- **Trust.** Codex runs a hook only once the user trusts it, by a hash of its definition. Moving from the exe's command hooks to these means trusting the new hooks once (§7.10).
+
+### 6.13 The MCP tools
+
+The tools ([tools.rs](../rust/crates/aipet-mcp/src/tools.rs)) are listed in a fixed order (`TOOLS`, [tools.rs](../rust/crates/aipet-mcp/src/tools.rs):30). Each returns `structuredContent` matching its `outputSchema`, with the same JSON as a text block, and carries read-only, idempotent or destructive annotations. A failure is `isError` with the reason; unknown tools and malformed requests are JSON-RPC errors. A table-driven test checks every tool (`every_tool_conforms`, [listener.rs](../rust/crates/aipet-mcp/tests/listener.rs):571).
+
+| Tool | Input | Result | Annotations |
+|---|---|---|---|
+| `status` | - | `{version, port, hook_events, registrations_seen: {claude, codex}}`: the last 30 lines of `hook-events.log`, and whether each agent's hooks reported since the pet started | read-only |
+| `report_event` | `{agent: "codex", event}` | `{}` (§6.12) | none |
+| `list_avatars` | - | `{worn: {name, style, theme}, avatars: [{name, styles: [{style, kind, themes}]}], skipped: [{path, reason}]}` | read-only |
+| `wear_avatar` | `{name, style?, theme?}` (the pet's default style and the style's default theme when left out) | `{worn, style, theme}` | idempotent |
+| `get_settings` | - | `{pet_size, bubble_size, bubbles, on_top, music}` | read-only |
+| `set_settings` | any of `get_settings`' fields | all the settings after the change | idempotent |
+| `get_board` | - | `{cards: [{id, source, title, state}]}` | read-only |
+| `dismiss_card` | `{id}` | `{dismissed}` | idempotent |
+| `list_themes` | `{pet, style?}` | `{pet, style, themes: [{name, builtin, palette}]}` | read-only |
+| `save_theme` | `{pet, style?, name, palette, create}` | `{pet, name, file}` | idempotent |
+| `delete_theme` | `{pet, style?, name, confirm_name}` | `{deleted, trashed_to}` | destructive |
+| `check_pack` | `{path}` | `{ok, report}` | read-only |
+| `install_pack` | `{path, replace?}` | `{installed, name, drawings, replaced, report}` | not idempotent |
+
+- **Through the pet** ([control.rs](../rust/crates/aipet-core/src/control.rs), [aipet-ui's control.rs](../rust/crates/aipet-ui/src/control.rs)). The avatar, settings, board and theme tools send a `Command` to the pet over its `PetLink`, as news that the shell hands `PetUi` every frame, and wait for the answer on a blocking thread. The pet checks the whole command first, then does it through the messages Settings sends: it changes, saves `config.json` and shows the change in an open Settings window exactly as for the user, and a refused command changes nothing. The server never uses Settings, so it works with Settings closed. A pet that doesn't answer within 5 s (`ANSWER_WITHIN`, [control.rs](../rust/crates/aipet-core/src/control.rs):14) makes the call `isError`.
+- **Errors the pet gives:** an unknown pet, style or theme, naming the valid ones; a pet size outside 75-200 or a bubble size outside 80-120, with the range; an unknown card id.
+- **Themes** use the Avatars page's own code ([themes.rs](../rust/crates/aipet-sprite/src/themes.rs)). A name is letters, digits, spaces, `-` and `_`, at most 40 characters, not a Windows device name, and unique per pet in any case (`check_name`, [themes.rs](../rust/crates/aipet-sprite/src/themes.rs):26). Files are written in `DataDir/avatars/themes/` only. Built-in themes can't be changed or deleted, `create: true` over an existing name and an edit of a missing theme are refused, and `delete_theme` needs `confirm_name` equal to `name`. A deleted theme moves to `DataDir/trash/`, out of the loader's reach; a pet wearing it wears its default theme.
+- **`check_pack`** runs `load::check`, the same check and text as `AiPet --check-pack`, and changes nothing.
+- **`install_pack`** ([install.rs](../rust/crates/aipet-sprite/src/install.rs)) takes a folder inside the user's home, not a link. The pet copies it into `DataDir/staging/` without following links, and stops past 64 MiB or 2,000 entries (`MAX_BYTES`, `MAX_ENTRIES`, [install.rs](../rust/crates/aipet-sprite/src/install.rs):20). It checks the copy and installs only when the check passes. A pack whose pet and style, or whose folder name, is already there is refused unless `replace: true`; then the user's style is replaced in its own folder, wherever it loaded from, and a built-in never is. A replacement renames the old folder to a backup in staging, renames the new one into place, restores the backup if that fails and deletes it only after success. Staging is on the same volume, so the moves are renames. One install runs at a time, and on any failure the avatars folder is as it was and staging is empty. Then the pet reads its avatars folder again, so `list_avatars` shows the pack.
 
 ---
 
 ## 7. Installing, trust and checking
 
-Files: in [aipet-hook](../rust/crates/aipet-hook/src/) `install.rs`, `claude.rs`, `codex.rs`, `toml_text.rs`, `json_out.rs`, `doctor.rs` and `plugin_hooks.rs`; aipet-core's [cleanup.rs](../rust/crates/aipet-core/src/cleanup.rs); [plugins/aipet/](../plugins/aipet/), [install.ps1](../install.ps1), [install.sh](../install.sh), [packaging/linux/install.sh](../packaging/linux/install.sh), [scripts/](../scripts/), [build.ps1](../build.ps1), [build.sh](../build.sh), [release.yml](../.github/workflows/release.yml), [ci.yml](../.github/workflows/ci.yml).
+Files: in [aipet-hook](../rust/crates/aipet-hook/src/) `install.rs`, `claude.rs`, `codex.rs`, `toml_text.rs`, `json_out.rs`, `doctor.rs`, `plugin_hooks.rs`, `mcp_install.rs` and `mcp_doctor.rs`, and aipet's [main.rs](../rust/crates/aipet/src/main.rs); aipet-core's [cleanup.rs](../rust/crates/aipet-core/src/cleanup.rs); [plugins/aipet/](../plugins/aipet/), [install.ps1](../install.ps1), [install.sh](../install.sh), [packaging/linux/install.sh](../packaging/linux/install.sh), [scripts/](../scripts/), [build.ps1](../build.ps1), [build.sh](../build.sh), [release.yml](../.github/workflows/release.yml), [ci.yml](../.github/workflows/ci.yml).
 
-An agent gets AiPet's hook in one of two ways:
-- **The aipet plugin**, for Claude Code and for Codex (§7.6). The one-line installers set it up.
-- **A direct registration** in the agent's own config, written by `aipet-hook --install`. The from-source scripts use it, and so does `install.ps1` for Claude when Git Bash is missing.
+An agent gets AiPet's hooks in one of three ways:
+- **The aipet plugin**, for Claude Code and for Codex (§7.6). Its hooks report to the pet's listener (§6.11, §6.12), and it registers the pet's MCP server. The one-line installers set it up.
+- **A direct registration** by `AiPet --install claude|codex` (§7.10): the same HTTP or `mcp_tool` hooks and the MCP server, in the agent's own config. `install.ps1` uses it for Claude when Git Bash is missing.
+- **The exe's direct registration**, by `aipet-hook --install` (§7.1-§7.5): a command hook that runs the exe on every event. It is what earlier releases registered, and stays for one release as a bridge, with its C# behaviour. The from-source scripts still use it.
 
-Using both reports every event twice. `--install` therefore registers nothing when the plugin already reports every event, and removes the direct hooks registered before it; the installers also remove a direct registration once they have added the plugin.
+Using two of them reports every event twice. Each `--install` therefore registers nothing when the plugin already reports every event, and removes the direct hooks registered before it. `AiPet --install` also takes out the exe's hooks, and the exe's `--install` takes out `AiPet --install`'s: either kind is AiPet's. The installers remove a direct registration of either kind once they have added the plugin.
 
-The hook exe registers itself, so no installer needs jq or python:
+The pet and the hook exe register themselves, so no installer needs jq or python. The exe's modes are:
 
 ```
 aipet-hook --install|--uninstall claude|codex
@@ -818,7 +911,7 @@ aipet-hook --doctor claude|codex [--probe]
 aipet-hook --print-plugin-hooks claude|codex
 ```
 
-A bare `--install`, `--uninstall`, `--doctor` or `--print-plugin-hooks` prints usage and exits 2 instead of running as a hook. The agent name is lower-cased (`mode`, aipet-hook's `main.rs`).
+A bare `--install`, `--uninstall`, `--doctor` or `--print-plugin-hooks` prints usage and exits 2 instead of running as a hook. The agent name is lower-cased (`mode`, aipet-hook's `lib.rs`). The exe also takes `--print-token-header` (§7.10). AiPet's own modes are in §7.10.
 
 ### 7.1 Claude registration
 
@@ -875,9 +968,10 @@ A bare `--install`, `--uninstall`, `--doctor` or `--print-plugin-hooks` prints u
 - **Claude:** `edit` with no command removes AiPet's hooks, empty events and an empty `hooks` key (`claude.rs`).
 - **Codex:** `edit_toml` with no command removes AiPet's tables, their trust entries, the trust entries of AiPet's `hooks.json` handlers, and the markers. Then `edit_hooks_json` with no command removes AiPet's JSON handlers and deletes `hooks.json` if nothing else is left and it isn't a symlink (`codex.rs`).
 - `--uninstall` removes every AiPet hook, whichever copy it names. The scripts that remove an install therefore call it only when a config names that install's own hook:
-  - **Windows app** (Velopack's uninstaller): `cleanup::run` checks `settings.json`, `config.toml` and `hooks.json` for `%LOCALAPPDATA%\AiPetApp\current\aipet-hook.exe`, with either slash, JSON/TOML escaping, PowerShell's doubled `''`, and the 8.3 forms `build_command` writes. For each agent that names it, it runs `aipet-hook --uninstall <agent>` with no window and a 10 s limit, and writes the result to `aipet.log`. Nothing in it fails the uninstall (`cleanup.rs`). It is registered as Velopack's before-uninstall hook (`updates.rs`).
-  - **Linux package** (`install.sh --uninstall`): runs `$app/aipet-hook --uninstall` when a config names `$app/aipet-hook`, with or without symlinks resolved, since the hook registers `/proc/self/exe` (packaging/linux/install.sh:70-85).
-  - **From source** (`install-from-source.sh --uninstall`): the same for `$data/hooks/aipet-hook`, also with symlinks resolved.
+  - **Windows app** (Velopack's uninstaller): `cleanup::run` checks `settings.json`, `.claude.json`, `config.toml` and `hooks.json` for `%LOCALAPPDATA%\AiPetApp\current\aipet-hook.exe`, and for what `AiPet --install` registers: the installed `AiPet.exe` (Claude's header helper) and `DataDir\mcp-header.cmd` (Codex's), with either slash, JSON/TOML escaping, PowerShell's doubled `''`, and the 8.3 forms `build_command` writes. For each agent that names it, it runs `aipet-hook --uninstall <agent>` with no window and a 10 s limit, and writes the result to `aipet.log`. Nothing in it fails the uninstall (`cleanup.rs`). It is registered as Velopack's before-uninstall hook (`updates.rs`).
+  - **Linux package** (`install.sh --uninstall`): runs `$app/aipet-hook --uninstall` when `settings.json`, `.claude.json`, `config.toml` or `hooks.json` names `$app/aipet-hook`, or what `AiPet --install` registers (`$app/AiPet` as Claude's header helper, `DataDir/mcp-header` as Codex's), with or without symlinks resolved, since the hook registers `/proc/self/exe` (packaging/linux/install.sh:70-88).
+  - **From source** (`install-from-source.sh --uninstall`): the same for `$data/hooks/aipet-hook`, `$data/app/AiPet` and `$data/mcp-header`, also with symlinks resolved for the hook.
+- `AiPet --uninstall claude|codex` and the exe's `--uninstall` both remove both kinds: the exe's command hooks, and the HTTP hooks, `mcp_tool` hooks and MCP server of `AiPet --install`. `AiPet --uninstall codex` also deletes `DataDir/mcp-header`.
 - The plugins are never touched: the agents manage them (`claude plugin uninstall aipet@aipet`, `codex plugin remove aipet@aipet`).
 
 ### 7.5 Doctor
@@ -919,22 +1013,24 @@ At the end they list the running pet's last 8 events of that agent from the ping
 
 ### 7.6 The plugin and the marketplaces
 
-`plugins/aipet/` is one plugin for both agents: `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` (which points at `./hooks/codex.json`), `hooks/hooks.json` for Claude, `hooks/codex.json` for Codex, `assets/`, and the launcher `native/aipet-hook.sh`.
+`plugins/aipet/` is one plugin for both agents: `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` (which points at `./hooks/codex.json` and `./hooks/codex-mcp.json`), `hooks/hooks.json` and `.mcp.json` for Claude, `hooks/codex.json` and `hooks/codex-mcp.json` for Codex, `assets/`, the launcher `native/aipet-hook.sh` and Codex's token helper `native/token-header.sh`.
 
-- **Claude's hooks:** the same 17 events and groups as the direct registration, with the command `sh "${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh" --agent claude` and `"shell": "bash"`, so Claude never falls back to PowerShell. Stop is synchronous here too (`plugin_hooks.rs`).
-- **Codex's hooks:** the 9 events of `CODEX_EVENTS`, each async with a 30 s timeout on every OS. A plugin can't pick its events per OS, so it has the Windows set everywhere (`codex.rs`). The command is `sh "$PLUGIN_ROOT/native/aipet-hook.sh" --agent codex`; on Windows Codex runs `commandWindows` with PowerShell instead: `& (Join-Path $env:PLUGIN_ROOT 'native\win-x64\aipet-hook.exe') --agent codex`, with no Git Bash (`plugin_hooks.rs`).
-- **Frozen.** Codex trusts a hook by a hash of its definition, so `codex.json` must not change after the first release. The plugin and marketplace names stay `aipet`: Codex trust keys contain `aipet@aipet` ([check-plugin.sh](../scripts/check-plugin.sh):79). The release notes warn when a release changes `codex.json` (§7.9).
-- **The launcher** (`native/aipet-hook.sh`, POSIX sh) runs the hook for this OS and CPU with the same arguments and stdin:
+- **Claude's hooks:** the HTTP hooks of `AiPet --install claude`, for the same 16 events (§6.11). They run no command.
+- **Claude's MCP server** (`.mcp.json`): `aipet`, `{"type": "http", "url": "http://127.0.0.1:47615/mcp", "headersHelper": "sh \"${CLAUDE_PLUGIN_ROOT}/native/aipet-hook.sh\" --print-token-header"}`. The helper runs the plugin's own `aipet-hook` through the launcher, which prints the token's header. On Windows that needs Git Bash, as the exe's command did.
+- **Codex's hooks:** the `mcp_tool` hooks of `AiPet --install codex`, for the same 11 events on every OS (§6.12).
+- **Codex's MCP server** (`hooks/codex-mcp.json`, which the manifest's `mcpServers` names): `aipet` with the same URL and `"http_headers_helper": "${PLUGIN_ROOT}/native/token-header.sh"`. Codex runs its helper with no arguments, so `token-header.sh` runs the launcher with `--print-token-header`. Whether Codex reads this file format and expands `${PLUGIN_ROOT}` there hasn't been tried on a real Codex yet, nor has the helper on Windows.
+- **Trust.** Codex trusts a hook by a hash of its definition. The plugin's Codex hooks changed once, from the exe's command hooks to the `mcp_tool` ones, so every Codex user trusts them again once after that update (§7.10). The plugin and marketplace names stay `aipet`: Codex trust keys contain `aipet@aipet` ([check-plugin.sh](../scripts/check-plugin.sh):79). The release notes warn when a release changes `codex.json` (§7.9).
+- **The launcher** (`native/aipet-hook.sh`, POSIX sh) runs the hook for this OS and CPU with the same arguments and stdin. The current plugin runs it only for the token's header; the plugin of earlier releases ran it on every event:
   - `OS=Windows_NT` (or a MINGW/MSYS/Cygwin `uname`) runs `win-x64/aipet-hook.exe`.
   - Linux x86_64 and aarch64 run `linux-x64` or `linux-arm64`, but only when the glibc loader (`/lib64/ld-linux-x86-64.so.2`, `/lib/ld-linux-aarch64.so.1`) exists: the binaries are glibc builds, which musl or a 32-bit userland can't load.
   - Anything else, a missing binary, or one that can't be made executable exits 0.
   - It runs the binary without `exec`, with stderr discarded, and always exits 0, so a binary that still can't load (a glibc older than it needs, an exe antivirus blocks) ends quietly too. It forks one `uname` at most (none on Windows) plus the hook itself (aipet-hook.sh:1-25).
-  - Because the plugin goes through bash, sh and the launcher, a Claude event's `at` comes a few ms after Claude started the hook on Linux, and maybe tens of ms on Git Bash (`event.rs`; §6.4).
-- **The binaries are release output.** `native/<rid>/` is gitignored. The release workflow adds `win-x64/aipet-hook.exe`, `linux-x64/aipet-hook` and `linux-arm64/aipet-hook` to its commit in the plugin repository (§7.9). `build.ps1` and `build.sh` copy local builds there, for trying the plugin with `claude --plugin-dir plugins/aipet` or the local marketplace in `artifacts/marketplace/` (§7.7).
+  - When the exe runs per event through the launcher (the plugin of earlier releases), a Claude event's `at` comes a few ms after Claude started the hook on Linux, and maybe tens of ms on Git Bash (`event.rs`; §6.4).
+- **The binaries are release output.** The plugin still ships them, for the token's header. `native/<rid>/` is gitignored. The release workflow adds `win-x64/aipet-hook.exe`, `linux-x64/aipet-hook` and `linux-arm64/aipet-hook` to its commit in the plugin repository (§7.9). `build.ps1` and `build.sh` copy local builds there, for trying the plugin with `claude --plugin-dir plugins/aipet` or the local marketplace in `artifacts/marketplace/` (§7.7).
 - **Marketplaces:** [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json) for Claude and [.agents/plugins/marketplace.json](../.agents/plugins/marketplace.json) for Codex. Both are named `aipet` and have one entry, `aipet`, with a `git-subdir` source: `https://github.com/xMarcinator/ai-pet-plugin.git`, path `plugins/aipet`, pinned by `ref` (the release tag) and `sha` (its commit). The release workflow updates the pins; the all-zero sha is the placeholder from before the first release. The plugin repository is separate and only the release workflow writes to it.
 - **Updating.** Claude keeps users on a plugin's version and Codex refreshes its copy only when the version changes, so each release stamps its version into both `plugin.json` files.
 
-`aipet-hook --print-plugin-hooks claude|codex` prints `hooks.json` or `codex.json` exactly as committed, made from the tables the direct hooks come from: claude.rs's `EVENTS` with `group`, and `CODEX_EVENTS` with `json_handler` and the fixed plugin values (async, 30 s). It writes the UTF-8 bytes with LF line endings, whatever the console's code page. It isn't a hook run, so it may print (`plugin_hooks.rs`). `scripts/check-plugin.sh --hook <command>...` runs a hook, in CI and the release the Rust one that ships, which has its own copy of those tables (`rust/crates/aipet-hook/src/claude.rs` and `plugin_hooks.rs`): `--hook rust/target/release/aipet-hook`, or `--hook cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook --` to build it first. It compares both files with the hook's output byte for byte, ignoring CRs in the file (a Windows checkout), and shows a diff on a mismatch. Without `--hook` the hook files are only checked to be JSON, and the OK line says so. The script also checks that the manifests are named `aipet` and agree on the version, the Codex manifest's `hooks` path, that the launcher starts with `#!` and has LF line endings, the three binaries with `--release`, and the marketplace entries with `--marketplaces` ([check-plugin.sh](../scripts/check-plugin.sh):1-17).
+`aipet-hook --print-plugin-hooks claude|codex` prints `hooks.json` or `codex.json` exactly as committed, made from the tables `AiPet --install` registers from: claude.rs's `http_events` with `http_group`, and codex.rs's `MCP_EVENTS` with `json_mcp_handler`. `claude-mcp` and `codex-mcp` print `.mcp.json` and `hooks/codex-mcp.json` the same way (`plugin_hooks.rs`); the usage line still names only `claude|codex`. It writes the UTF-8 bytes with LF line endings, whatever the console's code page. It isn't a hook run, so it may print (`plugin_hooks.rs`). `scripts/check-plugin.sh --hook <command>...` runs a hook, in CI and the release the Rust one that ships, which has its own copy of those tables (`rust/crates/aipet-hook/src/claude.rs` and `plugin_hooks.rs`): `--hook rust/target/release/aipet-hook`, or `--hook cargo run -q --locked --manifest-path rust/Cargo.toml -p aipet-hook --` to build it first. It compares all four files with the hook's output byte for byte, ignoring CRs in the file (a Windows checkout), and shows a diff on a mismatch. Without `--hook` the hook files are only checked to be JSON, and the OK line says so. The script also checks that the manifests are named `aipet` and agree on the version, the Codex manifest's `hooks` and `mcpServers` paths, that the launcher and `token-header.sh` start with `#!` and have LF line endings, that `token-header.sh` is executable, the three binaries with `--release`, and the marketplace entries with `--marketplaces` ([check-plugin.sh](../scripts/check-plugin.sh):1-17).
 
 ### 7.7 Installers and build scripts
 
@@ -944,14 +1040,14 @@ At the end they list the running pet's last 8 events of that agent from the ping
   1. Refuses macOS, Windows shells and CPUs other than x64 and arm64. Everything runs inside `main`, so a command that reads stdin can't eat the rest of the script (install.sh:22-23, 94-109).
   2. Downloads `AiPet-<version>-<rid>.tar.gz` and `SHA256SUMS`, and compares the checksum (install.sh:118-137).
   3. Runs the package's `install.sh` (below) with `GITHUB_TOKEN` unset, passing `--no-start` for `AIPET_NO_START=1` (install.sh:140-146).
-  4. Claude: `claude plugin marketplace add xMarcinator/ai-pet --sparse .claude-plugin`, then `marketplace update aipet`, `plugin install aipet@aipet` and `plugin update aipet@aipet`. Codex: `codex plugin marketplace add xMarcinator/ai-pet --sparse .agents/plugins`, `marketplace upgrade aipet` and `plugin add aipet@aipet`. Once a plugin is in, a direct registration (a config file of that agent that mentions `aipet-hook`) is removed with the app's own `aipet-hook --uninstall` (install.sh:150-197).
+  4. Claude: `claude plugin marketplace add xMarcinator/ai-pet --sparse .claude-plugin`, then `marketplace update aipet`, `plugin install aipet@aipet` and `plugin update aipet@aipet`. Codex: `codex plugin marketplace add xMarcinator/ai-pet --sparse .agents/plugins`, `marketplace upgrade aipet` and `plugin add aipet@aipet`. Once a plugin is in, a direct registration of either kind (a config file of that agent that mentions `aipet-hook` or `127.0.0.1:47615`: `settings.json` and `.claude.json` for Claude, `config.toml` and `hooks.json` for Codex) is removed with the app's own `AiPet --uninstall` (install.sh:88-93, 164-198).
   5. Prints the Codex trust step: run `codex`, open `/hooks` and trust the `aipet@aipet` hooks, then restart the ChatGPT app.
 - **`install.ps1`** (Windows, `irm … | iex`, Windows PowerShell 5.1 and PowerShell 7):
   1. Downloads `AiPet-Setup-<version>-win-x64.exe` and `SHA256SUMS`, and compares the checksum (install.ps1:131-147).
   2. Stops a running `AiPet` or `ClaudePet`, then runs Setup with `--silent --log %TEMP%\aipet-setup.log`, without `GITHUB_TOKEN` (`Start-WithoutToken`), and checks its exit code (install.ps1:149-165). Velopack installs to `%LOCALAPPDATA%\AiPetApp` for this user, without admin rights (§8.5).
   3. Removes the `HKCU\…\Run` values `AiPet` and `ClaudePet` of older installs, unless one points into `%LOCALAPPDATA%\AiPetApp` (added by hand) (install.ps1:170-179).
-  4. Claude: with Git Bash, adds the plugin as `install.sh` does and removes a direct registration. Without Git Bash, runs `current\aipet-hook.exe --install claude` instead; uninstalling the app removes that registration again (§7.4) (install.ps1:198-224).
-  5. Codex: adds the plugin, whose Windows command needs no Git Bash, and removes a direct registration (install.ps1:226-240).
+  4. Claude: with Git Bash, adds the plugin as `install.sh` does and removes a direct registration of either kind with `current\AiPet.exe --uninstall claude`. Without Git Bash, runs `current\AiPet.exe --install claude` instead (HTTP hooks and the MCP server, which need no shell); uninstalling the app removes that registration again (§7.4) (install.ps1:202-227).
+  5. Codex: adds the plugin and removes a direct registration of either kind (install.ps1:229-243).
   6. Starts the pet through Velopack's stub `%LOCALAPPDATA%\AiPetApp\AiPet.exe` unless `AIPET_NO_START=1`, and points out an older install in `%LOCALAPPDATA%\Programs\AiPet` (install.ps1:243-250).
 
 **The Linux package installer** (`packaging/linux/install.sh`, POSIX sh) is inside each tarball. Run from the extracted folder, it installs or updates; with `--no-start` it doesn't start the pet; with `--uninstall` it removes the install. The copy installed as `app/uninstall.sh` uninstalls by default.
@@ -966,13 +1062,13 @@ At the end they list the running pet's last 8 events of that agent from the ping
   - starts the pet with `setsid` (or `nohup`) and without `GITHUB_TOKEN`, unless there is no desktop session.
 - **Uninstall**: stops the pet, unregisters hooks registered at the app's hook (§7.4), removes the Hyprland include line (§7.8; best effort: a config it can't write, such as home-manager's, gets a note to remove the line by hand), the app, the rules, the menu entry, every sign-in entry and the icons. Settings and logs stay. It prints how to remove the plugins.
 
-**From-source scripts**, for a clone of the repository. They register the hook directly and don't add the plugins, so they stand in for the plugins.
+**From-source scripts**, for a clone of the repository. They register directly with `AiPet --install` (HTTP hooks and the MCP server, §7.10) and don't add the plugins, so they stand in for the plugins.
 - **`scripts/install-from-source.sh`** (Linux, bash):
   - Uses `artifacts/<rid>` from `build.sh` or `build.ps1`. When those are missing or older than the source (`rust/crates/`, `rust/Cargo.toml`, `rust/Cargo.lock` and `assets/`), or with `--rebuild`, it builds the pet and the hook with `cargo build -p aipet -p aipet-hook --release --locked`, which needs Rust (README, Building from source); without cargo it stops and says to run `build.sh` first.
   - Creates a new data folder with mode 0700 (an existing one keeps its mode), installs the app to `$data/app`, the hook to `$data/hooks/aipet-hook` (copied next to it and renamed over it: the agents run the hook all the time, and a running program can't be written over), a menu entry, and the Hyprland rules with the hint (§7.8). Removes old leftovers: the sign-in entry, `inbox`, `app-path.txt`, and the files the hooks and the pet used to share (`state.json`, `state.json.*.tmp`, `state.lock`, `heartbeat`, `autostart-disabled`, `claude-hook.log`, `codex-hook.log`).
-  - Runs `--install claude` and `--install codex` for each agent found (the command on PATH, or `~/.claude`/`~/.codex`), unless `--no-hooks`. It starts the pet with `setsid` unless `--no-start`.
+  - Runs `$data/app/AiPet --install claude` and `--install codex` for each agent found (the command on PATH, or `~/.claude`/`~/.codex`), unless `--no-hooks`. It starts the pet with `setsid` unless `--no-start`.
   - `--uninstall` unregisters the hooks registered at `$data/hooks/aipet-hook` (with or without symlinks resolved), removes `$data/hooks`, then runs the package installer's `--uninstall` for the rest.
-- **`scripts/install-from-source.ps1`** (Windows): rebuilds with `build.ps1 -Only win-x64` when needed, stops the pet, mirrors the app into `%LOCALAPPDATA%\Programs\AiPet` with `robocopy /MIR`, copies the hook to `%LOCALAPPDATA%\AiPet\hooks`, makes a Start menu shortcut, removes the same leftovers and the `HKCU\…\Run` value `AiPet`, registers the agents unless `-NoHooks`, and starts the pet unless `-NoStart`. It has no uninstall.
+- **`scripts/install-from-source.ps1`** (Windows): rebuilds with `build.ps1 -Only win-x64` when needed, stops the pet, mirrors the app into `%LOCALAPPDATA%\Programs\AiPet` with `robocopy /MIR`, copies the hook to `%LOCALAPPDATA%\AiPet\hooks`, makes a Start menu shortcut, removes the same leftovers and the `HKCU\…\Run` value `AiPet`, registers the agents with `AiPet.exe --install` unless `-NoHooks`, and starts the pet unless `-NoStart`. It has no uninstall.
 
 **Build scripts:**
 - **`build.sh`** (Linux): for each RID (this machine's by default), builds the pet and the hook with cargo into `artifacts/<rid>/app` (`AiPet`) and `artifacts/<rid>/hook` (`aipet-hook`). For this machine's RID that is a plain `cargo build -p aipet -p aipet-hook --release --locked`. The other Linux RID is built with `cargo zigbuild --target <triple>.2.27`, as the release builds it, when cargo-zigbuild and zig are installed and pkg-config finds that platform's libxkbcommon; without them it gets no build, and a warning. There is no win-x64 build from Linux: `build.ps1` builds it on Windows. It copies each hook to `plugins/aipet/native/<rid>/` and writes a local marketplace in `artifacts/marketplace/`.
@@ -1043,6 +1139,29 @@ The uninstall removes every line that names `AiPet/hyprland/aipet.lua` or `.conf
 
 No .NET is installed in CI; the release installs it only for `vpk`, a .NET tool, in the Windows job. [velopack-proof.yml](../.github/workflows/velopack-proof.yml), run by hand, installs a Rust pet on Windows, has it update itself from a local feed, and uninstalls it ([rust/proofs/velopack.md](../rust/proofs/velopack.md)). Until the cutover, CI also built and tested the C#, timed the Rust hook's start-up against the NativeAOT hook's, and a cross-runtime workflow ran each runtime's hook against the other's pet.
 
+### 7.10 `AiPet --install`, `--uninstall` and `--doctor`
+
+```
+AiPet --install|--uninstall claude|codex
+AiPet --doctor claude|codex
+AiPet --print-token-header
+```
+
+The pet registers the agents' HTTP and `mcp_tool` hooks and its MCP server itself ([mcp_install.rs](../rust/crates/aipet-hook/src/mcp_install.rs), [mcp_doctor.rs](../rust/crates/aipet-hook/src/mcp_doctor.rs), in aipet-hook's library). aipet's `main.rs` runs these modes after `--check-pack` and before the single instance, so they never start the pet; on Windows they print to the console they were started from. Another agent, or none, prints usage and exits 2. A file that isn't valid JSON or TOML is left as it is, with a message, and the command exits 1. Files are backed up and written as in §7.3.
+
+- **`--install claude`** (`install_claude`, [mcp_install.rs](../rust/crates/aipet-hook/src/mcp_install.rs):106) reads `settings.json` and Claude's user config first, and writes nothing if either isn't JSON.
+  - With the `aipet` plugin enabled and able to run (as §7.1 finds it), it registers nothing, removes the direct registrations of either kind made before, says so and exits 0.
+  - Otherwise it writes the HTTP hooks for the 16 events (§6.11) into `settings.json`, taking out the exe's command hooks, and `mcpServers.aipet` into `$CLAUDE_CONFIG_DIR/.claude.json` (else `~/.claude.json`), where `claude mcp add --scope user` keeps servers: `{"type": "http", "url": "http://127.0.0.1:47615/mcp", "headersHelper": "\"<AiPet>\" --print-token-header"}`, the path with forward slashes. Sessions started before pick it up when they restart.
+- **`--install codex`** (`install_codex`, [mcp_install.rs](../rust/crates/aipet-hook/src/mcp_install.rs):296) checks that `config.toml` is TOML (the `toml` crate), then writes the header helper `DataDir/mcp-header` (`mcp-header.cmd` on Windows): Codex runs its helper with no arguments, so the script runs `AiPet --print-token-header` (on Unix `#!/bin/sh`, `exec '<AiPet>' --print-token-header`, mode 0700). It then edits `config.toml` as text, as §7.2 does, with the same plugin rule: AiPet's block between the markers now holds `[mcp_servers.aipet]` with the URL and `http_headers_helper`, and the 11 `mcp_tool` hooks (§6.12); the exe's command hooks are taken out. A changed file prints the trust steps: run `codex`, choose *Review hooks* and trust AiPet's (`report_event` on `aipet`), then restart the ChatGPT/Codex desktop app.
+- **Trust.** Codex runs the new hooks only once the user trusts them, and a user moving from the exe's hooks or the earlier plugin trusts them once more. Until then Codex skips them quietly, and the pet sees Codex chats only through CodexWatcher (§5.6). The doctor warns.
+- **`--uninstall claude|codex`** removes the hooks of both kinds, the MCP server entry and, for Codex, `DataDir/mcp-header` (§7.4).
+- **`--print-token-header`** prints `{"Authorization":"Bearer <token>"}` from `DataDir/mcp-token`, or `{}` when there is none yet (the pet makes it at its first start), and always exits 0, so an agent starting while the pet is down goes on. The exe has the same mode, which the plugin's helpers run.
+- **`--doctor claude|codex`** changes nothing. It prints sections of `ok`, `warn`, `FAIL` and `info` lines, and exits 1 on a FAIL.
+  - **Pet:** the token file is there, else FAIL. It asks the pet's `status` tool over MCP with the token (one stateless request to 127.0.0.1 at the port, `AIPET_PORT` included); a pet that doesn't answer is a FAIL, with the hint that agents report nothing while it is closed and wait for nothing either.
+  - **Claude Code:** `settings.json` is JSON; HTTP hooks for every one of the 16 events, else a FAIL naming the missing ones (the plugin's own hooks are `ok`); the exe's old hooks still there are a warning; `mcpServers.aipet` in `.claude.json` with the pet's URL, else a FAIL (or `ok` when the plugin brings it).
+  - **Codex:** `config.toml` is TOML; `[mcp_servers.aipet]` with the pet's URL; `mcp_tool` hooks for every one of the 11 events (or the plugin's); the exe's old hooks are a warning. Trust comes from Codex itself, over `codex app-server`'s `hooks/list`: AiPet's `mcp_tool` hooks that are `untrusted` or `modified` are a warning, never a FAIL, and so is a Codex that couldn't be asked.
+  - At the end, an `info` line says whether the pet got events from that agent's hooks since it started (`status`' `registrations_seen`).
+
 ---
 
 ## 8. Other integrations and the platform layer
@@ -1094,6 +1213,8 @@ Tokens are only ever the ones the user types into Settings, stored under `AiPet:
 | Linux | `secret-tool` (`service aipet key <key>`, `secrets/linux.rs`), falling back to `DataDir/secrets.json` (`secrets/file.rs`). That file is created 0600 from the start (a new file each time, renamed over the old one) and deleted when its last key is removed |
 | macOS | In memory, lost on exit (`MemorySecrets`, `secrets/mod.rs`) |
 
+**The MCP token** is the pet's own, not the user's, and isn't in the secret store: the agents' header helpers have to read it without a keyring. It is `DataDir/mcp-token`, 64 hex digits the pet makes at its first start, readable by the user alone (mode 0600 on Unix, an ACL with the user's one entry on Windows), and replaced at a start that finds it wrong (§6.10). `AiPet --print-token-header` and the exe's same mode read it for the agents. Nothing logs it or puts it in a URL, and nothing rotates it. Claude's HTTP hooks carry no token.
+
 ### 8.5 Updates (Windows)
 
 Velopack installs and updates the Windows app, through its Rust SDK ([updates.rs](../rust/crates/aipet/src/updates.rs)). release.yml packs it with packId `AiPetApp`, channel `win`.
@@ -1142,18 +1263,24 @@ The pet is the tracker's **companion device**: it reads the tracker's active tas
 | Path | Written by | Read by | Purpose |
 |---|---|---|---|
 | `\\.\pipe\AiPet-<SID>-<session>` (Windows), `/run/user/<uid>/aipet.sock` (Linux; see §6.5) | the pet (`HookServer`), while it runs | hooks, Doctor, a starting pet (Linux, `single.rs`) | The hooks' way in; not a file on Windows, a 0600 socket on Linux, removed on a clean stop |
+| `127.0.0.1:47615` (TCP, not a file) | the pet's listener (aipet-mcp), while it runs | Claude's HTTP hooks and MCP client, Codex's MCP connection, `AiPet --doctor` | `/hook/claude` and `/mcp` (§6.10); `AIPET_PORT` moves it for tests |
+| `DataDir/mcp-token` | the pet, at its first start (`token.rs`) | the pet; `--print-token-header` | The MCP bearer token, readable by the user alone (§8.4) |
+| `DataDir/mcp-header` (`mcp-header.cmd` on Windows) | `AiPet --install codex`; deleted by `--uninstall codex` | Codex | Codex's header helper: runs `AiPet --print-token-header` |
+| `DataDir/trash/` | `delete_theme`, Settings → Avatars' Delete (`themes.rs`) | user | Deleted theme files, outside the avatars folder so the loader never reads them |
+| `DataDir/staging/` | `install_pack` (`install.rs`) | the pet | A pack's copy while it is checked, and a replaced pack's backup; empty after each install |
 | `<socket>.lock` next to the socket (Linux) | the pet, while it runs | a starting pet | The single instance's lock (§4.1) |
 | `DataDir/config.json` | the pet (aipet's `config.rs`, `placement.rs`) | the pet | Pet preferences and its place. `Left`/`Top` (desktop px) are the whole 380x600 surface's top-left corner, and `WindowHeight` is its height (§4.6) |
 | `DataDir/jira.json`, `github.json` | Settings Save, Import defaults… | watchers | Watcher settings |
 | `DataDir/secrets.json` | the Linux secrets' fallback (`secrets/file.rs`) | same | Tokens (0600), only without a keyring |
-| `DataDir/avatars/` | user, Settings' Open folder | `load::all` | The user's pets: pack folders, Aseprite files and legacy `*.json` avatars (a .NET pet of an earlier release reads only these) |
-| `DataDir/avatars/themes/*.json` | user, Settings → Avatars (Copy as new theme, Save, Delete) | `load::all` | The user's themes for pets |
+| `DataDir/avatars/` | user, Settings' Open folder, `install_pack` (§6.13) | `load::all` | The user's pets: pack folders, Aseprite files and legacy `*.json` avatars (a .NET pet of an earlier release reads only these) |
+| `DataDir/avatars/themes/*.json` | user, Settings → Avatars (Copy as new theme, Save, Delete), `save_theme` and `delete_theme` | `load::all` | The user's themes for pets |
 | `DataDir/aipet.log` | the pet (aipet-core's `log.rs`) | user | App log, including updates and the uninstaller's hook cleanup; deleted past 256 KB |
 | `DataDir/hook-events.log` | the pet (`server/record.rs`) | user (the doctor shows the in-memory copy of its tail) | One line per hook event the pet got; halved past 64 KB (§6.9) |
 | `%TEMP%\aipet-hook.log` (Windows), `$TMPDIR/aipet-hook-<euid>.log` (Unix, default `/tmp`) | hooks, only after reaching the pet | user | Hook errors; deleted past 64 KB. On Unix it is created 0600, and the hook writes only to a file of mode 0600 opened under that name (`trace.rs`) |
-| `~/.claude/settings.json` (+ `.aipet-*.bak`) | `--install claude` | Claude Code, Doctor | Direct Claude hooks; also `enabledPlugins` |
-| `~/.codex/config.toml` / `hooks.json` (+ `.aipet-*.bak`) | `--install codex` | Codex, Doctor | Direct Codex hooks and their trust entries; also the `[plugins."aipet@…"]` entry |
-| `~/.codex/plugins/cache/<market>/aipet/<version>/` | Codex | Codex, `--install codex` (`codex.rs`), Doctor | The Codex plugin, with its hook binaries |
+| `~/.claude/settings.json` (+ `.aipet-*.bak`) | `AiPet --install claude`, `aipet-hook --install claude` | Claude Code, Doctor | Direct Claude hooks (HTTP, or the exe's commands); also `enabledPlugins` |
+| `~/.claude.json` (`$CLAUDE_CONFIG_DIR/.claude.json`) (+ `.aipet-*.bak`) | Claude Code; `AiPet --install claude` sets `mcpServers.aipet` | Claude Code, Doctor | The pet's MCP server for Claude (§7.10) |
+| `~/.codex/config.toml` / `hooks.json` (+ `.aipet-*.bak`) | `AiPet --install codex`, `aipet-hook --install codex` | Codex, Doctor | Direct Codex hooks (`mcp_tool` or the exe's commands) and their trust entries, `[mcp_servers.aipet]`; also the `[plugins."aipet@…"]` entry |
+| `~/.codex/plugins/cache/<market>/aipet/<version>/` | Codex | Codex, `--install codex` (`codex.rs`), Doctor | The Codex plugin, with its hook binaries (for the token's header) |
 | Claude's copy of the plugin | Claude Code | Claude Code | The Claude plugin, with its hook binaries |
 | `~/.codex/session_index.jsonl` | Codex | the Codex watcher, `AgentSessions` | Chat names |
 | `~/.codex/sessions/**/rollout-*.jsonl` | Codex | the Codex watcher, `AgentSessions` (originator) | Turn events, where |
@@ -1173,22 +1300,23 @@ The pet is the tracker's **companion device**: it reads the tracker's active tas
 ## 10. Design principles and limits
 
 **Observe only; no replies.**
-- The hook never prints to the agent, and the app never sends text into a chat.
+- The hook never prints to the agent, and the app never sends text into a chat. `/hook/claude` answers `{}` to every event and `report_event` answers `{}`, so the HTTP hooks can't either.
 - The pet synthesises no input. The .NET pet's Stop button pressed Escape in the agent's app; the Rust pet has an Open button in its place, which opens the chat or brings its app forward (§4.5).
 
-**Tokens only from the user.** Jira and GitHub tokens come only from the Settings boxes and live in the OS secret store. No other credentials on the machine are read (§8.4). A preset never carries a token or an email, and one that moves a site removes the token saved for it (§8.2).
+**Tokens only from the user.** Jira and GitHub tokens come only from the Settings boxes and live in the OS secret store. No other credentials on the machine are read (§8.4). The MCP token is the pet's own, made by it (§8.4). A preset never carries a token or an email, and one that moves a site removes the token saved for it (§8.2).
 
-**Hooks start nothing.** A hook connects to the current user's pipe or socket and nothing else; when nothing listens it exits without writing anything. The pet is started only by the user (Start menu, app menu), by the installers (unless told not to), and by Velopack's `Update.exe` after an update the pet handed it. Nothing starts at sign-in: the installers remove older sign-in entries (§7.7).
+**Hooks start nothing.** Claude's HTTP hooks post to 127.0.0.1 and nothing else, and Codex's `mcp_tool` hooks call the pet over the connection Codex already has; neither runs a process. The old exe connects to the current user's pipe or socket and nothing else; when nothing listens it exits without writing anything. The pet is started only by the user (Start menu, app menu), by the installers (unless told not to), and by Velopack's `Update.exe` after an update the pet handed it. Nothing starts at sign-in: the installers remove older sign-in entries (§7.7).
 
 **Local builds.** Windows antivirus may hold a freshly built `.exe` for a scan for a while, and reacts to PowerShell. Cargo can't build the pet or the hook without an `.exe`, so expect the first run after a build to be slow; publishing is left to the release workflow, and no script here needs PowerShell to build. `--install` refuses to register a program not named `aipet-hook` (§7.1).
 
 **Behaviour that security tooling may look at.** The code doesn't mention antivirus. The notes below describe what the code does in areas such tools commonly inspect:
-- The hook opens one local pipe or socket per event and writes one line to it. Only the current user can open it: on Windows an ACL for the user alone with network clients denied, and an owner check by the hook; on Linux a 0600 socket in the user's runtime folder and the peer's uid checked with `SO_PEERCRED` (§6.5).
+- The pet listens on 127.0.0.1, port 47615, for HTTP (§6.10). It checks every request's Host and Origin, so a web page can't reach it, and `/mcp` needs the user's token. `/hook/claude` takes no token; it only takes status events.
+- The old hook opens one local pipe or socket per event and writes one line to it. Only the current user can open it: on Windows an ACL for the user alone with network clients denied, and an owner check by the hook; on Linux a 0600 socket in the user's runtime folder and the peer's uid checked with `SO_PEERCRED` (§6.5).
 - The hook starts no process. With the pet closed it writes no file.
 - No keystrokes are synthesised. Bringing an agent's app forward uses no Alt-key foreground trick (`platform/windows.rs`).
 - The installers use no Run key and no autostart entry.
 - The released pet and hooks are native Rust programs on both OSes. The Windows one has the C runtime linked in, and the release fails if it names a C runtime DLL. Both released exes carry the app icon and a version resource that names the `.exe`; the release fails without it (§7.9).
-- The pet's network use: Jira and GitHub when the user turns them on, and, in the installed Windows app only, one GitHub API call per update check (§8.5).
+- The pet's network use: Jira and GitHub when the user turns them on, the flow-next tracker once enrolled (§8.7), and, in the installed Windows app only, one GitHub API call per update check (§8.5). The listener only answers on loopback.
 
 **State lives only in the running pet.** Nothing is saved, so a pet that starts (or restarts) knows no chats until they send their next events, and while it's closed the events are lost. Concretely:
 - A chat shows up with its next event. One waiting on a permission prompt, a question or an elicitation sends nothing until you answer, so the pet doesn't show that it needs you.
@@ -1205,16 +1333,23 @@ The pet is the tracker's **companion device**: it reads the tracker's active tas
 - **No Stop:** the apps can't be told to stop a given chat, and Escape would stop whichever chat the app shows, so the pet only opens the chat (or brings its app forward) and leaves stopping it to you. When no window of the app is found, `focus_agent` opens the chat's link (or, on Windows, `claude://`).
 - **Linux focus:** `xdotool` and `wmctrl` see X11 windows only. An agent app running as a native Wayland window can't be found or brought forward; at most the chat's link opens (`platform/linux.rs`).
 - **Codex trust:**
-  - Codex runs only hooks the user has trusted, the plugin's included, and the desktop app needs a restart afterwards. Any change to AiPet's hook definitions means trusting them again, so the command strings and `codex.json` are frozen.
+  - Codex runs only hooks the user has trusted, the plugin's included, and the desktop app needs a restart afterwards. Any change to AiPet's hook definitions means trusting them again. The move to `mcp_tool` hooks is one such change: every Codex user trusts AiPet's hooks once more, and `AiPet --doctor codex` warns until they do.
   - Until then, the pet sees Codex chats only through `CodexWatcher`, which is best effort against Codex's internal file formats.
-- **Codex events not sent:** the plugin registers the Windows set on every OS, and so do direct hooks on Windows: no PostToolUse, Interrupt or SessionEnd. The chat's hook entry therefore keeps "working {tool}" until the next PreToolUse, PermissionRequest or Stop, unless CodexWatcher sees a newer rollout event, whose later `Ts` wins the merge. Interrupts are seen only through the rollout's `turn_aborted`, and such Codex entries are never tombstoned; they are pruned after 24 h. Only direct hooks on Unix send those three events.
+- **Codex events not sent:** `report_event` gets 11 events on every OS, but no SessionEnd, since Codex skips MCP hooks there: Codex chats are never tombstoned and are pruned after 24 h. The exe's hooks from before, on Windows and in the plugin of earlier releases, also had no PostToolUse or Interrupt: such a chat's hook entry keeps "working {tool}" until the next PreToolUse, PermissionRequest or Stop, unless CodexWatcher sees a newer rollout event, whose later `Ts` wins the merge, and interrupts are seen only through the rollout's `turn_aborted`.
+- **Codex fields not passed yet:** the `mcp_tool` hooks don't pass `trigger`, `agent_type` or `agent_id`, which aren't verified in Codex's payloads (a placeholder a payload lacks fails the whole hook). Until they are, a manual `/compact`, a helper's type and a helper's own events can't be told from the chat's own over this path.
+- **Codex and a closed pet:** a Codex thread started while the pet was down doesn't connect to the pet once it runs, so that thread's hooks report nothing (CodexWatcher still sees it).
+- **`report_event` is visible to the model:** Codex won't let a hook call a tool in `disabled_tools`. Its description tells the model not to call it, and a call with a bad event is refused.
+- **Claude's SessionStart:** Claude doesn't run HTTP hooks for it. The pet makes the chat from its first event, so it doesn't wake when a session merely opens, and a manual `/compact` shows "Compacted" for 20 s instead of going idle (§6.11).
+- **One pet per machine over HTTP:** the port is fixed. A second user's pet on the same machine, or another program, that has it leaves this pet without the listener (one log line): its Settings and the old pipe still work, but HTTP hooks and MCP clients reach the other pet.
+- **A shared machine:** any local user can reach 127.0.0.1. Something squatting on the port could read Claude's hook bodies or spoof bubbles; the owner accepted that for the hooks, which carry no token. The tools need the token.
+- **Not yet tried:** `AiPet --install` and the listener on Windows, and `install.ps1`'s changes, are untested so far: the token's ACL is type-checked only, and the listener doesn't set `SO_EXCLUSIVEADDRUSE`, so another program could bind the same port there. The Codex plugin's MCP file and `${PLUGIN_ROOT}` in its header helper haven't been tried on a real Codex. The listener's CPU and memory cost on the running pet haven't been measured yet.
 - **Codex ordering** goes by Codex's turn and tool-call ids (§6.4). It is wrong when another tool's Stop hook makes Codex go on, or a sub-agent works on past its chat's turn: the chat shows done until its next turn. The same command run again soon after an approved permission request can show the chat asking until its next event.
-- **Plugin timing:** the plugin runs the hook through bash, sh and the launcher, so Claude events that Claude starts within a few ms of each other (tens of ms on Git Bash) aren't ordered by `at`.
+- **Plugin timing:** the plugin of earlier releases runs the hook through bash, sh and the launcher, so Claude events that Claude starts within a few ms of each other (tens of ms on Git Bash) aren't ordered by `at`. Over HTTP the order is the order of arrival, with the straggler rule (§6.11).
 - **Codex chat names** come from the pet's `CODEX_HOME`, so a chat started with a `CODEX_HOME` of its own shows its prompt or folder instead.
-- **Large events:** the hook cuts every string to 256 Ki characters, and a request still over 4 MiB keeps only the `tool_input` keys the pet reads; one still over after that is dropped (the hook logs the broken pipe).
+- **Large events:** the hook, and the listener for HTTP events, cuts every string to 256 Ki characters, and a request still over 4 MiB keeps only the `tool_input` keys the pet reads; one still over after that is dropped (the hook logs the broken pipe).
 - **Linux hook builds:** the released Linux hook is built with cargo-zigbuild for glibc 2.27 and newer, linked dynamically. On musl or a 32-bit userland the plugin's launcher does nothing, so the pet sees no events. A hook built from source with plain cargo (`build.sh` for this machine's platform, `install-from-source.sh`) is linked against the build machine's glibc, so it may not run on an older one.
-- **Windows PowerShell cost:** every Codex hook on Windows, direct or from the plugin (`commandWindows`), pays a 1-4 s PowerShell start and runs async.
-- **Claude on Windows** runs the plugin's hooks in Git Bash. Without Git Bash, `install.ps1` registers the direct hooks at the installed exe instead, and the uninstaller removes them.
+- **Windows PowerShell cost:** every Codex command hook on Windows, direct or from the plugin of earlier releases (`commandWindows`), pays a 1-4 s PowerShell start and runs async. The `mcp_tool` hooks start no process.
+- **Claude on Windows** runs the plugin's token helper in Git Bash. Without Git Bash, `install.ps1` runs `AiPet --install claude` instead, and the uninstaller removes that registration.
 - **Linux desktops:**
   - On a compositor with layer-shell (Hyprland, Sway, KDE, COSMIC) the pet is a layer surface with an exact input region: everything but the pet and its bubbles clicks through, and it shows on every workspace of its output. Only Hyprland 0.56 and 0.57 have been tried by hand ([rust/proofs/linux-hands-on.md](../rust/proofs/linux-hands-on.md)); the other desktops' checks are an open spec (`fn-3`).
   - GNOME and X11 sessions get the desktop shell, an X11 window (through XWayland on GNOME), whose click-through relies on the compositor honouring the X11 input shape. Hyprland's XWayland doesn't, which is why the Wayland shell runs there (`AIPET_BACKEND=desktop` would bring back the .NET pet's problem: the whole 380x600 window takes the mouse).

@@ -12,7 +12,7 @@
   "priority": null,
   "spec": "fnt-71-mcp-server-in-the-pet",
   "spec_path": ".flow/tasks/fnt-71-mcp-server-in-the-pet.8.md",
-  "status": "todo",
+  "status": "done",
   "title": "Docs, budgets and hands-on pass for the MCP server",
   "updated_at": "2026-11-09T21:05:01.154888Z"
 }

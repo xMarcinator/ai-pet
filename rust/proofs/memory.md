@@ -63,6 +63,37 @@ comparable within one run, never across a reboot or a compositor restart. Within
 half the C# pet's CPU and about 57 % of its RSS. RSS also moves with what is already resident: the same fresh pet read
 124 MB minutes after boot, since shared driver pages count only once they're touched.
 
+## The MCP listener (fnt-71 task 8, R13 and R15)
+
+Linux, 2026-11-13, the release build of `fnt-71-mcp-server` wearing the pixel Sprout, normal Hyprland session.
+
+**R15, paired** (`scripts/perf/mcp-memory.sh 3`): two pets of the same build side by side, one with the listener on
+and an MCP client connected and idle, one with its port held so the listener can't start, read at the same moment
+after 60 s. Then the "on" pet got a Claude hook body just under the 4 MiB cap, and the "off" pet the same event through
+the old exe and its pipe, so both showed the same state. On minus off:
+
+| | Idle | 10 s after the big body | 60 s after |
+|---|---|---|---|
+| RSS | +3.3, +3.8, +3.2 MB | +3.5, +3.4, +3.1 MB | +3.5, +3.4, +3.1 MB |
+| Anonymous | +0.6, +0.8, +0.5 MB | +0.7, +0.5, +0.5 MB | +0.7, +0.5, +0.5 MB |
+
+Within R15's 5 MB. Before the fix in `aipet-mcp/src/guard.rs` (hand freed memory back with glibc's `malloc_trim`
+after a request of 256 kB or more), the big body left **+5.0 MB anonymous, +8.0 MB RSS** for the whole 60 s: glibc
+kept the freed body in the listener thread's arena. The rest of the RSS difference is the listener's code and
+tokio's pages, touched once.
+
+**R13** (`scripts/perf/pet-calm.sh`, two rounds alternating; `CONNECT=1` keeps an MCP client connected, `LISTENER=off`
+holds the port):
+
+| Pet | Calm CPU | RSS | PSS |
+|---|---|---|---|
+| C# Sprout | 12.26, 12.30 % | 242, 243 MB | 180, 181 MB |
+| Rust Sprout, listener on, client connected | 4.93, 5.03 % | 131, 131 MB | 81, 81 MB |
+| Rust Sprout, listener off | 5.03, 4.73 % | 127, 127 MB | 77, 77 MB |
+
+Within fn-1 R18's budgets (calm CPU at most the C# pet's + 0.5 points, RSS at most 1.5x its): the listener's CPU is
+within the run's noise. **Windows is still to do with the owner.**
+
 ## What is left, and what it would take
 
 - **Mesa's GL driver and LLVM (about 124 MB RSS, mostly shared with other GL programs).** Mesa's gallium driver links

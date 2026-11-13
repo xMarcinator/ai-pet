@@ -9,6 +9,8 @@
 #   scripts/perf/pet-calm.sh rust-sprout Sprout -- rust/target/release/AiPet
 #   scripts/perf/pet-calm.sh csharp-sprout Sprout -- ~/.local/share/AiPet/app/AiPet
 #
+# CONNECT=1 keeps an MCP client connected and idle to the pet's listener (fnt-71 R13; mcp-client.py, the pet's
+# port: AIPET_PORT or 47615). LISTENER=off holds that port first, so the pet's listener can't start.
 # SETTLE, SAMPLES and WINDOW (seconds) override the method's numbers for a quick try. It waits up to WAIT seconds
 # (600) for the 1-minute load average to be at most MAX_LOAD (1.0), and refuses to run if it isn't.
 set -euo pipefail
@@ -41,10 +43,22 @@ theme_field=
 printf '{"Left":3900,"Top":231,"Pills":true,"OnTop":true,"Avatar":"%s"%s,"Music":false,"WindowHeight":600}\n' \
     "$avatar" "$theme_field" >"$sandbox/data/AiPet/config.json"
 
+here=$(cd "$(dirname "$0")" && pwd)
+helpers=()
+if [[ ${LISTENER:-on} == off ]]; then
+    python3 -c "import socket,time;s=socket.socket();s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1);s.bind(('127.0.0.1',${AIPET_PORT:-47615}));s.listen();time.sleep(10**6)" &
+    helpers+=($!)
+    sleep 1
+fi
 AIPET_PIPE="$sandbox/aipet.sock" XDG_DATA_HOME="$sandbox/data" setsid "$@" >"$sandbox/pet.log" 2>&1 &
 pid=$!
+if [[ ${CONNECT:-} == 1 ]]; then
+    sleep 5
+    AIPET_DATA_DIR="$sandbox/data/AiPet" AIPET_PORT=${AIPET_PORT:-47615} python3 -I "$here/mcp-client.py" hold &
+    helpers+=($!)
+fi
 cleanup() {
-    kill "$pid" 2>/dev/null || true
+    kill "$pid" "${helpers[@]}" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
     rm -rf "$sandbox"
 }

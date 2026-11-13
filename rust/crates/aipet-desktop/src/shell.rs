@@ -383,19 +383,22 @@ impl Shell {
         }
     }
 
-    /// Hands the pet the core's news, moves it on to `now`, then does what is due: follow a drag, update the input
-    /// region, keep on top.
+    /// Hands the pet the core's news (and agents' commands, whose effects it does), moves it on to `now`, then does
+    /// what is due: follow a drag, update the input region, keep on top.
     fn frame(&mut self, now: Instant) -> Task<Message> {
+        let mut tasks = Vec::new();
         while let Ok(news) = self.news.try_recv() {
-            self.ui.update(news.into());
+            if let Some(effect) = self.ui.update(news.into()) {
+                tasks.push(self.apply(effect));
+            }
         }
         self.ui.tick(now);
         let Some(scale) = self.scale else {
-            return Task::none();
+            return Task::batch(tasks);
         };
         // `now` is when the tick was due, and a tick can come late: the region's wait is counted from when it really
         // went out
-        let mut tasks = vec![self.follow_pointer(now, scale), self.sync_region(Instant::now(), false)];
+        tasks.extend([self.follow_pointer(now, scale), self.sync_region(Instant::now(), false)]);
         if self.ui.on_top() && now.saturating_duration_since(self.top_at) >= KEEP_ON_TOP_EVERY {
             self.top_at = now;
             tasks.push(native_call(self.pet, "keeping the pet on top", native::keep_on_top));

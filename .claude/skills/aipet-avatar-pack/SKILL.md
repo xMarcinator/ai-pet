@@ -1,6 +1,6 @@
 ---
 name: aipet-avatar-pack
-description: Make, edit, recolour, theme, check or review an AiPet avatar pack (a pet, sprite or theme for the AiPet desktop pet) in the ai-pet repository. Use when the user wants a new pet drawn (pixel, painted or vector), an existing pet or its pack.json changed, a colour theme or theme file added, a pack checked with AiPet --check-pack, a --check-pack reason explained, or a pet's drawing reviewed.
+description: Make, edit, recolour, theme, check or review an AiPet avatar pack (a pet, sprite or theme for the AiPet desktop pet) in the ai-pet repository. Use when the user wants a new pet drawn (pixel, painted or vector), an existing pet or its pack.json changed, a colour theme or theme file added, a pack checked with AiPet --check-pack (or the pet's check_pack MCP tool), a pack installed or a theme saved through the pet's MCP tools, a --check-pack reason explained, or a pet's drawing reviewed.
 ---
 
 # Making an AiPet avatar pack
@@ -77,12 +77,21 @@ It loads exactly as the pet does, prints one line, exits 0 or 1, never starts th
 Pass the folder, not its `pack.json`: a `.json` file is read as a theme file or a legacy avatar. If the release
 binary is missing, say so and ask; don't start a `cargo build` unasked, since another session may be building.
 
+**Or over MCP.** When the user's pet is running and you have its MCP server (`aipet`, registered by the `aipet`
+plugin or `AiPet --install claude|codex`), its `check_pack` tool takes `{path}` (an absolute path) and answers
+`{ok, report}`: the same check and the same line as `--check-pack`, from the installed pet, with no binary to build.
+It changes nothing either.
+
 ## Where packs go
 
 - **A user's pet**: the data folder's `avatars/<folder>/` (`~/.local/share/AiPet/avatars` on Linux,
-  `%LOCALAPPDATA%\AiPet\avatars` on Windows). The user clicks **Reload** on Settings → Avatars.
-- **A theme for an existing pet**: a theme file in `avatars/themes/` there (`references/themes.md`), or **New
-  theme** on the Avatars page.
+  `%LOCALAPPDATA%\AiPet\avatars` on Windows). The user clicks **Reload** on Settings → Avatars. Or, with the pet's
+  MCP server, `install_pack` `{path, replace?}` on the pack's folder (inside the user's home, no links, at most
+  64 MiB and 2,000 files): the pet copies it, checks it, moves it into the avatars folder and reloads, and
+  `wear_avatar` `{name}` puts it on. A pack the user already has (same folder name, or same pet and style) is
+  refused unless `replace: true`; replacing one is the user's call, so ask first. A built-in is never replaced.
+- **A theme for an existing pet**: a theme file in `avatars/themes/` there (`references/themes.md`), **Copy as new
+  theme** on the Avatars page, or the MCP tools `list_themes` and `save_theme` (`references/themes.md`).
 - **A sample**: `avatars/samples/<folder>/`, with a line in `avatars/README.md`.
 - **A built-in pet** (only when the user asks): the pack in `rust/crates/aipet-sprite/packs/<folder>/`, its files
   listed in `rust/crates/aipet-sprite/src/builtin.rs` and the pet added to `all()`. A generated one is also listed in

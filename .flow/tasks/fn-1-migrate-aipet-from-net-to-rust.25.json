@@ -10,7 +10,7 @@
   "priority": null,
   "spec": "fn-1-migrate-aipet-from-net-to-rust",
   "spec_path": ".flow/tasks/fn-1-migrate-aipet-from-net-to-rust.25.md",
-  "status": "todo",
+  "status": "done",
   "title": "Cutover: remove .NET and cut the milestone 3 release",
   "updated_at": "2026-09-28T18:25:30.141786Z"
 }

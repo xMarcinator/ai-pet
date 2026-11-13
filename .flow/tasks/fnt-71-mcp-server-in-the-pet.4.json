@@ -12,7 +12,7 @@
   "priority": null,
   "spec": "fnt-71-mcp-server-in-the-pet",
   "spec_path": ".flow/tasks/fnt-71-mcp-server-in-the-pet.4.md",
-  "status": "todo",
+  "status": "done",
   "title": "Codex status over mcp_tool hooks (or the exe fallback)",
   "updated_at": "2026-11-09T21:07:42.693311Z"
 }

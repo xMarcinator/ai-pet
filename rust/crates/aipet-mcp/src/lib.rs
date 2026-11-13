@@ -3,7 +3,9 @@
 //!
 //! It runs on a thread of its own with a current-thread tokio runtime, never on the shells' executor (aipet-ui's
 //! one-worker `Executor`), and it reaches the rest of the pet only through the core's [`Ingress`], which the pipe
-//! server shares: events from either side land in the same chats and the same record. Its status events go there
+//! server shares (events from either side land in the same chats and the same record), and through its [`PetLink`]:
+//! the tools that read or change the pet's avatar, settings and board ask the pet, which answers within
+//! [`ANSWER_WITHIN`] or the call is `isError`. The hooks' status events go to the ingress
 //! through one bounded queue and a thread of their own ([`events`]), in the order they arrived.
 //!
 //! Every request passes the same checks first ([`guard`]): a body over [`MAX_REQUEST`] gets 413, a Host that isn't
@@ -28,8 +30,10 @@ use std::net::{Ipv4Addr, TcpListener};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use aipet_core::control::ANSWER_WITHIN;
+use aipet_core::control::PetLink;
 use aipet_core::server::Ingress;
 use aipet_ipc::protocol::{MAX_REQUEST, MCP_PORT};
 use axum::Router;
@@ -54,18 +58,70 @@ pub struct Options {
     pub version: String,
     /// Where the listener's `mcp:` lines go: the app log, aipet.log.
     pub log: Arc<dyn Fn(&str) + Send + Sync>,
+    /// How the tools reach the pet.
+    pub pet: PetLink,
+    /// The pet's data folder: its avatars folder, and the staging folder packs are copied to.
+    pub data: PathBuf,
+    /// The user's home folder, which a pack to install must be inside.
+    pub home: PathBuf,
+    /// How long a tool waits for the pet's answer: [`ANSWER_WITHIN`] (a debug build's tests, under load, wait longer).
+    pub answer_within: Duration,
 }
 
 impl Options {
-    /// The pet's: [`MCP_PORT`] (or `AIPET_PORT`, for tests), its data folder's token, and aipet.log.
-    pub fn app(version: impl Into<String>) -> Options {
+    /// The pet's: [`MCP_PORT`] (or `AIPET_PORT`, for tests), its data folder's token, aipet.log, and the pet.
+    pub fn app(version: impl Into<String>, pet: PetLink) -> Options {
         Options {
             port: port(std::env::var("AIPET_PORT").ok().as_deref()),
             token_file: aipet_ipc::paths::mcp_token(),
             version: version.into(),
             log: Arc::new(aipet_core::log::write),
+            pet,
+            data: aipet_ipc::paths::data_dir().to_owned(),
+            home: aipet_ipc::paths::home().to_owned(),
+            answer_within: ANSWER_WITHIN,
         }
     }
+}
+
+/// A listening socket on 127.0.0.1 at `port`, as `TcpListener::bind` makes it, but on Windows with
+/// `SO_EXCLUSIVEADDRUSE`: without it, a program that sets `SO_REUSEADDR` could bind the same port and take the agents'
+/// connections, and with them the token. On Unix, `SO_REUSEADDR` (std's choice) lets nothing take a port that is
+/// listening.
+fn bind(port: u16) -> io::Result<TcpListener> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
+    #[cfg(unix)]
+    socket.set_reuse_address(true)?;
+    #[cfg(windows)]
+    exclusive(&socket)?;
+    socket.bind(&std::net::SocketAddr::from((Ipv4Addr::LOCALHOST, port)).into())?;
+    socket.listen(128)?;
+    Ok(socket.into())
+}
+
+/// `SO_EXCLUSIVEADDRUSE` on `socket`, before it binds. windows-sys doesn't define it: Winsock's header makes it
+/// `~SO_REUSEADDR`.
+#[cfg(windows)]
+fn exclusive(socket: &socket2::Socket) -> io::Result<()> {
+    use std::os::windows::io::AsRawSocket;
+    use windows_sys::Win32::Networking::WinSock::{SO_REUSEADDR, SOCKET_ERROR, SOL_SOCKET, WSAGetLastError, setsockopt};
+    let on: i32 = 1;
+    // SAFETY: a valid socket handle, and a pointer to an i32 with its length, as setsockopt takes them
+    let failed = unsafe {
+        setsockopt(
+            socket.as_raw_socket() as _,
+            SOL_SOCKET,
+            !SO_REUSEADDR,
+            (&on as *const i32).cast(),
+            std::mem::size_of::<i32>() as i32,
+        )
+    } == SOCKET_ERROR;
+    if failed {
+        // SAFETY: no arguments; reads this thread's last Winsock error
+        return Err(io::Error::from_raw_os_error(unsafe { WSAGetLastError() }));
+    }
+    Ok(())
 }
 
 /// `AIPET_PORT` when it is a port number, else [`MCP_PORT`].
@@ -102,9 +158,13 @@ impl Listener {
             token_file,
             version,
             log,
+            pet,
+            data,
+            home,
+            answer_within,
         } = options;
         // the port first: a pet that can't have it leaves the token file alone
-        let socket = TcpListener::bind((Ipv4Addr::LOCALHOST, port))?;
+        let socket = bind(port)?;
         socket.set_nonblocking(true)?;
         let port = socket.local_addr()?.port();
         let token = token::load_or_make(&token_file, &*log)?;
@@ -119,6 +179,10 @@ impl Listener {
             version,
             ingress,
             events,
+            pet,
+            data,
+            home,
+            answer_within,
             log,
             refused: Mutex::new(None),
         });
@@ -157,6 +221,10 @@ pub(crate) struct State {
     pub(crate) ingress: Arc<Ingress>,
     /// Where the status events go on their way to the ingress, in the order they arrived.
     pub(crate) events: events::Events,
+    pub(crate) pet: PetLink,
+    pub(crate) data: PathBuf,
+    pub(crate) home: PathBuf,
+    pub(crate) answer_within: Duration,
     log: Arc<dyn Fn(&str) + Send + Sync>,
     /// When the log last got a line about a request without the right token.
     pub(crate) refused: Mutex<Option<Instant>>,

@@ -76,12 +76,34 @@ fn check_pack(folder: Option<std::ffi::OsString>) -> ExitCode {
     if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
 
+/// `AiPet --install|--uninstall|--doctor claude|codex` and `--print-token-header` (fnt-71): the agents' registrations
+/// for the pet's HTTP hooks and MCP server, and the token's header helper they run. `None` when the arguments are
+/// none of these. They never start the pet.
+fn agent_mode() -> Option<i32> {
+    let args: Vec<std::ffi::OsString> = env::args_os().skip(1).collect();
+    let first = args.first()?.to_str()?;
+    if !matches!(first, "--install" | "--uninstall" | "--doctor" | "--print-token-header") {
+        return None;
+    }
+    // a GUI app on Windows has no console of its own: print to the one it was started from
+    #[cfg(windows)]
+    // SAFETY: no arguments to get wrong; failing (no parent console) leaves nothing to print to, which is fine
+    unsafe {
+        windows_sys::Win32::System::Console::AttachConsole(windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS);
+    }
+    let exe = env::current_exe().unwrap_or_default();
+    aipet_hook::app_mode(&args, &exe)
+}
+
 fn main() -> ExitCode {
     updates::startup();
     cap_malloc_arenas();
     let mut args = env::args_os().skip(1);
     if args.next().is_some_and(|a| a == "--check-pack") {
         return check_pack(args.next());
+    }
+    if let Some(code) = agent_mode() {
+        return ExitCode::from(u8::try_from(code).unwrap_or(1));
     }
     #[cfg(not(feature = "demo"))]
     let instance = match only_pet() {
@@ -225,9 +247,13 @@ fn pet(wayland: bool, instance: single::Instance) -> Result<(), String> {
     let options = core_thread::Options::app(Arc::clone(&platform), prefs.music);
     let (secrets, http) = (Arc::clone(&options.secrets), options.http.clone());
     let (news, heard) = mpsc::channel();
+    // agents' commands reach the pet the way the core's news does: the shell hands both over every frame
+    let commands = news.clone();
+    let pet: aipet_core::control::PetLink =
+        Arc::new(move |request| commands.send(aipet_ui::News::Command(request)).is_ok());
     let core = core_thread::start(options, news);
     // a pet without the listener (its port taken) still has the pipe and Settings: the start logged why
-    let listener = aipet_mcp::Listener::start(aipet_mcp::Options::app(updates::version()), core.ingress()).ok();
+    let listener = aipet_mcp::Listener::start(aipet_mcp::Options::app(updates::version(), pet), core.ingress()).ok();
     let services = Services {
         data_dir: data_dir.clone(),
         jira: Some(core.jira()),

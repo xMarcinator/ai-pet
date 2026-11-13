@@ -32,9 +32,16 @@ Final measurement with every tool built, the Windows hands-on pass with the owne
 - [ ] Every doc in R14 updated; the two skill copies are identical
 
 ## Done summary
-TBD
+Linux half done; the Windows half moved to fnt-76-windows-checks-with-the-owner.4 (FNT-76 R5) on the owner's word, 2026-11-13.
 
+- Docs: every doc R14 lists (3c4d402), both skill copies identical.
+- Hands-on on Linux (`rust/proofs/mcp-server.md`): real Claude Code 2.1.322 and Codex 0.167.2 sessions against a sandboxed pet with the files AiPet --install writes; every tool from a real agent; the pet stopped and restarted mid-session; a session with the pet down; Codex's interactive re-trust and Settings following tool changes, with the owner.
+- R15 on Linux, paired (`scripts/perf/mcp-memory.sh`): +3.2-3.8 MB RSS with an agent connected and idle, back to +3.1-3.5 MB within 10 s of a cap-sized hook body.
+- R13 on Linux (`scripts/perf/pet-calm.sh` CONNECT/LISTENER): 4.9-5.0 % calm CPU and 131 MB RSS with the listener on and a client connected, against the C# pet's 12.3 % and 242 MB; the listener's CPU is within noise.
+- Fixes the pass found: the Codex header helper names the data folder (Codex gives it a bare environment); malloc_trim after large requests (a cap-sized body left 5 MB); no "uint16" format in status's schema; the doctor matches app-server's "mcpTool"; SO_EXCLUSIVEADDRUSE on Windows (not yet compiled there).
+
+stage: plan-sync - skipped(config: planSync.enabled != true)
 ## Evidence
-- Commits:
-- Tests:
+- Commits: 3c4d402, abc535e, ba4656b, f025d49, 690ed11
+- Tests: cd rust && cargo test --offline --workspace, cargo clippy --offline --workspace --all-targets -- -D warnings, cargo hakari verify
 - PRs:

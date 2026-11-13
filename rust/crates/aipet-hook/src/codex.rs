@@ -81,6 +81,151 @@ pub(crate) const EVENTS: &[Event] = if cfg!(windows) {
 const BEGIN: &str =
     "# >>> AiPet hooks (written by aipet-hook --install codex; Codex asks you to trust them again if they change) >>>";
 const END: &str = "# <<< AiPet hooks <<<";
+const MCP_BEGIN: &str =
+    "# >>> AiPet hooks (written by AiPet --install codex; Codex asks you to trust them again if they change) >>>";
+
+/// What an edit writes: the exe's command hooks (the C#'s, kept for its goldens and for the migration), or the
+/// pet's MCP server and the `mcp_tool` hooks that call its `report_event` (fnt-71, which `AiPet --install codex`
+/// writes). Either kind is AiPet's, so an edit for one takes out the other.
+pub(crate) enum Wanted<'a> {
+    Exe(&'a str),
+    /// The MCP server's URL and its header helper (a program Codex runs with no arguments).
+    Mcp {
+        url: &'a str,
+        helper: &'a str,
+    },
+}
+
+/// The MCP server's name in config.toml, which the hooks call.
+pub(crate) const SERVER: &str = "aipet";
+
+/// One of Codex's hook events reporting over MCP (fnt-71 task 4): the payload's fields its `input` passes on, past
+/// the base ones, and its timeout. Codex fails a hook whose placeholder its payload lacks, so each has only the
+/// fields the spike saw (`rust/proofs/mcp-spike.md`). No SessionEnd: Codex skips MCP hooks there.
+pub(crate) struct McpEvent {
+    pub(crate) name: &'static str,
+    pub(crate) fields: &'static [&'static str],
+    pub(crate) timeout: u32,
+}
+
+const TOOL_FIELDS: &[&str] = &["turn_id", "tool_name", "tool_use_id", "tool_input"];
+
+/// The same on every OS: an `mcp_tool` hook starts no process.
+pub(crate) const MCP_EVENTS: &[McpEvent] = &[
+    McpEvent {
+        name: "SessionStart",
+        fields: &["source"],
+        timeout: 5,
+    },
+    McpEvent {
+        name: "UserPromptSubmit",
+        fields: &["turn_id", "prompt"],
+        timeout: 5,
+    },
+    McpEvent {
+        name: "PreToolUse",
+        fields: TOOL_FIELDS,
+        timeout: 5,
+    },
+    McpEvent {
+        name: "PermissionRequest",
+        fields: &["turn_id", "tool_name", "tool_input"],
+        timeout: 5,
+    },
+    McpEvent {
+        name: "PostToolUse",
+        fields: TOOL_FIELDS,
+        timeout: 5,
+    },
+    McpEvent {
+        name: "Stop",
+        fields: &["turn_id"],
+        timeout: 5,
+    },
+    McpEvent {
+        name: "PreCompact",
+        fields: &[],
+        timeout: 5,
+    },
+    McpEvent {
+        name: "PostCompact",
+        fields: &[],
+        timeout: 5,
+    },
+    McpEvent {
+        name: "SubagentStart",
+        fields: &[],
+        timeout: 5,
+    },
+    McpEvent {
+        name: "SubagentStop",
+        fields: &[],
+        timeout: 5,
+    },
+    // Codex clamps Interrupt's to 3 s
+    McpEvent {
+        name: "Interrupt",
+        fields: &[],
+        timeout: 3,
+    },
+];
+
+/// Every event's base fields.
+const BASE_FIELDS: [&str; 5] = ["session_id", "hook_event_name", "cwd", "model", "transcript_path"];
+
+/// An MCP hook's `input`: `{agent = "codex", event = {<field> = "${<field>}", ...}}`, as TOML.
+pub(crate) fn mcp_input(e: &McpEvent) -> String {
+    let fields: Vec<String> = BASE_FIELDS
+        .iter()
+        .chain(e.fields)
+        .map(|f| format!("{f} = \"${{{f}}}\""))
+        .collect();
+    format!("{{ agent = \"codex\", event = {{ {} }} }}", fields.join(", "))
+}
+
+/// A TOML basic string of `text`.
+fn quoted(text: &str) -> String {
+    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// Whether a config.toml table is AiPet's: a handler running aipet-hook, an `mcp_tool` handler calling the pet's
+/// server, or that server's table.
+fn ours(s: &Segment) -> bool {
+    if s.handler.is_some() {
+        return is_ours(s.command.as_deref()) || mcp_ours(&s.values);
+    }
+    s.table
+        .as_deref()
+        .is_some_and(|t| t.len() >= 2 && t[0] == "mcp_servers" && t[1] == SERVER)
+}
+
+/// An `mcp_tool` handler calling the pet's server, by its values.
+fn mcp_ours(values: &[(Vec<String>, String, &str)]) -> bool {
+    let value = |key: &str| {
+        values
+            .iter()
+            .find(|(k, _, _)| k.len() == 1 && k[0] == key)
+            .map(|(_, v, _)| v.as_str())
+    };
+    value("type") == Some("s:mcp_tool") && value("server") == Some(&format!("s:{SERVER}"))
+}
+
+/// Whether a hooks.json handler is AiPet's: one running aipet-hook, or an `mcp_tool` one calling the pet's server.
+fn json_ours(hook: &Node) -> Result<bool, String> {
+    if is_ours(command_of(hook)?) {
+        return Ok(true);
+    }
+    if !matches!(hook, Node::Object(_)) {
+        return Ok(false);
+    }
+    let text = |key: &str| -> Result<Option<String>, String> {
+        Ok(match member(hook, key)? {
+            Some(Node::String(s)) => Some(s.clone()),
+            _ => None,
+        })
+    };
+    Ok(text("type")?.as_deref() == Some("mcp_tool") && text("server")?.as_deref() == Some(SERVER))
+}
 
 /// How many times an edit reads config.toml: when the file changed by the time the edit would be written (Codex
 /// writing it meanwhile), it is read and edited again, and after the last attempt nothing is written.
@@ -395,9 +540,15 @@ pub(crate) fn install(exe: &Path, say: &mut dyn FnMut(&str), warn: &mut dyn FnMu
     let changed = if use_json {
         // AiPet leftovers in config.toml
         let changed = edit_toml(&home.config, None, &[], say, &mut || {})?;
-        edit_hooks_json(&home.hooks, Some(&command), say, warn)? | changed
+        edit_hooks_json(&home.hooks, Some(&Wanted::Exe(&command)), say, warn)? | changed
     } else {
-        let changed = edit_toml(&home.config, Some(&command), &[home.hooks.as_path()], say, &mut || {})?;
+        let changed = edit_toml(
+            &home.config,
+            Some(&Wanted::Exe(&command)),
+            &[home.hooks.as_path()],
+            say,
+            &mut || {},
+        )?;
         // an older install's hooks.json entries
         edit_hooks_json(&home.hooks, None, say, warn)? | changed
     };
@@ -422,6 +573,49 @@ pub(crate) fn install(exe: &Path, say: &mut dyn FnMut(&str), warn: &mut dyn FnMu
     Ok(0)
 }
 
+/// AiPet's MCP server and `mcp_tool` hooks in config.toml (fnt-71, `AiPet --install codex`), taking out the exe's
+/// hooks in either file; or with the aipet plugin enabled, only the taking out. Whether it changed anything, or the
+/// exit code when it said why it stopped.
+pub(crate) fn install_as(
+    wanted: &Wanted,
+    say: &mut dyn FnMut(&str),
+    warn: &mut dyn FnMut(&str),
+) -> Result<Result<bool, i32>, String> {
+    let home = Home::at(aipet_ipc::paths::codex_home());
+    let config = home.config.display();
+    if let Some(plugin) = plugin(&home)? {
+        let mut removed = edit_toml(&home.config, None, &[home.hooks.as_path()], say, &mut || {})?;
+        removed |= edit_hooks_json(&home.hooks, None, say, warn)?;
+        say(&if removed {
+            format!(
+                "The {plugin} plugin is enabled in {config} and reports every event, so the AiPet hooks and MCP server \
+                 registered earlier were removed (the plugin replaces them)."
+            )
+        } else {
+            format!("The {plugin} plugin is enabled in {config} and already reports every event: nothing to register.")
+        });
+        say(&format!(
+            "To register them in Codex's config instead, remove the plugin (codex plugin remove {plugin}) and install \
+             again."
+        ));
+        return Ok(Err(0));
+    }
+    if let Some(clash) = inline_hooks(&toml_text::parse(&read_text(&home.config).unwrap_or_default())) {
+        warn(&format!(
+            "{config} defines hooks in a form AiPet can't add to without breaking the file:"
+        ));
+        warn(&format!("  {clash}"));
+        warn(
+            "Write those hooks as [[hooks.<Event>]] tables (or move them to hooks.json), then install again. Nothing \
+             was changed.",
+        );
+        return Ok(Err(1));
+    }
+    // the server has to be in config.toml, so its hooks go there too; an older install's hooks.json entries go
+    let changed = edit_toml(&home.config, Some(wanted), &[home.hooks.as_path()], say, &mut || {})?;
+    Ok(Ok(edit_hooks_json(&home.hooks, None, say, warn)? | changed))
+}
+
 /// `CodexConfig.Uninstall`.
 pub(crate) fn uninstall(say: &mut dyn FnMut(&str), warn: &mut dyn FnMut(&str)) -> Result<i32, String> {
     let home = Home::at(aipet_ipc::paths::codex_home());
@@ -438,10 +632,7 @@ pub(crate) fn uninstall(say: &mut dyn FnMut(&str), warn: &mut dyn FnMut(&str)) -
 /// `ChooseHooksJson`: hooks.json only when the user's other hooks already live there and config.toml has none.
 fn choose_hooks_json(home: &Home) -> bool {
     let text = read_text(&home.config).unwrap_or_default();
-    if toml_text::parse(&text)
-        .iter()
-        .any(|s| s.handler.is_some() && !is_ours(s.command.as_deref()))
-    {
+    if toml_text::parse(&text).iter().any(|s| s.handler.is_some() && !ours(s)) {
         return false;
     }
     // what reading hooks.json throws (it isn't there, isn't JSON, names a member twice) is a no too
@@ -450,7 +641,7 @@ fn choose_hooks_json(home: &Home) -> bool {
         let Some(Node::Object(hooks)) = member(&root, "hooks")? else {
             return Ok(false);
         };
-        json_positions(hooks, |_, _, _, hook| Ok(!is_ours(command_of(hook)?)))
+        json_positions(hooks, |_, _, _, hook| Ok(!json_ours(hook)?))
     };
     elsewhere().unwrap_or(false)
 }
@@ -650,7 +841,7 @@ fn stamp(path: &Path) -> Option<Stamp> {
 /// with the edit and the backup written (a test changes the file there, as Codex could).
 fn edit_toml(
     path: &Path,
-    command: Option<&str>,
+    command: Option<&Wanted>,
     remove_trust_for: &[&Path],
     say: &mut dyn FnMut(&str),
     meanwhile: &mut dyn FnMut(),
@@ -676,7 +867,7 @@ fn edit_toml(
             |s: &Segment, keys: &HashSet<String>| s.state_key.as_ref().is_some_and(|k| keys.contains(&upper(k)));
 
         // already exactly right: keep AiPet's hooks and their trust, only drop other files' leftovers
-        let keep_ours = command.is_some_and(|c| already_registered(&segs, c));
+        let keep_ours = command.is_some_and(|w| already_registered(&segs, w));
         if keep_ours && !segs.iter().any(|s| trusted(s, &other_trust)) {
             return Ok(false);
         }
@@ -687,10 +878,10 @@ fn edit_toml(
             .map(|i| {
                 let s = &segs[i];
                 !keep_ours
-                    && ((s.handler.is_some() && is_ours(s.command.as_deref()))
+                    && ((s.group.is_none() && ours(s))
                         || (s.group.is_some() && {
                             let mut handlers = group_handlers(&segs, i).peekable();
-                            handlers.peek().is_some() && handlers.all(|h| is_ours(h.command.as_deref()))
+                            handlers.peek().is_some() && handlers.all(ours)
                         }))
             })
             .collect();
@@ -835,7 +1026,7 @@ fn trust_key(file: &Path, event: &str, group: usize, index: usize) -> String {
 fn our_defs(file: &Path, segs: &[&Segment]) -> HashMap<String, String> {
     positions(segs)
         .into_iter()
-        .filter(|(s, _, _)| is_ours(s.command.as_deref()))
+        .filter(|(s, _, _)| ours(s))
         .map(|(s, group, index)| {
             (
                 trust_key(file, s.handler.as_deref().unwrap_or_default(), group, index),
@@ -847,19 +1038,22 @@ fn our_defs(file: &Path, segs: &[&Segment]) -> HashMap<String, String> {
 
 /// `AlreadyRegistered`: AiPet's handlers are exactly the ones we'd write (same events and definitions), wherever they
 /// are: moving them to the end would only shift the hooks after them and cost their trust.
-fn already_registered(segs: &[Segment], command: &str) -> bool {
-    let ours: Vec<(&str, String)> = segs
+fn already_registered(segs: &[Segment], wanted: &Wanted) -> bool {
+    // the handlers by event, and the server's tables by header
+    let key = |s: &Segment| s.handler.clone().or_else(|| s.header.map(str::to_owned));
+    let have: Vec<(String, String)> = segs
         .iter()
-        .filter(|s| is_ours(s.command.as_deref()))
-        .filter_map(|s| Some((s.handler.as_deref()?, normal(s))))
+        .filter(|s| ours(s))
+        .filter_map(|s| Some((key(s)?, normal(s))))
         .collect();
-    let block = block(command, "\n");
+    let block = block(wanted, "\n");
     let wanted = toml_text::parse(&block);
-    let want: Vec<(&str, String)> = wanted
+    let want: Vec<(String, String)> = wanted
         .iter()
-        .filter_map(|s| Some((s.handler.as_deref()?, normal(s))))
+        .filter(|s| ours(s))
+        .filter_map(|s| Some((key(s)?, normal(s))))
         .collect();
-    ours.len() == want.len() && want.iter().all(|w| ours.contains(w))
+    have.len() == want.len() && want.iter().all(|w| have.contains(w))
 }
 
 /// `Normal`: a handler's definition, for comparing: its keys and values, strings by their value (so quoting and
@@ -875,7 +1069,11 @@ fn normal(s: &Segment) -> String {
 }
 
 /// `Block`: AiPet's hooks between the markers: a group for each event, with the one handler in it.
-fn block(command: &str, nl: &str) -> String {
+fn block(wanted: &Wanted, nl: &str) -> String {
+    let command = match wanted {
+        Wanted::Exe(command) => command,
+        Wanted::Mcp { url, helper } => return mcp_block(url, helper, nl),
+    };
     let command = command.replace('\\', "\\\\").replace('"', "\\\"");
     let mut out = format!("{BEGIN}{nl}");
     for e in EVENTS {
@@ -894,6 +1092,23 @@ fn block(command: &str, nl: &str) -> String {
     out + END + nl
 }
 
+/// AiPet's block for the pet's MCP server: the server, then a group for each event with the one `mcp_tool` handler.
+fn mcp_block(url: &str, helper: &str, nl: &str) -> String {
+    let mut out = format!("{MCP_BEGIN}{nl}[mcp_servers.{SERVER}]{nl}url = {}{nl}", quoted(url));
+    let _ = write!(out, "http_headers_helper = {}{nl}{nl}", quoted(helper));
+    for e in MCP_EVENTS {
+        let name = e.name;
+        let _ = write!(
+            out,
+            "[[hooks.{name}]]{nl}[[hooks.{name}.hooks]]{nl}type = \"mcp_tool\"{nl}server = \"{SERVER}\"{nl}tool = \
+             \"report_event\"{nl}timeout = {}{nl}input = {}{nl}{nl}",
+            e.timeout,
+            mcp_input(e)
+        );
+    }
+    out + END + nl
+}
+
 /// `WarnIfShifting`: removing AiPet's hooks moves the other handlers after them in the same event (to another group or
 /// index), which breaks their recorded trust. AiPet appends its groups last, so this only happens if something was
 /// added after them; say so instead of hiding it.
@@ -905,10 +1120,7 @@ fn warn_if_shifting(before: &[Segment], after: &[&Segment], say: &mut dyn FnMut(
     let mut warned = HashSet::new();
     for (s, group, index) in positions(&before.iter().collect::<Vec<_>>()) {
         let event = s.handler.as_deref().unwrap_or_default();
-        if !is_ours(s.command.as_deref())
-            && now.get(&std::ptr::from_ref(s)).is_some_and(|&at| at != (group, index))
-            && warned.insert(event)
-        {
+        if !ours(s) && now.get(&std::ptr::from_ref(s)).is_some_and(|&at| at != (group, index)) && warned.insert(event) {
             say(&format!(
                 "Note: another {event} hook comes after AiPet's in config.toml; Codex will ask you to trust it again."
             ));
@@ -964,7 +1176,7 @@ fn our_json_keys(path: &Path) -> Result<HashSet<String>, String> {
     };
     let mut keys = HashSet::new();
     json_positions(hooks, |event, group, index, hook| {
-        if is_ours(command_of(hook)?) {
+        if json_ours(hook)? {
             keys.insert(trust_key(path, event, group, index));
         }
         Ok(false)
@@ -974,6 +1186,36 @@ fn our_json_keys(path: &Path) -> Result<HashSet<String>, String> {
 
 /// `JsonHandler`: a handler in a user's hooks.json (the plugin's have `commandWindows` too, see plugin_hooks).
 fn json_handler(e: &Event, command: &str) -> Node {
+    json_exe_handler(e, command)
+}
+
+/// AiPet's handlers for hooks.json: one per event, with its event's name.
+fn json_handlers(wanted: &Wanted) -> Vec<(&'static str, Node)> {
+    match wanted {
+        Wanted::Exe(command) => EVENTS.iter().map(|e| (e.name, json_handler(e, command))).collect(),
+        Wanted::Mcp { .. } => MCP_EVENTS.iter().map(|e| (e.name, json_mcp_handler(e))).collect(),
+    }
+}
+
+/// An `mcp_tool` handler for hooks.json.
+pub(crate) fn json_mcp_handler(e: &McpEvent) -> Node {
+    let mut event = Object::default();
+    for f in BASE_FIELDS.iter().chain(e.fields) {
+        event.push(*f, Node::String(format!("${{{f}}}")));
+    }
+    let mut input = Object::default();
+    input.push("agent", Node::String("codex".into()));
+    input.push("event", Node::Object(event));
+    let mut handler = Object::default();
+    handler.push("type", Node::String("mcp_tool".into()));
+    handler.push("server", Node::String(SERVER.into()));
+    handler.push("tool", Node::String("report_event".into()));
+    handler.push("timeout", Node::Number(e.timeout.to_string()));
+    handler.push("input", Node::Object(input));
+    Node::Object(handler)
+}
+
+fn json_exe_handler(e: &Event, command: &str) -> Node {
     let mut handler = Object::default();
     handler.push("type", Node::String("command".into()));
     handler.push("command", Node::String(command.into()));
@@ -985,21 +1227,22 @@ fn json_handler(e: &Event, command: &str) -> Node {
 }
 
 /// `JsonRegistered`: AiPet's handlers in hooks.json are exactly the ones we'd write, one per event, wherever they are.
-fn json_registered(hooks: &Object, command: &str) -> Result<bool, String> {
+fn json_registered(hooks: &Object, wanted: &Wanted) -> Result<bool, String> {
     let mut ours = Vec::new();
     json_positions(hooks, |event, _, _, hook| {
-        if is_ours(command_of(hook)?) {
+        if json_ours(hook)? {
             ours.push((event, hook));
         }
         Ok(false)
     })?;
-    if ours.len() != EVENTS.len() {
+    let handlers = json_handlers(wanted);
+    if ours.len() != handlers.len() {
         return Ok(false);
     }
-    for e in EVENTS {
+    for (name, handler) in &handlers {
         let mut found = false;
         for (event, hook) in &ours {
-            if *event == e.name && deep_equals(hook, &json_handler(e, command))? {
+            if event == name && deep_equals(hook, handler)? {
                 found = true;
                 break;
             }
@@ -1015,7 +1258,7 @@ fn json_registered(hooks: &Object, command: &str) -> Result<bool, String> {
 fn others(hooks: &Object) -> Result<Vec<(String, usize, usize)>, String> {
     let mut others = Vec::new();
     json_positions(hooks, |event, group, index, hook| {
-        if *hook != Node::Null && !is_ours(command_of(hook)?) {
+        if *hook != Node::Null && !json_ours(hook)? {
             others.push((event.to_owned(), group, index));
         }
         Ok(false)
@@ -1033,7 +1276,7 @@ fn blank(text: &str) -> bool {
 /// holds), and the file is deleted when nothing but an empty `hooks` object is left. Whether it changed.
 fn edit_hooks_json(
     path: &Path,
-    command: Option<&str>,
+    command: Option<&Wanted>,
     say: &mut dyn FnMut(&str),
     warn: &mut dyn FnMut(&str),
 ) -> Result<bool, String> {
@@ -1094,10 +1337,7 @@ fn edit_hooks_json(
                 kept.push(true);
                 continue;
             };
-            let ours = list
-                .iter()
-                .map(|hook| command_of(hook).map(is_ours))
-                .collect::<Result<Vec<bool>, String>>()?;
+            let ours = list.iter().map(json_ours).collect::<Result<Vec<bool>, String>>()?;
             if ours.contains(&true) {
                 let mut ours = ours.into_iter();
                 list.retain(|_| !ours.next().unwrap_or(false));
@@ -1118,15 +1358,15 @@ fn edit_hooks_json(
     if !removed && command.is_none() {
         return Ok(false);
     }
-    if let Some(command) = command {
-        for e in EVENTS {
+    if let Some(wanted) = command {
+        for (name, handler) in json_handlers(wanted) {
             let mut group = Object::default();
-            group.push("hooks", Node::Array(vec![json_handler(e, command)]));
+            group.push("hooks", Node::Array(vec![handler]));
             let group = Node::Object(group);
-            match hooks.get_mut(e.name) {
+            match hooks.get_mut(name) {
                 Some(Node::Array(groups)) => groups.push(group),
                 Some(other) => *other = Node::Array(vec![group]),
-                None => hooks.push(e.name, Node::Array(vec![group])),
+                None => hooks.push(name, Node::Array(vec![group])),
             }
         }
     }
@@ -1404,7 +1644,7 @@ mod tests {
         };
         let edited = edit_toml(
             &config,
-            Some(command),
+            Some(&Wanted::Exe(command)),
             &[hooks.as_path()],
             &mut |l| said.push(l.to_owned()),
             &mut meanwhile,
@@ -1420,7 +1660,7 @@ mod tests {
         let mut calm_said = Vec::new();
         let calm_edit = edit_toml(
             &calm_config,
-            Some(command),
+            Some(&Wanted::Exe(command)),
             &[calm_hooks.as_path()],
             &mut |l| calm_said.push(l.to_owned()),
             &mut || {},
@@ -1474,7 +1714,7 @@ mod tests {
         };
         let edited = edit_toml(
             &config,
-            Some(text(&corpus["command"])),
+            Some(&Wanted::Exe(text(&corpus["command"]))),
             &[hooks.as_path()],
             &mut |_| {},
             &mut meanwhile,

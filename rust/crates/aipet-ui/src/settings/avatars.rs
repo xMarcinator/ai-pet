@@ -11,7 +11,7 @@ use std::fs;
 use std::path::Path;
 
 use aipet_sprite::Avatar;
-use aipet_sprite::load::{self, LoadedPack, THEMES};
+use aipet_sprite::load::{self, LoadedPack};
 use aipet_sprite::pack::{Kind, Theme};
 use iced::widget::image::FilterMethod;
 use iced::widget::{Row, button, column, container, image, row, text, text_input, tooltip};
@@ -531,16 +531,15 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
         }
         Message::DeleteTheme(name) => {
             let file = own_theme(pet, &name)?.file.clone()?;
-            let path = folder.join(THEMES).join(&file);
-            match fs::remove_file(&path) {
-                Ok(()) => {
+            match aipet_sprite::themes::delete(&pet.settings.services.data_dir, &file) {
+                Ok(_) => {
                     pet.settings.avatars.theme_error = None;
                     let found = load::all(&folder);
                     pet.skipped = found.skipped;
                     reload(pet, found.pets);
                     pet.save_prefs();
                 }
-                Err(e) => pet.settings.avatars.theme_error = Some(format!("Couldn't delete {}: {e}", path.display())),
+                Err(e) => pet.settings.avatars.theme_error = Some(e),
             }
         }
         // a built-in theme is locked
@@ -571,7 +570,7 @@ pub(super) fn update(pet: &mut PetUi, message: Message) -> Option<Effect> {
                 pet.settings.avatars.theme = Some(t);
                 return None;
             }
-            match save(pet, &t, &folder.join(THEMES)) {
+            match save(pet, &t, &folder) {
                 Ok(name) => {
                     let found = load::all(&folder);
                     pet.skipped = found.skipped;
@@ -731,29 +730,11 @@ fn preview(pet: &PetUi, t: &Theming) -> Option<image::Handle> {
     Some(crate::sprite::still(&base.unpacked().recoloured(&colours).ok()?))
 }
 
-/// A name as part of a file name: lower case letters and digits, words joined by `-`.
-fn slug(name: &str) -> String {
-    name.chars()
-        .map(|c| {
-            if c.is_alphanumeric() {
-                c.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
-}
-
-/// Writes `t` as a theme file in `folder` (the themes folder): the colours that differ from the pet's default. An
-/// edited theme keeps its file; a new one is named after the pet and the theme. The theme's name, or why it can't be
-/// saved.
-fn save(pet: &PetUi, t: &Theming, folder: &Path) -> Result<String, String> {
-    let name = t.name.trim();
-    if name.is_empty() {
+/// Saves `t` with the shared theme code ([`aipet_sprite::themes::save`]) in the avatars folder `avatars`: the colours
+/// that differ from the pet's default. An edited theme keeps its file; a new one is named after the pet and the theme.
+/// The theme's name, or why it can't be saved.
+fn save(pet: &PetUi, t: &Theming, avatars: &Path) -> Result<String, String> {
+    if t.name.trim().is_empty() {
         return Err("Give the theme a name.".to_owned());
     }
     let base = pet
@@ -761,47 +742,19 @@ fn save(pet: &PetUi, t: &Theming, folder: &Path) -> Result<String, String> {
         .iter()
         .find(|a| a.name() == t.pet)
         .ok_or("The pet has gone.")?;
-    let palette = &base.pack.palette;
-    let own = match &t.editing {
-        Editing::Own(own) => Some(own.as_str()),
-        _ => None,
-    };
-    if own != Some(name) && palette.names().any(|n| n == name) {
-        return Err(format!("{} already has a theme named {name}.", t.pet));
-    }
-    let mut colours = serde_json::Map::new();
+    let mut colours = BTreeMap::new();
     for (n, v) in &t.colours {
         let c = aipet_sprite::vector::colour(v.trim())
             .ok()
             .flatten()
             .ok_or_else(|| format!("{}: {v:?} isn't a colour (#RRGGBB).", words(n)))?;
-        if palette.colours.get(n) != Some(&c) {
-            colours.insert(n.clone(), aipet_sprite::vector::colour_name(Some(c)).into());
-        }
+        colours.insert(n.clone(), c);
     }
-    let editing = own.and_then(|e| palette.themes.iter().find(|th| th.name == e)?.file.clone());
-    let file = match editing {
-        Some(file) => file,
-        None => {
-            let stem = format!("{}-{}", slug(&t.pet), slug(name));
-            (1..)
-                .map(|i| {
-                    if i == 1 {
-                        format!("{stem}.json")
-                    } else {
-                        format!("{stem}-{i}.json")
-                    }
-                })
-                .find(|f| !folder.join(f).exists())
-                .expect("a file name is free")
-        }
+    let own = match &t.editing {
+        Editing::Own(own) => Some(own.as_str()),
+        _ => None,
     };
-    let path = folder.join(file);
-    let json = serde_json::json!({"pet": t.pet, "theme": name, "palette": colours});
-    fs::create_dir_all(folder).map_err(|e| format!("Couldn't make the themes folder: {e}"))?;
-    let text = serde_json::to_string_pretty(&json).expect("a theme always serialises") + "\n";
-    fs::write(&path, text).map_err(|e| format!("Couldn't save {}: {e}", path.display()))?;
-    Ok(name.to_owned())
+    aipet_sprite::themes::save(avatars, &base.pack, &t.name, &colours, own).map(|saved| saved.name)
 }
 
 pub(super) fn tick(_pet: &mut PetUi) {}

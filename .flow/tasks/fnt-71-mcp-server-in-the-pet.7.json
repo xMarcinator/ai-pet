@@ -12,7 +12,7 @@
   "priority": null,
   "spec": "fnt-71-mcp-server-in-the-pet",
   "spec_path": ".flow/tasks/fnt-71-mcp-server-in-the-pet.7.md",
-  "status": "todo",
+  "status": "done",
   "title": "Install, uninstall, doctor and the plugin for the new hooks",
   "updated_at": "2026-11-09T09:28:13.179725Z"
 }

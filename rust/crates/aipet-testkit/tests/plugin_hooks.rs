@@ -47,7 +47,7 @@ fn check_plugin_compares_the_hook_files_with_the_hook() {
     fs::write(&claude, text).unwrap();
     let text = fs::read_to_string(&codex)
         .unwrap()
-        .replace("\"timeout\": 30", "\"timeout\": 31");
+        .replace("\"timeout\": 5", "\"timeout\": 6");
     fs::write(&codex, text).unwrap();
     let bad = box_.run(
         &bash,
@@ -61,6 +61,6 @@ fn check_plugin_compares_the_hook_files_with_the_hook() {
         codex.display()
     );
     assert!(bad.output().contains(&said), "{}", bad.output());
-    assert!(bad.stderr.contains("-            \"timeout\": 31,"), "{}", bad.stderr);
-    assert!(bad.stderr.contains("+            \"timeout\": 30,"), "{}", bad.stderr);
+    assert!(bad.stderr.contains("-            \"timeout\": 6,"), "{}", bad.stderr);
+    assert!(bad.stderr.contains("+            \"timeout\": 5,"), "{}", bad.stderr);
 }
