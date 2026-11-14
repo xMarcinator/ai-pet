@@ -596,7 +596,10 @@ fn every_tool_conforms() {
         .map(|rest| rest.split('"').next().unwrap().to_owned())
         .collect();
     for format in &formats {
-        assert!(["int32", "int64", "date-time", "uri"].contains(&format.as_str()), "format {format}: {listed}");
+        assert!(
+            ["int32", "int64", "date-time", "uri"].contains(&format.as_str()),
+            "format {format}: {listed}"
+        );
     }
 
     for (row, tool) in table.iter().zip(tools) {

@@ -348,13 +348,18 @@ fn install_under_another_name_refuses() {
 }
 
 // ------------------------------------------------------------------ the doctor
-/// The plugin as Codex caches it, under the sandbox's CODEX_HOME: the real launcher, and (with_hook) a hook binary for
-/// this system that runs the built hook.
+/// A plugin from before the MCP server (fnt-71), as Codex caches it under the sandbox's CODEX_HOME: its exe hooks for
+/// [`plugin_events`], the real launcher, and (with_hook) a hook binary for this system that runs the built hook. The
+/// `aipet-hook --doctor` these tests check is the migration bridge's, which knows that plugin; today's plugin
+/// registers `mcp_tool` hooks, which `AiPet --doctor codex` checks.
 fn plugin_root(a: &Agents, with_hook: bool) -> PathBuf {
     let root = a.box_.codex().join("plugins/cache/aipet/aipet/0.2.0");
     let plugin = repo().join("plugins").join("aipet");
     fs::create_dir_all(root.join("hooks")).unwrap();
-    fs::copy(plugin.join("hooks/codex.json"), root.join("hooks/codex.json")).unwrap();
+    let command =
+        json!([{"hooks": [{"type": "command", "command": "sh \"$PLUGIN_ROOT/native/aipet-hook.sh\" --agent codex"}]}]);
+    let hooks: serde_json::Map<String, Value> = plugin_events().into_iter().map(|e| (e, command.clone())).collect();
+    fs::write(root.join("hooks/codex.json"), json!({ "hooks": hooks }).to_string()).unwrap();
     fs::create_dir_all(root.join("native")).unwrap();
     fs::copy(plugin.join("native/aipet-hook.sh"), root.join("native/aipet-hook.sh")).unwrap();
     if with_hook {
@@ -366,10 +371,22 @@ fn plugin_root(a: &Agents, with_hook: bool) -> PathBuf {
     root
 }
 
-/// The events of the plugin's Codex hooks, as its committed codex.json has them.
+/// The events of the old plugin's Codex hooks (its codex.json before fnt-71): the ones the bridge's doctor counts as
+/// the whole plugin (`plugin_hooks::CODEX_EVENTS`).
 fn plugin_events() -> Vec<String> {
-    let file: Value = serde_json::from_str(&text(&repo().join("plugins/aipet/hooks/codex.json"))).unwrap();
-    file["hooks"].as_object().unwrap().keys().cloned().collect()
+    [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PermissionRequest",
+        "Stop",
+        "PreCompact",
+        "PostCompact",
+        "SubagentStart",
+        "SubagentStop",
+    ]
+    .map(String::from)
+    .to_vec()
 }
 
 /// `CodexConfig.Snake`: PreToolUse is pre_tool_use.

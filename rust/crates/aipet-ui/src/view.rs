@@ -8,7 +8,7 @@ use iced::widget::image::{FilterMethod, Handle};
 use iced::widget::{Space, button, canvas, container, image, mouse_area, opaque, pin, row, stack, text};
 use iced::{Border, Color, ContentFit, Element, Length, Padding, Point, Rectangle, Shadow, Vector, mouse};
 
-use crate::cards::{Button, Card, Progress};
+use crate::cards::{Button, Card};
 use crate::geometry::{
     CARD_GLOW_BLUR, CARD_H, CARD_RADIUS, CARD_SHADOW_BLUR, CARD_SHADOW_Y, CLOSE_SIZE, CardFrame, HALO_PAD, HEADER_H,
     HEADER_RADIUS, INLINE_MENU,
@@ -23,11 +23,10 @@ const DOT: Point = Point::new(1.0 + 14.0 + 9.0, CARD_H / 2.0);
 const TEXT_X: f32 = 1.0 + 14.0 + 18.0 + 8.0;
 /// A tracker task's subtask strip: its height and its gap above the bubble's bottom edge; its agent badge's size,
 /// text size and offset from the dot's centre (fnt-81).
-const STRIP_H: f32 = 2.5;
-const STRIP_BOTTOM: f32 = 5.0;
-const BADGE: f32 = 13.0;
-const BADGE_TEXT: f32 = 8.5;
-const BADGE_OFFSET: f32 = 7.0;
+/// A tracker task's ring in place of its dot: as wide as the dot's 18 px box, its stroke, and the gap between arcs.
+const RING: f32 = 18.0;
+const RING_STROKE: f32 = 3.0;
+const RING_GAP: f32 = 1.5;
 const TITLE_SIZE: f32 = 13.5;
 const DETAIL_SIZE: f32 = 12.0;
 /// The title's top: the lines' heights ([`style::LINE_SPACING`] em each) and the detail's 1 px margin, centred.
@@ -179,7 +178,23 @@ impl PetUi {
                 let alpha = 0.55 * (1.0 - phase) * o;
                 layers.push(disc(dot, 8.0 * (1.0 + 1.6 * grow) * s, colour.scale_alpha(alpha)));
             }
-            layers.push(disc(dot, 8.0 * s, colour.scale_alpha(o)));
+            match card.progress {
+                // a tracker task: its subtasks by status, as a ring where the dot would be
+                Some(progress) => {
+                    let size = RING * s;
+                    layers.push(
+                        pin(image(ring_picture(progress.ring))
+                            .width(size)
+                            .height(size)
+                            .content_fit(ContentFit::Fill)
+                            .filter_method(FilterMethod::Linear)
+                            .opacity(o))
+                        .position(Point::new(dot.x - size / 2.0, dot.y - size / 2.0))
+                        .into(),
+                    );
+                }
+                None => layers.push(disc(dot, 8.0 * s, colour.scale_alpha(o))),
+            }
             let title_colour = if highlight { argb(0xFFFFE9A8) } else { Color::WHITE };
             let fitted = card.fitted();
             layers.push(line(
@@ -196,9 +211,6 @@ impl PetUi {
                 argb(0xFFA8A8AE).scale_alpha(o),
                 frame.map(Point::new(TEXT_X, DETAIL_Y)),
             ));
-            if let Some(progress) = card.progress {
-                progress_marks(progress, colour, &frame, o, layers);
-            }
         }
 
         if card.interactive() {
@@ -335,64 +347,87 @@ fn pixels<'a>(handle: &Handle, r: Rectangle, filter: FilterMethod) -> Element<'a
     .into()
 }
 
-/// A tracker task's counts (fnt-81): its subtasks done of total as a strip along the bubble's bottom, between the
-/// text's start and the rounded end, in the dot's colour on a faint track; and, when more than one agent works on
-/// it, their number on a badge at the dot's top right.
-fn progress_marks<'a>(
-    progress: Progress,
-    colour: Color,
-    frame: &CardFrame,
-    o: f32,
-    layers: &mut Vec<Element<'a, Message>>,
-) {
-    let s = frame.scale;
-    if progress.total > 0 {
-        let (left, right) = (TEXT_X, frame.width - CARD_RADIUS * 0.6);
-        let length = (right - left).max(0.0);
-        let filled = length * (progress.done.min(progress.total) as f32 / progress.total as f32);
-        let y = CARD_H - STRIP_BOTTOM - STRIP_H;
-        for (width, fill) in [(length, argb(0x33FFFFFF)), (filled, colour)] {
-            if width <= 0.0 {
-                continue;
+/// The ring's arcs' colours, in [`Progress::ring`]'s order: the tracker's dark theme's status colours (done, in
+/// progress, needs you, blocked), and a faint track for the subtasks not started.
+const RING_COLOURS: [u32; aipet_core::tracker::wire::RING_GROUPS] =
+    [0xFF4CC38A, 0xFF3FB5C4, 0xFFC9A35A, 0xFFF2A29A, 0x47FFFFFF];
+
+/// The ring is rasterised at this many pixels per logical pixel (enough for a 300 % screen) and drawn scaled down, as
+/// the icons are; each pixel is the average of 4 × 4 samples, so its edges are smooth (iced's canvas would draw them
+/// jagged: the pet's window has no multisampling).
+const RING_RES: usize = 3;
+const RING_SAMPLES: usize = 4;
+
+/// A tracker task's subtasks by status as a picture: arcs round the middle, clockwise from the top, each as long as
+/// its share, with a small gap between neighbours; one status alone, or no subtasks (the faint track), is a whole
+/// ring. Made once per set of counts: a new picture is a new texture.
+fn ring_picture(counts: [u32; aipet_core::tracker::wire::RING_GROUPS]) -> Handle {
+    use std::collections::HashMap;
+    use std::f32::consts::TAU;
+    use std::sync::{LazyLock, Mutex};
+    type Pictures = HashMap<[u32; aipet_core::tracker::wire::RING_GROUPS], Handle>;
+    static PICTURES: LazyLock<Mutex<Pictures>> = LazyLock::new(Mutex::default);
+    let mut pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
+    pictures
+        .entry(counts)
+        .or_insert_with(|| {
+            let total: u32 = counts.iter().sum();
+            let shown = counts.iter().filter(|&&n| n > 0).count();
+            let middle = (RING - RING_STROKE) / 2.0;
+            let gap = if shown > 1 { RING_GAP / middle } else { 0.0 };
+            // each arc's start and end angle (from the top, clockwise), less half the gap at both ends
+            let mut arcs = Vec::new();
+            let mut start = 0.0;
+            for (i, &n) in counts.iter().enumerate() {
+                if n > 0 {
+                    let sweep = TAU * n as f32 / total as f32;
+                    arcs.push((start + gap / 2.0, start + sweep - gap / 2.0, RING_COLOURS[i]));
+                    start += sweep;
+                }
             }
-            let bar = container(Space::new().width(width * s).height(STRIP_H * s)).style(move |_| container::Style {
-                background: Some(fill.scale_alpha(o).into()),
-                border: Border {
-                    radius: (STRIP_H / 2.0 * s).into(),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            });
-            layers.push(pin(bar).position(frame.map(Point::new(left, y))).into());
-        }
-    }
-    if progress.agents > 1 {
-        let center = frame.map(Point::new(DOT.x + BADGE_OFFSET, DOT.y - BADGE_OFFSET));
-        let size = BADGE * s;
-        let count = progress.agents.min(99).to_string();
-        let badge = container(
-            text(count)
-                .size(BADGE_TEXT * s)
-                .font(style::UI_SEMIBOLD)
-                .color(Color::WHITE.scale_alpha(o))
-                .center(),
-        )
-        .center(size)
-        .style(move |_| container::Style {
-            background: Some(argb(0xFF3A3A3E).scale_alpha(o).into()),
-            border: Border {
-                color: colour.scale_alpha(o),
-                width: s,
-                radius: (size / 2.0).into(),
-            },
-            ..container::Style::default()
-        });
-        layers.push(
-            pin(badge)
-                .position(Point::new(center.x - size / 2.0, center.y - size / 2.0))
-                .into(),
-        );
-    }
+            if arcs.is_empty() {
+                arcs.push((0.0, TAU, RING_COLOURS[aipet_core::tracker::wire::RING_GROUPS - 1]));
+            }
+            let side = (RING * RING_RES as f32).round() as usize;
+            let mut rgba = Vec::with_capacity(side * side * 4);
+            for y in 0..side {
+                for x in 0..side {
+                    // premultiplied sums over the pixel's samples
+                    let mut sum = [0.0f32; 4];
+                    for sy in 0..RING_SAMPLES {
+                        for sx in 0..RING_SAMPLES {
+                            let px = (x as f32 + (sx as f32 + 0.5) / RING_SAMPLES as f32) / RING_RES as f32;
+                            let py = (y as f32 + (sy as f32 + 0.5) / RING_SAMPLES as f32) / RING_RES as f32;
+                            let (dx, dy) = (px - RING / 2.0, py - RING / 2.0);
+                            if ((dx * dx + dy * dy).sqrt() - middle).abs() > RING_STROKE / 2.0 {
+                                continue;
+                            }
+                            let angle = dx.atan2(-dy).rem_euclid(TAU);
+                            if let Some(&(_, _, colour)) =
+                                arcs.iter().find(|(from, to, _)| (*from..*to).contains(&angle))
+                            {
+                                let a = (colour >> 24) as f32 / 255.0;
+                                for (k, shift) in [16, 8, 0].into_iter().enumerate() {
+                                    sum[k] += ((colour >> shift) & 0xFF) as f32 * a;
+                                }
+                                sum[3] += a;
+                            }
+                        }
+                    }
+                    let n = (RING_SAMPLES * RING_SAMPLES) as f32;
+                    let alpha = sum[3] / n;
+                    let channel = |c: f32| if sum[3] > 0.0 { (c / sum[3]).round() as u8 } else { 0 };
+                    rgba.extend([
+                        channel(sum[0]),
+                        channel(sum[1]),
+                        channel(sum[2]),
+                        (alpha * 255.0).round() as u8,
+                    ]);
+                }
+            }
+            Handle::from_rgba(side as u32, side as u32, rgba)
+        })
+        .clone()
 }
 
 /// A filled circle `diameter` across, centred on `center`.

@@ -1,6 +1,7 @@
 //! A scripted day in the pet's life, so the pet shows every state and animation without real chats: a Claude chat
 //! that thinks, works, needs you and finishes, a Codex chat, a Jira issue to review, and late in each pass a crowd of
-//! chats that fills their stack ([`CROWD_FROM`]). It loops every [`PERIOD`] s.
+//! chats that fills their stack ([`CROWD_FROM`]). With `AIPET_DEMO_TRACKER=1` a tracker task joins them, its subtasks
+//! moving along its ring ([`TRACKER`]). It loops every [`PERIOD`] s.
 //!
 //! The script goes through the core's own [`Board`], as the hooks and the Jira watcher would report it, so the demo
 //! shows the bubbles, labels and moods the pet shows for real data. It is for development, screenshots and tests:
@@ -9,9 +10,11 @@
 
 use std::sync::Arc;
 
-use aipet_core::board::{Board, Sources};
+use aipet_core::board::{Board, Sources, TrackerSources};
 use aipet_core::jira::{Issue, JiraSettings};
 use aipet_core::sessions::Entry;
+use aipet_core::tracker::TrackerTask;
+use aipet_core::tracker::wire::{Agents, Count, SubtaskStatuses};
 
 /// The script's length; it starts over after that.
 pub const PERIOD: f64 = 40.0;
@@ -19,6 +22,8 @@ pub const PERIOD: f64 = 40.0;
 pub const CLAUDE: &str = "claude:demo";
 pub const CODEX: &str = "codex:demo";
 pub const REVIEW: &str = "jira:AIPET-42";
+/// The tracker task's id: its bubble's is `task:` and this.
+pub const TRACKER: &str = "fnt-12-tracker-bubbles";
 /// The Unix time the pet clock's start stands for, so the Board's times are a day's.
 const EPOCH: f64 = 1_790_000_000.0;
 
@@ -58,6 +63,8 @@ const REVIEW_UNTIL: f64 = 31.0;
 /// The script's Board, refreshed as the pet's clock goes on.
 pub struct Demo {
     board: Board,
+    /// Whether the tracker task shows (`AIPET_DEMO_TRACKER=1`).
+    tracker: bool,
 }
 
 impl Default for Demo {
@@ -68,18 +75,73 @@ impl Default for Demo {
 
 impl Demo {
     pub fn new() -> Demo {
-        Demo { board: Board::new() }
+        Demo {
+            board: Board::new(),
+            tracker: std::env::var("AIPET_DEMO_TRACKER").is_ok_and(|v| v == "1"),
+        }
     }
 
     /// The Board at `t` seconds since the start.
     pub fn board(&mut self, t: f64) -> Arc<Board> {
-        self.board.refresh(&sources(t), EPOCH + t);
+        let mut sources = sources(t);
+        if self.tracker {
+            sources.tracker = TrackerSources {
+                tasks: vec![tracker_task(t.rem_euclid(PERIOD))],
+                connected: true,
+                ..TrackerSources::default()
+            };
+        }
+        self.board.refresh(&sources, EPOCH + t);
         Arc::new(self.board.clone())
     }
 
     /// Hides a bubble until it does something new, as the core's Board does.
     pub fn dismiss(&mut self, id: &str, t: f64) {
         self.board.dismiss(id, EPOCH + t);
+    }
+}
+
+/// The tracker task at `at` seconds into a pass: seven subtasks in every status at first, two more done later.
+fn tracker_task(at: f64) -> TrackerTask {
+    let statuses = if at < PERIOD / 2.0 {
+        SubtaskStatuses {
+            todo: 1,
+            ready: 1,
+            in_progress: 1,
+            review: 1,
+            blocked: 1,
+            done: 2,
+        }
+    } else {
+        SubtaskStatuses {
+            todo: 0,
+            ready: 1,
+            in_progress: 1,
+            review: 1,
+            blocked: 0,
+            done: 4,
+        }
+    };
+    TrackerTask {
+        id: TRACKER.into(),
+        short_id: "FNT-12".into(),
+        title: "Tracker bubbles".into(),
+        status: "In progress".into(),
+        phase: Some("implementing".into()),
+        subtasks: Count {
+            done: statuses.done,
+            total: 7,
+        },
+        subtask_statuses: Some(statuses),
+        acceptance: Count { done: 9, total: 23 },
+        agents: Agents {
+            total: 2,
+            runs: 1,
+            sessions: 1,
+            subagents: 0,
+        },
+        at: "2026-11-13T10:00:00Z".into(),
+        ..TrackerTask::default()
     }
 }
 

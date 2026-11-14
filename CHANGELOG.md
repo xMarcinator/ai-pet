@@ -12,7 +12,7 @@ in the milestone 2 release, and an installed copy of any earlier release updates
 - The flow-next tracker: Settings › Tracker enrolls the pet as the tracker's companion device with a one-time code,
   on this computer (`http://127.0.0.1:3210`) or a hosted tracker over mutual TLS (`https://`, its certificate
   authority pinned by the code). Each task the tracker works on gets a bubble: its phase or what waits on you,
-  acceptance criteria met, a strip for its subtasks and a badge for its agents, amber when it needs you and red when
+  acceptance criteria met, a ring of its subtasks by status, amber when it needs you and red when
   its run failed; the chats that are its runs join it, and a click opens the task in the tracker's client. Where you
   allow it in the tracker, the bubble answers a permission prompt or pauses or stops the run. Chats that aren't
   tracker tasks can hide while it's connected. Nothing the hooks report is sent to the tracker but a chat's id.

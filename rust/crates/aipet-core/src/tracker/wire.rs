@@ -34,6 +34,10 @@ pub struct TrackerTask {
     pub phase: Option<String>,
     pub review_round: Option<u32>,
     pub subtasks: Count,
+    /// How many subtasks are in each of the tracker's subtask statuses, for the bubble's ring; `None` from a tracker
+    /// that doesn't send it, when the ring shows `subtasks`' done and the rest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtask_statuses: Option<SubtaskStatuses>,
     pub acceptance: Count,
     pub placement: Option<Placement>,
     pub agents: Agents,
@@ -59,6 +63,40 @@ pub struct Count {
 pub struct Placement {
     pub runner: Option<String>,
     pub lane: Option<String>,
+}
+
+/// A task's subtasks by the tracker's subtask status (`todo`, `ready`, `in_progress`, `review`, `blocked`, `done`).
+/// A status this pet doesn't know is ignored.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SubtaskStatuses {
+    pub todo: u32,
+    pub ready: u32,
+    pub in_progress: u32,
+    pub review: u32,
+    pub blocked: u32,
+    pub done: u32,
+}
+
+/// The ring's arcs, in the order they're drawn clockwise from the top, as the tracker's board groups its subtask
+/// statuses: done, in progress, needs you (review), blocked, not started (todo and ready).
+pub const RING_GROUPS: usize = 5;
+
+impl TrackerTask {
+    /// The subtask counts for the ring's arcs ([`RING_GROUPS`]): from `subtask_statuses` when the tracker sent them,
+    /// else `subtasks`' done and the rest not started.
+    pub fn ring(&self) -> [u32; RING_GROUPS] {
+        match self.subtask_statuses {
+            Some(s) => [s.done, s.in_progress, s.review, s.blocked, s.todo + s.ready],
+            None => [
+                self.subtasks.done.min(self.subtasks.total),
+                0,
+                0,
+                0,
+                self.subtasks.total.saturating_sub(self.subtasks.done),
+            ],
+        }
+    }
 }
 
 /// How many agents work on the task; `total` is the bubble's badge.
@@ -232,6 +270,7 @@ mod tests {
             phase: Some("reviewing".into()),
             review_round: Some(2),
             subtasks: Count { done: 3, total: 5 },
+            subtask_statuses: None,
             acceptance: Count { done: 4, total: 6 },
             placement: Some(Placement {
                 runner: Some("build-box".into()),
@@ -283,6 +322,21 @@ mod tests {
             let theirs: Value = serde_json::from_str(doc).unwrap();
             assert_eq!(ours, theirs);
         }
+    }
+
+    #[test]
+    fn the_ring_counts_subtasks_by_status_or_falls_back_to_done() {
+        // a tracker that sends the statuses: grouped as its board groups them, a status this pet doesn't know ignored
+        let line = r#"{"v":2,"type":"task","op":"upsert","task":{"id":"t","subtasks":{"done":4,"total":9},"subtask_statuses":{"todo":1,"ready":1,"in_progress":1,"review":1,"blocked":1,"done":4,"parked":2}}}"#;
+        let Ok(TaskMessage::Upsert(task)) = TaskMessage::parse(line) else {
+            panic!("not read: {line}");
+        };
+        assert_eq!(task.ring(), [4, 1, 1, 1, 2]);
+        // one that doesn't: done and the rest not started
+        let mut older = example();
+        assert_eq!(older.ring(), [3, 0, 0, 0, 2]);
+        older.subtasks = Count { done: 7, total: 5 };
+        assert_eq!(older.ring(), [5, 0, 0, 0, 0]);
     }
 
     #[test]

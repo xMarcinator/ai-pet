@@ -150,13 +150,11 @@ pub struct Bubble {
     pub progress: Option<Progress>,
 }
 
-/// A tracker task's counts on its bubble (fnt-81): its subtasks done of total as a thin strip along the bottom, and
-/// how many agents work on it as a badge on the dot.
+/// A tracker task's counts on its bubble: its subtasks by status as a ring in place of the dot (done, in progress,
+/// needs you, blocked, not started; [`aipet_core::tracker::TrackerTask::ring`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Progress {
-    pub done: u32,
-    pub total: u32,
-    pub agents: u32,
+    pub ring: [u32; aipet_core::tracker::wire::RING_GROUPS],
 }
 
 /// A bubble's title and detail cut to fit, and the bubble's width.
@@ -211,9 +209,9 @@ impl Card {
         self.o >= 0.004
     }
 
-    /// Whether the dot pulses: something is going on.
+    /// Whether the dot pulses: something is going on. A tracker task's ring doesn't: its arcs say what goes on.
     pub fn pulsing(&self) -> bool {
-        matches!(self.state, "working" | "attention" | "thinking" | "music")
+        self.progress.is_none() && matches!(self.state, "working" | "attention" | "thinking" | "music")
     }
 
     /// Whether it shows its round buttons and dismiss button, its text fitted beside them.

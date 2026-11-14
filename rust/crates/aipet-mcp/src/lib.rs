@@ -105,7 +105,9 @@ fn bind(port: u16) -> io::Result<TcpListener> {
 #[cfg(windows)]
 fn exclusive(socket: &socket2::Socket) -> io::Result<()> {
     use std::os::windows::io::AsRawSocket;
-    use windows_sys::Win32::Networking::WinSock::{SO_REUSEADDR, SOCKET_ERROR, SOL_SOCKET, WSAGetLastError, setsockopt};
+    use windows_sys::Win32::Networking::WinSock::{
+        SO_REUSEADDR, SOCKET_ERROR, SOL_SOCKET, WSAGetLastError, setsockopt,
+    };
     let on: i32 = 1;
     // SAFETY: a valid socket handle, and a pointer to an i32 with its length, as setsockopt takes them
     let failed = unsafe {

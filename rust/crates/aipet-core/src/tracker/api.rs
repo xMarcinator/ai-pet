@@ -8,7 +8,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::wire::{Agents, Count, Links, Need, Placement, Tone, TrackerTask};
+use super::wire::{Agents, Count, Links, Need, Placement, SubtaskStatuses, Tone, TrackerTask};
 
 /// A task as the tracker sends it (`TaskProgress`).
 #[derive(Debug, Default, Deserialize)]
@@ -21,6 +21,7 @@ struct Progress {
     phase: Option<String>,
     review_round: Option<u32>,
     subtasks: Count,
+    subtask_statuses: Option<SubtaskStatuses>,
     acceptance: Count,
     placement: Option<ProgressPlacement>,
     agents: Agents,
@@ -90,6 +91,7 @@ impl From<Progress> for TrackerTask {
             phase: p.phase,
             review_round: p.review_round,
             subtasks: p.subtasks,
+            subtask_statuses: p.subtask_statuses,
             acceptance: p.acceptance,
             placement: p.placement.map(|place| Placement {
                 runner: place.runner_name,
