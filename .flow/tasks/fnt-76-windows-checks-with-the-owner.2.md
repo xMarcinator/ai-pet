@@ -6,7 +6,7 @@ satisfies: [R2, R3]
 ## Description
 The Windows half of fn-2 task 8: each built-in pet's calm CPU and memory, then the hands-on pass with the owner.
 
-**Tooling ready (2026-11-14, tested on Linux only):** `scripts/perf/pet-calm-windows.sh` (pet-calm.sh's method on the sampler); a loop over the built-in pets like `pets-calm.sh` is still to write.
+**Tooling ready (2026-11-14, tested on Linux only):** `scripts/perf/pet-calm-windows.sh` (pet-calm.sh's method on the sampler) and `scripts/perf/pets-calm-windows.sh`, the loop over every built-in pet with the C# pet first and last.
 
 **Size:** M
 **Files:** `scripts/perf/pets-calm-windows.sh`, `rust/proofs/sprite-packs.md`, `rust/proofs/windows-hands-on.md`
