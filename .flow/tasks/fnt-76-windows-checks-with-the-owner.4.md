@@ -6,6 +6,8 @@ satisfies: [R5]
 ## Description
 The Windows half of FNT-71 task 8 (the MCP server in the pet), moved here on the owner's word, 2026-11-13, so FNT-71 can close on its Linux half and merge. Linux is done: `rust/proofs/mcp-server.md` (real Claude Code and Codex sessions, every tool, the pet restarted mid-session, Codex's interactive re-trust, Settings following tool changes) and `rust/proofs/memory.md` (R13 and R15 met).
 
+**Tooling ready (2026-11-14, tested on Linux only):** `scripts/perf/mcp-memory-windows.sh` (the paired R15 run), `scripts/perf/pet-calm-windows.sh` with `CONNECT=1` / `LISTENER=off` (R13), and `scripts/perf/mcp-client.sh` (curl only; Git Bash has no Python). Judge R15 by the working set: on Linux .NET's private figure counts address space, on Windows it is commit.
+
 **Size:** M
 **Files:** `rust/proofs/mcp-server.md` (its Windows section), `rust/proofs/memory.md`, `scripts/perf/` (Windows versions of `mcp-memory.sh` and `pet-calm.sh`'s CONNECT and LISTENER options, on task 1's sampler)
 

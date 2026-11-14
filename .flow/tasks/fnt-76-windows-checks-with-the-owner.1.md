@@ -6,6 +6,8 @@ satisfies: [R1]
 ## Description
 The Windows half of fn-1 task 28: a Git Bash bench script with a dotnet sampler, then two runs with the owner.
 
+**Tooling ready (2026-11-14, tested on Linux only):** `scripts/perf/pet-bench-windows.sh` and the sampler `scripts/perf/sampler/` (.NET 8, no packages: `proc <pid>…` for CPU ms, working set and private bytes, `system` for the machine-CPU gate, `hold-port`). The script also runs on Linux, where a smoke run with two Rust pets passed end to end. Left for the owner's session: the .NET 8 SDK on the Windows machine (ask first), the Velopack path of the installed C# pet (`%LOCALAPPDATA%\AiPet\current\AiPet.exe` assumed), `/proc/<pid>/winpid` and `kill` on native exes in Git Bash, then the two runs.
+
 **Size:** M
 **Files:** `scripts/perf/pet-bench-windows.sh`, `scripts/perf/sampler/` (a small dotnet project), `rust/proofs/performance.md`
 **Touches:** [scripts/perf/**, rust/proofs/performance.md]
