@@ -21,8 +21,9 @@
 # and run with `dotnet`; needs the .NET 8 SDK).
 #
 # Windows has no load average: before each pet it waits up to WAIT seconds (600) until the whole machine's CPU over
-# QUIET seconds (30) is at most MAX_CPU percent of one core (10), and refuses to run if it isn't; the figure is
-# printed. SETTLE, SAMPLES and WINDOW (seconds) override the method's numbers for a quick try.
+# QUIET seconds (30) is at most MAX_CPU percent of one core (300), and refuses to run if it isn't; the figure is
+# printed. 300, not the Linux script's one busy core: a corporate Windows laptop's antivirus and services keep two or
+# three of its 20 threads busy (the owner's call, 2026-11-25), and each pet's figure is its own process time. SETTLE, SAMPLES and WINDOW (seconds) override the method's numbers for a quick try.
 #
 # It also runs on Linux (the pids are the pids, the "pipes" sockets), so its arithmetic can be tried there.
 set -euo pipefail
@@ -34,7 +35,7 @@ rust=${1:-$root/rust/target/release/AiPet$exe}
 csharp=${2:-$HOME/AiPet-0.1.0/AiPet$exe}
 hook=${3:-$root/rust/target/release/aipet-hook$exe}
 settle=${SETTLE:-60} samples=${SAMPLES:-5} window=${WINDOW:-30}
-max_cpu=${MAX_CPU:-10} quiet_for=${QUIET:-30} wait=${WAIT:-600}
+max_cpu=${MAX_CPU:-300} quiet_for=${QUIET:-30} wait=${WAIT:-600}
 
 for f in "$rust" "$csharp" "$hook"; do
     [[ -f $f ]] || { echo "not found: $f" >&2; exit 2; }

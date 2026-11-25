@@ -13,7 +13,7 @@ fn-1's performance gate (task 28) and fn-2's verification (task 8) are done on L
 ## Edge Cases & Constraints
 
 - The Rust pet is measured on the backend it ships with on Windows (GL), not Vulkan.
-- Windows has no load average: the script waits until the machine's total CPU over 30 s is under 10 % of one core, and refuses to measure otherwise; the figure used is recorded.
+- Windows has no load average: the script waits until the machine's total CPU over 30 s is at most 300 % of one core, and refuses to measure otherwise; the figure used is recorded. (It was 10 %; on 2026-11-25 the owner's laptop never got under 2.1 cores with nothing but the antivirus and services running, and the owner set 300 %.)
 - Every Windows GUI step needs the owner present; downloads (Rust, the .NET SDK) are asked for first.
 
 ## Acceptance Criteria
